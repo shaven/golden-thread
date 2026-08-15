@@ -220,34 +220,36 @@ Python scripts can also be run directly from the command line:
 
 ```bash
 # Create a new vault
-python3 golden-thread/0.1.0/scripts/vault_init.py fresh \
+python3 golden-thread/0.3.0/scripts/vault_init.py fresh \
   --vault ~/my-vault --domain "My Team"
 
 # Scaffold a project
-python3 golden-thread/0.1.0/scripts/vault_init.py create-project \
+python3 golden-thread/0.3.0/scripts/vault_init.py create-project \
   --vault ~/my-vault \
   --name my-project \
   --title "My Project" \
   --tags "platform,backend" \
+  --domain platform \
+  --topology bastion-direct \
   --runbook \
   --project-dir ~/Projects/my-project
 
 # Scaffold a sub-project
-python3 golden-thread/0.1.0/scripts/vault_init.py create-project \
+python3 golden-thread/0.3.0/scripts/vault_init.py create-project \
   --vault ~/my-vault \
   --name sub-feature \
   --parent my-project \
   --title "Sub Feature"
 
 # Point vault-config.json at an existing vault
-python3 golden-thread/0.1.0/scripts/vault_init.py connect \
+python3 golden-thread/0.3.0/scripts/vault_init.py connect \
   --vault ~/existing-vault
 
 # Scan a project directory for ingest candidates
-python3 golden-thread/0.1.0/scripts/gt_ingest.py ~/Projects/my-project --json
+python3 golden-thread/0.3.0/scripts/gt_ingest.py ~/Projects/my-project --json
 
 # Audit vault health
-python3 golden-thread/0.1.0/scripts/gt_lint.py ~/my-vault \
+python3 golden-thread/0.3.0/scripts/gt_lint.py ~/my-vault \
   --queue ~/my-vault/review-queue.md
 ```
 

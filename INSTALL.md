@@ -47,7 +47,7 @@ curl -fsSL https://github.com/YOUR_USERNAME/golden-thread-plugin/archive/refs/he
 `install.sh` copies only the four directories the plugin needs into Claude Code's plugin cache:
 
 ```
-~/.claude/plugins/cache/golden-thread-plugin/golden-thread/0.1.0/
+~/.claude/plugins/cache/golden-thread-plugin/golden-thread/0.3.0/
   .claude-plugin/   ← plugin metadata
   skills/           ← six /gt-* skill definitions
   scripts/          ← Python scripts (vault_init.py, gt_ingest.py, gt_lint.py)
