@@ -105,6 +105,20 @@ cat > "$MARKETPLACE/plugins/gt-wiki/.claude-plugin/plugin.json" <<JSON
   }
 }
 JSON
+
+# 2b. Populate the marketplace's plugin directories with the ACTUAL plugin.
+# marketplace.json declares "source": "./plugins/gt", so that path must hold a
+# loadable plugin - not just a manifest. Without this, anything that resolves the
+# plugin from the marketplace (rather than from the installed cache) finds zero
+# skills, and no /gt: commands appear.
+for dir in skills scripts templates; do
+  rm -rf "$MARKETPLACE/plugins/gt/$dir"
+  cp -r "$SRC/$dir" "$MARKETPLACE/plugins/gt/$dir"
+  rm -rf "$MARKETPLACE/plugins/gt-wiki/$dir"
+  cp -r "$WIKI_SRC/$dir" "$MARKETPLACE/plugins/gt-wiki/$dir"
+done
+echo "Populated marketplace plugin directories with skills/scripts/templates"
+
 echo "Created marketplace entries → $MARKETPLACE"
 
 # 3. Register in known_marketplaces.json
