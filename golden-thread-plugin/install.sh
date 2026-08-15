@@ -114,9 +114,9 @@ path = '$KNOWN'
 os.makedirs(os.path.dirname(path), exist_ok=True)
 d = json.load(open(path)) if os.path.exists(path) else {}
 d['golden-thread-plugin'] = {
-    'source': {'source': 'local'},
+    'source': {'source': 'directory', 'path': '$MARKETPLACE'},
     'installLocation': '$MARKETPLACE',
-    'lastUpdated': '2026-08-14T00:00:00.000Z'
+    'lastUpdated': '2026-08-15T00:00:00.000Z'
 }
 open(path, 'w').write(json.dumps(d, indent=2) + '\n')
 print('Registered in known_marketplaces.json')
