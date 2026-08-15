@@ -6,17 +6,22 @@
 
 ## Option A — Install from GitHub (recommended)
 
+The plugin lives in the `golden-thread-plugin/` subdirectory of the
+`golden-thread` repo.
+
 ```bash
-git clone https://github.com/YOUR_USERNAME/golden-thread-plugin
-cd golden-thread-plugin
+git clone git@github.com:shaven/golden-thread.git
+cd golden-thread/golden-thread-plugin
 bash install.sh
 ```
 
 Or as a one-liner:
 
 ```bash
-git clone https://github.com/YOUR_USERNAME/golden-thread-plugin && bash golden-thread-plugin/install.sh
+git clone git@github.com:shaven/golden-thread.git && bash golden-thread/golden-thread-plugin/install.sh
 ```
+
+`install.sh` resolves its own paths, so it can be run from anywhere.
 
 ---
 
