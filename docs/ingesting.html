@@ -1,0 +1,439 @@
+<title>Golden Thread Ingest</title>
+<style>
+:root {
+  --ground:#F7F8FA; --surface:#FFFFFF; --surface-2:#EDEFF3; --surface-3:#E4E8EE;
+  --ink:#161B22; --ink-2:#414B57; --ink-3:#6B7482;
+  --rule:#DBE0E7; --rule-soft:#E8EBF0;
+  --accent:#8A6A17; --accent-bright:#A8842A; --accent-wash:#F6F0E0;
+  --good:#2F6B4F; --good-wash:#EAF2ED; --crit:#A33A32; --crit-wash:#FAEEED;
+  --shadow:0 1px 2px rgba(22,27,34,.05), 0 8px 24px -12px rgba(22,27,34,.12);
+  --sans:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+  --mono:ui-monospace,"SF Mono",SFMono-Regular,Menlo,Consolas,"Liberation Mono",monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --ground:#12161C; --surface:#181D25; --surface-2:#1E242E; --surface-3:#252C38;
+    --ink:#E8EBF0; --ink-2:#A8B2BF; --ink-3:#79838F;
+    --rule:#2A313B; --rule-soft:#222933;
+    --accent:#D9AE4E; --accent-bright:#EAC57A; --accent-wash:#231E13;
+    --good:#6FBF95; --good-wash:#15211B; --crit:#E0786E; --crit-wash:#241715;
+    --shadow:0 1px 2px rgba(0,0,0,.4), 0 8px 24px -12px rgba(0,0,0,.6);
+  }
+}
+:root[data-theme="dark"] {
+  --ground:#12161C; --surface:#181D25; --surface-2:#1E242E; --surface-3:#252C38;
+  --ink:#E8EBF0; --ink-2:#A8B2BF; --ink-3:#79838F;
+  --rule:#2A313B; --rule-soft:#222933;
+  --accent:#D9AE4E; --accent-bright:#EAC57A; --accent-wash:#231E13;
+  --good:#6FBF95; --good-wash:#15211B; --crit:#E0786E; --crit-wash:#241715;
+  --shadow:0 1px 2px rgba(0,0,0,.4), 0 8px 24px -12px rgba(0,0,0,.6);
+}
+* { box-sizing:border-box; }
+body {
+  margin:0; background:var(--ground); color:var(--ink);
+  font-family:var(--sans); font-size:17px; line-height:1.68;
+  -webkit-font-smoothing:antialiased;
+}
+.wrap { max-width:1480px; margin:0 auto; padding:0 32px 96px; }
+
+.mast { padding:72px 0 40px; border-bottom:1px solid var(--rule); }
+.eyebrow {
+  font-family:var(--mono); font-size:11px; letter-spacing:.16em;
+  text-transform:uppercase; color:var(--accent); margin:0 0 20px;
+  display:flex; align-items:center; gap:10px;
+}
+.eyebrow::before { content:""; width:26px; height:2px; background:var(--accent); flex:none; }
+h1 {
+  font-size:clamp(34px,5.5vw,54px); line-height:1.06; letter-spacing:-.025em;
+  font-weight:700; margin:0 0 20px; text-wrap:balance; max-width:16ch;
+}
+.standfirst {
+  font-size:clamp(17px,2vw,19px); color:var(--ink-2); margin:0; max-width:62ch; line-height:1.6;
+}
+.meta {
+  margin-top:28px; display:flex; flex-wrap:wrap; gap:10px 28px;
+  font-family:var(--mono); font-size:12px; color:var(--ink-3);
+}
+.meta b { color:var(--ink-2); font-weight:500; }
+
+.cols { display:block; }
+.toc {
+  display:flex; flex-wrap:wrap; gap:8px; align-items:center;
+  padding:22px 0; border-bottom:1px solid var(--rule);
+}
+.toc h2 {
+  font-family:var(--mono); font-size:10px; letter-spacing:.16em;
+  text-transform:uppercase; color:var(--ink-3); margin:0 8px 0 0; font-weight:500;
+}
+.toc a {
+  color:var(--ink-2); text-decoration:none; font-size:13.5px;
+  padding:5px 13px; border:1px solid var(--rule); border-radius:99px;
+  background:var(--surface); white-space:nowrap;
+  transition:color .15s, border-color .15s;
+}
+.toc a:hover, .toc a:focus-visible { color:var(--accent); border-color:var(--accent); }
+.toc a .n { font-family:var(--mono); font-size:11px; color:var(--accent); margin-right:6px; }
+
+main { display:block; width:100%; padding-top:44px; }
+section { position:relative; padding-left:34px; padding-bottom:8px; border-left:1px solid var(--rule); }
+section:last-of-type { border-left-color:transparent; }
+section > h2 { position:relative; }
+section > h2::before {
+  content:attr(data-n); position:absolute; left:-34px; top:2px;
+  transform:translateX(-50%); width:26px; height:26px; border-radius:50%;
+  background:var(--accent); color:var(--ground);
+  font-family:var(--mono); font-size:11px; font-weight:600;
+  display:flex; align-items:center; justify-content:center;
+  box-shadow:0 0 0 5px var(--ground);
+}
+@media (max-width:620px) {
+  section { padding-left:24px; }
+  section > h2::before { left:-24px; width:22px; height:22px; font-size:10px; }
+}
+
+h2 {
+  font-size:clamp(23px,3vw,29px); letter-spacing:-.02em; line-height:1.2;
+  margin:56px 0 8px; font-weight:650; text-wrap:balance;
+}
+section:first-of-type h2 { margin-top:0; }
+h3 { font-size:17px; margin:36px 0 10px; font-weight:650; letter-spacing:-.01em; color:var(--ink); }
+h4 {
+  font-family:var(--mono); font-size:11px; letter-spacing:.14em;
+  text-transform:uppercase; color:var(--ink-3); margin:28px 0 10px; font-weight:500;
+}
+p { margin:0 0 16px; max-width:none; }
+.lede { color:var(--ink-2); font-size:18px; margin-bottom:24px; }
+ul, ol { max-width:none; padding-left:22px; margin:0 0 16px; }
+li { margin-bottom:8px; }
+li::marker { color:var(--accent); }
+strong { font-weight:650; }
+a { color:var(--accent); text-underline-offset:2px; }
+
+code {
+  font-family:var(--mono); font-size:.875em; background:var(--surface-2);
+  padding:.14em .38em; border-radius:4px; color:var(--ink); border:1px solid var(--rule-soft);
+}
+pre {
+  background:var(--surface); border:1px solid var(--rule); border-radius:8px;
+  padding:16px 18px; overflow-x:auto; margin:0 0 20px; box-shadow:var(--shadow);
+  border-left:3px solid var(--accent);
+}
+pre code { background:none; border:0; padding:0; font-size:13px; line-height:1.6; }
+
+.tw { overflow-x:auto; margin:0 0 24px; border:1px solid var(--rule);
+      border-radius:8px; background:var(--surface); box-shadow:var(--shadow); }
+table { border-collapse:collapse; width:100%; font-size:14.5px; min-width:440px; }
+th {
+  text-align:left; font-family:var(--mono); font-size:10.5px; font-weight:600;
+  letter-spacing:.1em; text-transform:uppercase; color:var(--ink-3);
+  padding:12px 16px; border-bottom:1px solid var(--rule);
+  background:var(--surface-2); white-space:nowrap;
+}
+td { padding:12px 16px; border-bottom:1px solid var(--rule-soft); vertical-align:top; color:var(--ink-2); }
+tr:last-child td { border-bottom:0; }
+td:first-child { color:var(--ink); font-weight:500; }
+td code, th code { font-size:12.5px; }
+
+.note {
+  border:1px solid var(--rule); border-left:3px solid var(--accent);
+  background:var(--accent-wash); border-radius:8px; padding:16px 20px;
+  margin:0 0 24px; max-width:none;
+}
+.note p:last-child { margin-bottom:0; }
+.note .tag {
+  font-family:var(--mono); font-size:10.5px; letter-spacing:.13em;
+  text-transform:uppercase; color:var(--accent); display:block; margin-bottom:8px; font-weight:600;
+}
+.warn { border-left-color:var(--crit); background:var(--crit-wash); }
+.warn .tag { color:var(--crit); }
+
+/* before / after result strip */
+.stats { display:grid; grid-template-columns:repeat(auto-fit,minmax(130px,1fr));
+         gap:1px; background:var(--rule); border:1px solid var(--rule);
+         border-radius:8px; overflow:hidden; margin:0 0 24px; }
+.stat { background:var(--surface); padding:16px 18px; }
+.stat .v { font-size:26px; font-weight:700; letter-spacing:-.02em;
+           font-variant-numeric:tabular-nums; color:var(--accent); line-height:1.1; }
+.stat .k { font-family:var(--mono); font-size:10.5px; letter-spacing:.1em;
+           text-transform:uppercase; color:var(--ink-3); margin-top:6px; }
+
+/* triage piles */
+.piles { display:grid; gap:12px; margin:0 0 24px; max-width:none;
+         grid-template-columns:repeat(auto-fit,minmax(280px,1fr)); }
+.pile { border:1px solid var(--rule); border-radius:8px; padding:14px 18px;
+        background:var(--surface); border-left:3px solid var(--ink-3); }
+.pile.p1 { border-left-color:var(--crit); }
+.pile.p2 { border-left-color:var(--accent); }
+.pile.p3 { border-left-color:var(--good); }
+.pile b { display:block; margin-bottom:4px; font-size:14.5px; }
+.pile span { color:var(--ink-2); font-size:14px; }
+
+.check { list-style:none; padding:0; max-width:none; margin:0; }
+.check li {
+  padding:10px 0 10px 30px; border-bottom:1px solid var(--rule-soft);
+  position:relative; color:var(--ink-2); font-size:15px; margin:0;
+}
+.check li:last-child { border-bottom:0; }
+.check li::before {
+  content:""; position:absolute; left:0; top:16px; width:13px; height:13px;
+  border:1.5px solid var(--accent); border-radius:3px;
+}
+
+footer {
+  margin-top:72px; padding-top:28px; border-top:1px solid var(--rule);
+  font-family:var(--mono); font-size:12px; color:var(--ink-3);
+  display:flex; flex-wrap:wrap; gap:8px 24px;
+}
+:focus-visible { outline:2px solid var(--accent); outline-offset:3px; border-radius:3px; }
+@media (prefers-reduced-motion:reduce) { * { transition:none !important; animation:none !important; } }
+</style>
+
+<div class="wrap">
+
+<header class="mast">
+  <p class="eyebrow">Golden Thread · gt v0.2.0</p>
+  <h1>Ingesting an existing project</h1>
+  <p class="standfirst">How to bring a project that already exists — with its own history, notes, <code>CLAUDE.md</code> and scattered memory files — into the vault. Written against what actually happened migrating this vault on 2026-08-15, including the two things that bit.</p>
+  <div class="meta">
+    <span><b>Vault</b> ~/Dropbox/Projects/Obsidian</span>
+    <span><b>Skill</b> /gt:gt-ingest</span>
+    <span><b>Updated</b> 2026-08-15</span>
+  </div>
+</header>
+
+<div class="cols">
+
+<nav class="toc" aria-label="Contents">
+  <h2>Steps</h2>
+  <a href="#what"><span class="n">—</span>What ingest is</a>
+  <a href="#before"><span class="n">—</span>Before you start</a>
+  <a href="#scan"><span class="n">1</span>Scan</a>
+  <a href="#classify"><span class="n">2</span>Classify</a>
+  <a href="#links"><span class="n">3</span>The link trap</a>
+  <a href="#source"><span class="n">4</span>Fill source.md</a>
+  <a href="#index"><span class="n">5</span>Index memory</a>
+  <a href="#verify"><span class="n">6</span>Verify</a>
+  <a href="#commit"><span class="n">7</span>Wire &amp; commit</a>
+  <a href="#example"><span class="n">—</span>Worked example</a>
+  <a href="#checklist"><span class="n">—</span>Checklist</a>
+</nav>
+
+<main>
+
+<section id="what">
+  <h2 data-n="◆">What ingest is, and isn't</h2>
+  <p>Ingest is <strong>additive and non-destructive</strong>. It copies; it never moves or deletes from the original location. If it goes wrong, the source of truth is still wherever it was.</p>
+  <p>It is also <strong>not automatic</strong>. The script finds candidates and classifies them; you approve each group before anything is written. That approval step is the point — classification is a judgement about <em>scope</em>, and scope is the one thing a script can't infer reliably.</p>
+</section>
+
+<section id="before">
+  <h2 data-n="◆">Before you start</h2>
+  <p class="lede">Three things worth having ready, because being asked mid-flow is where people guess — and guess wrong.</p>
+  <ol>
+    <li><strong>A slug.</strong> kebab-case, and the same one you'll use in <code>/gt:gt-open</code> forever.</li>
+    <li><strong>The topology.</strong> <code>local</code> (a folder here) · <code>remote</code> (one repo, one server, server pulls from GitHub) · <code>bastion-jump</code> (several servers behind one gateway) · <code>bastion-direct</code> (several servers, each reachable directly).</li>
+    <li><strong>A restore point</strong>, if you're restructuring something that already exists.</li>
+  </ol>
+  <pre><code>cd &lt;target&gt; &amp;&amp; git add -A &amp;&amp; git commit -m "Pre-ingest snapshot"</code></pre>
+  <p>That last one is not ceremony. It's what made the migration on this vault safe to attempt at all.</p>
+</section>
+
+<section id="scan">
+  <h2 data-n="1">Scan</h2>
+  <pre><code>/gt:gt-ingest</code></pre>
+  <p>Claude asks which directory to scan and which slug to use, then runs <code>gt_ingest.py</code>, which looks at:</p>
+  <div class="tw"><table>
+    <thead><tr><th>Source</th><th>What it finds</th></tr></thead>
+    <tbody>
+      <tr><td><code>~/.claude/projects/&lt;encoded&gt;/memory/</code></td><td>session memory files</td></tr>
+      <tr><td>the project's <code>CLAUDE.md</code></td><td>section by section</td></tr>
+      <tr><td>root-level markdown</td><td>READMEs, design docs, notes</td></tr>
+      <tr><td>the tech stack</td><td>Node, Go, Rust, Python</td></tr>
+      <tr><td>the last 20 git commits</td><td>design context</td></tr>
+    </tbody>
+  </table></div>
+  <p>Run it directly to preview without writing anything:</p>
+  <pre><code>python3 ~/.claude/plugins/cache/golden-thread-plugin/gt/0.2.0/scripts/gt_ingest.py \
+  ~/Projects/my-project --json</code></pre>
+</section>
+
+<section id="classify">
+  <h2 data-n="2">Classify</h2>
+  <p class="lede">This is the step that decides whether the vault is useful in six months.</p>
+  <div class="tw"><table>
+    <thead><tr><th>Group</th><th>Goes to</th><th>Test</th></tr></thead>
+    <tbody>
+      <tr><td>decisions</td><td><code>decisions.md</code></td><td>A stable rule or constraint. Would you be annoyed if it were violated?</td></tr>
+      <tr><td>research</td><td><code>research.md</code></td><td>A dated finding or gotcha. True, but might change.</td></tr>
+      <tr><td>design</td><td><code>design.md</code></td><td>How it's built <em>now</em>.</td></tr>
+      <tr><td>knowledge</td><td><code>Knowledge/</code> + <code>Sources/</code></td><td>True for other projects too — a platform behavior, not a project quirk.</td></tr>
+      <tr><td>global_memory</td><td><code>global-memory/</code></td><td>Needed in <em>every</em> session, <em>every</em> project.</td></tr>
+      <tr><td>ideas</td><td>new project scaffold</td><td>Doesn't belong to this project at all.</td></tr>
+      <tr><td>skip</td><td>stays put</td><td>Personal prefs (<code>user.md</code>) — session-level, not vault-level.</td></tr>
+    </tbody>
+  </table></div>
+  <p>Say <em>"show me each one"</em> to review individually rather than approving a group.</p>
+  <div class="note">
+    <span class="tag">Set the bar higher than it feels</span>
+    <p>A fact promoted to <code>knowledge</code> or <code>global_memory</code> on its first sighting is a guess about generality. Leave it in the project — <code>/gt:gt-promote</code> exists precisely so a <em>second</em> project can prove it.</p>
+  </div>
+</section>
+
+<section id="links">
+  <h2 data-n="3">Watch for the wikilink trap</h2>
+  <p class="lede">The one that will actually bite you.</p>
+  <p>If the notes cross-reference each other by <code>[[wikilink]]</code>, renaming or merging files silently destroys that graph. Obsidian resolves wikilinks by <em>filename</em>, so the moment <code>project_foo.md</code> stops existing, every <code>[[project_foo]]</code> anywhere in the vault dangles.</p>
+  <p>Measure before you restructure:</p>
+  <pre><code>cd &lt;vault&gt;
+echo "links:  $(grep -roh '\[\[[^]]*\]\]' --include='*.md' . | wc -l)"
+echo "files:  $(grep -rl '\[\[' --include='*.md' . | wc -l)"</code></pre>
+
+  <div class="stats">
+    <div class="stat"><div class="v">323</div><div class="k">links found</div></div>
+    <div class="stat"><div class="v">63</div><div class="k">of 74 files</div></div>
+    <div class="stat"><div class="v">219</div><div class="k">to project_ notes</div></div>
+  </div>
+
+  <p>That measurement is why this migration <strong>kept every original filename intact</strong> and moved the files unchanged into <code>memory/</code>, rather than folding them into <code>research.md</code> as originally planned. The plan changed because the number came back bigger than expected.</p>
+
+  <h3>Three ways out, in order of preference</h3>
+  <ol>
+    <li><strong>Keep the filenames.</strong> Move files as-is; the graph survives untouched. Costs nothing.</li>
+    <li><strong>Repoint the links.</strong> Fine for a handful of renames. Match the <em>whole</em> link — <code>[[name]]</code> and <code>[[name|alias]]</code> — never a substring.</li>
+    <li><strong>Drop them.</strong> Only if the graph genuinely has no value.</li>
+  </ol>
+
+  <div class="note warn">
+    <span class="tag">Substring matching will corrupt your links</span>
+    <p>A naive replace of <code>reference_discord_webhook</code> also rewrites <code>[[reference_discord_webhook_mstp3]]</code> — a different, still-existing note. Anchor the pattern to the closing brackets:</p>
+    <pre style="margin:12px 0 0"><code>re.sub(r"\[\[" + re.escape(old) + r"(\|[^\]]*)?\]\]", ..., text)</code></pre>
+  </div>
+
+  <div class="note warn">
+    <span class="tag">Never repoint links inside Sources/</span>
+    <p>Those files are immutable; their links are <em>supposed</em> to point at the world as it was when they were captured. Suppress them in <code>lint-declines.md</code> instead.</p>
+  </div>
+</section>
+
+<section id="source">
+  <h2 data-n="4">Fill in source.md</h2>
+  <p>New in v0.2.0, and the highest-value part of an ingest for a multi-server project.</p>
+  <p>The evidence is usually already in the material you just read — deploy scripts, hostnames in notes, install steps. Cross-reference it against <code>~/.ssh/config</code>, which is authoritative for alias → address:</p>
+  <pre><code>grep -iE '^host ' ~/.ssh/config</code></pre>
+  <p>Fill in:</p>
+  <ul>
+    <li><strong>Topology</strong> — one of the four types.</li>
+    <li><strong>Deployment targets</strong> — one row per <strong>role × env → host + path</strong>. This shape matters because one machine can serve several sites, and the same role exists in more than one environment.</li>
+    <li><strong>File plan</strong> (bastion only) — every deployed file marked <strong>static</strong> (byte-identical everywhere) or <strong>unique</strong> (per-server variant).</li>
+    <li><strong>Fleet</strong> — link the shared <code>INFRASTRUCTURE.md</code> rather than copying the host table in.</li>
+  </ul>
+  <div class="note">
+    <span class="tag">Read the notes for drift language</span>
+    <p>A note saying a file "drifted" or "had to be fixed separately on each box" is telling you it is <strong>static and currently unmanaged</strong>. Record that — it's the most useful sentence in the file.</p>
+  </div>
+  <p><strong>Record only what the material states.</strong> Mark inferences <code>TODO — verify</code> and list them in the summary. A confidently wrong path is worse than a blank one, because a blank one gets checked.</p>
+</section>
+
+<section id="index">
+  <h2 data-n="5">Index the memory files</h2>
+  <p><code>MEMORY.md</code> is not decoration. It is the <em>only</em> thing <code>/gt:gt-open</code> reads — the files themselves load on demand. So each line has to carry enough signal to decide whether opening that file is worth it.</p>
+  <pre><code>- [reference_quote_api](reference_quote_api.md) — live quote + daily-candle API at
+  quotes.example.internal:6000; use it instead of the local cached files, which go stale</code></pre>
+  <p>That's a useful line. <code>— quote api notes</code> is not.</p>
+  <p>Most notes already have a <code>description:</code> in frontmatter, which makes this mechanical:</p>
+  <pre><code>m = re.search(r'^description:\s*"?(.*?)"?\s*$', frontmatter, re.M)</code></pre>
+  <div class="stats">
+    <div class="stat"><div class="v">39</div><div class="k">notes indexed</div></div>
+    <div class="stat"><div class="v">53</div><div class="k">lines to open</div></div>
+    <div class="stat"><div class="v">97%</div><div class="k">less than loading all</div></div>
+  </div>
+  <p>The largest project in this vault indexes 39 notes in 53 lines, against ~1,900 if every file were loaded — with the detail still one request away.</p>
+</section>
+
+<section id="verify">
+  <h2 data-n="6">Verify</h2>
+  <pre><code>/gt:gt-lint</code></pre>
+  <p>Expect findings on a first ingest. Triage them into three piles:</p>
+  <div class="piles">
+    <div class="pile p1"><b>You broke it</b><span>Fix now, while you remember why. Mostly <code>broken-link</code> after renames.</span></div>
+    <div class="pile p2"><b>Already broken</b><span>Record in <code>review-queue.md</code>. Don't guess at a target — changing what a note <em>claims</em> is worse than leaving it dangling.</span></div>
+    <div class="pile p3"><b>False positive</b><span>Suppress in <code>lint-declines.md</code>, <strong>with the reason</strong>.</span></div>
+  </div>
+  <p>Confirm which pile a link belongs in rather than assuming:</p>
+  <pre><code>git grep -c "\[\[some_link\]\]" &lt;pre-ingest-sha&gt; -- '*.md'</code></pre>
+  <p>On this vault: <strong>28 findings → 3</strong>, and all 3 survivors were confirmed pre-existing against the pre-migration commit.</p>
+</section>
+
+<section id="commit">
+  <h2 data-n="7">Wire and commit</h2>
+  <p>Claude offers to add a Golden Thread section to the project's <code>CLAUDE.md</code>. For <code>remote</code> and <code>bastion</code> projects the code isn't on this machine, so skip it — the <code>source.md</code> targets are what matter.</p>
+  <p>Then commit, and record the ingest in <code>log.md</code>:</p>
+  <pre><code>2026-08-15 [ingest] &lt;source&gt; → Projects/&lt;slug&gt; — N items migrated</code></pre>
+</section>
+
+<section id="example">
+  <h2 data-n="◆">Worked example: this vault</h2>
+  <p class="lede">What actually happened on 2026-08-15, as a shape to copy.</p>
+  <p><strong>Before</strong> — 82 files in <code>Project Store/</code>, organised as <code>hub_</code> / <code>project_</code> / <code>reference_</code> / <code>feedback_</code> notes across 8 topic folders, indexed by <code>Index.md</code>.</p>
+
+  <div class="tw"><table>
+    <thead><tr><th>Question</th><th>Answer</th></tr></thead>
+    <tbody>
+      <tr><td>Vault root</td><td><code>~/Dropbox/Projects/Obsidian</code>; <code>Project Store/</code> renamed to <code>Projects/</code></td></tr>
+      <tr><td>Git</td><td>repo moved up to vault root so the whole vault is versioned</td></tr>
+      <tr><td>Granularity</td><td>each topic folder → one project (8 total)</td></tr>
+      <tr><td><code>project_*.md</code></td><td><strong>kept as <code>memory/</code> files</strong> — chosen over folding into <code>research.md</code> once the 323-link graph was measured</td></tr>
+      <tr><td><code>reference_*</code></td><td>cross-project → <code>Knowledge/</code>; project-specific → <code>memory/</code></td></tr>
+      <tr><td><code>feedback_*</code></td><td>cross-cutting → <code>global-memory/</code>, indexed in <code>PROTOCOL.md</code></td></tr>
+      <tr><td>Stale topology</td><td>archived to <code>Sources/</code>, superseded by <code>INFRASTRUCTURE.md</code></td></tr>
+    </tbody>
+  </table></div>
+
+  <h3>Sequence</h3>
+  <pre><code>git add -A &amp;&amp; git commit -m "Pre-migration snapshot"   # restore point
+mv "Project Store/.git" .git &amp;&amp; mv "Project Store" Projects
+git add -A &amp;&amp; git commit -m "Move vault root"          # so git mv works
+python3 .../vault_init.py fresh --vault . --domain "Acme"
+# route files with git mv, then create-project per slug
+python3 .../gt_lint.py .</code></pre>
+
+  <div class="note warn">
+    <span class="tag">Two things that bit</span>
+    <p><strong><code>git mv</code> needs the index to match the working tree.</strong> Moving <code>.git</code> up without committing first meant git still held the old paths, and every <code>git mv</code> failed until the move was committed.</p>
+    <p><strong>Case-only renames fail on macOS.</strong> <code>General</code> → <code>general</code> needs a two-step: <code>git mv General general-tmp &amp;&amp; git mv general-tmp general</code>.</p>
+  </div>
+
+  <h3>Result</h3>
+  <div class="stats">
+    <div class="stat"><div class="v">8</div><div class="k">projects</div></div>
+    <div class="stat"><div class="v">69</div><div class="k">notes in memory/</div></div>
+    <div class="stat"><div class="v">4</div><div class="k">Knowledge pages</div></div>
+    <div class="stat"><div class="v">323</div><div class="k">links intact</div></div>
+    <div class="stat"><div class="v">3</div><div class="k">known gaps logged</div></div>
+  </div>
+</section>
+
+<section id="checklist">
+  <h2 data-n="◆">Checklist</h2>
+  <ul class="check">
+    <li>Commit a restore point</li>
+    <li>Decide the slug and topology up front</li>
+    <li>Count the wikilinks before renaming anything</li>
+    <li>Run <code>/gt:gt-ingest</code> and review each group, not just each batch</li>
+    <li>Fill <code>source.md</code> — mark inferences TODO, don't invent paths</li>
+    <li>Write <code>MEMORY.md</code> descriptions worth reading</li>
+    <li>Run <code>/gt:gt-lint</code>; sort findings into broke / already-broken / false-positive</li>
+    <li>Log unresolved questions in <code>review-queue.md</code></li>
+    <li>Commit, and add an <code>[ingest]</code> line to <code>log.md</code></li>
+  </ul>
+</section>
+
+<footer>
+  <span>Golden Thread gt v0.2.0</span>
+  <span>Vault: ~/Dropbox/Projects/Obsidian</span>
+  <span>See also: WORKFLOW · CONVENTIONS · PROTOCOL · INFRASTRUCTURE</span>
+</footer>
+
+</main>
+</div>
+</div>

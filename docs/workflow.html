@@ -1,0 +1,461 @@
+<title>Golden Thread Workflow</title>
+<style>
+:root {
+  --ground:#F7F8FA; --surface:#FFFFFF; --surface-2:#EDEFF3; --surface-3:#E4E8EE;
+  --ink:#161B22; --ink-2:#414B57; --ink-3:#6B7482;
+  --rule:#DBE0E7; --rule-soft:#E8EBF0;
+  --accent:#8A6A17; --accent-bright:#A8842A; --accent-wash:#F6F0E0;
+  --good:#2F6B4F; --warn:#8A5A1A; --crit:#A33A32;
+  --shadow:0 1px 2px rgba(22,27,34,.05), 0 8px 24px -12px rgba(22,27,34,.12);
+  --sans:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+  --mono:ui-monospace,"SF Mono",SFMono-Regular,Menlo,Consolas,"Liberation Mono",monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --ground:#12161C; --surface:#181D25; --surface-2:#1E242E; --surface-3:#252C38;
+    --ink:#E8EBF0; --ink-2:#A8B2BF; --ink-3:#79838F;
+    --rule:#2A313B; --rule-soft:#222933;
+    --accent:#D9AE4E; --accent-bright:#EAC57A; --accent-wash:#231E13;
+    --good:#6FBF95; --warn:#D9A155; --crit:#E0786E;
+    --shadow:0 1px 2px rgba(0,0,0,.4), 0 8px 24px -12px rgba(0,0,0,.6);
+  }
+}
+:root[data-theme="dark"] {
+  --ground:#12161C; --surface:#181D25; --surface-2:#1E242E; --surface-3:#252C38;
+  --ink:#E8EBF0; --ink-2:#A8B2BF; --ink-3:#79838F;
+  --rule:#2A313B; --rule-soft:#222933;
+  --accent:#D9AE4E; --accent-bright:#EAC57A; --accent-wash:#231E13;
+  --good:#6FBF95; --warn:#D9A155; --crit:#E0786E;
+  --shadow:0 1px 2px rgba(0,0,0,.4), 0 8px 24px -12px rgba(0,0,0,.6);
+}
+* { box-sizing:border-box; }
+body {
+  margin:0; background:var(--ground); color:var(--ink);
+  font-family:var(--sans); font-size:17px; line-height:1.68;
+  -webkit-font-smoothing:antialiased;
+}
+.wrap { max-width:1480px; margin:0 auto; padding:0 32px 96px; }
+
+/* ---- masthead ---- */
+.mast { padding:72px 0 40px; border-bottom:1px solid var(--rule); }
+.eyebrow {
+  font-family:var(--mono); font-size:11px; letter-spacing:.16em;
+  text-transform:uppercase; color:var(--accent); margin:0 0 20px;
+  display:flex; align-items:center; gap:10px;
+}
+.eyebrow::before {
+  content:""; width:26px; height:2px; background:var(--accent); flex:none;
+}
+h1 {
+  font-size:clamp(34px,5.5vw,54px); line-height:1.06; letter-spacing:-.025em;
+  font-weight:700; margin:0 0 20px; text-wrap:balance; max-width:16ch;
+}
+.standfirst {
+  font-size:clamp(17px,2vw,19px); color:var(--ink-2); margin:0; max-width:62ch;
+  line-height:1.6;
+}
+.meta {
+  margin-top:28px; display:flex; flex-wrap:wrap; gap:10px 28px;
+  font-family:var(--mono); font-size:12px; color:var(--ink-3);
+}
+.meta b { color:var(--ink-2); font-weight:500; }
+
+/* ---- layout: single full-width column ---- */
+.cols { display:block; }
+.toc {
+  display:flex; flex-wrap:wrap; gap:8px; align-items:center;
+  padding:22px 0; border-bottom:1px solid var(--rule);
+}
+.toc h2 {
+  font-family:var(--mono); font-size:10px; letter-spacing:.16em;
+  text-transform:uppercase; color:var(--ink-3); margin:0 8px 0 0; font-weight:500;
+}
+.toc a {
+  color:var(--ink-2); text-decoration:none; font-size:13.5px;
+  padding:5px 13px; border:1px solid var(--rule); border-radius:99px;
+  background:var(--surface); white-space:nowrap;
+  transition:color .15s, border-color .15s;
+}
+.toc a:hover, .toc a:focus-visible { color:var(--accent); border-color:var(--accent); }
+.toc a .n { font-family:var(--mono); font-size:11px; color:var(--accent); margin-right:6px; }
+
+/* ---- the thread: a brass spine down the content ---- */
+main { display:block; width:100%; padding-top:44px; }
+section {
+  position:relative; padding-left:34px; padding-bottom:8px;
+  border-left:1px solid var(--rule);
+}
+section:last-of-type { border-left-color:transparent; }
+section > h2 { position:relative; }
+section > h2::before {
+  content:attr(data-n); position:absolute; left:-34px; top:2px;
+  transform:translateX(-50%); width:26px; height:26px; border-radius:50%;
+  background:var(--accent); color:var(--ground);
+  font-family:var(--mono); font-size:11px; font-weight:600;
+  display:flex; align-items:center; justify-content:center;
+  box-shadow:0 0 0 5px var(--ground);
+}
+@media (max-width:620px) {
+  section { padding-left:24px; }
+  section > h2::before { left:-24px; width:22px; height:22px; font-size:10px; }
+}
+
+h2 {
+  font-size:clamp(23px,3vw,29px); letter-spacing:-.02em; line-height:1.2;
+  margin:56px 0 8px; font-weight:650; text-wrap:balance;
+}
+section:first-of-type h2 { margin-top:0; }
+h3 {
+  font-size:17px; margin:36px 0 10px; font-weight:650; letter-spacing:-.01em;
+  color:var(--ink);
+}
+h4 {
+  font-family:var(--mono); font-size:11px; letter-spacing:.14em;
+  text-transform:uppercase; color:var(--ink-3); margin:28px 0 10px; font-weight:500;
+}
+p { margin:0 0 16px; max-width:none; }
+.lede { color:var(--ink-2); font-size:18px; margin-bottom:24px; }
+ul, ol { max-width:none; padding-left:22px; margin:0 0 16px; }
+li { margin-bottom:8px; }
+li::marker { color:var(--accent); }
+strong { font-weight:650; }
+a { color:var(--accent); text-underline-offset:2px; }
+hr { border:0; border-top:1px solid var(--rule); margin:44px 0; }
+
+code {
+  font-family:var(--mono); font-size:.875em; background:var(--surface-2);
+  padding:.14em .38em; border-radius:4px; color:var(--ink);
+  border:1px solid var(--rule-soft);
+}
+pre {
+  background:var(--surface); border:1px solid var(--rule); border-radius:8px;
+  padding:16px 18px; overflow-x:auto; margin:0 0 20px; box-shadow:var(--shadow);
+  border-left:3px solid var(--accent);
+}
+pre code { background:none; border:0; padding:0; font-size:13px; line-height:1.6; }
+
+/* ---- tables ---- */
+.tw { overflow-x:auto; margin:0 0 24px; border:1px solid var(--rule);
+      border-radius:8px; background:var(--surface); box-shadow:var(--shadow); }
+table { border-collapse:collapse; width:100%; font-size:14.5px; min-width:440px; }
+th {
+  text-align:left; font-family:var(--mono); font-size:10.5px; font-weight:600;
+  letter-spacing:.1em; text-transform:uppercase; color:var(--ink-3);
+  padding:12px 16px; border-bottom:1px solid var(--rule);
+  background:var(--surface-2); white-space:nowrap;
+}
+td { padding:12px 16px; border-bottom:1px solid var(--rule-soft); vertical-align:top;
+     color:var(--ink-2); }
+tr:last-child td { border-bottom:0; }
+td:first-child { color:var(--ink); font-weight:500; }
+td code, th code { font-size:12.5px; }
+
+/* ---- callouts ---- */
+.note {
+  border:1px solid var(--rule); border-left:3px solid var(--accent);
+  background:var(--accent-wash); border-radius:8px; padding:16px 20px;
+  margin:0 0 24px; max-width:70ch;
+}
+.note p:last-child { margin-bottom:0; }
+.note .tag {
+  font-family:var(--mono); font-size:10.5px; letter-spacing:.13em;
+  text-transform:uppercase; color:var(--accent); display:block; margin-bottom:8px;
+  font-weight:600;
+}
+.warn { border-left-color:var(--crit); }
+.warn .tag { color:var(--crit); }
+
+/* ---- hierarchy diagram ---- */
+.flow { margin:0 0 28px; display:flex; flex-direction:column; gap:0; max-width:640px; }
+.flow-row {
+  display:flex; align-items:baseline; gap:14px; padding:13px 18px;
+  border:1px solid var(--rule); background:var(--surface);
+  position:relative;
+}
+.flow-row:first-child { border-radius:8px 8px 0 0; }
+.flow-row:last-child { border-radius:0 0 8px 8px; }
+.flow-row + .flow-row { border-top:0; }
+.flow-row .scope {
+  font-family:var(--mono); font-size:12.5px; color:var(--accent);
+  font-weight:600; flex:none; width:150px;
+}
+.flow-row .what { color:var(--ink-2); font-size:14px; }
+.flow-arrow {
+  font-family:var(--mono); font-size:10.5px; letter-spacing:.1em;
+  text-transform:uppercase; color:var(--ink-3);
+  padding:5px 18px 5px 172px; border-left:1px solid var(--rule);
+  border-right:1px solid var(--rule); background:var(--surface-2);
+}
+.flow-arrow b { color:var(--accent); font-weight:600; }
+@media (max-width:860px) {
+  .flow-row { flex-direction:column; gap:3px; }
+  .flow-row .scope { width:auto; }
+  .flow-arrow { padding-left:18px; }
+}
+
+/* ---- command list ---- */
+.cmds { display:grid; gap:0; border:1px solid var(--rule); border-radius:8px;
+        overflow:hidden; margin:0 0 24px; background:var(--surface); }
+.cmd { display:grid; grid-template-columns:210px 1fr; gap:18px; padding:12px 18px;
+       border-bottom:1px solid var(--rule-soft); align-items:baseline; }
+.cmd:last-child { border-bottom:0; }
+.cmd .c { font-family:var(--mono); font-size:13px; color:var(--accent); font-weight:600; }
+.cmd .d { color:var(--ink-2); font-size:14px; }
+.cmd-group { background:var(--surface-2); padding:9px 18px; font-family:var(--mono);
+             font-size:10.5px; letter-spacing:.13em; text-transform:uppercase;
+             color:var(--ink-3); border-bottom:1px solid var(--rule); font-weight:600; }
+@media (max-width:620px) { .cmd { grid-template-columns:1fr; gap:2px; } }
+
+footer {
+  margin-top:72px; padding-top:28px; border-top:1px solid var(--rule);
+  font-family:var(--mono); font-size:12px; color:var(--ink-3);
+  display:flex; flex-wrap:wrap; gap:8px 24px;
+}
+:focus-visible { outline:2px solid var(--accent); outline-offset:3px; border-radius:3px; }
+@media (prefers-reduced-motion:reduce) { * { transition:none !important; animation:none !important; } }
+</style>
+
+<div class="wrap">
+
+<header class="mast">
+  <p class="eyebrow">Golden Thread · gt v0.2.0</p>
+  <h1>Working a project with Golden Thread</h1>
+  <p class="standfirst">Claude forgets everything between sessions. The vault doesn't. These are the eleven skills that move what you learn out of a session and into a file whose <em>location</em> tells you how widely it applies — then load only the slice the next session needs.</p>
+  <div class="meta">
+    <span><b>Vault</b> ~/Dropbox/Projects/Obsidian</span>
+    <span><b>Config</b> ~/.claude/vault-config.json</span>
+    <span><b>Updated</b> 2026-08-15</span>
+  </div>
+</header>
+
+<div class="cols">
+
+<nav class="toc" aria-label="Contents">
+  <h2>Phases</h2>
+  <a href="#model"><span class="n">—</span>The model</a>
+  <a href="#setup"><span class="n">0</span>Setup</a>
+  <a href="#create"><span class="n">1</span>Starting</a>
+  <a href="#rhythm"><span class="n">2</span>Session rhythm</a>
+  <a href="#query"><span class="n">3</span>Looking up</a>
+  <a href="#promote"><span class="n">4</span>Promoting</a>
+  <a href="#maint"><span class="n">5</span>Maintenance</a>
+  <a href="#where"><span class="n">—</span>Where does it go?</a>
+  <a href="#ref"><span class="n">—</span>Quick reference</a>
+</nav>
+
+<main>
+
+<section id="model">
+  <h2 data-n="◆">The model</h2>
+  <p class="lede">Facts move <strong>up</strong> the hierarchy as they prove general. They never move back down, and nothing is ever silently deleted.</p>
+
+  <div class="flow">
+    <div class="flow-row"><span class="scope">session</span><span class="what">the conversation you're having right now</span></div>
+    <div class="flow-arrow">↓ &nbsp;<b>/gt-work</b></div>
+    <div class="flow-row"><span class="scope">memory/*.md</span><span class="what">this project, this detail</span></div>
+    <div class="flow-arrow">↓ &nbsp;<b>/gt-promote</b></div>
+    <div class="flow-row"><span class="scope">research · decisions</span><span class="what">settled findings and choices for this project</span></div>
+    <div class="flow-arrow">↓ &nbsp;<b>/gt-promote</b></div>
+    <div class="flow-row"><span class="scope">Knowledge/</span><span class="what">true for several projects — a platform behavior</span></div>
+    <div class="flow-arrow">↓ &nbsp;<b>/gt-promote</b></div>
+    <div class="flow-row"><span class="scope">global-memory/</span><span class="what">true everywhere, loaded in every session</span></div>
+  </div>
+
+  <div class="note">
+    <span class="tag">The discipline that makes it work</span>
+    <p>Write the fact at the <strong>narrowest scope that is honest</strong>, and promote it only when a second project proves it general. A fact promoted too early becomes a rule you have to remember to disbelieve.</p>
+  </div>
+</section>
+
+<section id="setup">
+  <h2 data-n="0">One-time setup</h2>
+  <p>Already done for this vault. You'd only repeat it on a new machine.</p>
+  <pre><code>/gt:gt-init</code></pre>
+  <p>It writes <code>~/.claude/vault-config.json</code> — the pointer every other skill reads — scaffolds the vault if missing, and adds a Golden Thread section to <code>~/.claude/CLAUDE.md</code>. It is idempotent: re-running verifies rather than overwrites.</p>
+</section>
+
+<section id="create">
+  <h2 data-n="1">Starting a project</h2>
+  <pre><code>/gt:gt-create</code></pre>
+  <p>Claude gathers a kebab-case <strong>slug</strong> (the name you'll use forever in <code>/gt-open</code>), a title, tags from the vault's taxonomy, whether it's a sub-project, whether it needs a runbook — and the <strong>topology</strong>.</p>
+
+  <h3>Topology — the question worth answering carefully</h3>
+  <div class="tw"><table>
+    <thead><tr><th>Your situation</th><th>Topology</th></tr></thead>
+    <tbody>
+      <tr><td>A folder on this Mac</td><td><code>local</code></td></tr>
+      <tr><td>One repo, one server, server pulls from GitHub</td><td><code>remote</code></td></tr>
+      <tr><td>Several servers, all reached through one gateway box</td><td><code>bastion-jump</code></td></tr>
+      <tr><td>Several servers, each reachable directly</td><td><code>bastion-direct</code></td></tr>
+    </tbody>
+  </table></div>
+  <p>Everything in this vault is <code>bastion-direct</code> except <code>general</code>, which is <code>local</code>.</p>
+
+  <p>This lands in <code>source.md</code>, and it is the file that stops Claude editing the wrong box. For bastion projects it also carries the <strong>file plan</strong>, marking each deployed file as:</p>
+  <ul>
+    <li><strong>static</strong> — byte-identical on every target. Deploy from one canonical copy.</li>
+    <li><strong>unique</strong> — a per-server variant. Never copy one host's version over another's.</li>
+  </ul>
+
+  <div class="note warn">
+    <span class="tag">Why that distinction isn't bureaucracy</span>
+    <p><code>js/engine_common.js</code> is <strong>static</strong> across <code>app-01</code> and <code>app-02</code> with nothing keeping them in sync — and the copies have already silently diverged once. <code>dispatcher.js</code> is <strong>unique</strong> across <code>edge-01</code> and <code>tools-01</code>: same filename, different config, and copying one over the other would either kill production routing or point dev at real orders.</p>
+  </div>
+
+  <h4>What you get</h4>
+  <pre><code>Projects/&lt;slug&gt;/
+  README.md      status board — stage, next action
+  source.md      where the code lives + deploy plan
+  idea.md        your brain dump — IMMUTABLE after creation
+  research.md    append-only dated findings
+  decisions.md   append-only numbered ADRs
+  design.md      current architecture — always describes now
+  memory/
+    MEMORY.md    index of session notes</code></pre>
+  <p>Claude fills <code>idea.md</code> from what you actually said. Don't tidy it — it's the traceable "why" behind everything that follows, and it is never edited again.</p>
+</section>
+
+<section id="rhythm">
+  <h2 data-n="2">The session rhythm</h2>
+  <p class="lede">The loop you'll run hundreds of times.</p>
+
+  <h3>Start — <code>/gt:gt-open &lt;slug&gt;</code></h3>
+  <p>Reads, in order: <code>source.md</code> → <code>idea.md</code> → <code>research.md</code> → <code>decisions.md</code> → <code>design.md</code> → <code>spec.md</code> → <code>runbook.md</code>, then the fleet page if <code>source.md</code> links one, then <code>memory/MEMORY.md</code>.</p>
+
+  <div class="note">
+    <span class="tag">And it stops there</span>
+    <p>The individual <code>memory/*.md</code> files are <strong>not</strong> loaded. The index is one line per file with a description — enough to know what exists. Opening Automated Trading System costs <strong>~53 lines instead of ~1,900</strong>.</p>
+    <p>Pull in detail as you need it: <em>"read the MSTP3 notes"</em>, <em>"what does the production backtest checklist say"</em>. That's the design working — you're spending context on what the task needs instead of on everything.</p>
+  </div>
+
+  <h3>Middle — do the work</h3>
+  <p>Normal Claude Code. Two habits worth keeping: check <code>source.md</code> before touching a server, and run <code>/gt:gt-query</code> before searching the web.</p>
+
+  <h3>End — <code>/gt:gt-work</code></h3>
+  <p>The step people skip, and skipping it is what makes the vault decay. Claude proposes what to write and where:</p>
+  <div class="tw"><table>
+    <thead><tr><th>Goes to</th><th>What belongs there</th></tr></thead>
+    <tbody>
+      <tr><td><code>research.md</code></td><td>Dated findings, gotchas, measured behavior. <strong>New discoveries only</strong> — not things you already knew.</td></tr>
+      <tr><td><code>decisions.md</code></td><td>A numbered ADR: the decision, the context, the alternatives rejected. <strong>Only stable choices.</strong></td></tr>
+      <tr><td><code>design.md</code></td><td>Rewritten in place if the architecture changed. Always describes <em>now</em>.</td></tr>
+      <tr><td><code>memory/*.md</code></td><td>Session state — updated in place.</td></tr>
+      <tr><td><code>spec.md</code></td><td>Created when the design is complete enough to hand off.</td></tr>
+    </tbody>
+  </table></div>
+
+  <pre><code>## 2026-08-15: Shared engine files drift between hosts
+js/engine_common.js exists on app-01 and app-02 with nothing
+syncing them. Confirmed diverged 2026-07-04; the tick-dedup fix had to
+be applied twice.</code></pre>
+
+  <pre><code>## ADR-3: render.php is per-host, never copied
+- **Decision**: Treat render.php as a unique file per server
+- **Context**: edge-01's copy gates the renderer block behind page_type
+- **Rejected**: A single shared render.php — breaks edge-01's display gating</code></pre>
+
+  <div class="note warn">
+    <span class="tag">What does not belong in decisions.md</span>
+    <p>Anything you might change next session. Unstable things go in <code>research.md</code> or <code>memory/</code>. An ADR you reverse next week teaches the vault to lie to you.</p>
+  </div>
+</section>
+
+<section id="query">
+  <h2 data-n="3">Looking things up</h2>
+  <pre><code>/gt:gt-query</code></pre>
+  <p>Reads <code>index.md</code>, follows wikilinks into <code>Knowledge/</code> up to 2–3 hops, then falls back to grep across <code>Knowledge/</code> and <code>global-memory/</code>, then project memory.</p>
+  <p>Be specific. <em>"Quote API ticker key"</em> finds the answer; <em>"quote"</em> finds noise. If a result carries <code>status: stale</code>, verify before acting on it. If nothing is found, that's a signal — either the knowledge isn't captured yet, or it's filed somewhere <code>index.md</code> doesn't reach, which <code>/gt:gt-lint</code> will tell you.</p>
+</section>
+
+<section id="promote">
+  <h2 data-n="4">Promoting knowledge</h2>
+  <pre><code>/gt:gt-promote</code></pre>
+  <p>The judgement call: <strong>has a second project proved this general?</strong></p>
+  <div class="tw"><table>
+    <thead><tr><th>From → To</th><th>When</th></tr></thead>
+    <tbody>
+      <tr><td><code>memory/</code> → <code>research</code>/<code>decisions</code></td><td>The finding stopped changing session to session</td></tr>
+      <tr><td>project → <code>Knowledge/</code></td><td>A second project hit the same truth. It's a platform behavior, not a project quirk</td></tr>
+      <tr><td><code>Knowledge/</code> → <code>global-memory/</code></td><td>You need it in <em>every</em> session, for <em>every</em> project</td></tr>
+      <tr><td>anywhere → new project</td><td>The idea doesn't belong to the project you're in</td></tr>
+    </tbody>
+  </table></div>
+  <p><code>global-memory/</code> is expensive — it loads every session, everywhere. Six working rules live there now. Adding to it should feel like a decision, not a reflex.</p>
+
+  <div class="note">
+    <span class="tag">Retiring</span>
+    <p>Nothing is deleted. A stale page gets <code>status: stale</code> and a note saying what superseded it. That's why <code>Sources/2026-07-15 Server Topology.md</code> still exists even though <code>INFRASTRUCTURE.md</code> replaced it — notes written before August still name those hosts, and a reader needs to be able to find out why.</p>
+  </div>
+</section>
+
+<section id="maint">
+  <h2 data-n="5">Maintenance</h2>
+  <p>Run these periodically, not every session.</p>
+  <div class="tw"><table>
+    <thead><tr><th>Command</th><th>Cadence</th><th>What it catches</th></tr></thead>
+    <tbody>
+      <tr><td><code>/gt:gt-lint</code></td><td>weekly, and after any ingest</td><td>broken links, orphan pages, index gaps, unlisted memory files, bloated global-memory, unfilled <code>source.md</code></td></tr>
+      <tr><td><code>/gt:gt-refresh</code></td><td>when upstream docs may have changed</td><td><code>Sources/</code> entries whose origin has moved on</td></tr>
+      <tr><td><code>/gt:gt-review</code></td><td>when daily notes pile up</td><td>uncaptured ideas and tasks worth promoting into projects</td></tr>
+      <tr><td><code>/gt:gt-runbook-lint</code></td><td>when you have several runbooks</td><td>procedures duplicated across runbooks that should be shared</td></tr>
+    </tbody>
+  </table></div>
+  <p>Lint findings you deliberately decline go in <code>lint-declines.md</code> as a <code>suppress:</code> line <strong>with the reason</strong> — a suppression without a reason is indistinguishable from a bug nobody got round to.</p>
+</section>
+
+<section id="where">
+  <h2 data-n="◆">Where does this fact go?</h2>
+  <p class="lede">The question that comes up constantly.</p>
+  <div class="tw"><table>
+    <thead><tr><th>The fact</th><th>Goes to</th></tr></thead>
+    <tbody>
+      <tr><td>"This ticker's preset is wrong"</td><td><code>memory/</code> — session state</td></tr>
+      <tr><td>"Istio blocks PATCH in this project"</td><td><code>research.md</code> — dated finding</td></tr>
+      <tr><td>"We use POST for all mutations, and why"</td><td><code>decisions.md</code> — an ADR</td></tr>
+      <tr><td>"The system is structured like this now"</td><td><code>design.md</code> — overwrite</td></tr>
+      <tr><td>"The Quote API needs singular <code>ticker</code>"</td><td><code>Knowledge/</code> — several projects hit it</td></tr>
+      <tr><td>"Always diff before overwriting prod"</td><td><code>global-memory/</code> — everywhere, always</td></tr>
+      <tr><td>"How to restart the prod backtest"</td><td><code>runbook.md</code> — operational procedure</td></tr>
+      <tr><td>"Never <code>scp</code> without backing up first"</td><td><code>PROTOCOL.md</code> — process rule across projects</td></tr>
+      <tr><td>"Code for this lives on <code>edge-01</code>"</td><td><code>source.md</code> — topology</td></tr>
+    </tbody>
+  </table></div>
+
+  <div class="note warn">
+    <span class="tag">Two failure modes, in opposite directions</span>
+    <p><strong>Filing too narrow</strong> — a platform truth buried in one project's memory, so the next project rediscovers it the hard way.</p>
+    <p><strong>Filing too wide</strong> — a project quirk promoted to <code>global-memory/</code>, where it loads into every unrelated session as a rule that isn't true there.</p>
+    <p>When unsure, file narrow. Promotion is cheap and reversible; demotion isn't.</p>
+  </div>
+</section>
+
+<section id="ref">
+  <h2 data-n="◆">Quick reference</h2>
+  <div class="cmds">
+    <div class="cmd-group">Setup</div>
+    <div class="cmd"><span class="c">/gt:gt-init</span><span class="d">once per machine</span></div>
+    <div class="cmd"><span class="c">/gt:gt-create</span><span class="d">new project</span></div>
+    <div class="cmd-group">Every session</div>
+    <div class="cmd"><span class="c">/gt:gt-open &lt;slug&gt;</span><span class="d">start — loads core docs, indexes memory without loading it</span></div>
+    <div class="cmd"><span class="c">/gt:gt-query</span><span class="d">look up before searching the web</span></div>
+    <div class="cmd"><span class="c">/gt:gt-work</span><span class="d">end — write back what you learned</span></div>
+    <div class="cmd-group">Occasional</div>
+    <div class="cmd"><span class="c">/gt:gt-promote</span><span class="d">graduate a fact up a level</span></div>
+    <div class="cmd"><span class="c">/gt:gt-ingest</span><span class="d">import an existing project</span></div>
+    <div class="cmd-group">Maintenance</div>
+    <div class="cmd"><span class="c">/gt:gt-lint</span><span class="d">weekly health check</span></div>
+    <div class="cmd"><span class="c">/gt:gt-refresh</span><span class="d">check sources for upstream drift</span></div>
+    <div class="cmd"><span class="c">/gt:gt-review</span><span class="d">promote items out of daily notes</span></div>
+    <div class="cmd"><span class="c">/gt:gt-runbook-lint</span><span class="d">find duplication across runbooks</span></div>
+  </div>
+</section>
+
+<footer>
+  <span>Golden Thread gt v0.2.0</span>
+  <span>Vault: ~/Dropbox/Projects/Obsidian</span>
+  <span>See also: INGESTING · CONVENTIONS · PROTOCOL · INFRASTRUCTURE</span>
+</footer>
+
+</main>
+</div>
+</div>

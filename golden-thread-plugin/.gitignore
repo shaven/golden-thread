@@ -1,0 +1,8 @@
+# macOS
+.DS_Store
+
+# Build/distribution artifacts — regenerate with install.sh
+*.zip
+
+# Marker written by Claude Code into the installed cache, not source
+.in_use
