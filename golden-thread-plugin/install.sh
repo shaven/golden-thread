@@ -84,7 +84,7 @@ JSON
 
 cat > "$MARKETPLACE/plugins/gt/.claude-plugin/plugin.json" <<JSON
 {
-  "name": "golden-thread",
+  "name": "gt",
   "version": "$VERSION",
   "description": "Golden Thread: vault-based AI memory system. Sets up an Obsidian vault as the single source of truth for all Claude Code sessions across projects.",
   "author": {
@@ -179,10 +179,10 @@ echo "  /gt:gt-review        scan daily notes for uncaptured work"
 echo "  /gt:gt-refresh       check sources for upstream changes"
 echo ""
 echo "gt-wiki skills:"
-echo "  /gt:gt-wiki-init     set up a new wiki vault"
-echo "  /gt:gt-wiki          query the wiki"
-echo "  /gt:gt-wiki-ingest   add a source to the wiki"
-echo "  /gt:gt-wiki-lint     health-check the wiki"
-echo "  /gt:gt-wiki-refresh  check sources for upstream changes"
+echo "  /gt-wiki:gt-wiki-init     set up a new wiki vault"
+echo "  /gt-wiki:gt-wiki          query the wiki"
+echo "  /gt-wiki:gt-wiki-ingest   add a source to the wiki"
+echo "  /gt-wiki:gt-wiki-lint     health-check the wiki"
+echo "  /gt-wiki:gt-wiki-refresh  check sources for upstream changes"
 echo ""
 echo "Restart Claude Code to load the plugins."
