@@ -44,14 +44,14 @@ done
 
 # 1. Install plugin files into cache
 mkdir -p "$CACHE"
-for dir in .claude-plugin skills scripts templates; do
-  cp -r "$SRC/$dir" "$CACHE/"
+for dir in .claude-plugin skills scripts templates commands; do
+  [ -d "$SRC/$dir" ] && cp -r "$SRC/$dir" "$CACHE/"
 done
 echo "Installed gt plugin files → $CACHE"
 
 mkdir -p "$WIKI_CACHE"
-for dir in .claude-plugin skills scripts templates; do
-  cp -r "$WIKI_SRC/$dir" "$WIKI_CACHE/"
+for dir in .claude-plugin skills scripts templates commands; do
+  [ -d "$WIKI_SRC/$dir" ] && cp -r "$WIKI_SRC/$dir" "$WIKI_CACHE/"
 done
 echo "Installed gt-wiki plugin files → $WIKI_CACHE"
 
@@ -93,11 +93,11 @@ cp "$WIKI_SRC/.claude-plugin/plugin.json" "$MARKETPLACE/plugins/gt-wiki/.claude-
 # loadable plugin - not just a manifest. Without this, anything that resolves the
 # plugin from the marketplace (rather than from the installed cache) finds zero
 # skills, and no /gt: commands appear.
-for dir in skills scripts templates; do
+for dir in skills scripts templates commands; do
   rm -rf "$MARKETPLACE/plugins/gt/$dir"
-  cp -r "$SRC/$dir" "$MARKETPLACE/plugins/gt/$dir"
+  [ -d "$SRC/$dir" ] && cp -r "$SRC/$dir" "$MARKETPLACE/plugins/gt/$dir"
   rm -rf "$MARKETPLACE/plugins/gt-wiki/$dir"
-  cp -r "$WIKI_SRC/$dir" "$MARKETPLACE/plugins/gt-wiki/$dir"
+  [ -d "$WIKI_SRC/$dir" ] && cp -r "$WIKI_SRC/$dir" "$MARKETPLACE/plugins/gt-wiki/$dir"
 done
 echo "Populated marketplace plugin directories with skills/scripts/templates"
 
