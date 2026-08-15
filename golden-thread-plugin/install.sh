@@ -82,29 +82,11 @@ cat > "$MARKETPLACE/.claude-plugin/marketplace.json" <<JSON
 }
 JSON
 
-cat > "$MARKETPLACE/plugins/gt/.claude-plugin/plugin.json" <<JSON
-{
-  "name": "gt",
-  "version": "$VERSION",
-  "description": "Golden Thread: vault-based AI memory system. Sets up an Obsidian vault as the single source of truth for all Claude Code sessions across projects.",
-  "author": {
-    "name": "Stacy Haven",
-    "email": "shaven@shavenconsulting.com"
-  }
-}
-JSON
-
-cat > "$MARKETPLACE/plugins/gt-wiki/.claude-plugin/plugin.json" <<JSON
-{
-  "name": "gt-wiki",
-  "version": "$WIKI_VERSION",
-  "description": "Golden Thread Wiki: LLM-powered knowledge base with immutable sources, interlinked pages, and a maintenance loop.",
-  "author": {
-    "name": "Stacy Haven",
-    "email": "shaven@shavenconsulting.com"
-  }
-}
-JSON
+# The plugin manifests are copied from source, not regenerated here. Two
+# hand-maintained copies of the same manifest drift - the descriptions had
+# already diverged once.
+cp "$SRC/.claude-plugin/plugin.json" "$MARKETPLACE/plugins/gt/.claude-plugin/plugin.json"
+cp "$WIKI_SRC/.claude-plugin/plugin.json" "$MARKETPLACE/plugins/gt-wiki/.claude-plugin/plugin.json"
 
 # 2b. Populate the marketplace's plugin directories with the ACTUAL plugin.
 # marketplace.json declares "source": "./plugins/gt", so that path must hold a
