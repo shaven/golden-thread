@@ -1,0 +1,188 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+# ── Preflight ──────────────────────────────────────────────────────────────
+
+if ! command -v python3 &>/dev/null; then
+  echo "✗ Python 3 is required. Install it from https://python.org and re-run."
+  exit 1
+fi
+
+PY_VER=$(python3 -c 'import sys; print(sys.version_info.minor + sys.version_info.major * 100)')
+if [ "$PY_VER" -lt 308 ]; then
+  echo "✗ Python 3.8 or later is required (found $(python3 --version))."
+  exit 1
+fi
+
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+if [ ! -d "$SCRIPT_DIR/golden-thread" ]; then
+  echo "✗ Run this script from the golden-thread-plugin directory."
+  exit 1
+fi
+
+VERSION="0.3.0"
+WIKI_VERSION="0.1.0"
+PLUGIN_KEY="gt@golden-thread-plugin"
+WIKI_PLUGIN_KEY="gt-wiki@golden-thread-plugin"
+SRC="$SCRIPT_DIR/golden-thread/$VERSION"
+WIKI_SRC="$SCRIPT_DIR/golden-thread-wiki/$WIKI_VERSION"
+CACHE="$HOME/.claude/plugins/cache/golden-thread-plugin/gt/$VERSION"
+WIKI_CACHE="$HOME/.claude/plugins/cache/golden-thread-plugin/gt-wiki/$WIKI_VERSION"
+MARKETPLACE="$HOME/.claude/plugins/marketplaces/golden-thread-plugin"
+SETTINGS="$HOME/.claude/settings.json"
+INSTALLED="$HOME/.claude/plugins/installed_plugins.json"
+KNOWN="$HOME/.claude/plugins/known_marketplaces.json"
+
+# 0. Remove superseded gt versions so old caches don't linger unreferenced
+for old in "$HOME/.claude/plugins/cache/golden-thread-plugin/gt"/*; do
+  [ -d "$old" ] || continue
+  if [ "$(basename "$old")" != "$VERSION" ]; then
+    rm -rf "$old"
+    echo "Removed superseded gt cache → $old"
+  fi
+done
+
+# 1. Install plugin files into cache
+mkdir -p "$CACHE"
+for dir in .claude-plugin skills scripts templates; do
+  cp -r "$SRC/$dir" "$CACHE/"
+done
+echo "Installed gt plugin files → $CACHE"
+
+mkdir -p "$WIKI_CACHE"
+for dir in .claude-plugin skills scripts templates; do
+  cp -r "$WIKI_SRC/$dir" "$WIKI_CACHE/"
+done
+echo "Installed gt-wiki plugin files → $WIKI_CACHE"
+
+# 2. Create marketplace directory structure
+mkdir -p "$MARKETPLACE/.claude-plugin"
+mkdir -p "$MARKETPLACE/plugins/gt/.claude-plugin"
+mkdir -p "$MARKETPLACE/plugins/gt-wiki/.claude-plugin"
+
+cat > "$MARKETPLACE/.claude-plugin/marketplace.json" <<JSON
+{
+  "name": "golden-thread-plugin",
+  "owner": {
+    "name": "Stacy Haven",
+    "email": "shaven@shavenconsulting.com"
+  },
+  "plugins": [
+    {
+      "name": "gt",
+      "source": "./plugins/gt",
+      "description": "Vault-based AI memory system. Turns an Obsidian vault into the single source of truth for all Claude Code sessions across projects."
+    },
+    {
+      "name": "gt-wiki",
+      "source": "./plugins/gt-wiki",
+      "description": "LLM-powered knowledge base with immutable sources, interlinked pages, and a maintenance loop."
+    }
+  ]
+}
+JSON
+
+cat > "$MARKETPLACE/plugins/gt/.claude-plugin/plugin.json" <<JSON
+{
+  "name": "golden-thread",
+  "version": "$VERSION",
+  "description": "Golden Thread: vault-based AI memory system. Sets up an Obsidian vault as the single source of truth for all Claude Code sessions across projects.",
+  "author": {
+    "name": "Stacy Haven",
+    "email": "shaven@shavenconsulting.com"
+  }
+}
+JSON
+
+cat > "$MARKETPLACE/plugins/gt-wiki/.claude-plugin/plugin.json" <<JSON
+{
+  "name": "gt-wiki",
+  "version": "$WIKI_VERSION",
+  "description": "Golden Thread Wiki: LLM-powered knowledge base with immutable sources, interlinked pages, and a maintenance loop.",
+  "author": {
+    "name": "Stacy Haven",
+    "email": "shaven@shavenconsulting.com"
+  }
+}
+JSON
+echo "Created marketplace entries → $MARKETPLACE"
+
+# 3. Register in known_marketplaces.json
+python3 - <<EOF
+import json, os
+path = '$KNOWN'
+os.makedirs(os.path.dirname(path), exist_ok=True)
+d = json.load(open(path)) if os.path.exists(path) else {}
+d['golden-thread-plugin'] = {
+    'source': {'source': 'local'},
+    'installLocation': '$MARKETPLACE',
+    'lastUpdated': '2026-08-14T00:00:00.000Z'
+}
+open(path, 'w').write(json.dumps(d, indent=2) + '\n')
+print('Registered in known_marketplaces.json')
+EOF
+
+# 4. Register in installed_plugins.json
+python3 - <<EOF
+import json, os
+from datetime import datetime, timezone
+path = '$INSTALLED'
+os.makedirs(os.path.dirname(path), exist_ok=True)
+d = json.load(open(path)) if os.path.exists(path) else {'version': 2, 'plugins': {}}
+now = datetime.now(timezone.utc).strftime('%Y-%m-%dT%H:%M:%S.000Z')
+d['plugins']['$PLUGIN_KEY'] = [{
+    'scope': 'user',
+    'installPath': '$CACHE',
+    'version': '$VERSION',
+    'installedAt': now,
+    'lastUpdated': now,
+    'gitCommitSha': 'local'
+}]
+d['plugins']['$WIKI_PLUGIN_KEY'] = [{
+    'scope': 'user',
+    'installPath': '$WIKI_CACHE',
+    'version': '$WIKI_VERSION',
+    'installedAt': now,
+    'lastUpdated': now,
+    'gitCommitSha': 'local'
+}]
+open(path, 'w').write(json.dumps(d, indent=2) + '\n')
+print('Registered in installed_plugins.json')
+EOF
+
+# 5. Register in settings.json (enabledPlugins)
+python3 - <<EOF
+import json, os
+path = '$SETTINGS'
+os.makedirs(os.path.dirname(path), exist_ok=True)
+d = json.load(open(path)) if os.path.exists(path) else {}
+d.setdefault('enabledPlugins', {})['$PLUGIN_KEY'] = True
+d['enabledPlugins']['$WIKI_PLUGIN_KEY'] = True
+open(path, 'w').write(json.dumps(d, indent=2) + '\n')
+print('Registered in settings.json')
+EOF
+
+echo ""
+echo "Golden Thread $VERSION installed."
+echo ""
+echo "gt skills:"
+echo "  /gt:gt-init          set up vault + wire a project"
+echo "  /gt:gt-open          load a project at session start"
+echo "  /gt:gt-create        scaffold a new project"
+echo "  /gt:gt-ingest        import existing memory"
+echo "  /gt:gt-work          write back session findings"
+echo "  /gt:gt-promote       graduate facts up the hierarchy"
+echo "  /gt:gt-lint          audit vault health"
+echo "  /gt:gt-runbook-lint  detect duplication across runbooks"
+echo "  /gt:gt-query         look things up"
+echo "  /gt:gt-review        scan daily notes for uncaptured work"
+echo "  /gt:gt-refresh       check sources for upstream changes"
+echo ""
+echo "gt-wiki skills:"
+echo "  /gt:gt-wiki-init     set up a new wiki vault"
+echo "  /gt:gt-wiki          query the wiki"
+echo "  /gt:gt-wiki-ingest   add a source to the wiki"
+echo "  /gt:gt-wiki-lint     health-check the wiki"
+echo "  /gt:gt-wiki-refresh  check sources for upstream changes"
+echo ""
+echo "Restart Claude Code to load the plugins."
