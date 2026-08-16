@@ -91,10 +91,55 @@ Generic │ loaded when space allows   │ (rare — validation implies  │
 
 ## Governance — promotion & demotion
 
-- A rule earns **Core** when it has drifted/failed despite being stored, *or* the user
-  designates it as always-on. Promotion means: set `level: core`, wire the enforcement
-  mechanism (hook), and note it here.
-- A rule drops to **Generic** when it proves situational or is superseded.
+There are **two ways into Core**, and only one of them is gated.
+
+### Path 1 — Designation (primary)
+
+The user designates a rule as Core. It is Core from that moment: no test applies, and
+**no prior incident is required or wanted**. A rule that must be immutable is Core as
+soon as that is known. Requiring it to fail first means accepting the failure, which
+defeats the one tier whose entire purpose is that it never breaks.
+
+### Path 2 — Promotion from a lower level (gated)
+
+When an existing item at levels 1–5 is put forward for Core, answer all three
+questions explicitly. Each is asked in the negative — *if this rule were **not**
+enforced*:
+
+1. **Correctness** — would it cause a misunderstanding by Claude that leads to code
+   written incorrectly, or a change implemented wrongly, not at all, or in a way that
+   is not allowed?
+2. **Cost** — would it cause more work, or force backing out a solution already
+   implemented?
+3. **Cascade** — would it cause a cascade in which rules at the lower five levels are
+   misrepresented, or are written such that they cannot or should not be followed?
+
+**Any single YES qualifies the item for Core.** Three NOs means it stays where it is —
+it may still be a sound rule, but it belongs at its current level.
+
+Record the three answers in the rule file's body, so the tier is justified rather than
+asserted.
+
+The two paths are not redundant, and the current Core set proves it:
+
+| Rule | Q1 | Q2 | Q3 | Entered by |
+|---|---|---|---|---|
+| `core_timestamp_every_message` | no | no | no | **Designation** — fails the gate, is Core anyway |
+| `core_global_memory_scope` | no | no | **yes** | Either path |
+| `core_memory_load_policy` | no | **yes** | no | Either path |
+
+The gate governs *promotion*, not the tier. A rule the user requires is Core whether
+or not it would ever have qualified on its own.
+
+### Standing rules
+
+- Promotion by either path means: set `level: core` and `enforcement`, move the file
+  into `core-rules/`, wire the mechanism, and **verify it actually fires**.
+- Observed drift is **not** an entry requirement. A rule that drifts was mis-tiered —
+  drift is a diagnostic, not a qualification.
+- A rule drops to **Generic** when it proves situational or is superseded. **Unwire
+  the mechanism first**, then move the file and change the frontmatter; the reverse
+  order leaves a hook pointing at a rule that no longer exists.
 - Record every promotion/demotion in the rule file's body and re-index `MEMORY.md`.
 - This model file is itself **Core** — the system for rules must be as durable as the
   rules.
