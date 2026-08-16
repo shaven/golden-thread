@@ -86,7 +86,14 @@ def check_index_gap(vault: Path, findings: list, suppressed: set):
         rel = f"Knowledge/{page.name}"
         if rel.lower() in suppressed or title.lower() in suppressed:
             continue
-        if title not in index_text and page.name not in index_text:
+        # Match the actual link, not a bare substring: 'Quote API' must not count as
+        # indexed merely because 'Schwab Quote API' is listed.
+        linked = (f"[[{title}]]" in index_text
+                  or f"[[{title}|" in index_text
+                  or f"[[{title}#" in index_text
+                  or f"({page.name})" in index_text
+                  or f"Knowledge/{page.name}" in index_text)
+        if not linked:
             findings.append({
                 "check": "index-gap",
                 "path": rel,
