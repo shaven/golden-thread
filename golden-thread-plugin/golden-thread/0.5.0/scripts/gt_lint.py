@@ -473,7 +473,18 @@ def check_core_rules(vault: Path, findings: list, suppressed: set):
     2026-08-16 incident had the timestamp rule sitting in global-memory while
     silently not being applied. So this checks the mechanism, not the file.
     """
-    core_dir = vault / "Projects" / "golden-thread" / "core-rules"
+    core_dir = None
+    try:
+        sys.path.insert(0, str(Path(__file__).parent))
+        from gt_paths import find_core_rules
+        core_dir = find_core_rules(vault, record=False)
+    except Exception:
+        pass
+    if core_dir is None:
+        for cand in sorted(vault.rglob("core-rules")):
+            if (cand / "core_rule_priority_model.md").is_file():
+                core_dir = cand
+                break
     events = wired_hook_events()
 
     for md in sorted(vault.rglob("*.md")):
@@ -490,12 +501,12 @@ def check_core_rules(vault: Path, findings: list, suppressed: set):
             continue
 
         # (i) must live in the canonical folder
-        if core_dir not in md.parents:
+        if core_dir is None or core_dir not in md.parents:
             findings.append({
                 "check": "core-misplaced",
                 "path": rel,
                 "message": f"{md.name} declares level: core but lives outside core-rules/",
-                "proposed_fix": "Move it to Projects/golden-thread/core-rules/, or lower its level",
+                "proposed_fix": f"Move it to {core_dir.relative_to(vault) if core_dir else 'core-rules/'}/, or lower its level",
             })
 
         # (ii) must declare an enforcement mechanism
@@ -524,8 +535,8 @@ def check_core_rules(vault: Path, findings: list, suppressed: set):
             })
 
     # A core-rules folder with no wiring at all is the headline failure.
-    if core_dir.exists() and not ({"UserPromptSubmit", "Stop"} & events):
-        rel = "Projects/golden-thread/core-rules"
+    if core_dir and core_dir.exists() and not ({"UserPromptSubmit", "Stop"} & events):
+        rel = str(core_dir.relative_to(vault))
         if rel.lower() not in suppressed:
             findings.append({
                 "check": "core-unenforced",

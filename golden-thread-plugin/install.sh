@@ -20,7 +20,7 @@ if [ ! -d "$SCRIPT_DIR/golden-thread" ]; then
   exit 1
 fi
 
-VERSION="0.4.1"
+VERSION="0.5.0"
 WIKI_VERSION="0.1.0"
 PLUGIN_KEY="gt@golden-thread-plugin"
 WIKI_PLUGIN_KEY="gt-wiki@golden-thread-plugin"
@@ -44,10 +44,22 @@ done
 
 # 1. Install plugin files into cache
 mkdir -p "$CACHE"
-for dir in .claude-plugin skills scripts templates commands; do
+for dir in .claude-plugin skills scripts templates commands hooks; do
   [ -d "$SRC/$dir" ] && cp -r "$SRC/$dir" "$CACHE/"
 done
 echo "Installed gt plugin files → $CACHE"
+
+# 1b. Install the Core-rule hooks to a STABLE location outside the vault.
+# settings.json references these by absolute path, so the path must survive project
+# renames, merges and vault moves. The scripts locate the rules at run time.
+GT_HOOKS="$HOME/.claude/golden-thread/hooks"
+if [ -d "$SRC/hooks" ]; then
+  mkdir -p "$GT_HOOKS"
+  find "$SRC/hooks" -maxdepth 1 -type f -exec cp {} "$GT_HOOKS/" \;
+  cp "$SRC/scripts/gt_paths.py" "$GT_HOOKS/gt_paths.py"
+  chmod +x "$GT_HOOKS"/*.sh
+  echo "Installed Core-rule hooks → $GT_HOOKS"
+fi
 
 mkdir -p "$WIKI_CACHE"
 for dir in .claude-plugin skills scripts templates commands; do
@@ -93,7 +105,7 @@ cp "$WIKI_SRC/.claude-plugin/plugin.json" "$MARKETPLACE/plugins/gt-wiki/.claude-
 # loadable plugin - not just a manifest. Without this, anything that resolves the
 # plugin from the marketplace (rather than from the installed cache) finds zero
 # skills, and no /gt: commands appear.
-for dir in skills scripts templates commands; do
+for dir in skills scripts templates commands hooks; do
   rm -rf "$MARKETPLACE/plugins/gt/$dir"
   [ -d "$SRC/$dir" ] && cp -r "$SRC/$dir" "$MARKETPLACE/plugins/gt/$dir"
   rm -rf "$MARKETPLACE/plugins/gt-wiki/$dir"

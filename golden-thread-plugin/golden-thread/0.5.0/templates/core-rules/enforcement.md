@@ -60,13 +60,36 @@ A `Stop` hook that exits non-zero with a message (or emits
 validation to rules that are cheap and unambiguous to check; ambiguous rules stay
 Reminder-tier.
 
-## Incorporating into a project (the "point at it" step)
+## Where the scripts live — and why not here
 
-1. From the project repo: `mkdir -p .golden-thread` and copy or symlink the two
-   scripts from this folder into it (symlink keeps one source of truth).
-2. Add the two hook blocks above to the project's `.claude/settings.json`.
-3. In the project's `CLAUDE.md`, state that Core rules are defined in
-   `Projects/golden-thread/core-rules/` and enforced by these hooks.
+The **rules** are vault content and live in this folder. The **hook scripts** are
+machinery shipped by the `gt` plugin and installed to:
+
+```
+~/.claude/golden-thread/hooks/
+```
+
+That separation is deliberate. `settings.json` must reference the hooks by absolute
+path, so that path must never move — but projects get renamed, merged and removed,
+and the vault itself can move. A hook path that runs through a project slug is a
+breaking change waiting to happen, and a silent one: a hook pointing at a missing
+file simply stops firing.
+
+So the scripts sit at a fixed location outside the vault and **locate the rules at
+run time** (`gt_paths.py`: vault-config, then a search for the folder by its marker
+file). Consequences:
+
+- Rename or move a project — enforcement keeps working; the path self-heals.
+- Edit a `core_*.md` rule — the injected text changes immediately. The rules are not
+  duplicated inside the script.
+- Vault unreachable — the injector still emits the timestamp, because that rule is
+  Validated and must never silently stop.
+
+Install or repair with:
+
+```bash
+python3 <plugin>/scripts/vault_init.py install-core-rules --vault <vault>
+```
 
 ## Scope note
 

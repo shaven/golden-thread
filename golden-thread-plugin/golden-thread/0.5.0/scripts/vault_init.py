@@ -11,6 +11,7 @@ Modes:
                   [--repo-url <url>] [--fleet <page-name>]
   connect         --vault <path>
   install-core-rules --vault <path> [--no-hooks] [--settings <file>]
+  rename-project  --vault <path> --from <old-slug> --to <new-slug>
 
 Exit codes:
   0 = success
@@ -148,43 +149,54 @@ def register_in_master_index(index_path: Path, slug: str, title: str, tags: list
 
 
 def install_core_rules(vault: Path, wire_hooks: bool = True, settings_path: Path = None):
-    """Establish the Core-rule tier: copy the module in, then WIRE THE HOOKS.
+    """Establish the Core tier: place the rules, record where they are, wire the hooks.
 
-    Copying the files is not enough. Per core_rule_priority_model.md, a Core rule is
-    only as durable as the mechanism that re-asserts it — an unwired module is exactly
-    the failure mode this tier exists to prevent. So the wiring is part of init, not a
-    follow-up step.
+    The hooks are installed by install.sh to ~/.claude/golden-thread/hooks — outside
+    the vault, so the settings.json path survives project renames and vault moves.
+    Here we only ensure the RULES exist and that settings points at those stable
+    scripts.
     """
     src = TEMPLATES_DIR / "core-rules"
     if not src.exists():
         record("error", src, "core-rules template missing from the plugin")
         return
 
-    dest = vault / "Projects" / "golden-thread" / "core-rules"
+    # Default location for a fresh vault; an existing one is found wherever it is.
+    dest = _resolve_core_rules(vault) or (vault / "Projects" / "golden-thread" / "core-rules")
     ensure_dir(dest)
-    ensure_dir(dest / "hooks")
     for f in sorted(src.glob("*.md")):
         ensure_file(dest / f.name, f.read_text(encoding="utf-8"))
-    for f in sorted((src / "hooks").glob("*.sh")):
-        target = dest / "hooks" / f.name
-        ensure_file(target, f.read_text(encoding="utf-8"))
-        try:
-            target.chmod(0o755)
-        except OSError:
-            pass
+
+    # Record the location so nothing has to guess next time. Relative to the vault, so
+    # moving the whole vault does not invalidate it either.
+    try:
+        cfg_path = Path.home() / ".claude" / "vault-config.json"
+        cfg = json.loads(cfg_path.read_text(encoding="utf-8")) if cfg_path.exists() else {}
+        rel = str(dest.relative_to(vault))
+        if cfg.get("core_rules_path") != rel:
+            cfg["core_rules_path"] = rel
+            cfg.setdefault("vault_path", str(vault))
+            cfg_path.parent.mkdir(parents=True, exist_ok=True)
+            cfg_path.write_text(json.dumps(cfg, indent=2) + "\n", encoding="utf-8")
+            record("updated", cfg_path, f"core_rules_path = {rel}")
+    except Exception as exc:
+        record("error", "vault-config.json", f"could not record core_rules_path: {exc}")
 
     if not wire_hooks:
         return
 
-    # Core = user-global scope. Wiring per-project would scope these to one project,
-    # which is the Context tier, not Core.
-    settings = settings_path or (Path.home() / ".claude" / "settings.json")
-    hooks_dir = dest / "hooks"
+    hooks_dir = Path.home() / ".claude" / "golden-thread" / "hooks"
     wanted = {
-        "UserPromptSubmit": str(hooks_dir / "inject_core_rules.sh"),
-        "Stop": str(hooks_dir / "validate_response.sh"),
+        "UserPromptSubmit": hooks_dir / "inject_core_rules.sh",
+        "Stop": hooks_dir / "validate_response.sh",
     }
+    missing = [str(v) for v in wanted.values() if not v.is_file()]
+    if missing:
+        record("error", hooks_dir,
+               "hook scripts not installed — run install.sh (they ship with the plugin)")
+        return
 
+    settings = settings_path or (Path.home() / ".claude" / "settings.json")
     try:
         data = json.loads(settings.read_text(encoding="utf-8")) if settings.exists() else {}
     except (json.JSONDecodeError, OSError) as exc:
@@ -193,23 +205,93 @@ def install_core_rules(vault: Path, wire_hooks: bool = True, settings_path: Path
 
     data.setdefault("hooks", {})
     changed = False
-    for event, cmd in wanted.items():
+    for event, script in wanted.items():
         blocks = data["hooks"].setdefault(event, [])
-        already = any(
-            h.get("command") == cmd
-            for b in blocks if isinstance(b, dict)
-            for h in b.get("hooks", [])
-        )
-        if already:
+        # Drop any previous entry that pointed at a vault-internal copy of this hook.
+        for b in blocks:
+            if isinstance(b, dict):
+                b["hooks"] = [h for h in b.get("hooks", [])
+                              if not (h.get("command", "").endswith(script.name)
+                                      and h.get("command") != str(script))]
+        blocks[:] = [b for b in blocks if not (isinstance(b, dict) and not b.get("hooks"))]
+        if any(h.get("command") == str(script)
+               for b in blocks if isinstance(b, dict) for h in b.get("hooks", [])):
             record("skipped", settings, f"{event} hook already wired")
             continue
-        blocks.append({"hooks": [{"type": "command", "command": cmd, "timeout": 10}]})
+        blocks.append({"hooks": [{"type": "command", "command": str(script), "timeout": 10}]})
         changed = True
 
     if changed:
         settings.parent.mkdir(parents=True, exist_ok=True)
         settings.write_text(json.dumps(data, indent=2) + "\n", encoding="utf-8")
-        record("updated", settings, "wired Core-rule enforcement hooks (UserPromptSubmit + Stop)")
+        record("updated", settings, "wired Core-rule hooks at the stable path")
+
+
+def _resolve_core_rules(vault: Path):
+    """Find core-rules wherever it currently lives (config, then marker-file search)."""
+    try:
+        sys.path.insert(0, str(SCRIPT_DIR))
+        from gt_paths import find_core_rules
+        return find_core_rules(vault, record=False)
+    except Exception:
+        for cand in sorted(vault.rglob("core-rules")):
+            if (cand / "core_rule_priority_model.md").is_file():
+                return cand
+        return None
+
+
+def cmd_rename_project(vault: Path, old: str, new: str):
+    """Rename a project and update every reference to it.
+
+    Renames happen — projects get redefined, merged, retired. This makes that a
+    supported operation rather than a manual sweep that misses something.
+    """
+    vault = vault.resolve()
+    projects = vault / "Projects"
+    matches = [d for d in projects.rglob(old) if d.is_dir()] if projects.exists() else []
+    if not matches:
+        record("error", vault / "Projects" / old, "project not found")
+        return
+    src_dir = matches[0]
+    dst_dir = src_dir.parent / new
+    if dst_dir.exists():
+        record("conflict", dst_dir, "destination already exists")
+        return
+
+    src_dir.rename(dst_dir)
+    record("updated", dst_dir, f"renamed from {old}")
+
+    # Update textual references across the vault.
+    touched = 0
+    for md in vault.rglob("*.md"):
+        if ".git" in md.parts:
+            continue
+        try:
+            text = original = md.read_text(encoding="utf-8")
+        except Exception:
+            continue
+        text = text.replace(f"Projects/{old}/", f"Projects/{new}/")
+        text = text.replace(f"({old}/", f"({new}/")
+        text = text.replace(f"`{old}`", f"`{new}`")
+        text = re.sub(rf"^(\s*slug:\s*){re.escape(old)}\s*$", rf"\g<1>{new}", text, flags=re.M)
+        if text != original:
+            md.write_text(text, encoding="utf-8")
+            touched += 1
+    record("updated", vault, f"{touched} files re-pointed")
+
+    # If core-rules lived under the renamed project, re-record its location.
+    core = _resolve_core_rules(vault)
+    if core:
+        try:
+            cfg_path = Path.home() / ".claude" / "vault-config.json"
+            cfg = json.loads(cfg_path.read_text(encoding="utf-8")) if cfg_path.exists() else {}
+            rel = str(core.relative_to(vault))
+            if cfg.get("core_rules_path") != rel:
+                cfg["core_rules_path"] = rel
+                cfg_path.write_text(json.dumps(cfg, indent=2) + "\n", encoding="utf-8")
+                record("updated", cfg_path, f"core_rules_path = {rel}")
+        except Exception:
+            pass
 
 
 def cmd_fresh(vault: Path, domain: str):
@@ -411,6 +493,11 @@ def main():
     p_conn = sub.add_parser("connect", help="Point vault-config.json at an existing vault")
     p_conn.add_argument("--vault", required=True, type=Path)
 
+    p_ren = sub.add_parser("rename-project", help="Rename a project and update every reference")
+    p_ren.add_argument("--vault", required=True, type=Path)
+    p_ren.add_argument("--from", dest="old", required=True)
+    p_ren.add_argument("--to", dest="new", required=True)
+
     p_core = sub.add_parser("install-core-rules",
                             help="Establish the Core-rule tier in an existing vault and wire the hooks")
     p_core.add_argument("--vault", required=True, type=Path)
@@ -430,6 +517,8 @@ def main():
                            args.domain)
     elif args.mode == "connect":
         cmd_connect(args.vault)
+    elif args.mode == "rename-project":
+        cmd_rename_project(args.vault, args.old, args.new)
     elif args.mode == "install-core-rules":
         install_core_rules(args.vault.resolve(), wire_hooks=not args.no_hooks,
                            settings_path=args.settings)

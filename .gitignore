@@ -6,3 +6,7 @@
 
 # Marker Claude Code writes into the installed plugin cache, not source
 .in_use
+
+# Python bytecode
+__pycache__/
+*.pyc
