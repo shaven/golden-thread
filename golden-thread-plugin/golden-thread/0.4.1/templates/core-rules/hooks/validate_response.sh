@@ -12,7 +12,7 @@
 # that blocks wrongly makes every session unusable, which is far worse than missing
 # an occasional violation.
 #
-# Canonical source: Projects/obsidian-vault/core-rules/
+# Canonical source: Projects/golden-thread/core-rules/
 
 set -uo pipefail
 

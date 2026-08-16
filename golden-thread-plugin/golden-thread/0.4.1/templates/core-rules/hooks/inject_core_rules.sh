@@ -8,7 +8,7 @@
 # Output is phrased as an IMPERATIVE, not a description. Descriptions drift;
 # commands re-anchor.
 #
-# Canonical source: Projects/obsidian-vault/core-rules/
+# Canonical source: Projects/golden-thread/core-rules/
 # Wire at user-global ~/.claude/settings.json for the Core tier (every project).
 # Wiring per-project instead scopes it to that project = Context tier.
 
@@ -21,7 +21,7 @@ STAMP="$(date '+%Y-%m-%d %H:%M %Z')"
 read -r -d '' CONTEXT <<EOF || true
 Current date and time: ${STAMP}
 
-CORE RULES (always on, every turn, every project — see Projects/obsidian-vault/core-rules/):
+CORE RULES (always on, every turn, every project — see Projects/golden-thread/core-rules/):
 1. Begin your reply with this exact timestamp: ${STAMP}
 2. Write to global-memory/ only facts true in EVERY project; project-specific facts go to Projects/<slug>/memory/.
 3. Do not auto-load the memory index. Load global-memory/MEMORY.md only when asked or when a /gt:* skill runs.

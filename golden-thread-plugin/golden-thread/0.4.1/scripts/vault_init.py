@@ -160,7 +160,7 @@ def install_core_rules(vault: Path, wire_hooks: bool = True, settings_path: Path
         record("error", src, "core-rules template missing from the plugin")
         return
 
-    dest = vault / "Projects" / "obsidian-vault" / "core-rules"
+    dest = vault / "Projects" / "golden-thread" / "core-rules"
     ensure_dir(dest)
     ensure_dir(dest / "hooks")
     for f in sorted(src.glob("*.md")):

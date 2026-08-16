@@ -473,7 +473,7 @@ def check_core_rules(vault: Path, findings: list, suppressed: set):
     2026-08-16 incident had the timestamp rule sitting in global-memory while
     silently not being applied. So this checks the mechanism, not the file.
     """
-    core_dir = vault / "Projects" / "obsidian-vault" / "core-rules"
+    core_dir = vault / "Projects" / "golden-thread" / "core-rules"
     events = wired_hook_events()
 
     for md in sorted(vault.rglob("*.md")):
@@ -495,7 +495,7 @@ def check_core_rules(vault: Path, findings: list, suppressed: set):
                 "check": "core-misplaced",
                 "path": rel,
                 "message": f"{md.name} declares level: core but lives outside core-rules/",
-                "proposed_fix": "Move it to Projects/obsidian-vault/core-rules/, or lower its level",
+                "proposed_fix": "Move it to Projects/golden-thread/core-rules/, or lower its level",
             })
 
         # (ii) must declare an enforcement mechanism
@@ -525,7 +525,7 @@ def check_core_rules(vault: Path, findings: list, suppressed: set):
 
     # A core-rules folder with no wiring at all is the headline failure.
     if core_dir.exists() and not ({"UserPromptSubmit", "Stop"} & events):
-        rel = "Projects/obsidian-vault/core-rules"
+        rel = "Projects/golden-thread/core-rules"
         if rel.lower() not in suppressed:
             findings.append({
                 "check": "core-unenforced",

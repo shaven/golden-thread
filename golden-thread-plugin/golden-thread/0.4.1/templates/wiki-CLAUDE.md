@@ -63,7 +63,7 @@ Use `/gt-lint` to check for gaps, broken links, and stale pages.
 
 ## Core rules
 
-Core rules live in `Projects/obsidian-vault/core-rules/` and are enforced by hooks on
+Core rules live in `Projects/golden-thread/core-rules/` and are enforced by hooks on
 every turn, in every project — the top of the promotion hierarchy, above
 `global-memory/`. Each carries `level` and `enforcement` in its frontmatter.
 

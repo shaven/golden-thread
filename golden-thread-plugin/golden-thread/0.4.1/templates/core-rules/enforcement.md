@@ -66,7 +66,7 @@ Reminder-tier.
    scripts from this folder into it (symlink keeps one source of truth).
 2. Add the two hook blocks above to the project's `.claude/settings.json`.
 3. In the project's `CLAUDE.md`, state that Core rules are defined in
-   `Projects/obsidian-vault/core-rules/` and enforced by these hooks.
+   `Projects/golden-thread/core-rules/` and enforced by these hooks.
 
 ## Scope note
 

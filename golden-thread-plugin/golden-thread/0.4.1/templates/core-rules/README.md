@@ -2,7 +2,7 @@
 
 Canonical home for the **Core-tier rules** and their **enforcement wiring**. This is
 the single source of truth that every other project points at to inherit the rules
-that must hold everywhere. Owned by the golden-thread (obsidian-vault) project.
+that must hold everywhere. Owned by the golden-thread project.
 
 ## What's here
 
@@ -23,7 +23,7 @@ them by pointing at this folder. Two incorporation levels:
 
 1. **Reference (documentation):** in the project's `CLAUDE.md`, link this folder as
    the authority — e.g. "Core rules and their enforcement are defined in
-   `Projects/obsidian-vault/core-rules/`; they apply here."
+   `Projects/golden-thread/core-rules/`; they apply here."
 2. **Enforce (wiring):** point the project's Claude Code hooks at the scripts here
    (see `enforcement.md`). This is what makes the Core/Validated tier real rather
    than aspirational.

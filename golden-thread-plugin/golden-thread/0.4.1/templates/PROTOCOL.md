@@ -18,7 +18,7 @@ Promote to global-memory when:
 - It's a cross-cutting fact needed in every session, for every project
 - Examples: platform URLs, tool versions, authentication patterns
 
-Promote to **Core** (`Projects/obsidian-vault/core-rules/`) when:
+Promote to **Core** (`Projects/golden-thread/core-rules/`) when:
 - The rule has drifted or failed *despite being stored*, or the user designates it
   always-on
 - Promotion is not just a move: set `level: core`, set `enforcement`, and **wire the

@@ -15,7 +15,7 @@ Standards for all projects in this vault.
 
 ## Core rules — the top of the hierarchy
 
-Core rules are defined **and enforced** from `Projects/obsidian-vault/core-rules/`
+Core rules are defined **and enforced** from `Projects/golden-thread/core-rules/`
 and apply to every project. They sit above `global-memory/`.
 
 A Core rule is not one written down more emphatically — it is one backed by a

@@ -100,7 +100,7 @@ Always append to `<vault>/log.md` with the appropriate verb:
 
 ## Promoting to Core (the top tier)
 
-`Projects/obsidian-vault/core-rules/` is the top of the hierarchy, above
+`Projects/golden-thread/core-rules/` is the top of the hierarchy, above
 `global-memory/`. Promote here only when a rule must hold on **every turn, in every
 project**.
 
@@ -130,7 +130,7 @@ Steps, in order:
      promoted: <today>
      supersedes: <old-filename-if-any>
    ```
-3. **Move the file** to `Projects/obsidian-vault/core-rules/`, renamed `core_<topic>.md`.
+3. **Move the file** to `Projects/golden-thread/core-rules/`, renamed `core_<topic>.md`.
 4. **Wire or confirm the mechanism:**
    - `reminder` → add the rule's **imperative** to `hooks/inject_core_rules.sh`.
      Phrase it as a command ("Begin your reply with…"), never a description —
