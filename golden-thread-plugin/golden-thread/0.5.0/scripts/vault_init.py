@@ -11,7 +11,7 @@ Modes:
                   [--repo-url <url>] [--fleet <page-name>]
   connect         --vault <path>
   install-core-rules --vault <path> [--no-hooks] [--settings <file>]
-  rename-project  --vault <path> --from <old-slug> --to <new-slug>
+  rename-project  --vault <path> --from <old-slug> --to <new-slug>\n  merge-project   --vault <path> --from <slug> --into <slug>\n  archive-project --vault <path> --slug <slug> [--reason <text>]
 
 Exit codes:
   0 = success
@@ -294,6 +294,256 @@ def cmd_rename_project(vault: Path, old: str, new: str):
             pass
 
 
+def _proj_dir(vault: Path, slug: str):
+    projects = vault / "Projects"
+    if not projects.exists():
+        return None
+    for d in projects.rglob(slug):
+        if d.is_dir():
+            return d
+    return None
+
+
+def _frontmatter_set(path: Path, **kv):
+    """Set keys in a file's YAML frontmatter, adding the block if absent."""
+    if not path.exists():
+        return
+    text = path.read_text(encoding="utf-8")
+    m = re.match(r"^---\s*\n(.*?)\n---\s*\n", text, re.S)
+    if not m:
+        fm = "\n".join(f"{k}: {v}" for k, v in kv.items())
+        path.write_text(f"---\n{fm}\n---\n\n" + text, encoding="utf-8")
+        return
+    body, fm = text[m.end():], m.group(1)
+    for k, v in kv.items():
+        if re.search(rf"^{k}\s*:", fm, re.M):
+            fm = re.sub(rf"^{k}\s*:.*$", f"{k}: {v}", fm, count=1, flags=re.M)
+        else:
+            fm += f"\n{k}: {v}"
+    if not body.startswith("\n"):
+        body = "\n" + body
+    path.write_text(f"---\n{fm}\n---\n" + body, encoding="utf-8")
+
+
+def _append(path: Path, text: str):
+    prior = path.read_text(encoding="utf-8").rstrip() + "\n" if path.exists() else ""
+    path.write_text(prior + text, encoding="utf-8")
+
+
+def _strip_heading(text: str) -> str:
+    """Drop frontmatter, a leading '# Title' and comment scaffolding from a merged file."""
+    text = re.sub(r"\A---\s*\n.*?\n---\s*\n", "", text, flags=re.S)
+    text = re.sub(r"\A#\s+.*\n", "", text)
+    text = re.sub(r"\A\s*<!--.*?-->\s*\n", "", text, flags=re.S)
+    return text.strip() + "\n"
+
+
+def cmd_merge_project(vault: Path, src_slug: str, dst_slug: str, today: str):
+    """Fold one project into another.
+
+    Deliberately split. Content that combines without judgement is moved and appended.
+    Content encoding a CURRENT state (design.md, source.md) or a single choice
+    (domain, tags) is appended under a REVIEW banner and parked in review-queue.md —
+    silently concatenating two architectures yields a design.md describing neither.
+
+    Nothing is deleted: the source becomes a tombstone so older notes and links that
+    reference it still lead somewhere.
+    """
+    vault = vault.resolve()
+    src, dst = _proj_dir(vault, src_slug), _proj_dir(vault, dst_slug)
+    if src is None or dst is None:
+        record("error", vault, f"project not found: {src_slug if src is None else dst_slug}")
+        return
+    if src == dst:
+        record("error", src, "cannot merge a project into itself")
+        return
+    if str(dst).startswith(str(src) + "/"):
+        record("error", dst, "destination is inside the source — move it out first")
+        return
+
+    review = [f"\n### Merge {src_slug} -> {dst_slug} ({today})", ""]
+
+    # memory notes keep their filenames so existing [[wikilinks]] still resolve
+    src_mem, dst_mem = src / "memory", dst / "memory"
+    moved = 0
+    if src_mem.exists():
+        dst_mem.mkdir(parents=True, exist_ok=True)
+        for f in sorted(src_mem.glob("*.md")):
+            if f.name == "MEMORY.md":
+                continue
+            target = dst_mem / f.name
+            if target.exists():
+                target = dst_mem / f"{f.stem}__from_{src_slug}{f.suffix}"
+                review.append(f"- [ ] Name clash: `{f.name}` kept as `{target.name}` — reconcile or keep both")
+            f.rename(target)
+            moved += 1
+        src_idx = src_mem / "MEMORY.md"
+        if src_idx.exists() and moved:
+            entries = [l for l in src_idx.read_text(encoding="utf-8").splitlines() if l.startswith("- [")]
+            if entries:
+                _append(dst_mem / "MEMORY.md",
+                        f"\n## Merged from {src_slug} ({today})\n\n" + "\n".join(entries) + "\n")
+        if moved:
+            record("updated", dst_mem, f"{moved} memory notes moved from {src_slug}")
+
+    # idea.md is IMMUTABLE — preserved whole, never concatenated
+    src_idea = src / "idea.md"
+    if src_idea.exists():
+        dst_mem.mkdir(parents=True, exist_ok=True)
+        keep = dst_mem / f"idea_{src_slug.replace('-', '_')}.md"
+        keep.write_text(
+            f"> Origin story of `{src_slug}`, merged into `{dst_slug}` on {today}.\n"
+            f"> Preserved verbatim — idea.md is immutable.\n\n"
+            + src_idea.read_text(encoding="utf-8"), encoding="utf-8")
+        src_idea.unlink()
+        _append(dst_mem / "MEMORY.md",
+                f"- [{keep.stem}]({keep.name}) — original brain dump of the merged {src_slug} project\n")
+        record("updated", keep, "source idea.md preserved verbatim")
+
+    # research.md — append-only and dated, safe to interleave
+    src_res = src / "research.md"
+    if src_res.exists() and _strip_heading(src_res.read_text(encoding="utf-8")).strip():
+        _append(dst / "research.md",
+                f"\n---\n\n# Merged from {src_slug} ({today})\n\n"
+                + _strip_heading(src_res.read_text(encoding="utf-8")))
+        record("updated", dst / "research.md", f"research merged from {src_slug}")
+
+    # decisions.md — ADR ids collide, so renumber and keep the original id visible
+    src_dec = src / "decisions.md"
+    if src_dec.exists():
+        body = _strip_heading(src_dec.read_text(encoding="utf-8"))
+        if body.strip():
+            dst_dec = dst / "decisions.md"
+            existing = dst_dec.read_text(encoding="utf-8") if dst_dec.exists() else ""
+            nums = [int(n) for n in re.findall(r"^## ADR-(\d+)", existing, re.M)]
+            offset = max(nums) if nums else 0
+
+            def _renum(m):
+                old_n = int(m.group(1))
+                return f"## ADR-{old_n + offset}: {m.group(2)} *(was {src_slug} ADR-{old_n})*"
+
+            body = re.sub(r"^## ADR-(\d+):\s*(.+)$", _renum, body, flags=re.M)
+            _append(dst_dec, f"\n---\n\n# Merged from {src_slug} ({today})\n\n" + body)
+            record("updated", dst_dec, f"ADRs merged from {src_slug}, renumbered +{offset}")
+
+    for name in ("runbook.md", "spec.md"):
+        s = src / name
+        if s.exists() and _strip_heading(s.read_text(encoding="utf-8")).strip():
+            _append(dst / name, f"\n---\n\n# Merged from {src_slug} ({today})\n\n"
+                    + _strip_heading(s.read_text(encoding="utf-8")))
+            record("updated", dst / name, f"merged from {src_slug}")
+
+    # design.md / source.md describe a CURRENT state — never auto-merged
+    for name, why in (("design.md", "two architectures"),
+                      ("source.md", "two topologies / file plans")):
+        s = src / name
+        if s.exists() and _strip_heading(s.read_text(encoding="utf-8")).strip():
+            _append(dst / name,
+                    f"\n---\n\n# MERGED FROM {src_slug} ({today}) — NEEDS REVIEW\n\n"
+                    f"Appended verbatim, not reconciled: {why} cannot be combined\n"
+                    f"mechanically. Rewrite this file to describe the single current system,\n"
+                    f"then delete this banner.\n\n"
+                    + _strip_heading(s.read_text(encoding="utf-8")))
+            record("updated", dst / name, f"{name} appended UNREVIEWED from {src_slug}")
+            review.append(f"- [ ] Reconcile `{dst_slug}/{name}` — {src_slug}'s section is appended, not merged")
+
+    for child in sorted(src.iterdir()):
+        if child.is_dir() and child.name != "memory" and (child / "idea.md").exists():
+            child.rename(dst / child.name)
+            record("updated", dst / child.name, f"sub-project moved from {src_slug}")
+
+    # the source becomes a tombstone, not a hole
+    for leftover in sorted(src.rglob("*")):
+        if leftover.is_file() and leftover.name != "README.md":
+            leftover.unlink()
+    for d in sorted((x for x in src.rglob("*") if x.is_dir()), reverse=True):
+        try:
+            d.rmdir()
+        except OSError:
+            pass
+    (src / "README.md").write_text(
+        f"---\ntype: project\nslug: {src_slug}\ndomain: merged\nstage: merged\n"
+        f"merged_into: {dst_slug}\nmerged: {today}\ntags: [merged]\n---\n\n"
+        f"# {src_slug} — merged into {dst_slug}\n\n"
+        f"> Merged into [{dst_slug}](../{dst_slug}/) on {today}. This tombstone stays so that\n"
+        f"> notes and links written before the merge still lead somewhere.\n\n"
+        f"Its memory notes kept their filenames and moved to `{dst_slug}/memory/`, so existing\n"
+        f"`[[wikilinks]]` still resolve. Its `idea.md` is preserved verbatim at\n"
+        f"`{dst_slug}/memory/idea_{src_slug.replace('-', '_')}.md`.\n", encoding="utf-8")
+    record("updated", src / "README.md", "replaced with a merge tombstone")
+
+    idx = vault / "Projects" / "README.md"
+    if idx.exists():
+        lines = [l for l in idx.read_text(encoding="utf-8").splitlines()
+                 if not re.search(rf"\|\s*`{re.escape(src_slug)}`\s*\|", l)]
+        idx.write_text("\n".join(lines) + "\n", encoding="utf-8")
+        record("updated", idx, f"{src_slug} row removed")
+
+    review += [
+        f"- [ ] Confirm `{dst_slug}` frontmatter (domain/stage/tags) still fits the combined project",
+        f"- [ ] Re-run /gt:gt-lint — expect memory-unlisted findings until MEMORY.md is tidied",
+    ]
+    _append(vault / "review-queue.md", "\n" + "\n".join(review) + "\n")
+    record("updated", vault / "review-queue.md", "merge items needing review")
+
+    core = _resolve_core_rules(vault)
+    if core:
+        try:
+            cfg_path = Path.home() / ".claude" / "vault-config.json"
+            cfg = json.loads(cfg_path.read_text(encoding="utf-8")) if cfg_path.exists() else {}
+            rel = str(core.relative_to(vault))
+            if cfg.get("core_rules_path") != rel:
+                cfg["core_rules_path"] = rel
+                cfg_path.write_text(json.dumps(cfg, indent=2) + "\n", encoding="utf-8")
+                record("updated", cfg_path, f"core_rules_path = {rel}")
+        except Exception:
+            pass
+
+
+def cmd_archive_project(vault: Path, slug: str, reason: str, today: str):
+    """Archive a project. Nothing is deleted.
+
+    Follows the vault's own vocabulary: `archived` is the STAGE (CONVENTIONS.md
+    defines it as "Retired or replaced"); `retire` is the LOG VERB for log.md.
+    """
+    vault = vault.resolve()
+    proj = _proj_dir(vault, slug)
+    if proj is None:
+        record("error", vault, f"project not found: {slug}")
+        return
+
+    readme = proj / "README.md"
+    _frontmatter_set(readme, stage="archived", archived=today)
+    if readme.exists():
+        text = readme.read_text(encoding="utf-8")
+        banner = (f"\n> **Archived {today}.** {reason}\n>\n"
+                  f"> Kept in full: its notes, decisions and research remain readable and its\n"
+                  f"> `[[wikilinks]]` still resolve. Archiving is not deleting.\n")
+        if "**Archived" not in text:
+            m = re.match(r"^(---\s*\n.*?\n---\s*\n)(.*)$", text, re.S)
+            if m:
+                head, body = m.group(1), m.group(2)
+                bm = re.match(r"^(\s*#[^\n]*\n)(.*)$", body, re.S)
+                body = (bm.group(1) + banner + bm.group(2)) if bm else banner + body
+                readme.write_text(head + body, encoding="utf-8")
+            else:
+                readme.write_text(banner + text, encoding="utf-8")
+        record("updated", readme, f"archived: {reason}")
+
+    idx = vault / "Projects" / "README.md"
+    if idx.exists():
+        lines = idx.read_text(encoding="utf-8").splitlines()
+        for i, l in enumerate(lines):
+            if re.search(rf"\|\s*`{re.escape(slug)}`\s*\|", l):
+                parts = l.split("|")
+                if len(parts) >= 5:
+                    parts[4] = " archived "
+                    lines[i] = "|".join(parts)
+        idx.write_text("\n".join(lines) + "\n", encoding="utf-8")
+        record("updated", idx, f"{slug} marked archived")
+
+
+
 def cmd_fresh(vault: Path, domain: str):
     vault = vault.resolve()
     write_config(vault)
@@ -498,6 +748,19 @@ def main():
     p_ren.add_argument("--from", dest="old", required=True)
     p_ren.add_argument("--to", dest="new", required=True)
 
+    p_mrg = sub.add_parser("merge-project", help="Fold one project into another (nothing deleted)")
+    p_mrg.add_argument("--vault", required=True, type=Path)
+    p_mrg.add_argument("--from", dest="src", required=True)
+    p_mrg.add_argument("--into", dest="dst", required=True)
+    p_mrg.add_argument("--date", default=None, help="YYYY-MM-DD (default: today)")
+
+    p_ret = sub.add_parser("archive-project",
+                       help="Archive a project (stage: archived). Nothing is deleted.")
+    p_ret.add_argument("--vault", required=True, type=Path)
+    p_ret.add_argument("--slug", required=True)
+    p_ret.add_argument("--reason", default="Superseded.")
+    p_ret.add_argument("--date", default=None)
+
     p_core = sub.add_parser("install-core-rules",
                             help="Establish the Core-rule tier in an existing vault and wire the hooks")
     p_core.add_argument("--vault", required=True, type=Path)
@@ -517,6 +780,12 @@ def main():
                            args.domain)
     elif args.mode == "connect":
         cmd_connect(args.vault)
+    elif args.mode == "merge-project":
+        cmd_merge_project(args.vault, args.src, args.dst,
+                          args.date or __import__("datetime").date.today().isoformat())
+    elif args.mode == "archive-project":
+        cmd_archive_project(args.vault, args.slug, args.reason,
+                           args.date or __import__("datetime").date.today().isoformat())
     elif args.mode == "rename-project":
         cmd_rename_project(args.vault, args.old, args.new)
     elif args.mode == "install-core-rules":

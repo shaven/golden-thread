@@ -164,3 +164,41 @@ enforces a rule no longer in `core-rules/` is worse than either state.
 
 **Keep the Core tier small.** A bloated always-on tier dilutes attention on every rule
 in it — which is the failure mode Core exists to prevent.
+
+---
+
+## Project lifecycle: rename, merge, archive
+
+Projects get redefined, combined and retired. These are supported operations, not
+manual sweeps — a half-finished rename leaves links pointing at nothing.
+
+```bash
+vault_init.py rename-project  --vault <v> --from <old> --to <new>
+vault_init.py merge-project   --vault <v> --from <slug> --into <slug>
+vault_init.py archive-project --vault <v> --slug <slug> --reason "<why>"
+```
+
+### Nothing is ever deleted
+
+`archived` is the **stage** (`CONVENTIONS.md`: *"Retired or replaced"*); `retire` is
+the **log verb** for `log.md`. Archiving keeps every note, decision and link intact —
+it changes the project's status, not its contents.
+
+A merge leaves the source as a **tombstone**: a README recording where it went. Notes
+and links written before the merge still lead somewhere.
+
+### What merge does and does not do
+
+| Content | Handling |
+|---|---|
+| `memory/*.md` | Moved, filenames preserved so `[[wikilinks]]` keep resolving. A clash becomes `<name>__from_<slug>.md` and is flagged |
+| `idea.md` | **Immutable — never concatenated.** Preserved verbatim as `<dst>/memory/idea_<src>.md` |
+| `research.md` | Appended (dated and append-only, so interleaving is safe) |
+| `decisions.md` | Appended with ADR ids **renumbered** to avoid collision; the original id is kept in the heading |
+| `runbook.md`, `spec.md` | Appended |
+| `design.md`, `source.md` | **Appended under a NEEDS REVIEW banner, not merged.** Two architectures or two topologies cannot be combined mechanically — a silent concatenation would describe neither system |
+| frontmatter (`domain`, `tags`) | Destination's kept; parked in `review-queue.md` for you to confirm |
+
+Everything requiring judgement lands in `review-queue.md`. Work through it before
+calling the merge done, and re-run `/gt:gt-lint` — expect `memory-unlisted` until
+`MEMORY.md` is tidied, and `project-missing` if anything still points at the old slug.

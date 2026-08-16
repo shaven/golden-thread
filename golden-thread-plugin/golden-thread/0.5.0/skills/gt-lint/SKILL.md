@@ -111,3 +111,12 @@ re-asserted. Treat it as a real defect, not a style nit.
 **Fix:** `vault_init.py install-core-rules --vault <vault>`, or wire the hook by hand
 in `~/.claude/settings.json`. Do not suppress these — suppressing `core-unenforced`
 re-creates the original bug with a paper trail saying it was fine.
+
+## `project-missing`
+
+A markdown link points at a `Projects/<slug>/` folder that does not exist — the usual
+cause is a rename or merge that was done by hand and missed a reference. Obsidian
+fails these silently.
+
+Fix by re-pointing the link, or by leaving a tombstone README at the old slug (which
+is what `merge-project` does automatically).
