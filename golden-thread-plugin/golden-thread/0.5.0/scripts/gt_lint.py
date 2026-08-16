@@ -537,7 +537,7 @@ def check_core_rules(vault: Path, findings: list, suppressed: set):
                 "message": (f"{md.name} declares enforcement: {enf} but no {needed} hook is wired — "
                             f"the rule is stored, never re-asserted"),
                 "proposed_fix": (f"Wire {needed} in ~/.claude/settings.json to "
-                                 f"core-rules/hooks/"
+                                 f"~/.claude/golden-thread/hooks/"
                                  + ("validate_response.sh" if enf == "validated" else "inject_core_rules.sh")
                                  + " (or run vault_init.py install-core-rules)"),
             })

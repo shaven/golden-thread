@@ -20,7 +20,7 @@ Wire it in the project's (or user-global) `.claude/settings.json`:
       {
         "hooks": [
           { "type": "command",
-            "command": "$CLAUDE_PROJECT_DIR/.golden-thread/inject_core_rules.sh" }
+            "command": "$HOME/.claude/golden-thread/hooks/inject_core_rules.sh" }
         ]
       }
     ]
@@ -28,10 +28,10 @@ Wire it in the project's (or user-global) `.claude/settings.json`:
 }
 ```
 
-The script's stdout is added to the turn's context. Point `command` at wherever the
-project incorporates this folder (a copy, a symlink, or an absolute path into the
-vault). Its output is an **imperative** ("Begin your reply with this exact
-timestamp"), not a description — descriptions drift, commands re-anchor.
+The script's stdout is added to the turn's context. `install.sh` puts the hooks at
+that fixed location — **do not point `command` into the vault** (see "Where the
+scripts live" below for why). Its output is an **imperative** ("Begin your reply with
+this exact timestamp"), not a description — descriptions drift, commands re-anchor.
 
 ## 2. Validated tier — `Stop` hook (reject a violating reply)
 
@@ -47,7 +47,7 @@ model's in-the-moment discipline. Script: `hooks/validate_response.sh`.
       {
         "hooks": [
           { "type": "command",
-            "command": "$CLAUDE_PROJECT_DIR/.golden-thread/validate_response.sh" }
+            "command": "$HOME/.claude/golden-thread/hooks/validate_response.sh" }
         ]
       }
     ]
