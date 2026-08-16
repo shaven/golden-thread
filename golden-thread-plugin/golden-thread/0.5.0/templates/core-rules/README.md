@@ -13,8 +13,12 @@ that must hold everywhere. Owned by the golden-thread project.
 | `core_global_memory_scope.md` | Core/Reminder — global-memory holds only all-project facts. |
 | `core_memory_load_policy.md` | Core/Reminder — load the memory index only on request or `/gt:*`. |
 | `enforcement.md` | **How the rules are made real** — the hook wiring spec. |
-| `hooks/inject_core_rules.sh` | `UserPromptSubmit` hook — the Reminder mechanism (re-injects rules every turn). |
-| `hooks/validate_response.sh` | `Stop` hook — the Validated mechanism (rejects a reply that breaks a checkable Core rule). |
+
+The **hook scripts are not here** — they ship with the `gt` plugin and install to
+`~/.claude/golden-thread/hooks/`, outside the vault. `settings.json` references them
+by absolute path, so that path must survive project renames, merges and vault moves.
+The scripts locate these rules at run time, so editing a `core_*.md` file changes what
+gets injected — the rule text is never duplicated into a script. See `enforcement.md`.
 
 ## How another project incorporates this
 
@@ -24,7 +28,8 @@ them by pointing at this folder. Two incorporation levels:
 1. **Reference (documentation):** in the project's `CLAUDE.md`, link this folder as
    the authority — e.g. "Core rules and their enforcement are defined in
    `Projects/golden-thread/core-rules/`; they apply here."
-2. **Enforce (wiring):** point the project's Claude Code hooks at the scripts here
+2. **Enforce (wiring):** point the project's Claude Code hooks at the installed
+   scripts in `~/.claude/golden-thread/hooks/` — never at a path inside the vault
    (see `enforcement.md`). This is what makes the Core/Validated tier real rather
    than aspirational.
 
