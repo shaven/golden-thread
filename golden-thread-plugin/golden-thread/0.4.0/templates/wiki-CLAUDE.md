@@ -60,3 +60,13 @@ Use `/gt-lint` to check for gaps, broken links, and stale pages.
 | `/gt-promote` | Graduate facts up the hierarchy |
 | `/gt-lint` | Audit vault health |
 | `/gt-query` | Look up a topic |
+
+## Core rules
+
+Core rules live in `Projects/obsidian-vault/core-rules/` and are enforced by hooks on
+every turn, in every project — the top of the promotion hierarchy, above
+`global-memory/`. Each carries `level` and `enforcement` in its frontmatter.
+
+Do not duplicate Core rules elsewhere; point at that folder. See
+`core-rules/core_rule_priority_model.md` for the model and `core-rules/enforcement.md`
+for the hook wiring.

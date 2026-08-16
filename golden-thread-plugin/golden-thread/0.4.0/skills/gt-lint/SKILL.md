@@ -90,3 +90,24 @@ Lint complete.
 ```
 
 If the vault is clean: "✓ Vault is healthy — no issues found."
+
+---
+
+## Core-rule checks
+
+These audit that Core rules are **enforced**, not merely stored — the distinction the
+whole tier rests on.
+
+| Check | Means |
+|---|---|
+| `core-misplaced` | A rule declares `level: core` but lives outside `core-rules/` |
+| `core-no-enforcement` | `level: core` with no `enforcement` declared |
+| `core-unenforced` | The declared mechanism is **not actually wired** — `validated` needs a `Stop` hook, `reminder` needs `UserPromptSubmit` |
+
+`core-unenforced` is the important one. It is the machine-checkable form of "in
+context ≠ applied": a rule can be perfectly written, correctly filed, and still never
+re-asserted. Treat it as a real defect, not a style nit.
+
+**Fix:** `vault_init.py install-core-rules --vault <vault>`, or wire the hook by hand
+in `~/.claude/settings.json`. Do not suppress these — suppressing `core-unenforced`
+re-creates the original bug with a paper trail saying it was fine.

@@ -154,3 +154,22 @@ the project's reality, update the property too — not just the prose:
 The `## Stage` heading in the body and the `stage:` property must agree. If they
 disagree, the property is what the Dataview views show, so fix the property and
 make the prose match it.
+
+## Tier every rule you write
+
+Memory files carry `level` and `enforcement` in frontmatter so a rule's durability is
+explicit from the moment it is written:
+
+```yaml
+metadata:
+  type: core | feedback | user | reference
+  level: core | context | generic      # default generic
+  enforcement: validated | reminder    # required iff level: core
+```
+
+Default to `generic`. Do **not** set `level: core` here — Core is a promotion, and it
+requires wiring an enforcement hook, which is `/gt:gt-promote`'s job. A file marked
+`level: core` without that wiring is exactly what `gt-lint`'s `core-unenforced` check
+exists to catch.
+
+Template: `templates/memory-file.md`.

@@ -18,6 +18,24 @@ Promote to global-memory when:
 - It's a cross-cutting fact needed in every session, for every project
 - Examples: platform URLs, tool versions, authentication patterns
 
+Promote to **Core** (`Projects/obsidian-vault/core-rules/`) when:
+- The rule has drifted or failed *despite being stored*, or the user designates it
+  always-on
+- Promotion is not just a move: set `level: core`, set `enforcement`, and **wire the
+  hook**. A Core rule that is only stored is not Core — that is the exact failure
+  this tier exists to prevent.
+
+### The full ladder
+
+| Level | Home | Guarantee |
+|---|---|---|
+| 1 | session | none |
+| 2 | `Projects/<slug>/memory/` | loaded on demand |
+| 3 | `research.md` / `decisions.md` | project-scoped, durable |
+| 4 | `Knowledge/` | cross-project |
+| 5 | `global-memory/` | all projects, index always available |
+| **6** | **`core-rules/`** | **enforced by hooks every turn, all projects** |
+
 ## Promotion Log Verbs
 
 Every promotion is logged in `log.md` with a closed vocabulary:

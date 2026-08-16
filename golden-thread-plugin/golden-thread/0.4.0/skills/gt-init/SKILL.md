@@ -78,3 +78,27 @@ Golden Thread is ready.
 
 If the vault was freshly created (not pre-existing), add:
 > "Tip: run `/gt-ingest` to pull in any existing `.claude/memory/` files, CLAUDE.md constraints, or project notes."
+
+---
+
+## Establish the Core-rule tier
+
+`vault_init.py fresh` now also installs `Projects/obsidian-vault/core-rules/` and
+**wires the enforcement hooks** into `~/.claude/settings.json` (`UserPromptSubmit` +
+`Stop`). Both steps matter: copying the module without wiring it produces an inert
+Core tier, which is the exact failure this system exists to prevent.
+
+For an existing vault that predates the tier:
+
+```bash
+python3 <base_dir>/../../scripts/vault_init.py install-core-rules --vault "<vault>"
+```
+
+Idempotent — re-running will not duplicate hook entries.
+
+**Scope matters.** Wire at **user-global** `~/.claude/settings.json` so Core applies to
+every project. Wiring into a project's `.claude/settings.json` scopes those rules to
+that project, which is the Context tier, not Core.
+
+After wiring, confirm with `/gt:gt-lint`: a `core-unenforced` finding means the rules
+are stored but not actually being asserted.

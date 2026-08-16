@@ -17,6 +17,9 @@ Checks:
   stale                Knowledge page with status: stale in frontmatter
   source-todo          Project source.md with no topology or deployment targets
   frontmatter          Project README missing/incorrect property frontmatter
+  core-misplaced       level: core rule living outside core-rules/
+  core-no-enforcement  level: core rule with no enforcement declared
+  core-unenforced      Core rule whose enforcement hook is not actually wired
 
 Suppression: reads <vault>/lint-declines.md — lines starting with "suppress:" are matched
 against finding paths.
@@ -26,6 +29,7 @@ Exit codes:
   1 = findings found
 """
 import argparse
+import json
 import re
 import sys
 from pathlib import Path
@@ -434,6 +438,103 @@ def check_frontmatter(vault: Path, findings: list, suppressed: set):
             })
 
 
+def parse_frontmatter_map(text: str) -> dict:
+    """Flat key->value of the YAML frontmatter (nested keys included, un-nested)."""
+    m = re.match(r"^---\s*\n(.*?)\n---", text, re.S)
+    if not m:
+        return {}
+    out = {}
+    for line in m.group(1).splitlines():
+        km = re.match(r"^\s*([a-zA-Z_][a-zA-Z0-9_-]*)\s*:\s*(.*)$", line)
+        if km:
+            out[km.group(1)] = km.group(2).strip().strip('"\'')
+    return out
+
+
+def wired_hook_events(settings_path: Path = None) -> set:
+    """Which hook events are actually wired. Enforcement lives here, not in the vault."""
+    settings = settings_path or (Path.home() / ".claude" / "settings.json")
+    try:
+        data = json.loads(settings.read_text(encoding="utf-8"))
+    except Exception:
+        return set()
+    events = set()
+    for event, blocks in (data.get("hooks") or {}).items():
+        for b in blocks or []:
+            if isinstance(b, dict) and b.get("hooks"):
+                events.add(event)
+    return events
+
+
+def check_core_rules(vault: Path, findings: list, suppressed: set):
+    """Audit that Core rules are ENFORCED, not merely stored.
+
+    The whole point of the Core tier is that storing a rule is not enough — the
+    2026-08-16 incident had the timestamp rule sitting in global-memory while
+    silently not being applied. So this checks the mechanism, not the file.
+    """
+    core_dir = vault / "Projects" / "obsidian-vault" / "core-rules"
+    events = wired_hook_events()
+
+    for md in sorted(vault.rglob("*.md")):
+        if ".git" in md.parts or "templates" in md.parts:
+            continue
+        rel = str(md.relative_to(vault))
+        if rel.lower() in suppressed or md.name.lower() in suppressed:
+            continue
+        try:
+            fm = parse_frontmatter_map(md.read_text(encoding="utf-8", errors="replace"))
+        except Exception:
+            continue
+        if fm.get("level") != "core":
+            continue
+
+        # (i) must live in the canonical folder
+        if core_dir not in md.parents:
+            findings.append({
+                "check": "core-misplaced",
+                "path": rel,
+                "message": f"{md.name} declares level: core but lives outside core-rules/",
+                "proposed_fix": "Move it to Projects/obsidian-vault/core-rules/, or lower its level",
+            })
+
+        # (ii) must declare an enforcement mechanism
+        enf = fm.get("enforcement")
+        if not enf:
+            findings.append({
+                "check": "core-no-enforcement",
+                "path": rel,
+                "message": f"{md.name} is level: core with no enforcement declared",
+                "proposed_fix": "Add enforcement: reminder (re-injected) or validated (output-checked)",
+            })
+            continue
+
+        # (iii) the declared mechanism must actually be wired
+        needed = "Stop" if enf == "validated" else "UserPromptSubmit"
+        if needed not in events:
+            findings.append({
+                "check": "core-unenforced",
+                "path": rel,
+                "message": (f"{md.name} declares enforcement: {enf} but no {needed} hook is wired — "
+                            f"the rule is stored, never re-asserted"),
+                "proposed_fix": (f"Wire {needed} in ~/.claude/settings.json to "
+                                 f"core-rules/hooks/"
+                                 + ("validate_response.sh" if enf == "validated" else "inject_core_rules.sh")
+                                 + " (or run vault_init.py install-core-rules)"),
+            })
+
+    # A core-rules folder with no wiring at all is the headline failure.
+    if core_dir.exists() and not ({"UserPromptSubmit", "Stop"} & events):
+        rel = "Projects/obsidian-vault/core-rules"
+        if rel.lower() not in suppressed:
+            findings.append({
+                "check": "core-unenforced",
+                "path": rel,
+                "message": "core-rules/ exists but neither enforcement hook is wired — the Core tier is inert",
+                "proposed_fix": "Run: vault_init.py install-core-rules --vault <vault>",
+            })
+
+
 def write_queue(vault: Path, findings: list, queue_path: Path):
     lines = ["# Vault Review Queue\n\nGenerated by gt_lint.py\n"]
     by_check = {}
@@ -470,6 +571,7 @@ def main():
     check_global_scope_leak(vault, findings, suppressed)
     check_source_todo(vault, findings, suppressed)
     check_frontmatter(vault, findings, suppressed)
+    check_core_rules(vault, findings, suppressed)
     check_superseded_cited(vault, findings, suppressed)
     check_stale(vault, findings, suppressed)
 

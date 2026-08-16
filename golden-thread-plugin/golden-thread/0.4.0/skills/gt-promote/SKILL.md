@@ -95,3 +95,72 @@ Always append to `<vault>/log.md` with the appropriate verb:
 <today> [retire] Knowledge/<page>.md: superseded by <new-page>
 <today> [relocate] <source> → <dest>: reclassified
 ```
+
+---
+
+## Promoting to Core (the top tier)
+
+`Projects/obsidian-vault/core-rules/` is the top of the hierarchy, above
+`global-memory/`. Promote here only when a rule must hold on **every turn, in every
+project**.
+
+**A rule earns Core when it has drifted or failed *despite being stored*, or the user
+designates it always-on.** Importance alone is not the test — a critical trading
+constraint that only matters inside a backtest is Context, not Core.
+
+### Promotion is not a move — it is a wiring job
+
+Moving the file is the easy part and, on its own, achieves nothing. The 2026-08-16
+incident had the timestamp rule sitting in `global-memory` while silently not being
+applied for dozens of turns. **A Core rule that is only stored is not Core.**
+
+Steps, in order:
+
+1. **Choose the enforcement**, and be honest about it:
+   - `validated` — the rule is mechanically checkable (a required prefix, a forbidden
+     token, a required file list). This is the only unbreakable form.
+   - `reminder` — a judgement call that can only be re-asserted, not checked.
+   Prefer `validated` for anything cheap to check.
+2. **Set the frontmatter:**
+   ```yaml
+   metadata:
+     type: core
+     level: core
+     enforcement: validated | reminder
+     promoted: <today>
+     supersedes: <old-filename-if-any>
+   ```
+3. **Move the file** to `Projects/obsidian-vault/core-rules/`, renamed `core_<topic>.md`.
+4. **Wire or confirm the mechanism:**
+   - `reminder` → add the rule's **imperative** to `hooks/inject_core_rules.sh`.
+     Phrase it as a command ("Begin your reply with…"), never a description —
+     descriptions drift, commands re-anchor.
+   - `validated` → add a check to `hooks/validate_response.sh` that inspects the
+     finished reply and blocks on violation. Keep it cheap and unambiguous.
+   - Confirm both hooks are wired in `~/.claude/settings.json` (user-global = Core).
+     If not: `vault_init.py install-core-rules --vault <vault>`.
+5. **Update the pointer** in `global-memory/MEMORY.md` — it points at `core-rules/`,
+   it does not hold Core rules inline. Leave a one-line note where the old file was.
+6. **Verify** with `/gt:gt-lint` — `core-unenforced` must not fire for the new rule.
+   That check exists precisely to catch step 4 being skipped.
+7. **Log** in `log.md` with the `graduate` verb.
+
+> **Writing a validator is a safety-critical act.** A `Stop` hook that blocks wrongly
+> makes every session unusable. Fail open on any parse failure, honour
+> `stop_hook_active` so a block can never loop, and test the allow cases before the
+> block case.
+
+### Demotion (Core → generic)
+
+When a rule proves situational or is superseded, reverse it in this order:
+**remove the enforcement first**, then move the file. Leaving a hook behind that
+enforces a rule no longer in `core-rules/` is worse than either state.
+
+1. Remove its imperative from `inject_core_rules.sh` and/or its check from
+   `validate_response.sh`.
+2. Set `level: generic` and drop `enforcement`.
+3. Move to `global-memory/` (cross-project) or the owning project's `memory/`.
+4. Re-index `MEMORY.md` and log with `retire` or `relocate`.
+
+**Keep the Core tier small.** A bloated always-on tier dilutes attention on every rule
+in it — which is the failure mode Core exists to prevent.

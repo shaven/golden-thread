@@ -10,6 +10,7 @@ Modes:
                   [--topology local|remote|bastion-jump|bastion-direct]
                   [--repo-url <url>] [--fleet <page-name>]
   connect         --vault <path>
+  install-core-rules --vault <path> [--no-hooks] [--settings <file>]
 
 Exit codes:
   0 = success
@@ -146,6 +147,71 @@ def register_in_master_index(index_path: Path, slug: str, title: str, tags: list
     record("updated", index_path, f"registered {slug}")
 
 
+def install_core_rules(vault: Path, wire_hooks: bool = True, settings_path: Path = None):
+    """Establish the Core-rule tier: copy the module in, then WIRE THE HOOKS.
+
+    Copying the files is not enough. Per core_rule_priority_model.md, a Core rule is
+    only as durable as the mechanism that re-asserts it — an unwired module is exactly
+    the failure mode this tier exists to prevent. So the wiring is part of init, not a
+    follow-up step.
+    """
+    src = TEMPLATES_DIR / "core-rules"
+    if not src.exists():
+        record("error", src, "core-rules template missing from the plugin")
+        return
+
+    dest = vault / "Projects" / "obsidian-vault" / "core-rules"
+    ensure_dir(dest)
+    ensure_dir(dest / "hooks")
+    for f in sorted(src.glob("*.md")):
+        ensure_file(dest / f.name, f.read_text(encoding="utf-8"))
+    for f in sorted((src / "hooks").glob("*.sh")):
+        target = dest / "hooks" / f.name
+        ensure_file(target, f.read_text(encoding="utf-8"))
+        try:
+            target.chmod(0o755)
+        except OSError:
+            pass
+
+    if not wire_hooks:
+        return
+
+    # Core = user-global scope. Wiring per-project would scope these to one project,
+    # which is the Context tier, not Core.
+    settings = settings_path or (Path.home() / ".claude" / "settings.json")
+    hooks_dir = dest / "hooks"
+    wanted = {
+        "UserPromptSubmit": str(hooks_dir / "inject_core_rules.sh"),
+        "Stop": str(hooks_dir / "validate_response.sh"),
+    }
+
+    try:
+        data = json.loads(settings.read_text(encoding="utf-8")) if settings.exists() else {}
+    except (json.JSONDecodeError, OSError) as exc:
+        record("error", settings, f"could not read settings.json: {exc}")
+        return
+
+    data.setdefault("hooks", {})
+    changed = False
+    for event, cmd in wanted.items():
+        blocks = data["hooks"].setdefault(event, [])
+        already = any(
+            h.get("command") == cmd
+            for b in blocks if isinstance(b, dict)
+            for h in b.get("hooks", [])
+        )
+        if already:
+            record("skipped", settings, f"{event} hook already wired")
+            continue
+        blocks.append({"hooks": [{"type": "command", "command": cmd, "timeout": 10}]})
+        changed = True
+
+    if changed:
+        settings.parent.mkdir(parents=True, exist_ok=True)
+        settings.write_text(json.dumps(data, indent=2) + "\n", encoding="utf-8")
+        record("updated", settings, "wired Core-rule enforcement hooks (UserPromptSubmit + Stop)")
+
+
 def cmd_fresh(vault: Path, domain: str):
     vault = vault.resolve()
     write_config(vault)
@@ -168,6 +234,8 @@ def cmd_fresh(vault: Path, domain: str):
     seed_template("INFRASTRUCTURE.md", vault / "Projects" / "INFRASTRUCTURE.md", {"DOMAIN": domain})
     seed_template("PROJECTS-README.md", vault / "Projects" / "README.md", {"DOMAIN": domain})
     seed_template("lint-declines.md", vault / "lint-declines.md", {"DOMAIN": domain})
+
+    install_core_rules(vault)
 
     global_claude = Path.home() / ".claude" / "CLAUDE.md"
     gt_section = f"""## Golden Thread
@@ -343,6 +411,14 @@ def main():
     p_conn = sub.add_parser("connect", help="Point vault-config.json at an existing vault")
     p_conn.add_argument("--vault", required=True, type=Path)
 
+    p_core = sub.add_parser("install-core-rules",
+                            help="Establish the Core-rule tier in an existing vault and wire the hooks")
+    p_core.add_argument("--vault", required=True, type=Path)
+    p_core.add_argument("--no-hooks", action="store_true",
+                        help="Copy the module but do not touch settings.json")
+    p_core.add_argument("--settings", type=Path, default=None,
+                        help="Settings file to wire (default: ~/.claude/settings.json)")
+
     args = parser.parse_args()
 
     if args.mode == "fresh":
@@ -354,6 +430,9 @@ def main():
                            args.domain)
     elif args.mode == "connect":
         cmd_connect(args.vault)
+    elif args.mode == "install-core-rules":
+        install_core_rules(args.vault.resolve(), wire_hooks=not args.no_hooks,
+                           settings_path=args.settings)
 
     print(json.dumps(RESULTS, indent=2))
     sys.exit(0)

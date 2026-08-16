@@ -13,6 +13,51 @@ Standards for all projects in this vault.
 | `complete` | Shipped, no active development |
 | `archived` | Retired or replaced |
 
+## Core rules — the top of the hierarchy
+
+Core rules are defined **and enforced** from `Projects/obsidian-vault/core-rules/`
+and apply to every project. They sit above `global-memory/`.
+
+A Core rule is not one written down more emphatically — it is one backed by a
+mechanism that re-asserts it every turn. **"In context" does not mean "applied":**
+rules fail because a salient task crowds them out of attention, not because they were
+deleted. So a rule is only as durable as the mechanism that re-asserts it.
+
+### Two independent axes
+
+| Scope | Meaning |
+|---|---|
+| `core` | Every session, every turn, every project. Un-removable. |
+| `context` | While a project / directory / skill context is active. |
+| `generic` | Best-effort convention; yields under space pressure. Default. |
+
+| Enforcement | Meaning | Depends on model discipline? |
+|---|---|---|
+| `reminder` | Re-injected each turn as an imperative | Yes |
+| `validated` | Output is checked and a violation is blocked | **No** — the only unbreakable form |
+
+### Frontmatter contract
+
+```yaml
+metadata:
+  type: core | feedback | user | reference
+  level: core | context | generic
+  enforcement: validated | reminder    # omit for generic
+```
+
+### Enforcement wiring
+
+| Tier | Hook | Script |
+|---|---|---|
+| Reminder | `UserPromptSubmit` | `core-rules/hooks/inject_core_rules.sh` |
+| Validated | `Stop` | `core-rules/hooks/validate_response.sh` |
+
+Wire at **user-global** `~/.claude/settings.json` for Core (applies everywhere).
+Per-project wiring scopes a rule to that project — that is the Context tier.
+
+**Keep the Core tier small.** The fewer Core rules, the more reliably each survives;
+a bloated always-on tier dilutes attention on every rule in it.
+
 ## Project Properties
 
 Every project's `README.md` carries YAML frontmatter. These are real Obsidian
@@ -51,6 +96,11 @@ Define your own. Keep it short — `domain` is the coarse axis, `tags` are the
 fine-grained multi-value one. A project has exactly one `domain` and any number
 of `tags`. If two projects land in a catch-all domain, that is the signal to add
 a real one.
+
+## Memory file frontmatter
+
+New memory files start from `templates/memory-file.md`, which carries `level` and
+`enforcement` so every rule is tiered from birth. Unlabeled = `generic`.
 
 ## File Naming
 
