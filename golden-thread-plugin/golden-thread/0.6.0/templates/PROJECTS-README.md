@@ -70,5 +70,6 @@ Every project folder holds the same files:
 | `research.md` | Append-only dated findings |
 | `decisions.md` | Append-only numbered ADRs |
 | `design.md` | Current architecture — always describes now |
+| `CLAUDE.md` | **Leaves the vault.** Self-contained working notes, committed to that project's repo root so any agent in the code reads them automatically |
 | `memory/MEMORY.md` | Index of session memory files |
 | `memory/*.md` | The notes themselves — **loaded on demand, not at open** |

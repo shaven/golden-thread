@@ -613,6 +613,14 @@ def cmd_create_project(vault: Path, slug: str, title: str = None, tags: list = N
     ensure_file(proj / "idea.md",
                 f"# {display_title}\n\n<!-- Original brain dump — immutable after creation -->\n")
 
+    # CLAUDE.md — the outward axis. Unlike every other file here, this one is
+    # written for a reader who has never seen the vault, and is committed to the
+    # project's repo root so any session working in that code picks it up.
+    seed_template("project-CLAUDE.md", proj / "CLAUDE.md", {
+        "TITLE": display_title,
+        "SLUG": slug,
+    })
+
     # source.md — where the code lives and how it is deployed.
     topology = topology or "TODO"
     if fleet:

@@ -36,6 +36,42 @@ that is true). Facts stop at `global-memory/`. Only rules enter Core.
 Observed drift is **not** an entry requirement — a rule that drifts was mis-tiered.
 Drift is a diagnostic, not a qualification.
 
+### Two routing questions, not one
+
+The ladder answers only half of "where does this belong."
+
+- **Reach** — how universally does this apply? This picks the **level**.
+- **Audience** — *would this make sense to someone who has never heard of this
+  vault?* If yes, it is a **repo fact** and also belongs in that project's
+  `CLAUDE.md`, regardless of which level it occupies.
+
+Independent axes: reach moves a fact **up**, audience moves it **out**. A fact can
+do both. The repo layer is **not another rung** — a repo fact is not more universal
+than a Core rule, it is aimed at a different reader.
+
+## Graduating a fact out to a repo
+
+Destination: `Projects/<slug>/CLAUDE.md`, committed to that project's repo root,
+where **every session working in that code reads it automatically** — no plugin, no
+configuration, no vault access.
+
+**What qualifies.** Passes the teammate test *and* has stopped changing. Stability
+is the signal; a fact still in motion is not ready to publish.
+
+**What belongs there.** How to work in the code: the real command, the environment
+trick, the structural landmine, the file that must never be copied between hosts.
+
+**The content rule is absolute.** Substantive content must be **self-contained** — a
+reader with no vault gets full value. Vault paths appear only in an optional trailing
+section, located via `~/.claude/vault-config.json`, ignorable when absent. A
+`CLAUDE.md` that only points into the vault is inert for everyone it exists to reach.
+
+**Layering.** A repo with several areas carries a root `CLAUDE.md` for shared rules
+plus one per area; they are read cumulatively, so state a shared rule once at the
+root and never repeat it.
+
+**Log it** with `graduate`, naming the destination repo from `source.md`.
+
 ### The full ladder
 
 | Level | Home | Guarantee |
