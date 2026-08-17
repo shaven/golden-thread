@@ -49,11 +49,33 @@ metadata:
 
 | Tier | Hook | Script |
 |---|---|---|
-| Reminder | `UserPromptSubmit` | `core-rules/hooks/inject_core_rules.sh` |
-| Validated | `Stop` | `core-rules/hooks/validate_response.sh` |
+| Reminder | `UserPromptSubmit` | `~/.claude/golden-thread/hooks/inject_core_rules.sh` |
+| Validated | `Stop` | `~/.claude/golden-thread/hooks/validate_response.sh` |
 
 Wire at **user-global** `~/.claude/settings.json` for Core (applies everywhere).
 Per-project wiring scopes a rule to that project — that is the Context tier.
+
+The hooks live **outside the vault** — installed by `install.sh`, never stored in
+`core-rules/`. `settings.json` references them by absolute path, so keeping them in
+the vault meant a project rename or vault move silently broke enforcement. The scripts
+locate the rules at run time, so editing a `core_*.md` changes what gets injected.
+
+### Two ways into Core
+
+| Path | Gate |
+|---|---|
+| **Designation** (primary) | None. The user names it Core and it is Core. No prior incident required. |
+| **Promotion from levels 1–5** | Must pass the three-question test — see [[PROTOCOL]]. |
+
+The gate asks, *if this rule were **not** enforced*: would it cause **incorrect code
+or a change implemented wrongly** · would it cause **rework or a backout** · would it
+**cascade** into lower-level rules being misrepresented or unfollowable. Any single
+YES qualifies.
+
+**Canary rules are designated, never tested.** A canary is kept because its absence is
+*visible*, not because it is *costly* — small, cheap, and seen on every reply, so the
+moment it stops appearing you know enforcement itself has broken. Every other Core
+rule fails silently; a canary fails loudly. Never demote one for failing the gate.
 
 **Keep the Core tier small.** The fewer Core rules, the more reliably each survives;
 a bloated always-on tier dilutes attention on every rule in it.
@@ -118,6 +140,10 @@ New memory files start from `templates/memory-file.md`, which carries `level` an
 | Platform-level knowledge | `Knowledge/<page>.md` |
 | Cross-project facts | `global-memory/<file>.md` |
 | Session scratch notes | `memory/<file>.md` |
+| **Rules enforced on every turn** | `Projects/golden-thread/core-rules/<rule>.md` |
+
+The last row is the only one holding **rules** rather than **facts**, and the only one
+pushed into every turn by a hook rather than read on demand.
 
 ## Append-Only vs Iterative
 

@@ -104,9 +104,34 @@ Always append to `<vault>/log.md` with the appropriate verb:
 `global-memory/`. Promote here only when a rule must hold on **every turn, in every
 project**.
 
-**A rule earns Core when it has drifted or failed *despite being stored*, or the user
-designates it always-on.** Importance alone is not the test — a critical trading
-constraint that only matters inside a backtest is Context, not Core.
+There are **two ways in**, and only one is gated.
+
+**Path 1 — Designation (primary).** The user names the rule Core; it is Core from that
+moment. No test, and **no prior incident is required or wanted** — a rule that must be
+immutable is Core as soon as that is known. Requiring it to fail first means accepting
+the failure, which defeats the one tier whose purpose is that it never breaks.
+
+*Canary rules are designated too.* A canary is kept because its absence is **visible**,
+not because it is **costly** — small, cheap, and present on every reply, so the moment
+it stops appearing you know enforcement itself has broken. Every other Core rule fails
+silently; a canary fails loudly. `core_timestamp_every_message` is the canonical one.
+**Never demote a canary for failing the gate below** — it was never meant to take it.
+
+**Path 2 — Promotion from levels 1–5 (gated).** When an existing item moves up, answer
+all three, each asked as *if this rule were **not** enforced*:
+
+1. **Correctness** — would it cause a misunderstanding that leads to code written
+   incorrectly, or a change implemented wrongly, not at all, or in a way not allowed?
+2. **Cost** — would it cause more work, or force backing out an implemented solution?
+3. **Cascade** — would it cause a cascade in which rules at the lower five levels are
+   misrepresented, or written such that they cannot or should not be followed?
+
+**Any single YES qualifies.** Three NOs means it stays where it is. Record the three
+answers in the rule file's body so the tier is justified rather than asserted.
+
+Observed drift is **not** an entry requirement — a rule that drifts was mis-tiered.
+Importance alone is not the test either: a critical trading constraint that only
+matters inside a backtest is Context, not Core.
 
 ### Promotion is not a move — it is a wiring job
 
@@ -131,14 +156,23 @@ Steps, in order:
      supersedes: <old-filename-if-any>
    ```
 3. **Move the file** to `Projects/golden-thread/core-rules/`, renamed `core_<topic>.md`.
-4. **Wire or confirm the mechanism:**
-   - `reminder` → add the rule's **imperative** to `hooks/inject_core_rules.sh`.
-     Phrase it as a command ("Begin your reply with…"), never a description —
-     descriptions drift, commands re-anchor.
-   - `validated` → add a check to `hooks/validate_response.sh` that inspects the
-     finished reply and blocks on violation. Keep it cheap and unambiguous.
+4. **Wire or confirm the mechanism.** The hooks live at
+   `~/.claude/golden-thread/hooks/` — **outside the vault**, so the absolute path in
+   `settings.json` survives project renames and vault moves.
+   - `reminder` → **nothing to edit.** `inject_core_rules.sh` reads the rule files at
+     run time, so a correctly-placed rule is picked up automatically. Its injected
+     text comes from the rule's imperative, which is why the rule body must be phrased
+     as a command ("Begin your reply with…"), never a description. **Do not copy rule
+     text into the script** — duplicating it is how the two copies drift apart.
+   - `validated` → add a check to `validate_response.sh` that inspects the finished
+     reply and blocks on violation. Keep it cheap and unambiguous.
    - Confirm both hooks are wired in `~/.claude/settings.json` (user-global = Core).
      If not: `vault_init.py install-core-rules --vault <vault>`.
+   - **Verify it actually fires** — an unverified Core rule is an assumption:
+     ```bash
+     echo '{}' | ~/.claude/golden-thread/hooks/inject_core_rules.sh
+     ```
+     The new rule must appear in the output.
 5. **Update the pointer** in `global-memory/MEMORY.md` — it points at `core-rules/`,
    it does not hold Core rules inline. Leave a one-line note where the old file was.
 6. **Verify** with `/gt:gt-lint` — `core-unenforced` must not fire for the new rule.
@@ -156,8 +190,10 @@ When a rule proves situational or is superseded, reverse it in this order:
 **remove the enforcement first**, then move the file. Leaving a hook behind that
 enforces a rule no longer in `core-rules/` is worse than either state.
 
-1. Remove its imperative from `inject_core_rules.sh` and/or its check from
-   `validate_response.sh`.
+1. Remove any `validated` check for it from
+   `~/.claude/golden-thread/hooks/validate_response.sh`. For a `reminder`-tier rule
+   there is nothing to unwire in the script — the injector reads `core-rules/` at run
+   time, so the rule stops being injected the moment step 3 moves the file out.
 2. Set `level: generic` and drop `enforcement`.
 3. Move to `global-memory/` (cross-project) or the owning project's `memory/`.
 4. Re-index `MEMORY.md` and log with `retire` or `relocate`.

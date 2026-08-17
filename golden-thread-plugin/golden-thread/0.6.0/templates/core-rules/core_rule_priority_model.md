@@ -100,6 +100,18 @@ The user designates a rule as Core. It is Core from that moment: no test applies
 soon as that is known. Requiring it to fail first means accepting the failure, which
 defeats the one tier whose entire purpose is that it never breaks.
 
+**Canary rules are designated, not tested.** A canary is a rule kept in Core because
+its absence is *visible*, not because its absence is *costly*. It is deliberately
+small and cheap, and it appears often enough that its disappearance is noticed
+immediately — which makes it the health check for the enforcement mechanism itself.
+Every other Core rule fails silently; a canary fails loudly, and that is the whole
+point of keeping it.
+
+No consequence-based test can score this, because the value is observability rather
+than impact. `core_timestamp_every_message` is the canonical example: it answers NO to
+all three gate questions below and is Core regardless. **Never demote a canary for
+failing the gate** — it was never meant to take it.
+
 ### Path 2 — Promotion from a lower level (gated)
 
 When an existing item at levels 1–5 is put forward for Core, answer all three
@@ -124,12 +136,13 @@ The two paths are not redundant, and the current Core set proves it:
 
 | Rule | Q1 | Q2 | Q3 | Entered by |
 |---|---|---|---|---|
-| `core_timestamp_every_message` | no | no | no | **Designation** — fails the gate, is Core anyway |
+| `core_timestamp_every_message` | no | no | no | **Designation — canary.** Fails the gate; Core anyway |
 | `core_global_memory_scope` | no | no | **yes** | Either path |
 | `core_memory_load_policy` | no | **yes** | no | Either path |
 
 The gate governs *promotion*, not the tier. A rule the user requires is Core whether
-or not it would ever have qualified on its own.
+or not it would ever have qualified on its own — and the canary is the proof, since
+the tier's own health check is the one rule the gate would reject.
 
 ### Standing rules
 

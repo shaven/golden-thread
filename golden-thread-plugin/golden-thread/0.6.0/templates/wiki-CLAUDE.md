@@ -46,6 +46,10 @@ Knowledge moves up this hierarchy:
 | 3 | `Projects/<slug>/design.md` | current architecture |
 | 4 | `Knowledge/<page>.md` | cross-project platform knowledge |
 | 5 | `global-memory/` | loaded in every session |
+| **6** | **`core-rules/`** | **rules enforced by hooks on every turn, every project** |
+
+Levels 1–5 hold **facts** and are read on demand. Level 6 holds **rules** and is
+pushed into every turn by a hook.
 
 Use `/gt-promote` to graduate items between levels.
 Use `/gt-lint` to check for gaps, broken links, and stale pages.
