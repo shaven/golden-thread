@@ -9,16 +9,21 @@ metadata:
   supersedes: feedback_timestamp_every_message
 ---
 
-**Begin every response with the current wall-clock timestamp — before any other text,
-before any tool call.** Pull the real current time from the environment (the injected
+**Begin every response with the current wall-clock timestamp — before any other text
+you emit.** Pull the real current time from the environment (the injected
 `Current date and time:` line, or `date` via Bash) — never guess. Format short and clear, e.g. `2026-08-16 15:14 CDT`.
 Applies to EVERY chat and project, on EVERY turn — no exceptions.
 
-**"Begin" means the first characters of the first text you emit in the turn —
-before any tool call, not on a closing summary.** A turn is often
+**"Begin" means the first characters of the first text block of the turn — not a
+closing summary, and not after a lead-in sentence.** A turn is often
 text → tool_use → more text; the timestamp goes at the very start of the *first*
 text block. Putting it on the final block is a violation and the `Stop` hook will
 block the reply, because that is exactly what it checks.
+
+**A tool call to obtain the correct time is not a violation; guessing to avoid one
+is.** The constraint is on *text you emit*, so `date` may be run first — and must be,
+when no `Current date and time:` value was injected (hook-feedback turns, for
+instance, carry none). Silent tool calls do not "begin" a reply; words do.
 
 **Never carry a timestamp forward or estimate elapsed time.** If work in the turn
 took a while, that does not license adjusting the number — either use the injected
@@ -63,17 +68,22 @@ to prevent. The user runs long sessions with rapid-fire questions and needs to s
 when each answer was current relative to real-world/market time.
 
 **How to apply:**
-- Put it at the very start of the **first** text block of the turn, before any tool
-  call. Not on a closing summary, not after a lead-in sentence.
+- Put it at the very start of the **first** text block of the turn. Not on a closing
+  summary, not after a lead-in sentence. Run `date` first if you need it.
 - Use the injected `Current date and time:` value verbatim, or run `date` if none was
   injected. Do not estimate, and do not adjust for time spent working in the turn.
 - For a long turn spanning background work, the value is still the one you were given
   or the one `date` returns when you check — never an interpolation between them.
 
-**Known failure mode (observed 2026-08-16, twice in one session):** writing a lead-in
-sentence, then tool calls, then a timestamped summary. The reply *contains* a
+**Known failure mode (observed 2026-08-16, three times in one session):** writing a
+lead-in sentence, then tool calls, then a timestamped summary. The reply *contains* a
 timestamp but does not *begin* with one, and the `Stop` hook blocks it. The validator
 reads the first text of the turn, which is the correct reading of this rule.
+
+The third occurrence came **immediately after this file was tightened to forbid it**,
+with the corrected imperative injected on that very turn. That is the clearest
+evidence available for why this rule is Validated rather than Reminder: the reminder
+was present, current, and specific, and it still did not hold. The output check did.
 
 **What the validator does not catch:** it checks the *shape* of the timestamp, not its
 truth. A well-formed but fabricated value passes. That is an accepted limit of a cheap
