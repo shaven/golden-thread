@@ -6,7 +6,7 @@ Modes:
   fresh           --vault <path> --domain <name>
   create-project  --vault <path> --name <slug> [--title <title>] [--tags a,b]
                   [--domain <grouping>]
-                  [--parent <parent-slug>] [--runbook] [--project-dir <dir>]
+                  [--parent <parent-slug>] [--project-dir <dir>]
                   [--topology local|remote|bastion-jump|bastion-direct]
                   [--repo-url <url>] [--fleet <page-name>]
   connect         --vault <path>
@@ -677,9 +677,11 @@ idea
 """
     ensure_file(proj / "README.md", readme_content)
 
-    if runbook:
-        ensure_file(proj / "runbook.md",
-                    f"# {display_title} Runbook\n\n<!-- Operational procedures. Project-specific facts only — process rules go in PROTOCOL.md -->\n")
+    # runbook.md — the incubator for the outward axis. Created ALWAYS, not behind a
+    # flag: it was opt-in until 0.6.1 and produced zero instances across eleven
+    # projects. A capture surface that must be requested is one that never gets used.
+    # The `runbook` parameter is retained for call compatibility and is a no-op.
+    seed_template("runbook.md", proj / "runbook.md", {"TITLE": display_title})
 
     register_in_master_index(master_index, slug, display_title, tags, domain)
 
@@ -737,7 +739,8 @@ def main():
     p_proj.add_argument("--title", default=None, help="Human-readable project title")
     p_proj.add_argument("--tags", default=None, help="Comma-separated tags, e.g. platform,infra")
     p_proj.add_argument("--parent", default=None, help="Parent project slug (creates sub-project)")
-    p_proj.add_argument("--runbook", action="store_true", help="Create runbook.md skeleton")
+    p_proj.add_argument("--runbook", action="store_true",
+                    help="No-op; runbook.md is always created (kept for compatibility)")
     p_proj.add_argument("--project-dir", type=Path, default=None)
     p_proj.add_argument("--topology", choices=TOPOLOGIES, default=None,
                         help="Where the code lives: local, remote, bastion-jump, bastion-direct")

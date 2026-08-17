@@ -55,6 +55,11 @@ Destination: `Projects/<slug>/CLAUDE.md`, committed to that project's repo root,
 where **every session working in that code reads it automatically** — no plugin, no
 configuration, no vault access.
 
+**Where it comes from.** `runbook.md` is the incubator: repo facts are written there
+the moment they are learned, with no ceremony and no review. That is the only place
+**stability can be observed** — the graduation trigger below is meaningless without
+somewhere a fact sits and is watched. Capture is cheap; graduation is deliberate.
+
 **What qualifies.** Passes the teammate test *and* has stopped changing. Stability
 is the signal; a fact still in motion is not ready to publish.
 
