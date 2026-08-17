@@ -75,15 +75,22 @@ when each answer was current relative to real-world/market time.
 - For a long turn spanning background work, the value is still the one you were given
   or the one `date` returns when you check — never an interpolation between them.
 
-**Known failure mode (observed 2026-08-16, three times in one session):** writing a
-lead-in sentence, then tool calls, then a timestamped summary. The reply *contains* a
-timestamp but does not *begin* with one, and the `Stop` hook blocks it. The validator
-reads the first text of the turn, which is the correct reading of this rule.
+**Known failure mode (observed 2026-08-16, four times in one session):** reacting to
+tool output — or writing a lead-in sentence — before the timestamp, then putting the
+timestamp on a closing summary. The reply *contains* a timestamp but does not *begin*
+with one, and the `Stop` hook blocks it. The validator reads the first text of the
+turn, which is the correct reading of this rule.
 
-The third occurrence came **immediately after this file was tightened to forbid it**,
-with the corrected imperative injected on that very turn. That is the clearest
-evidence available for why this rule is Validated rather than Reminder: the reminder
-was present, current, and specific, and it still did not hold. The output check did.
+The pattern is a **reflex**, not an oversight: the pull is to respond to what a tool
+just returned before addressing the user. That is why the imperative alone does not
+reach it.
+
+**Four for four.** The Reminder tier did not prevent a single one of the four, despite
+the imperative being injected on every turn and rewritten twice to be more explicit —
+including once *immediately before* the next violation. The `Stop` hook caught all
+four. This is the clearest evidence in the vault for why a rule is designated
+Core/**Validated** rather than Core/Reminder: a more emphatic reminder is not the
+lever. Do not "fix" this by rewording the injection again.
 
 **What the validator does not catch:** it checks the *shape* of the timestamp, not its
 truth. A well-formed but fabricated value passes. That is an accepted limit of a cheap
