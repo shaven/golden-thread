@@ -148,6 +148,44 @@ def register_in_master_index(index_path: Path, slug: str, title: str, tags: list
     record("updated", index_path, f"registered {slug}")
 
 
+ENFORCEMENT_CHECK_MARKER = "## First: is enforcement active?"
+
+
+def _ensure_enforcement_check(vault: Path):
+    """Put the 'is enforcement active?' section into the vault's own CLAUDE.md.
+
+    Lifted verbatim from templates/wiki-CLAUDE.md so the two never drift. Idempotent:
+    a vault that already carries the section is left alone.
+    """
+    claude = vault / "CLAUDE.md"
+    tmpl = TEMPLATES_DIR / "wiki-CLAUDE.md"
+    if not tmpl.exists():
+        record("error", tmpl, "wiki-CLAUDE.md template missing; cannot add enforcement check")
+        return
+    src = tmpl.read_text(encoding="utf-8")
+    if ENFORCEMENT_CHECK_MARKER not in src:
+        record("error", tmpl, "template no longer contains the enforcement-check section")
+        return
+    start = src.index(ENFORCEMENT_CHECK_MARKER)
+    end = src.index("## How to Read This", start)
+    section = src[start:end]
+
+    if not claude.exists():
+        record("skipped", claude, "no vault CLAUDE.md to add the enforcement check to")
+        return
+    existing = claude.read_text(encoding="utf-8")
+    if ENFORCEMENT_CHECK_MARKER in existing:
+        record("skipped", claude, "enforcement check already present")
+        return
+
+    lines = existing.split("\n")
+    # Insert before the first H2 so it is read early; otherwise append.
+    idx = next((i for i, l in enumerate(lines) if l.startswith("## ")), len(lines))
+    lines[idx:idx] = section.rstrip("\n").split("\n") + [""]
+    claude.write_text("\n".join(lines), encoding="utf-8")
+    record("updated", claude, "added the enforcement-active check")
+
+
 def install_core_rules(vault: Path, wire_hooks: bool = True, settings_path: Path = None):
     """Establish the Core tier: place the rules, record where they are, wire the hooks.
 
@@ -166,6 +204,12 @@ def install_core_rules(vault: Path, wire_hooks: bool = True, settings_path: Path
     ensure_dir(dest)
     for f in sorted(src.glob("*.md")):
         ensure_file(dest / f.name, f.read_text(encoding="utf-8"))
+
+    # Retrofit the enforcement check into the vault's own CLAUDE.md. A vault that
+    # predates the Core tier has no way to tell a session that enforcement exists but
+    # may be absent — and that gap is silent, because a session without the hooks reads
+    # the same rules and simply never has them re-asserted.
+    _ensure_enforcement_check(vault)
 
     # Record the location so nothing has to guess next time. Relative to the vault, so
     # moving the whole vault does not invalidate it either.

@@ -2,6 +2,37 @@
 
 This vault is the single source of truth for AI memory across all projects.
 
+## First: is enforcement active?
+
+This vault defines **Core rules** in `Projects/golden-thread/core-rules/` that are
+meant to hold on every turn, in every project — see `Projects/PROTOCOL.md`. They are
+enforced by hooks living **outside the vault**, at `~/.claude/golden-thread/hooks/`,
+installed by the `gt` plugin.
+
+**The rules travel with these files. The enforcement does not.** A copy of this vault
+on another machine, or opened by another person, has the rules as *documents* and no
+mechanism re-asserting them.
+
+So before substantive work here, confirm the hooks are wired:
+
+```bash
+echo '{}' | ~/.claude/golden-thread/hooks/inject_core_rules.sh
+```
+
+- **Output lists the Core rules** — enforcement is active. Proceed normally.
+- **Command not found, or empty output** — the plugin is not installed on this machine.
+  **Say so plainly in your first reply.** Then continue: treat everything in
+  `core-rules/` as advisory rather than guaranteed, and never state that a Core rule is
+  enforced when it is not.
+
+Install with `bash <plugin-repo>/install.sh`, then restart Claude Code.
+
+This check exists because the failure is otherwise **silent**. A session without the
+hooks reads exactly the same rules and simply never has them re-asserted — the precise
+"in context is not applied" failure the Core tier was built to close, reappearing
+whenever the vault outruns its machinery. Announcing it does not fix it; it stops the
+gap being invisible.
+
 ## How to Read This
 
 - `Knowledge/` — wiki pages. Each page is self-contained. Follow `[[wikilinks]]` for related topics.
