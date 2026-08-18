@@ -12,6 +12,9 @@ it at startup, look things up while working, and write back what they learn.
 Its distinguishing idea is the second problem, the one most memory systems never
 address: **writing a rule down does not mean it gets followed.**
 
+Plugin **v0.8.0**. Four Core rules currently enforced, two of them *validated* — a
+`Stop` hook inspects the finished reply and blocks it if the rule was broken.
+
 ## "In context" is not "applied"
 
 A rule can sit in a loaded file for an entire session and still be quietly dropped for
@@ -23,6 +26,24 @@ a **scope** (`core` / `context` / `generic`) and an **enforcement** (`reminder`,
 is re-injected every turn, or `validated`, where the output is checked and a violating
 reply is blocked). A rule that must never break is Core + Validated — the only
 combination that does not depend on in-the-moment discipline.
+
+The Core tier is deliberately small; every addition dilutes the reliability of the rest.
+
+| Rule | Enforcement | What it does |
+|---|---|---|
+| `core_no_secrets_in_transcript` | **validated** | Never put a secret's value into the session — not to inspect, redact or check it |
+| `core_timestamp_every_message` | **validated** | Begin every reply with the current wall-clock timestamp |
+| `core_global_memory_scope` | reminder | `global-memory/` holds only facts needed in *every* project |
+| `core_memory_load_policy` | reminder | Do not auto-load the full memory index |
+
+Two ways in: the user **designates** a rule, or an existing fact is **promoted** and
+must answer three questions — would its absence cause incorrect code, cause rework, or
+cascade into lower-level rules being written wrongly?
+
+The two validated rules show why both paths exist. `core_no_secrets_in_transcript`
+answers yes to all three. `core_timestamp_every_message` answers **no to all three** and
+is Core anyway: it is the *canary*, kept because its absence is visible rather than
+costly, so a broken hook announces itself.
 
 ## What is in this repo
 
@@ -88,7 +109,9 @@ kept, and still serve after reality moved on. `gt_lint.py` runs 13 deterministic
 and `core-unenforced`, which catches a rule that is **stored but never re-asserted** —
 the exact failure this system exists to close.
 
-`skill_lint.py` enforces that no two skills can fire on the same intent.
+`skill_lint.py` enforces that no two skills can fire on the same intent — a rule most
+systems state and check by hand. Adopting it found a live collision: two skills sharing
+three verbatim trigger phrases.
 
 ## Contributing to this repo
 
