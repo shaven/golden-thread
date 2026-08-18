@@ -43,12 +43,22 @@ to take.
 
 Its value is **observability of the enforcement mechanism itself**, which no
 consequence-based test can measure. The rule is small, cheap, and *highly visible* — it
-sits at the top of every single reply. So the moment the timestamp stops appearing,
-that is an immediate, unmistakable signal that **enforcement has broken**: the hook is
-unwired, the script moved, the vault is unreachable, or `settings.json` was
-overwritten. Every other Core rule fails *silently*. This one fails *loudly*.
+sits at the top of every single reply. So if the timestamp stops appearing, the hook
+itself has stopped running — unwired, script moved, or `settings.json` overwritten.
+Every other Core rule fails *silently*; this one fails *loudly*. **But only for that
+one failure mode** — see the correction below.
 
-That makes it the health check for the entire tier. Without it, a broken
+**Corrected 2026-08-18 — it is not a complete health check.** On 2026-08-17 a Dropbox
+file-provider mount dropped, the vault became unreachable, and rules 2 and 3 stopped
+being injected for roughly twenty hours. **The timestamp kept appearing the whole
+time**, so nothing looked wrong. The injector had a hardcoded fallback that emitted
+the timestamp when no rules could be loaded — the canary had a privileged survival
+path, which is exactly backwards for a health indicator.
+
+A canary detects *total* hook failure. It cannot detect *partial* rule loss, and
+partial loss is the more likely failure because it happens whenever the vault moves.
+The injector now emits an explicit `ENFORCEMENT DEGRADED` banner in that state, with
+the reason, so the gap is visible on the first turn rather than after a day. Without it, a broken
 `UserPromptSubmit` hook could go unnoticed for weeks while the rules it was supposed to
 be re-asserting quietly stopped applying — precisely the failure the Core tier exists
 to prevent.
