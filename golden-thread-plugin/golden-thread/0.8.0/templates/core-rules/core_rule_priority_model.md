@@ -136,6 +136,7 @@ The two paths are not redundant, and the current Core set proves it:
 
 | Rule | Q1 | Q2 | Q3 | Entered by |
 |---|---|---|---|---|
+| `core_no_secrets_in_transcript` | **yes** | **yes** | **yes** | Both — passes every gate *and* designated |
 | `core_timestamp_every_message` | no | no | no | **Designation — canary.** Fails the gate; Core anyway |
 | `core_global_memory_scope` | no | no | **yes** | Either path |
 | `core_memory_load_policy` | no | **yes** | no | Either path |
