@@ -318,6 +318,10 @@ def cmd_rename_project(vault: Path, old: str, new: str):
         text = text.replace(f"({old}/", f"({new}/")
         text = text.replace(f"`{old}`", f"`{new}`")
         text = re.sub(rf"^(\s*slug:\s*){re.escape(old)}\s*$", rf"\g<1>{new}", text, flags=re.M)
+        # `parent:` too. Missing it silently orphans every sub-project: the folders
+        # move with the parent, but their frontmatter keeps naming a slug that no
+        # longer exists, so any Dataview grouping by parent quietly drops them.
+        text = re.sub(rf"^(\s*parent:\s*){re.escape(old)}\s*$", rf"\g<1>{new}", text, flags=re.M)
         if text != original:
             md.write_text(text, encoding="utf-8")
             touched += 1
