@@ -120,18 +120,53 @@ HIGH_CONFIDENCE = [
 ]
 
 # keyword = literalvalue   /   -u user:literalpassword
+# keyword = literalvalue   /   -u user:literalpassword   /   Bearer <token>
+#
+# The keyword may carry an identifier PREFIX, because real credentials are
+# almost always namespaced: aws_secret_access_key, NEST_CLIENT_SECRET,
+# CAM_HTTP_PASS. The 2026-08-22 sweep found the prefix-less version missed
+# aws_secret_access_key, secret_key, private_key, AUTH_KEY and credential.
+#
+# The SUFFIX is deliberately NOT open. Allowing a trailing tail would fire on
+# `token_count = 123456` and `cache_key = ...`, so the identifier must END on a
+# credential word, and a bare `key` counts only behind a credential qualifier.
 KEYWORD_LITERAL = re.compile(
-    r'(?:pass(?:word|wd)?|pwd|secret|api[_-]?key|token)\s*[=:]\s*(["\']?)([^\s"\'&<>]{6,})\1',
+    r'([\w-]*(?:pass(?:word|wd)?|pwd|secret|token|credential|'
+    r'(?:api|access|private|auth|signing|encryption|client|secret)[_-]?key))'
+    r'\s*[=:]\s*(["\']?)([^\s"\'&<>]{6,})\2',
     re.I)
+
+# Identifiers that contain a credential word but are guaranteed NOT to be
+# followed by one. `NOPASSWD:` is the sudoers tag meaning *no password is
+# required*, and its operand is a command path — so the one token in sudoers
+# that can never precede a secret was reliably tripping the secret detector.
+#
+# Do NOT "fix" that by requiring a word boundary before the keyword. Underscore
+# is a word character, so \b would also stop matching CAM_HTTP_PASS=,
+# NOTIFY_PASS= and NEST_CLIENT_SECRET= — real credentials this vault tracks.
+# Verified 2026-08-22 against 34 cases.
+SAFE_KEYWORD = re.compile(r'^no[_-]?passwd$', re.I)
+
 BASIC_AUTH = re.compile(r'-u\s+[A-Za-z0-9_.-]{2,}:([^\s"\']{4,})')
+BEARER = re.compile(
+    r'\b(?:bearer|authorization\s*:\s*bearer)\s+([A-Za-z0-9._~+/=-]{16,})', re.I)
 
 def secret_findings(text):
     hits = []
     for name, rx in HIGH_CONFIDENCE:
         if rx.search(text):
             hits.append(name)
-    for rx, label in ((KEYWORD_LITERAL, "credential assigned a literal value"),
-                      (BASIC_AUTH, "basic-auth pair with a literal password")):
+
+    for m in KEYWORD_LITERAL.finditer(text):
+        keyword, val = m.group(1), m.group(3)
+        if SAFE_KEYWORD.match(keyword):
+            continue
+        if val and not PLACEHOLDER.match(val):
+            hits.append("credential assigned a literal value")
+            break
+
+    for rx, label in ((BASIC_AUTH, "basic-auth pair with a literal password"),
+                      (BEARER, "bearer token with a literal value")):
         for m in rx.finditer(text):
             val = m.group(m.lastindex or 1)
             if val and not PLACEHOLDER.match(val):
