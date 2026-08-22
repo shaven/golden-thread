@@ -50,8 +50,24 @@ def read_suppress_list(vault: Path) -> set:
     return suppressed
 
 
+def strip_code(text: str) -> str:
+    """Blank out fenced blocks and inline code spans.
+
+    A wikilink written inside backticks is documentation ABOUT link syntax, not a
+    link. CONVENTIONS.md and the runbooks do this routinely; counting those as
+    real links produced broken-link findings for `[[wikilink]]` itself.
+    Replaced with spaces rather than removed so offsets stay usable.
+    """
+    def blank(m):
+        return re.sub(r'\S', ' ', m.group(0))
+    text = re.sub(r'```.*?```', blank, text, flags=re.DOTALL)
+    text = re.sub(r'~~~.*?~~~', blank, text, flags=re.DOTALL)
+    text = re.sub(r'`[^`\n]*`', blank, text)
+    return text
+
+
 def extract_wikilinks(text: str) -> list:
-    return re.findall(r'\[\[([^\]|#]+?)(?:[|#][^\]]*)?\]\]', text)
+    return re.findall(r'\[\[([^\]|#]+?)(?:[|#][^\]]*)?\]\]', strip_code(text))
 
 
 def parse_frontmatter_status(text: str) -> str:
@@ -102,8 +118,37 @@ def check_index_gap(vault: Path, findings: list, suppressed: set):
             })
 
 
+def link_targets(vault: Path) -> dict:
+    """Every name a [[wikilink]] may legitimately resolve to.
+
+    Two kinds of target exist and only one used to be registered:
+
+      * a PAGE — any .md file, addressed by its stem (`[[INFRASTRUCTURE]]`)
+      * a PROJECT — a folder holding README.md, addressed by its folder name
+        (`[[shome-security]]`), or for a sub-project by `parent/child`
+        (`[[golden-thread/validation-agents]]`)
+
+    Keying only on file stem made every project folder register as "readme", so
+    no project slug could ever resolve. Measured against the reference vault on
+    2026-08-22: 77 of 87 broken-link findings were this false positive, which
+    buried the 2 real ones and made the check unusable.
+    """
+    targets = {p.stem.lower(): p for p in vault.rglob("*.md")}
+    projects = vault / "Projects"
+    if projects.is_dir():
+        for readme in projects.rglob("README.md"):
+            folder = readme.parent
+            if folder == projects:
+                continue
+            targets.setdefault(folder.name.lower(), folder)
+            rel = folder.relative_to(projects)
+            if len(rel.parts) > 1:
+                targets.setdefault(str(rel).lower(), folder)
+    return targets
+
+
 def check_broken_links(vault: Path, findings: list, suppressed: set):
-    all_pages = {p.stem.lower(): p for p in vault.rglob("*.md")}
+    all_pages = link_targets(vault)
 
     for md_file in vault.rglob("*.md"):
         # Skip lint-declines itself
@@ -127,7 +172,10 @@ def check_broken_links(vault: Path, findings: list, suppressed: set):
                     "check": "broken-link",
                     "path": rel,
                     "message": f"`[[{target}]]` in {rel} doesn't resolve to any vault page",
-                    "proposed_fix": f"Remove the link or create `Knowledge/{target}.md`",
+                    "proposed_fix": (
+                        f"Remove the link, create `Knowledge/{target}.md`, "
+                        f"or scaffold a project with slug `{target}`"
+                    ),
                 })
 
 
