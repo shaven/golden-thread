@@ -80,12 +80,23 @@ cannot be reached and the rules are not loaded — the banner names the cause.
 
 ## The skills
 
-`gt-open` loads a project at session start · `gt-work` writes findings back ·
-`gt-create` scaffolds a new project · `gt-promote` graduates a fact up a level or out
-to a repo · `gt-query` looks things up · `gt-lint` runs 13 health checks ·
-`gt-ingest` imports an existing project · `gt-review` sweeps daily notes ·
-`gt-refresh` checks sources for upstream changes ·
-`gt-validate` re-derives a claim with a fresh-context validator.
+Twelve skills. Each composes through files rather than through other skills, so
+removing any one leaves the rest working.
+
+| Skill | What it does |
+|---|---|
+| `gt-init` | Sets up the vault and wires it to a project. Writes `vault-config.json`, the pointer every other skill resolves through, and adds the Golden Thread section to your global `CLAUDE.md`. Idempotent — safe to re-run on a new machine. |
+| `gt-create` | Scaffolds a project: slug, domain, topology, tags, optional sub-project parent. Fills `idea.md` from what you actually said, then freezes it — that file is the traceable *why*, and it is never rewritten when the plan changes. |
+| `gt-open` | Loads a project at session start, reading `source.md` first so you know which host serves which role before touching code. Stops at the memory *index* rather than the notes, so a 70-note project costs ~80 lines to open instead of ~2,000. |
+| `gt-work` | Writes the session back: dated findings to `research.md`, stable choices to numbered ADRs in `decisions.md`, architecture rewritten in place in `design.md`, session state to `memory/`. The step people skip, and skipping it is what makes a vault decay. |
+| `gt-promote` | Graduates a fact up a level once a second project proves it general — or *out* to a project's `CLAUDE.md`, where any agent working in that repo reads it with no vault and no setup. Reach picks the level; audience decides whether it also leaves. |
+| `gt-validate` | Re-derives a claim with a validator given only the claim, the rules and the artifact — never the reasoning that produced it. Four classes: `empirical`, `vantage`, `rule-compliance`, `code`. Returns confirmed, refuted, or cannot-verify, and the third never counts as a pass. |
+| `gt-query` | Answers "how does this work?" — reads `index.md`, follows wikilinks into `Knowledge/`, then falls back to grep and project memory. Flags anything returned that is marked `status: stale`. |
+| `gt-ingest` | Imports an existing project's notes. Copies, never moves or deletes. Stores external sources immutably in `Sources/` before synthesising them, so the raw input survives whatever you later conclude from it. |
+| `gt-review` | Sweeps Obsidian daily notes for tasks and ideas that were jotted down and never captured, then promotes the ones you pick into tracked projects. |
+| `gt-refresh` | Checks `Sources/` for upstream changes. Supersedes with a *new* immutable file carrying `supersedes:` rather than editing the old one, so the record of what you believed and when stays intact. |
+| `gt-lint` | Runs 13 deterministic health checks — broken links, orphans, index gaps, scope leaks, staleness, superseded sources — plus `core-unenforced`, which catches a rule that is stored but never re-asserted. |
+| `gt-runbook-lint` | Finds procedures duplicated across project runbooks and routes them to the right shared layer: `PROTOCOL.md`, a `Knowledge/` page, or a repo `CLAUDE.md`. Duplication across two runbooks is the signal a fact belongs one layer out. |
 
 ## Typical use
 
