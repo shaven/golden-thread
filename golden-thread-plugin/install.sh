@@ -20,7 +20,7 @@ if [ ! -d "$SCRIPT_DIR/golden-thread" ]; then
   exit 1
 fi
 
-VERSION="0.8.0"
+VERSION="0.9.0"
 WIKI_VERSION="0.1.0"
 PLUGIN_KEY="gt@golden-thread-plugin"
 WIKI_PLUGIN_KEY="gt-wiki@golden-thread-plugin"

@@ -12,7 +12,7 @@ it at startup, look things up while working, and write back what they learn.
 Its distinguishing idea is the second problem, the one most memory systems never
 address: **writing a rule down does not mean it gets followed.**
 
-Plugin **v0.8.0**. Four Core rules currently enforced, two of them *validated* — a
+Plugin **v0.9.0**. Four Core rules currently enforced, two of them *validated* — a
 `Stop` hook inspects the finished reply and blocks it if the rule was broken.
 
 ## "In context" is not "applied"
@@ -49,7 +49,7 @@ costly, so a broken hook announces itself.
 
 | Path | What it is |
 |---|---|
-| `golden-thread-plugin/golden-thread/<ver>/` | The `gt` plugin — 11 skills, scripts, templates, hooks |
+| `golden-thread-plugin/golden-thread/<ver>/` | The `gt` plugin — 12 skills, scripts, templates, hooks |
 | `golden-thread-plugin/golden-thread-wiki/<ver>/` | The `gt-wiki` plugin — 5 skills for standalone wiki vaults |
 | `golden-thread-plugin/install.sh` | Installs both, wires the hooks, registers the marketplace |
 
@@ -84,7 +84,24 @@ cannot be reached and the rules are not loaded — the banner names the cause.
 `gt-create` scaffolds a new project · `gt-promote` graduates a fact up a level or out
 to a repo · `gt-query` looks things up · `gt-lint` runs 13 health checks ·
 `gt-ingest` imports an existing project · `gt-review` sweeps daily notes ·
-`gt-refresh` checks sources for upstream changes.
+`gt-refresh` checks sources for upstream changes ·
+`gt-validate` re-derives a claim with a fresh-context validator.
+
+## Typical use
+
+| Situation | What you run | The part that bites |
+|---|---|---|
+| Starting something new | `/gt:gt-create`, then `/gt:gt-work` to close the session | `idea.md` is immutable after creation — it is the traceable *why* |
+| Picking a project back up | `/gt:gt-open <slug>` | Check hosts and blockers in the summary *before* touching anything |
+| "What should I work on?" | Regenerate `TASKS.md`, then read it | Priority is computed against the clock, never stored — a stale rollup is last week's ranking |
+| Bringing an existing project in | `/gt:gt-ingest` | Copies, never moves. Count `[[wikilinks]]` before renaming: Obsidian resolves links by filename |
+| You learned something | `/gt:gt-work`, later `/gt:gt-promote` | File at the narrowest honest scope; promotion is cheap, demotion is not |
+| A number is about to become fact | `/gt:gt-validate` | Run it *before* the claim reaches `decisions.md` or production, not after |
+| "How does this work?" | `/gt:gt-query <topic>` | Verify anything that comes back `status: stale` |
+| Keeping the vault honest | `/gt:gt-lint` | `memory-unlisted` matters most — a note missing from the index is one no session will ever load |
+
+Full walkthroughs, one section per skill, are in
+[`golden-thread-plugin/MANUAL.md`](golden-thread-plugin/MANUAL.md).
 
 ## How knowledge moves
 

@@ -1,6 +1,6 @@
 # Golden Thread — User Manual
 
-Complete reference for all eleven skills. Written against **gt v0.3.0**.
+Complete reference for all twelve skills. Written against **gt v0.9.0**.
 
 ---
 
@@ -15,15 +15,32 @@ session conversation
       ↓  gt-work
 Projects/<slug>/memory/*.md      this project, this detail
       ↓  gt-promote
-research.md · decisions.md       settled findings and choices
-      ↓  gt-promote
-Knowledge/                       true for several projects
-      ↓  gt-promote
-global-memory/                   true everywhere
+research.md                      dated findings — `unverified` allowed, if labelled
+      ↓  gt-promote + gt-validate
+decisions.md · design.md         settled choices — independently verified
+      ↓  gt-promote + gt-validate
+Knowledge/                       true for several projects — independently verified
+      ↓  gt-promote + gt-validate
+global-memory/                   true everywhere — independently verified
 ```
 
 Facts move **up** as they prove general. They never move back down, and nothing
 is silently deleted.
+
+**Verification gates the climb — it is not a step at the end.** `research.md` holds
+dated findings and accepts an `unverified` figure so long as it is labelled. Every
+level above it *reads as settled*, so a figure entering `decisions.md`, `design.md`,
+`Knowledge/` or `global-memory/` — or driving a production change — must be
+**independently verified**: re-derived by a validator that never saw the reasoning.
+A second pass by the same session is only `self-verified`; it shares the assumptions
+that produced the error, so it confirms rather than checks. Run `/gt:gt-validate`
+*before* the promotion.
+
+> This rung was added after an unverified analysis reached `decisions.md` as an ADR
+> recommending a four-ticker production change. An independent validator refuted three
+> of the four — two of which would have deepened portfolio drawdown while appearing to
+> improve their own ticker's. The ladder carried the error upward because nothing on it
+> asked how the number was checked.
 
 **The discipline:** write a fact at the narrowest scope that is honest, and
 promote it only when a second project proves it general. A fact promoted too
@@ -130,6 +147,111 @@ from each `source.md`. Never copy the host table into a project.
 
 ---
 
+## Typical use cases
+
+Recipes for the situations that actually recur. Each names the command; the
+per-command detail follows in the sections below.
+
+### Starting something new
+
+```
+/gt:gt-create   →   work   →   /gt:gt-work
+```
+
+`gt-create` gathers slug, domain, topology and tags, scaffolds the folder, and
+writes `idea.md` from what you actually said. **`idea.md` is immutable after
+that** — it is the traceable "why", and the one file you never rewrite when the
+plan changes. Close the session with `gt-work` or the session's findings die with it.
+
+### Picking up a project after time away
+
+```
+/gt:gt-open <slug>
+```
+
+Reads the project docs in dependency order and stops at `memory/MEMORY.md`. Skim the
+returned summary for **stage**, **hosts** and **blockers** before touching anything —
+a stale host entry is cheapest to correct before work starts. Then pull individual
+memory notes by name as the work needs them.
+
+### "What should I work on?"
+
+```bash
+python3 <vault>/Projects/golden-thread/tools/gt_tasks.py   # then read TASKS.md
+```
+
+**Regenerate first, always.** Effective priority is computed against the clock — a
+`p:: 1` older than seven days escalates, a `due` inside three days escalates, an open
+`pp_escalate` window escalates. Reading a stale `TASKS.md` gives you last week's
+ranking with this week's confidence.
+
+`waiting:: user` is your list; `waiting:: agent` is the session's.
+
+### Bringing an existing project into the vault
+
+```
+/gt:gt-ingest
+```
+
+Copies — never moves or deletes. If the notes cross-reference each other by
+`[[wikilink]]`, **count the links before renaming anything**; Obsidian resolves links
+by filename, so a tidy-up destroys the graph. Prefer keeping filenames.
+
+### You just learned something — where does it go?
+
+```
+/gt:gt-work          (end of session)
+/gt:gt-promote       (when it proves general)
+```
+
+File at the **narrowest scope that is honest**. A finding that stopped changing
+graduates from `memory/` to `research.md`; a truth a *second* project hit graduates to
+`Knowledge/`. See "Where does this fact go?" below. Promotion is cheap; demotion is not.
+
+### A number is about to be recorded as fact
+
+```
+/gt:gt-validate
+```
+
+Before it lands in `decisions.md`, `design.md`, `Knowledge/` or `global-memory/`, and
+before any production change. The validator gets the claim, the rules and the
+artifact — never your reasoning. Budget for the possibility that it comes back
+**refuted**; that is the skill working, not failing.
+
+### Answering "how does this work?"
+
+```
+/gt:gt-query <topic>
+```
+
+Reads `index.md`, follows wikilinks into `Knowledge/`, then falls back to grep and
+project memory. If a page comes back `status: stale`, verify before acting on it.
+
+### Keeping the vault honest
+
+```
+/gt:gt-lint            # broken links, orphans, unlisted memory, scope leaks
+/gt:gt-runbook-lint    # facts duplicated across runbooks
+/gt:gt-refresh         # upstream changes to Sources/
+```
+
+Run `gt-lint` after any structural change. Triage into three piles: *you broke it*
+(fix now), *already broken* (record in `review-queue.md`), *false positive* (suppress
+**with the reason**). The check that matters most is `memory-unlisted` — a memory file
+missing from `MEMORY.md` is a file Claude will never load.
+
+### Capturing what you jotted down elsewhere
+
+```
+/gt:gt-review
+```
+
+Scans Obsidian daily notes for uncaptured tasks and ideas and promotes the ones you
+pick into tracked projects.
+
+---
+
 ## Setup
 
 ### `/gt:gt-init`
@@ -153,12 +275,29 @@ actually said. `idea.md` is immutable afterwards — it is the traceable "why".
 
 ### `/gt:gt-open <slug>`
 
-Reads `source.md` → `idea.md` → `research.md` → `decisions.md` → `design.md` →
-`spec.md` → `runbook.md`, then the linked fleet page, then `memory/MEMORY.md` —
-and **stops**. Individual memory files load on demand.
+Loads a project and stops. It is **read-only** — nothing is written during loading.
 
-Summarises stage, topology and hosts, next action, blockers, and what memory
-exists but is unloaded.
+Reads, in order: `CONVENTIONS.md` and `PROTOCOL.md` (once per session), the project
+`README.md` — frontmatter first, since `domain`/`stage`/`topology`/`tags` is the
+fastest read of where the project stands — then `source.md` → `idea.md` →
+`research.md` → `decisions.md` → `design.md` → `spec.md` → `runbook.md`, the linked
+fleet page, and finally `memory/MEMORY.md` — **the index only**. Individual memory
+files load on demand.
+
+**`source.md` leads the project docs deliberately.** It says which box serves which
+role in which environment. Acting before reading it is how you edit the wrong host,
+or overwrite a file that exists on three machines.
+
+**`research.md` over ~200 lines is read by its headings**, plus the entries relevant
+to the work at hand and the most recent few. It is append-only and grows without
+bound; reading it whole crowds out the context the actual work needs.
+
+Sub-projects load only when you name one, or the status board shows it as the active
+item.
+
+Announces the `review-queue.md` count once, then summarises stage, **topology and
+hosts**, next action, blockers, and what memory exists but is unloaded — the host
+list so you can correct a stale entry *before* work starts rather than after.
 
 ### `/gt:gt-work`
 
@@ -227,6 +366,56 @@ carrying `supersedes:` — never edits the old one.
 
 ---
 
+## Verification
+
+### `/gt:gt-validate`
+
+Verify a claim by **re-deriving** it, not by reviewing it. Use before a finding is
+recorded as fact, before a production change, or whenever a number matters.
+
+**The one rule: the validator never receives the reasoning that produced the claim.**
+Give it the reasoning and it grades the argument — inheriting the same blind spot.
+Give it only the claim, the rules and the artifact, and it has to go back to primary
+sources. That is the only thing that catches a wrong premise.
+
+Reduce the work to a **single falsifiable assertion**. "The analysis is sound" is not
+validatable; "widening NQ's target to 1.25 improves risk-adjusted return" is. Validate
+several claims **separately** — a bundled claim returns a bundled verdict, which hides
+which part failed.
+
+Loads the project's `validation-rules.md`, and the parent's too, since packs are
+inherited. Those are standing invariants the validator enforces whether or not the
+request mentions them — because *a requester who has already made a domain error will
+not think to ask the validator to check for it.* On conflict, the pack wins.
+
+| Class | Use when the risk is |
+|---|---|
+| `empirical` | A number, measurement or result could be wrong |
+| `vantage` | The measuring position may not be able to observe the answer |
+| `rule-compliance` | Work must satisfy `core-rules/` or `CONVENTIONS.md` |
+| `code` | Code may not do what its name, comment or docs claim |
+
+Pick every class whose risk is present. **Do not substitute one generic reviewer** —
+that produces agreement, not verification.
+
+The packet is exactly three fields — `claim`, `rules`, `artifact` — then re-read it
+and strip your conclusions, your numbers, your confidence, and any adjective implying
+the expected answer. "Confirm that X" becomes "determine whether X". Withholding
+*reasoning* is isolation; withholding *access* is just a broken validator, so keep the
+hostnames, API shapes and filters it needs to reach the artifact alone.
+
+Three verdicts: **confirmed**, **refuted** (quantify the divergence), and
+**cannot-verify** (name what was missing).
+
+> **`cannot-verify` is never a pass.** A validator that could not check something and
+> stayed quiet manufactures false assurance — worse than no validator at all.
+
+**You are the worst possible author of this packet**, because you already know the
+answer and your framing leaks. Treat building it as an adversarial exercise against
+yourself. A validator disagreeing is a *result*, not a failure.
+
+---
+
 ## Maintenance
 
 ### `/gt:gt-lint`
@@ -283,7 +472,7 @@ that isn't true there. When unsure, file narrow — promotion is cheap, demotion
 ## Script reference
 
 ```bash
-SCRIPTS=~/.claude/plugins/cache/golden-thread-plugin/gt/0.3.0/scripts
+SCRIPTS=~/.claude/plugins/cache/golden-thread-plugin/gt/0.9.0/scripts
 
 python3 $SCRIPTS/vault_init.py fresh --vault ~/my-vault --domain "My Team"
 
@@ -301,6 +490,20 @@ python3 $SCRIPTS/gt_ingest.py ~/Projects/my-project --json
 
 python3 $SCRIPTS/gt_lint.py ~/my-vault --queue ~/my-vault/review-queue.md
 ```
+
+`gt_tasks.py` is the exception: it ships **in the vault**, not the plugin, at
+`Projects/golden-thread/tools/`. It regenerates `TASKS.md` from every project's
+`## Tasks` section.
+
+```bash
+python3 ~/my-vault/Projects/golden-thread/tools/gt_tasks.py
+```
+
+It infers the vault from its own location, so it needs no arguments; `--vault` is
+there to override that. **Re-run it before reading `TASKS.md`** — project priority is
+computed against the clock (stale-P1 ageing, deadline windows, `pp_escalate`), so the
+ranking changes with time even when no file has changed. `TASKS.md` is generated and
+must never be hand-edited.
 
 ---
 
