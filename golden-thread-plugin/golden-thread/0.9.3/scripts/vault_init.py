@@ -712,6 +712,11 @@ def cmd_create_project(vault: Path, slug: str, title: str = None, tags: list = N
 | Sub-project | Phase | Next action |
 |---|---|---|
 
+## Tasks
+
+<!-- Format: - [ ] text [p:: 1|2|3] [waiting:: user|agent|external|parked] [due:: YYYY-MM-DD] [since:: YYYY-MM-DD]
+     See [[CONVENTIONS]] > Priority. Rolled up into /TASKS.md — do not edit that file by hand. -->
+
 ## Stage
 idea
 
