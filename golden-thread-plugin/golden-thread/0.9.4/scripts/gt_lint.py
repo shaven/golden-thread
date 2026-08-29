@@ -651,6 +651,66 @@ def write_queue(vault: Path, findings: list, queue_path: Path):
     queue_path.write_text("\n".join(lines), encoding="utf-8")
 
 
+def check_attribution_wired(vault: Path, findings: list, suppressed: set):
+    """Per-edit attribution is INSTALLED but is it POINTED AT?
+
+    Same shape as check_core_rules above, one layer down. `.githooks/` is tracked
+    so the hooks travel with the repo, but `core.hooksPath` is per-clone LOCAL
+    config -- it does not travel, and nothing about a fresh clone announces its
+    absence. In that state safe_write keeps recording attribution to
+    .git/gt-edits.jsonl and the ledger simply never reaches a commit message: no
+    error, no warning, silently no permanent record.
+
+    That is exactly the "stored but never re-asserted" failure the Core tier
+    exists to catch. This check was itself missed on 2026-08-29 -- the task
+    listing it was marked done with this third item unbuilt, which is the same
+    mistake in miniature.
+    """
+    if not (vault / ".git").exists():
+        return                      # not a repo: attribution does not apply
+    tools = vault / "Projects" / "golden-thread" / "tools" / "gt_edits.py"
+    if not tools.exists():
+        return                      # attribution not adopted here at all
+
+    hookspath = None
+    try:
+        import subprocess
+        out = subprocess.run(["git", "-C", str(vault), "config", "--get", "core.hooksPath"],
+                             capture_output=True, text=True, timeout=10)
+        if out.returncode == 0:
+            hookspath = out.stdout.strip() or None
+    except Exception:
+        return                      # cannot tell: stay silent rather than cry wolf
+
+    if not hookspath:
+        findings.append({
+            "check": "attribution-unwired",
+            "path": ".git/config",
+            "message": ("gt_edits.py is present but core.hooksPath is unset, so the "
+                        "commit hooks never run and per-edit attribution never reaches "
+                        "a commit — silently"),
+            "proposed_fix": "git -C <vault> config core.hooksPath .githooks",
+        })
+        return
+
+    for hook in ("prepare-commit-msg", "post-commit"):
+        f = vault / hookspath / hook
+        if not f.exists():
+            findings.append({
+                "check": "attribution-unwired",
+                "path": f"{hookspath}/{hook}",
+                "message": f"core.hooksPath is {hookspath} but {hook} is missing there",
+                "proposed_fix": "re-run the plugin install.sh to restore the git hooks",
+            })
+        elif not (f.stat().st_mode & 0o111):
+            findings.append({
+                "check": "attribution-unwired",
+                "path": f"{hookspath}/{hook}",
+                "message": f"{hook} is present but not executable, so git silently skips it",
+                "proposed_fix": f"chmod +x {hookspath}/{hook}",
+            })
+
+
 def main():
     parser = argparse.ArgumentParser(description="Golden Thread vault health checker")
     parser.add_argument("vault", type=Path, help="Path to the vault root")
@@ -678,6 +738,7 @@ def main():
     check_project_refs(vault, findings, suppressed)
     check_superseded_cited(vault, findings, suppressed)
     check_stale(vault, findings, suppressed)
+    check_attribution_wired(vault, findings, suppressed)
 
     if args.queue and findings:
         write_queue(vault, findings, args.queue)

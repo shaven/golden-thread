@@ -29,8 +29,8 @@
    "sha256": "a728c8b60714bfe670cdb9d3056c94968c4b8aa7790d751b9aba6ef753267a45"
   },
   "scripts/gt_lint.py": {
-   "bytes": 29453,
-   "sha256": "2fe375971f1b75eae4df3302d165f1a685f7fb001c06fce1eafbc5db290aa999"
+   "bytes": 32303,
+   "sha256": "dc16f7bf3f2165c9b84272d05effd9868b44e27de600cefe1365873f470502cd"
   },
   "scripts/gt_paths.py": {
    "bytes": 4144,
@@ -145,6 +145,6 @@
    "sha256": "7a9ef20b5b12ff7ce5e4c859467624bcb9bffaa7d51b5ab3b068feaf53c29ecd"
   }
  },
- "generated": "2026-08-29T15:19:18",
+ "generated": "2026-08-29T15:23:18",
  "version": "0.9.4"
 }
