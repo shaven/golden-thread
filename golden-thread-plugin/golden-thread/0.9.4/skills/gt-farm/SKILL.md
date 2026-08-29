@@ -73,8 +73,15 @@ GAPS:
 
 - **`source: NONE` is a legal answer.** A claim admitting it has no source beats
   one that invents a citation. Say so in the packet.
-- **`GAPS` is mandatory.** A farmed task that silently returns partial results is
-  worse than one that fails loudly.
+- **`GAPS` is mandatory, and `GAPS: None` must be justified, not asserted.** The
+  first real return claimed "None. All 7 questions were fully established" while one
+  claim's citation did not support it and another had been falsified by direct
+  observation an hour earlier — both at `confidence: high`.
+- **A claim that *follows from* a source but is not *stated by* it must be marked
+  `source: NONE`.** This is the failure mode the format exists to catch: an inference
+  presented as a citation reads exactly like a fact until someone opens the page.
+- **Watch the citation spread.** Six of seven claims sharing one URL is what a model
+  that read a single page and generalised looks like.
 - Write the packet so it survives being read with no other context. If it only
   makes sense to someone who watched this session, it is not a packet.
 
