@@ -20,7 +20,7 @@ if [ ! -d "$SCRIPT_DIR/golden-thread" ]; then
   exit 1
 fi
 
-VERSION="0.9.3"
+VERSION="0.9.4"
 WIKI_VERSION="0.1.0"
 PLUGIN_KEY="gt@golden-thread-plugin"
 WIKI_PLUGIN_KEY="gt-wiki@golden-thread-plugin"
@@ -57,8 +57,24 @@ if [ -d "$SRC/hooks" ]; then
   mkdir -p "$GT_HOOKS"
   find "$SRC/hooks" -maxdepth 1 -type f -exec cp {} "$GT_HOOKS/" \;
   cp "$SRC/scripts/gt_paths.py" "$GT_HOOKS/gt_paths.py"
-  chmod +x "$GT_HOOKS"/*.sh
+  # Component drift detection + the session report card run FROM the hooks dir,
+  # for the same reason the hooks themselves do: settings.json addresses them by
+  # absolute path, so the path must survive a vault move or a project rename.
+  for extra in gt_components.py gt_report_card.py; do
+    [ -f "$SRC/scripts/$extra" ] && cp "$SRC/scripts/$extra" "$GT_HOOKS/$extra"
+  done
+  chmod +x "$GT_HOOKS"/*.sh 2>/dev/null || true
+  chmod +x "$GT_HOOKS"/*.py 2>/dev/null || true
   echo "Installed Core-rule hooks → $GT_HOOKS"
+fi
+
+# 1c. Component MANIFEST. gt_components.py compares what is INSTALLED against
+# these hashes at session start. Generated at install time so it always describes
+# the version actually being shipped -- a hand-maintained manifest would drift,
+# which is the failure this whole mechanism exists to detect.
+if [ -f "$SRC/scripts/gt_components.py" ]; then
+  python3 "$SRC/scripts/gt_components.py" manifest "$SRC" >/dev/null 2>&1 \
+    && echo "Wrote component MANIFEST → $SRC/MANIFEST.json"
 fi
 
 mkdir -p "$WIKI_CACHE"
@@ -195,3 +211,70 @@ echo "  /gt-wiki:gt-wiki-lint     health-check the wiki"
 echo "  /gt-wiki:gt-wiki-refresh  check sources for upstream changes"
 echo ""
 echo "Restart Claude Code to load the plugins."
+
+# 6. Register the SessionStart / PreCompact / SessionEnd hooks.
+#
+# SessionStart  -> gt_components.py check   : is what is INSTALLED still what is
+#                  CHECKED IN? Found live on 2026-08-29 that guard_session_claims.sh
+#                  was installed but absent from the plugin source entirely, and
+#                  validate_response.sh had drifted -- two of three enforcement
+#                  mechanisms existing on one machine only.
+# PreCompact    -> gt_report_card.py        : fires on BOTH `/compact` and the
+#                  automatic compaction near the context limit, which is the point:
+#                  a report card produced at the very end of a session competes for
+#                  the context it needs to be written.
+# SessionEnd    -> gt_report_card.py        : backstop for sessions that never compact.
+python3 - <<EOF
+import json, os
+p = os.path.expanduser('~/.claude/settings.json')
+d = json.load(open(p)) if os.path.exists(p) else {}
+hooks = d.setdefault('hooks', {})
+gt = os.path.expanduser('~/.claude/golden-thread/hooks')
+want = {
+    # Paths are QUOTED: the plugin source lives under "Golden Thread", and an
+    # unquoted path split on that space so the checker was handed "Golden" and
+    # reported a bogus no-manifest drift on every session start.
+    'SessionStart': 'python3 "%s/gt_components.py" check "%s"' % (gt, '$SRC'),
+    'PreCompact':   'python3 "%s/gt_report_card.py"' % gt,
+    'SessionEnd':   'python3 "%s/gt_report_card.py"' % gt,
+}
+changed = []
+for event, cmd in want.items():
+    arr = hooks.setdefault(event, [])
+    # Replace any existing golden-thread entry for this event rather than stacking
+    # duplicates on every re-install.
+    arr[:] = [e for e in arr
+              if not any('golden-thread' in (h.get('command') or '')
+                         for h in e.get('hooks', []))]
+    arr.append({'hooks': [{'type': 'command', 'command': cmd}]})
+    changed.append(event)
+open(p, 'w').write(json.dumps(d, indent=2) + '\n')
+print('Registered hooks: ' + ', '.join(sorted(changed)))
+EOF
+
+# 7. Wire the VAULT's git repo for per-edit attribution, if it is one.
+#
+# .git/hooks is not tracked and does not survive a clone, so the hooks ship in a
+# tracked .githooks/ and core.hooksPath points at it. That config is per-clone
+# local state -- which is exactly why it belongs in the installer rather than in a
+# README nobody re-reads on a new machine.
+VAULT_PATH=$(python3 -c "import json,os;p=os.path.expanduser('~/.claude/vault-config.json');print(json.load(open(p)).get('vault_path','')) if os.path.exists(p) else print('')" 2>/dev/null)
+if [ -n "$VAULT_PATH" ] && [ -d "$VAULT_PATH/.git" ]; then
+  mkdir -p "$VAULT_PATH/.githooks" "$VAULT_PATH/Projects/golden-thread/tools"
+  if [ -d "$SRC/templates/githooks" ]; then
+    cp "$SRC/templates/githooks/"* "$VAULT_PATH/.githooks/" 2>/dev/null || true
+    chmod +x "$VAULT_PATH/.githooks/"* 2>/dev/null || true
+  fi
+  # Tools are only SEEDED, never overwritten: a vault's copy may have been fixed
+  # locally, and clobbering it here would repeat the mistake this release exists
+  # to fix -- an update that silently reverts work only present on one machine.
+  if [ -d "$SRC/templates/tools" ]; then
+    for t in "$SRC/templates/tools/"*.py; do
+      [ -f "$t" ] || continue
+      dest="$VAULT_PATH/Projects/golden-thread/tools/$(basename "$t")"
+      [ -f "$dest" ] || cp "$t" "$dest"
+    done
+  fi
+  git -C "$VAULT_PATH" config core.hooksPath .githooks 2>/dev/null \
+    && echo "Wired vault git attribution → $VAULT_PATH (.githooks)"
+fi

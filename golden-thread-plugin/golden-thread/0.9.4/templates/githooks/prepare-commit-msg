@@ -1,0 +1,40 @@
+#!/bin/sh
+# Append Session-Edit: trailers naming WHICH SESSION on WHICH MACHINE changed each
+# staged file. Source: .git/gt-edits.jsonl, written by safe_write() via
+# Projects/golden-thread/tools/gt_edits.py.
+#
+# The commit message IS the permanent store. Git history is immutable and already
+# replicated by every clone, so nothing has to be reconciled into a second tracked
+# ledger -- which matters, because a shared tracked ledger would be precisely the
+# kind of file the concurrent-session problem destroys.
+#
+# FAILS OPEN, always. A commit must never be blocked by bookkeeping: every path
+# here exits 0 and leaves the message untouched on any failure. Same rule the Stop
+# validator and the claim guard follow -- a hook that blocks wrongly makes the repo
+# unusable, which is a worse failure than the gap it closes.
+#
+# Skips merge/squash/amend ($2 set): those messages are generated or reused, and
+# appending to them duplicates trailers.
+#
+# All message editing happens in Python. The shell version needed a flag to survive
+# a `while read` loop, which runs in a subshell after a pipe, so the flag reset on
+# every iteration and the blank line was never written.
+
+MSG_FILE="$1"
+MSG_SOURCE="$2"
+
+[ -n "$MSG_FILE" ] && [ -f "$MSG_FILE" ] || exit 0
+
+case "$MSG_SOURCE" in
+  merge|squash|commit) exit 0 ;;
+esac
+
+GIT_DIR_ABS=$(git rev-parse --absolute-git-dir 2>/dev/null) || exit 0
+ROOT=$(git rev-parse --show-toplevel 2>/dev/null) || exit 0
+TOOL="$ROOT/Projects/golden-thread/tools/gt_edits.py"
+
+[ -f "$TOOL" ] || exit 0
+[ -f "$GIT_DIR_ABS/gt-edits.jsonl" ] || exit 0
+
+(cd "$ROOT" && python3 "$TOOL" apply-msg "$MSG_FILE" >/dev/null 2>&1)
+exit 0
