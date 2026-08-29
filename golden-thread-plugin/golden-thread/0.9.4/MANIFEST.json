@@ -41,8 +41,12 @@
    "sha256": "33dc7d37edee740cf06a60dea8f74c8d0832e70a392b07010a4d9a07aa7a1eab"
   },
   "scripts/gt_settings.py": {
-   "bytes": 5598,
-   "sha256": "00636a74c793441efe11c4c1aafe2f8d148f37010a4e773a2d05039bbb13fbf7"
+   "bytes": 6679,
+   "sha256": "92199129cf2ee3f98a88531213c6915cab8f7b1c684ad1411c1e11648c53d9b1"
+  },
+  "scripts/gt_workers.py": {
+   "bytes": 10670,
+   "sha256": "9a71954ad0b59846ca61f209dfd23e52dbefe7091598f0e29f154d15bb89ce3e"
   },
   "scripts/skill_lint.py": {
    "bytes": 4162,
@@ -141,6 +145,6 @@
    "sha256": "7a9ef20b5b12ff7ce5e4c859467624bcb9bffaa7d51b5ab3b068feaf53c29ecd"
   }
  },
- "generated": "2026-08-29T15:00:09",
+ "generated": "2026-08-29T15:19:18",
  "version": "0.9.4"
 }

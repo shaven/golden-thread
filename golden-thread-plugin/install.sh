@@ -60,7 +60,7 @@ if [ -d "$SRC/hooks" ]; then
   # Component drift detection + the session report card run FROM the hooks dir,
   # for the same reason the hooks themselves do: settings.json addresses them by
   # absolute path, so the path must survive a vault move or a project rename.
-  for extra in gt_components.py gt_report_card.py; do
+  for extra in gt_components.py gt_report_card.py gt_settings.py gt_workers.py; do
     [ -f "$SRC/scripts/$extra" ] && cp "$SRC/scripts/$extra" "$GT_HOOKS/$extra"
   done
   chmod +x "$GT_HOOKS"/*.sh 2>/dev/null || true
@@ -234,17 +234,25 @@ want = {
     # Paths are QUOTED: the plugin source lives under "Golden Thread", and an
     # unquoted path split on that space so the checker was handed "Golden" and
     # reported a bogus no-manifest drift on every session start.
+    # Two independent SessionStart concerns, deliberately separate commands: a
+    # failure in one must not suppress the other.
     'SessionStart': 'python3 "%s/gt_components.py" check "%s"' % (gt, '$SRC'),
+    'SessionStart2': 'python3 "%s/gt_workers.py" check' % gt,
     'PreCompact':   'python3 "%s/gt_report_card.py"' % gt,
     'SessionEnd':   'python3 "%s/gt_report_card.py"' % gt,
 }
 changed = []
-for event, cmd in want.items():
+for key, cmd in want.items():
+    event = key.rstrip('2')
     arr = hooks.setdefault(event, [])
     # Replace any existing golden-thread entry for this event rather than stacking
     # duplicates on every re-install.
+    # Replace only the entry for THIS script, not every golden-thread entry for
+    # the event -- SessionStart now has two, and wiping by event would delete the
+    # sibling registered moments earlier in this same loop.
+    script = cmd.split('/')[-1].split('"')[0]
     arr[:] = [e for e in arr
-              if not any('golden-thread' in (h.get('command') or '')
+              if not any(script in (h.get('command') or '')
                          for h in e.get('hooks', []))]
     arr.append({'hooks': [{'type': 'command', 'command': cmd}]})
     changed.append(event)

@@ -44,6 +44,25 @@ SETTINGS = {
             "prompt and the plugin source sits in a cloud-synced folder, so `auto` means a\n"
             "sync from another machine can change what runs here."),
     },
+    "orphan_check": {
+        "default": "report",
+        "values": ["off", "report", "reap"],
+        "summary": "Look for abandoned Claude WORKERS (background shells) at session start.",
+        "detail": (
+            "off     no checking\n"
+            "report  list stalled workers and how to reap them  (default)\n"
+            "reap    terminate stalled workers automatically\n"
+            "\n"
+            "A worker is judged by CPU consumed across its whole process tree, not by\n"
+            "age and not by whether someone wrote a note about it. On 2026-08-29 ten\n"
+            "orphans were found alive across three sessions, the oldest at 10 days 23\n"
+            "hours, every one having burned under 0.05 seconds of CPU. All ten would\n"
+            "have passed a documentation check.\n"
+            "\n"
+            "A DECLARED worker that is stalled is reported more urgently, not less --\n"
+            "someone was told work was happening and it is not. `reap` only ever kills\n"
+            "stalled workers; one consuming CPU is never touched."),
+    },
     "report_card": {
         "default": "minimal",
         "values": ["off", "minimal", "full"],
