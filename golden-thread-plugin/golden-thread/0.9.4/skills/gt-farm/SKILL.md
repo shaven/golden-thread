@@ -88,10 +88,35 @@ GAPS:
 Save it to `<vault>/Projects/external-ai-tools/packets/<YYYY-MM-DD>-<slug>.md` so
 the request is auditable next to whatever came back.
 
+## Step 3b — Choose the MODE before you finish the packet
+
+A vendor's **research mode** will not honour the return contract. Measured: the same
+packet that produced a clean `FINDINGS/GAPS` block in plain mode came back from Deep
+research as an executive summary with ASCII diagrams and a findings table. That is not a
+failed attempt at the format — it is a pipeline with its own view of a deliverable.
+
+| Need | Mode | Cost |
+|---|---|---|
+| Parseable output — **required at rung 1+** | plain generation, contract enforced | shallower retrieval |
+| Maximum source depth | research mode, contract abandoned | prose only; a human reads it; **rung 0 only** |
+
+**Depth is a rung-0 capability.** Do not plan automation around a research mode.
+
+Also state explicitly in the packet that **forum, community and blog URLs are not
+documentation** — a run restricted to "official Google documentation" cited a
+`support.google.com/a/thread/` forum post inside its citations table.
+
 ## Step 4 — Choose the transport
 
-**Relay (rung 0, available now).** Hand the user the packet and say where to paste
-it. The human is the transport, which is what keeps it within terms — you.com
+**Relay (rung 0, available now).** Hand the packet over **from the file, never as
+terminal text** — a rendered packet is a lossy view and long lines are silently
+truncated by the display. This has already corrupted one run:
+
+```bash
+sed -n '/^### TASK/,$p' <packet-file> | pbcopy
+```
+
+Then say where to paste it. The human is the transport, which is what keeps it within terms — you.com
 §2.4(16) permits automated access *only* via an API key, so for that vendor relay
 is the permanent ceiling for the web UI, not a stage to grow out of.
 
