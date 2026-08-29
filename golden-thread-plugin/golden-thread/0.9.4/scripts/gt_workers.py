@@ -196,12 +196,30 @@ def classify(w, declared):
 BANNER = "*" * 99
 
 
+def _clean_line(ws, buckets):
+    """What a clean check says out loud.
+
+    Silence was the original design, on the reasoning that a check with nothing
+    to report should not add noise. That is wrong for a SessionStart hook: a
+    check that says nothing when clean is indistinguishable from a check that is
+    not installed, or is installed and crashed. A whole session was spent
+    establishing that this hook had in fact run. One line is cheaper than that.
+    """
+    if not ws:
+        return "GT workers: clean — no background workers alive."
+    bits = []
+    if buckets.get("active"):
+        bits.append("%d active" % len(buckets["active"]))
+    if buckets.get("young"):
+        bits.append("%d too new to judge" % len(buckets["young"]))
+    return ("GT workers: clean — %d alive, none orphaned (%s)."
+            % (len(ws), ", ".join(bits) or "all accounted for"))
+
+
 def report():
     ws = workers()
     declared = _load()
     prune({w["pid"] for w in ws})
-    if not ws:
-        return 0
 
     buckets = {}
     for w in ws:
@@ -221,6 +239,7 @@ def report():
               buckets.get("undeclared-stalled", []) +
               buckets.get("undeclared-working", []))
     if not alerts:
+        print(_clean_line(ws, buckets))
         return 0
 
     print("CLAUDE WORKERS needing a decision (%d):" % len(alerts))

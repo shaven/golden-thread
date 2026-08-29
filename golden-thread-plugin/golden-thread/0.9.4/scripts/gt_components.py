@@ -224,6 +224,10 @@ def report(version_dir, pol=None):
     actionable = [r for r in rows if r["state"] in ("stale", "missing")]
     blocked = [r for r in rows if r["state"] in ("ahead", "no-manifest")]
     if not rows and not ex:
+        # Say so out loud rather than exiting silently -- at SessionStart a mute
+        # check cannot be told apart from one that never ran. See gt_workers.
+        print("GOLDEN THREAD components: clean — installed matches %s."
+              % os.path.basename(version_dir))
         return 0
 
     lines = []

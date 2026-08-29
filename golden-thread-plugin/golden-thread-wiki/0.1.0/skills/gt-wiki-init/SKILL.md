@@ -16,7 +16,7 @@ conflict without touching anything.
 
 1. **Gather two inputs**:
    - the vault path (an Obsidian vault folder is ideal; any folder works)
-   - a one-line domain description, e.g. "cloud platform engineering"
+   - a one-line domain description, e.g. "cloud orchestration"
 
 2. **Run the script**:
    `python3 <plugin>/scripts/vault_init.py wiki --vault <path> --domain "<domain>"`

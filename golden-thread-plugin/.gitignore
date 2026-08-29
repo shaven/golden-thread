@@ -1,8 +1,3 @@
-# macOS
-.DS_Store
-
-# Build/distribution artifacts — regenerate with install.sh
+golden-thread-plugin.zip
 *.zip
-
-# Marker written by Claude Code into the installed cache, not source
-.in_use
+.DS_Store

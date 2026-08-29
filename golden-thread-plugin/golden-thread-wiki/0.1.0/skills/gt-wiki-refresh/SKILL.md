@@ -1,6 +1,6 @@
 ---
 name: gt-wiki-refresh
-description: "Check a standalone LLM Wiki's sources for upstream changes and supersede outdated ones. Use when the user says: refresh the wiki, check the wiki's sources, is the wiki still current, update the wiki from upstream. For a Golden Thread project vault use gt-refresh instead. Runs on a user-selected subset of sources by default. Vault path via ~/.claude/vault-config.json."
+description: "Check the user's LLM Wiki sources for upstream changes and supersede outdated ones. Use when the user says: refresh the wiki, check sources for updates, is the wiki still current, update from upstream. Runs on a user-selected subset of sources by default. Vault path via ~/.claude/vault-config.json."
 ---
 
 # LLM Wiki — Refresh
