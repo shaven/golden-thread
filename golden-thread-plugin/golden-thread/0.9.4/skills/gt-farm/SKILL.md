@@ -75,7 +75,7 @@ Answer ONLY in this shape. Omit preamble, apologies and restatement.
 
 FINDINGS:
   - claim: <one sentence>
-    source: <URL that supports it, or NONE>
+    source: <URL of the PAGE carrying the statement — not a homepage — or NONE>
     confidence: high | medium | low
 GAPS:
   - <what you could not establish, and why>
@@ -90,8 +90,16 @@ GAPS:
 - **A claim that *follows from* a source but is not *stated by* it must be marked
   `source: NONE`.** This is the failure mode the format exists to catch: an inference
   presented as a citation reads exactly like a fact until someone opens the page.
-- **Watch the citation spread.** Six of seven claims sharing one URL is what a model
-  that read a single page and generalised looks like.
+- **Cite the page, not the site.** Require the URL of the specific page carrying the
+  statement. A homepage or section index is not a source for a particular claim — and
+  a site-level URL resolves with HTTP 200, so it passes a citation check while
+  supporting nothing. One run cited a bare `https://workspace.google.com`.
+- **Citation spread is a weak heuristic, not evidence.** It was adopted as the quality
+  measure and then disproved: a run that performed **zero searches** returned nine
+  claims with nine distinct URLs — the widest spread recorded — every one resolving.
+  Use spread to rank what to verify first. The signal that actually holds is
+  **grounding metadata reporting no sources while claims carry sources**, which is a
+  fact about what the request did rather than how the answer looks.
 - Write the packet so it survives being read with no other context. If it only
   makes sense to someone who watched this session, it is not a packet.
 
