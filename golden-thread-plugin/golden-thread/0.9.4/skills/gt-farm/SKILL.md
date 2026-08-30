@@ -60,6 +60,16 @@ Plain Markdown, because every transport accepts it:
 ### INPUTS
 <URLs, quoted text, explicit constraints — everything needed, nothing assumed>
 
+### CURRENT VOCABULARY — use these terms, not your own recollection
+Today is <YYYY-MM-DD>. The following are current, read from <where you read them> today.
+Use these names in your searches:
+
+<exact model ids / product names / version numbers / console paths>
+
+**Do NOT search for <the superseded names>.** Those are earlier generations and any
+figures attached to them are out of date. If a page you find discusses only those, say so
+in GAPS rather than reporting its numbers as current.
+
 ### RETURN CONTRACT
 Answer ONLY in this shape. Omit preamble, apologies and restatement.
 
@@ -105,6 +115,30 @@ failed attempt at the format — it is a pipeline with its own view of a deliver
 Also state explicitly in the packet that **forum, community and blog URLs are not
 documentation** — a run restricted to "official Google documentation" cited a
 `support.google.com/a/thread/` forum post inside its citations table.
+
+
+## Step 3c — Supply the vocabulary. Mandatory, and the cheapest win here.
+
+**A model formulates its search queries from its priors, so a stale prior produces a stale
+query, which retrieves a stale page, which is then cited for a current-sounding claim.**
+Grounding does not cure staleness — it launders it, and every mechanical check still passes.
+
+Measured, same packet and same model, with and without a vocabulary block:
+
+| | Queries it ran | The rate-limit question |
+|---|---|---|
+| Without | `"gemini-1.5-flash" per token price` — two generations stale | Invented `15 RPM / 1M TPM / 1500 RPD`, cited to a page carrying no such table |
+| **With** | `"When you use Unpaid Services" site:ai.google.dev` — `site:`-scoped, phrase-anchored | Put it in **`GAPS`**, noting *"older documentation references deprecated model series"* |
+
+Claims went 9 → 6, with real gaps instead of padding. The fix is prompt-side and free.
+
+**The rule generalises past model ids: any fact the model would otherwise recall, supply
+instead.** Product names, version numbers, console paths, price points, today's date.
+
+**Read the vocabulary from the system, never from memory** — your own recollection is the
+thing being worked around. Model ids come from a live `ListModels` call; console paths from
+the console; versions from the package manifest. A vocabulary block written from memory
+reproduces the bug it exists to fix.
 
 ## Step 4 — Choose the transport
 
