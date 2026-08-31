@@ -44,10 +44,6 @@
    "bytes": 7887,
    "sha256": "35c559c236f7c38c184f60bc02398d09761184b30a8a1fb04d765b1ac94ffcc8"
   },
-  "scripts/gt_settings.py.bak_20260830": {
-   "bytes": 6679,
-   "sha256": "92199129cf2ee3f98a88531213c6915cab8f7b1c684ad1411c1e11648c53d9b1"
-  },
   "scripts/gt_version_check.py": {
    "bytes": 7005,
    "sha256": "fc822e4b34418a9eea6940f9d0ca684a376238fc333f8a2e8023e2a1212b10c3"
@@ -61,8 +57,8 @@
    "sha256": "e90f18ee05ae00394781790405f54ce4b776b28b723bf8eb3ca0b14336ad1ef2"
   },
   "scripts/vault_init.py": {
-   "bytes": 38425,
-   "sha256": "85da31a6b90ea9758bd41f7e1b636ff951e0644ac5c9ead838a23affd7ae12ae"
+   "bytes": 38897,
+   "sha256": "7c1db250629df1681d0145447aabb8acc789c5e5ca6737778424900cada1fafb"
   },
   "templates/CONVENTIONS.md": {
    "bytes": 6372,
@@ -81,8 +77,12 @@
    "sha256": "228c8247b853aa33d3d02f33eff5b34f78d80b52d909630787dacf005461541f"
   },
   "templates/core-rules/README.md": {
-   "bytes": 2536,
-   "sha256": "b8e82e04f54361a6377aa447f510822ab0df79b9e62ac0d7210200de33e4935a"
+   "bytes": 2976,
+   "sha256": "e659dde7d3d3701839bd7972106de4fe6d3b59555647f1392eb3f3cfe9da078a"
+  },
+  "templates/core-rules/core_concurrent_session_claim.md": {
+   "bytes": 4867,
+   "sha256": "bdb5b107e9bcce4b61a07dfc934b64688cb4852620bbcc2dd896f0264b2a0c7d"
   },
   "templates/core-rules/core_global_memory_scope.md": {
    "bytes": 1352,
@@ -103,6 +103,10 @@
   "templates/core-rules/core_timestamp_every_message.md": {
    "bytes": 6323,
    "sha256": "abe377c2fc6ce803c4c5b0cfa67a07f92775c9fa665b8056da6bbf5336084a86"
+  },
+  "templates/core-rules/core_verification_state.md": {
+   "bytes": 3145,
+   "sha256": "91ed153429c1a85c450fef1c519d076bf12dfd8582dd3787432d56ae3c7227b8"
   },
   "templates/core-rules/enforcement.md": {
    "bytes": 3650,
@@ -153,6 +157,6 @@
    "sha256": "7a9ef20b5b12ff7ce5e4c859467624bcb9bffaa7d51b5ab3b068feaf53c29ecd"
   }
  },
- "generated": "2026-08-30T14:43:03",
- "version": "0.9.4"
+ "generated": "2026-08-31T06:18:05",
+ "version": "0.9.5"
 }

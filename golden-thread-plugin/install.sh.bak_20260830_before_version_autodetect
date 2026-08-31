@@ -20,71 +20,8 @@ if [ ! -d "$SCRIPT_DIR/golden-thread" ]; then
   exit 1
 fi
 
-# ── Version selection ──────────────────────────────────────────────────────
-#
-# The version installed is the newest version DIRECTORY present, not a constant
-# maintained by hand. A hardcoded VERSION silently reinstalls a stale release
-# every time a new version dir is added and the line is not bumped -- which is
-# exactly how 0.6.0 stayed installed for a fortnight while 0.9.4 sat checked in
-# beside it, hooks referenced from settings.json pointing at files that had never
-# been copied.
-#
-# Deliberate rollback:  ./install.sh 0.9.3   (or GT_VERSION=0.9.3 ./install.sh)
-
-# Sorted numerically per field, NOT lexically: a lexical sort puts 0.9.4 above
-# 0.10.0 and would start reinstalling the older release the moment a minor
-# version reaches double digits.
-latest_version() {
-  local root="$1" d name
-  for d in "$root"/*/; do
-    name=$(basename "$d")
-    [[ "$name" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] || continue
-    # A version dir without a manifest is an archive or a work in progress, not
-    # something installable.
-    [ -f "$d/.claude-plugin/plugin.json" ] || continue
-    echo "$name"
-  done | sort -t. -k1,1n -k2,2n -k3,3n | tail -1
-}
-
-# The directory name decides what gets copied; plugin.json's version field is what
-# every consumer reads back afterwards. If they disagree one of them is lying, and
-# guessing which would defeat the point of detecting it.
-assert_manifest_version() {
-  local dir="$1" expected="$2" label="$3" actual
-  actual=$(python3 -c "import json,sys;print(json.load(open(sys.argv[1])).get('version',''))" \
-           "$dir/.claude-plugin/plugin.json" 2>/dev/null) || actual=""
-  if [ "$actual" != "$expected" ]; then
-    echo "✗ $label version mismatch: directory is $expected, plugin.json says '${actual:-<none>}'."
-    echo "  Reconcile them before installing — consumers read the manifest, not the path."
-    exit 1
-  fi
-}
-
-REQUESTED="${1:-${GT_VERSION:-}}"
-VERSION="${REQUESTED:-$(latest_version "$SCRIPT_DIR/golden-thread")}"
-WIKI_VERSION="${GT_WIKI_VERSION:-$(latest_version "$SCRIPT_DIR/golden-thread-wiki")}"
-
-for spec in "gt:$VERSION:$SCRIPT_DIR/golden-thread" "gt-wiki:$WIKI_VERSION:$SCRIPT_DIR/golden-thread-wiki"; do
-  label="${spec%%:*}"; rest="${spec#*:}"; ver="${rest%%:*}"; root="${rest#*:}"
-  if [ -z "$ver" ]; then
-    echo "✗ No installable $label version found under $root"
-    echo "  (need an N.N.N directory containing .claude-plugin/plugin.json)"
-    exit 1
-  fi
-  if [ ! -d "$root/$ver" ]; then
-    echo "✗ $label version $ver requested, but $root/$ver does not exist."
-    echo "  Available: $(ls -1 "$root" 2>/dev/null | tr '\n' ' ')"
-    exit 1
-  fi
-  assert_manifest_version "$root/$ver" "$ver" "$label"
-done
-
-if [ -n "$REQUESTED" ]; then
-  echo "Installing gt $VERSION (pinned; newest available is $(latest_version "$SCRIPT_DIR/golden-thread"))"
-else
-  echo "Installing gt $VERSION (newest version directory), gt-wiki $WIKI_VERSION"
-fi
-
+VERSION="0.9.4"
+WIKI_VERSION="0.1.0"
 PLUGIN_KEY="gt@golden-thread-plugin"
 WIKI_PLUGIN_KEY="gt-wiki@golden-thread-plugin"
 SRC="$SCRIPT_DIR/golden-thread/$VERSION"
@@ -123,7 +60,7 @@ if [ -d "$SRC/hooks" ]; then
   # Component drift detection + the session report card run FROM the hooks dir,
   # for the same reason the hooks themselves do: settings.json addresses them by
   # absolute path, so the path must survive a vault move or a project rename.
-  for extra in gt_components.py gt_report_card.py gt_settings.py gt_workers.py gt_version_check.py; do
+  for extra in gt_components.py gt_report_card.py gt_settings.py gt_workers.py; do
     [ -f "$SRC/scripts/$extra" ] && cp "$SRC/scripts/$extra" "$GT_HOOKS/$extra"
   done
   chmod +x "$GT_HOOKS"/*.sh 2>/dev/null || true
@@ -264,7 +201,6 @@ echo "  /gt:gt-query         look a topic up across Knowledge and project memory
 echo "  /gt:gt-review        sweep daily notes for uncaptured tasks and ideas"
 echo "  /gt:gt-refresh       check Sources/ for upstream changes and supersede"
 echo "  /gt:gt-lint          13 health checks, including core-unenforced"
-echo "  /gt:gt-settings      inspect or switch off anything this plugin does on its own"
 echo "  /gt:gt-runbook-lint  find facts duplicated across runbooks"
 echo ""
 echo "gt-wiki skills:"
@@ -294,45 +230,32 @@ p = os.path.expanduser('~/.claude/settings.json')
 d = json.load(open(p)) if os.path.exists(p) else {}
 hooks = d.setdefault('hooks', {})
 gt = os.path.expanduser('~/.claude/golden-thread/hooks')
-# (event, script filename, command). The script is named EXPLICITLY rather than
-# parsed back out of the command: the previous version derived it with
-# cmd.split('/')[-1], which returns the last segment of the whole string -- for any
-# command ending in a quoted path argument that is the ARGUMENT, not the script.
-# gt_components resolved to '0.9.4' and gt_version_check to 'golden-thread-plugin',
-# a substring of the gt_components command, so registering one would have deleted
-# the other from the same loop that had just added it.
-#
-# Paths are QUOTED: the plugin source lives under "Golden Thread", and an unquoted
-# path split on that space so the checker was handed "Golden" and reported a bogus
-# no-manifest drift on every session start.
-#
-# Three independent SessionStart concerns, deliberately separate commands: a failure
-# in one must not suppress the others.
-want = [
-    ('SessionStart', 'gt_components.py',
-     'python3 "%s/gt_components.py" check "%s"' % (gt, '$SRC')),
-    ('SessionStart', 'gt_workers.py',
-     'python3 "%s/gt_workers.py" check' % gt),
-    # Handed the SOURCE ROOT, not a version dir -- deliberately. gt_components is
-    # pinned to the version it was installed against, which is exactly what makes it
-    # blind to a newer release sitting beside it; passing the root keeps this hook
-    # correct without being rewritten on every version bump.
-    ('SessionStart', 'gt_version_check.py',
-     'python3 "%s/gt_version_check.py" check "%s"' % (gt, '$SCRIPT_DIR')),
-    ('PreCompact', 'gt_report_card.py', 'python3 "%s/gt_report_card.py"' % gt),
-    ('SessionEnd', 'gt_report_card.py', 'python3 "%s/gt_report_card.py"' % gt),
-]
+want = {
+    # Paths are QUOTED: the plugin source lives under "Golden Thread", and an
+    # unquoted path split on that space so the checker was handed "Golden" and
+    # reported a bogus no-manifest drift on every session start.
+    # Two independent SessionStart concerns, deliberately separate commands: a
+    # failure in one must not suppress the other.
+    'SessionStart': 'python3 "%s/gt_components.py" check "%s"' % (gt, '$SRC'),
+    'SessionStart2': 'python3 "%s/gt_workers.py" check' % gt,
+    'PreCompact':   'python3 "%s/gt_report_card.py"' % gt,
+    'SessionEnd':   'python3 "%s/gt_report_card.py"' % gt,
+}
 changed = []
-for event, script, cmd in want:
+for key, cmd in want.items():
+    event = key.rstrip('2')
     arr = hooks.setdefault(event, [])
-    # Replace the entry for THIS script only, not every golden-thread entry for the
-    # event -- SessionStart now has three, and wiping by event would delete the
-    # siblings registered moments earlier in this same loop.
+    # Replace any existing golden-thread entry for this event rather than stacking
+    # duplicates on every re-install.
+    # Replace only the entry for THIS script, not every golden-thread entry for
+    # the event -- SessionStart now has two, and wiping by event would delete the
+    # sibling registered moments earlier in this same loop.
+    script = cmd.split('/')[-1].split('"')[0]
     arr[:] = [e for e in arr
               if not any(script in (h.get('command') or '')
                          for h in e.get('hooks', []))]
     arr.append({'hooks': [{'type': 'command', 'command': cmd}]})
-    changed.append('%s/%s' % (event, script))
+    changed.append(event)
 open(p, 'w').write(json.dumps(d, indent=2) + '\n')
 print('Registered hooks: ' + ', '.join(sorted(changed)))
 EOF

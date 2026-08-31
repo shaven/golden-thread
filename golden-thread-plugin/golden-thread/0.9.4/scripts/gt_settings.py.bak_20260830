@@ -44,26 +44,6 @@ SETTINGS = {
             "prompt and the plugin source sits in a cloud-synced folder, so `auto` means a\n"
             "sync from another machine can change what runs here."),
     },
-    "version_check": {
-        "default": "report",
-        "values": ["off", "report"],
-        "summary": "Check at session start whether a newer plugin version is checked in.",
-        "detail": (
-            "off     no checking\n"
-            "report  name the newer version and how to install it  (default)\n"
-            "\n"
-            "`component_updates` asks whether the installed FILES match a given version.\n"
-            "This asks whether that version is still the newest one available -- the axis\n"
-            "the component check is blind along. On 2026-08-30 gt 0.6.0 was found\n"
-            "installed with 0.9.4 checked in beside it since the day before, four hooks\n"
-            "registered in settings.json pointing at files that had never been copied. A\n"
-            "component check aimed at 0.6.0 reported clean the whole time.\n"
-            "\n"
-            "There is deliberately no `auto`. Installing a version rewrites hook\n"
-            "registrations and prunes caches; doing that mid-session leaves the running\n"
-            "session executing hooks that no longer match the ones on disk. An upgrade is\n"
-            "a decision with a restart attached."),
-    },
     "orphan_check": {
         "default": "report",
         "values": ["off", "report", "reap"],
