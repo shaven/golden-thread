@@ -27,7 +27,8 @@ git clone git@github.com:shaven/golden-thread.git && bash golden-thread/golden-t
 
 ## Option B — Install from zip
 
-Download `golden-thread-plugin.zip` from the GitHub releases page (or the repo root), then:
+Build it with `bash package.sh`, or download it from a GitHub release. It is **not** in
+the repo — `*.zip` is gitignored — so a fresh clone will not contain one.
 
 ```bash
 unzip golden-thread-plugin.zip
@@ -49,17 +50,37 @@ curl -fsSL https://github.com/YOUR_USERNAME/golden-thread-plugin/archive/refs/he
 
 ## What the installer does
 
-`install.sh` copies only the four directories the plugin needs into Claude Code's plugin cache:
+`install.sh` installs the **newest version directory present** — it detects the version
+rather than carrying a hardcoded one, so this guide does not name a version either. To
+pin an older release deliberately: `bash install.sh 0.9.3`.
+
+It copies into Claude Code's plugin cache:
 
 ```
-~/.claude/plugins/cache/golden-thread-plugin/golden-thread/0.3.0/
+~/.claude/plugins/cache/golden-thread-plugin/gt/<version>/
   .claude-plugin/   ← plugin metadata
-  skills/           ← six /gt-* skill definitions
-  scripts/          ← Python scripts (vault_init.py, gt_ingest.py, gt_lint.py)
-  templates/        ← vault scaffold templates
+  skills/           ← the /gt:gt-* skill definitions
+  scripts/          ← Python scripts (vault_init, gt_lint, gt_ingest, gt_settings,
+                      gt_components, gt_version_check, gt_workers, gt_push_check, …)
+  templates/        ← vault scaffold templates, Core rules, git hooks, vault tools
+  hooks/            ← Core-rule enforcement
 ```
 
-Re-running `install.sh` is safe — it overwrites only those directories.
+The enforcement hooks are **also** copied outside the cache, to
+`~/.claude/golden-thread/hooks/`, and `~/.claude/settings.json` references them by
+absolute path — so the path survives a project rename, a vault move, or a version bump.
+
+Re-running `install.sh` is safe. Note it **removes superseded caches** for the plugin
+rather than leaving them beside the new one.
+
+After installing, **restart Claude Code** — plugins and hooks load at session start.
+Then confirm enforcement is actually live, because a rule that is not wired is not a rule:
+
+```bash
+echo '{}' | ~/.claude/golden-thread/hooks/inject_core_rules.sh
+```
+
+The Core rules should print. Silence or an error means they are not being asserted.
 
 ---
 
@@ -68,7 +89,7 @@ Re-running `install.sh` is safe — it overwrites only those directories.
 Open any Claude Code session and type:
 
 ```
-/gt-init
+/gt:gt-init
 ```
 
 Claude will walk you through:
@@ -76,7 +97,9 @@ Claude will walk you through:
 2. Entering your domain/team name
 3. Wiring the vault to your current project
 
-The skills `/gt-ingest`, `/gt-work`, `/gt-promote`, `/gt-lint`, and `/gt-query` are then ready to use.
+The rest of the `/gt:gt-*` skills are then ready to use — see
+[`MANUAL.md`](MANUAL.md) for the full reference, or run `/gt:gt-settings` to see
+everything the plugin does on its own.
 
 ---
 
@@ -99,7 +122,7 @@ The skills `/gt-ingest`, `/gt-work`, `/gt-promote`, `/gt-lint`, and `/gt-query` 
 
 ## Connecting to an Existing Obsidian Vault
 
-Run `/gt-init` and enter the vault path when asked. The `vault_init.py` script uses `ensure_file` throughout — it only creates files that don't exist, so your existing content is safe.
+Run `/gt:gt-init` and enter the vault path when asked. The `vault_init.py` script uses `ensure_file` throughout — it only creates files that don't exist, so your existing content is safe.
 
 Golden Thread adds these files/directories only if missing:
 - `CLAUDE.md` — knowledge page schema
@@ -115,17 +138,19 @@ Golden Thread adds these files/directories only if missing:
 If your project already has `.claude/memory/` files or CLAUDE.md constraints:
 
 ```
-/gt-init      # wire the vault to this project
-/gt-ingest    # scan and import existing memory
+/gt:gt-init      # wire the vault to this project
+/gt:gt-ingest    # scan and import existing memory
 ```
 
-`/gt-ingest` copies, never moves. Your existing files stay untouched.
+`/gt:gt-ingest` copies, never moves. Your existing files stay untouched.
 
 ---
 
 ## Updating
 
-Run `bash install.sh` again from the repo (after `git pull`) or from a new zip. The versioned directory means newer versions install alongside older ones without conflict.
+Run `bash install.sh` again from the repo (after `git pull`), then restart Claude Code.
+It installs the newest version directory it finds and removes superseded caches for the
+plugin, so exactly one version is live at a time.
 
 ---
 
