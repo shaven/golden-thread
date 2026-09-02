@@ -354,11 +354,46 @@ if [ -n "$VAULT_PATH" ] && [ -d "$VAULT_PATH/.git" ]; then
   # Tools are only SEEDED, never overwritten: a vault's copy may have been fixed
   # locally, and clobbering it here would repeat the mistake this release exists
   # to fix -- an update that silently reverts work only present on one machine.
+  #
+  # Seeding alone is not enough once a CORRECTNESS fix lands, though. A vault
+  # seeded before one keeps the broken copy through every future reinstall and
+  # nothing says so. That is how safe_write's truncating append would have
+  # survived 0.9.6 on every machine that already had a vault: reinstalling looks
+  # like it updated the tools, and for the file that mattered it did nothing.
+  #
+  # So a tool may declare the function that must be present. A copy missing it
+  # predates the fix and is repaired rather than left -- after backing the local
+  # file up, so a genuine local edit is recoverable instead of lost. Tools with
+  # no declared contract keep the old seed-only behaviour untouched.
+  #
+  # Only list a function here when its absence means a KNOWN defect. A contract
+  # asserted for its own sake would "repair" files whose only sin was being edited.
+  TOOL_CONTRACTS="safe_write.py:_resolve_append"
   if [ -d "$SRC/templates/tools" ]; then
     for t in "$SRC/templates/tools/"*.py; do
       [ -f "$t" ] || continue
-      dest="$VAULT_PATH/Projects/golden-thread/tools/$(basename "$t")"
-      [ -f "$dest" ] || cp "$t" "$dest"
+      base=$(basename "$t")
+      dest="$VAULT_PATH/Projects/golden-thread/tools/$base"
+      if [ ! -f "$dest" ]; then
+        cp "$t" "$dest"
+        echo "Seeded vault tool → $base"
+        continue
+      fi
+      want=""
+      for pair in $TOOL_CONTRACTS; do
+        case "$pair" in "$base":*) want="${pair#*:}" ;; esac
+      done
+      [ -n "$want" ] || continue
+      if grep -q "def $want" "$dest"; then
+        echo "Vault tool verified → $base defines $want()"
+      else
+        bak="$dest.bak_$(date +%Y%m%d_%H%M%S)_missing_$want"
+        cp "$dest" "$bak"
+        cp "$t" "$dest"
+        echo "⚠ Vault tool REPLACED → $base was missing $want() and predates a"
+        echo "  correctness fix. Your previous copy is kept at $(basename "$bak")"
+        echo "  -- diff it if you had local edits."
+      fi
     done
   fi
   git -C "$VAULT_PATH" config core.hooksPath .githooks 2>/dev/null \
