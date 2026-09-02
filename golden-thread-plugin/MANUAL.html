@@ -1,0 +1,794 @@
+<!DOCTYPE html><html lang='en'><head><meta charset='utf-8'><title>Golden Thread — User Manual</title><style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
+    font-size: 13.5px;
+    line-height: 1.65;
+    color: #1a1a1a;
+    background: #fff;
+  }
+
+  /* ── Cover ── */
+  .cover {
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: flex-start;
+    padding: 72px 80px;
+    background: #0f1117;
+    color: #fff;
+    page-break-after: always;
+  }
+  .cover .kicker {
+    font-size: 11px; font-weight: 600; letter-spacing: .15em;
+    text-transform: uppercase; color: #7c8cff; margin-bottom: 28px;
+  }
+  .cover h1 { font-size: 46px; font-weight: 700; line-height: 1.1; max-width: 600px; margin-bottom: 20px; }
+  .cover .subtitle { font-size: 18px; color: #9ba0b4; max-width: 500px; margin-bottom: 56px; line-height: 1.5; }
+  .cover .meta { font-size: 12px; color: #555d7a; border-top: 1px solid #1e2236; padding-top: 20px; width: 100%; }
+
+  /* ── Page body ── */
+  .page { max-width: 760px; margin: 0 auto; padding: 64px 64px 80px; }
+  .toc-page { page-break-after: always; }
+
+  /* ── TOC ── */
+  .toc h2 { font-size: 11px; font-weight: 600; letter-spacing: .12em; text-transform: uppercase; color: #7c8cff; margin-bottom: 28px; }
+  .toc ol { list-style: none; counter-reset: toc; }
+  .toc > ol > li { counter-increment: toc; border-bottom: 1px solid #f0f0f0; padding: 10px 0; }
+  .toc > ol > li::before { content: counter(toc, decimal-leading-zero); font-size: 11px; font-weight: 600; color: #9ba0b4; margin-right: 14px; font-variant-numeric: tabular-nums; }
+  .toc > ol > li > a { font-size: 14px; font-weight: 600; color: #1a1a1a; text-decoration: none; }
+  .toc-sub { list-style: none; padding-left: 30px; margin-top: 4px; }
+  .toc-sub li { font-size: 12.5px; color: #555; padding: 2px 0; }
+  .toc-sub li::before { content: "—  "; color: #ccc; }
+
+  /* ── Typography ── */
+  h1.section-title { font-size: 28px; font-weight: 700; color: #0f1117; margin-bottom: 8px; padding-top: 8px; }
+  .section-rule { border: none; border-top: 2px solid #7c8cff; width: 48px; margin-bottom: 28px; }
+  h2 { font-size: 17px; font-weight: 700; color: #0f1117; margin-top: 36px; margin-bottom: 10px; }
+  h3 { font-size: 13.5px; font-weight: 700; color: #0f1117; margin-top: 24px; margin-bottom: 6px; text-transform: uppercase; letter-spacing: .06em; }
+  p { margin-bottom: 14px; }
+  ul, ol { padding-left: 22px; margin-bottom: 14px; }
+  li { margin-bottom: 5px; }
+  strong { font-weight: 600; }
+  em { font-style: italic; }
+
+  /* ── Code ── */
+  code { font-family: "SF Mono","Fira Mono","Menlo",monospace; font-size: 12px; background: #f4f5f8; border-radius: 3px; padding: 1px 5px; }
+  pre { background: #0f1117; color: #c8d3f5; border-radius: 6px; padding: 18px 20px; overflow-x: auto; margin: 16px 0 20px; font-size: 12px; line-height: 1.6; }
+  pre code { background: none; padding: 0; color: inherit; font-size: inherit; }
+  .comment { color: #5c6370; }
+  .kw { color: #c792ea; }
+  .str { color: #c3e88d; }
+  .cmd { color: #82aaff; }
+
+  /* ── Tables ── */
+  table { width: 100%; border-collapse: collapse; margin: 16px 0 20px; font-size: 13px; }
+  th { background: #f4f5f8; text-align: left; padding: 8px 12px; font-weight: 600; font-size: 11.5px; text-transform: uppercase; letter-spacing: .06em; color: #555; border-bottom: 2px solid #e0e2ea; }
+  td { padding: 8px 12px; border-bottom: 1px solid #f0f0f4; vertical-align: top; }
+  tr:last-child td { border-bottom: none; }
+  td code { font-size: 11.5px; }
+
+  /* ── Callouts ── */
+  .callout { border-left: 3px solid #7c8cff; background: #f7f8ff; padding: 12px 16px; border-radius: 0 6px 6px 0; margin: 16px 0 20px; font-size: 13px; }
+  .callout.warning { border-color: #f5a623; background: #fffdf4; }
+  .callout.tip { border-color: #3ecf8e; background: #f4fdf9; }
+  .callout.danger { border-color: #e5534b; background: #fff5f5; }
+  .callout-label { font-size: 10.5px; font-weight: 700; text-transform: uppercase; letter-spacing: .1em; color: #7c8cff; margin-bottom: 4px; }
+  .callout.warning .callout-label { color: #f5a623; }
+  .callout.tip .callout-label { color: #3ecf8e; }
+  .callout.danger .callout-label { color: #e5534b; }
+
+  /* ── Skill badges ── */
+  .skill { display: inline-block; font-family: "SF Mono","Fira Mono","Menlo",monospace; font-size: 11.5px; font-weight: 600; background: #0f1117; color: #7c8cff; border-radius: 4px; padding: 2px 7px; white-space: nowrap; }
+
+  /* ── Diagram ── */
+  .diagram { background: #0f1117; color: #c8d3f5; border-radius: 6px; padding: 20px 24px; font-family: "SF Mono","Fira Mono","Menlo",monospace; font-size: 12px; line-height: 1.7; margin: 16px 0 20px; }
+  .diagram .dim { color: #5c6370; }
+  .diagram .hi { color: #82aaff; }
+
+  /* ── Print ── */
+  .page-break { page-break-after: always; }
+  h1.section-title { page-break-before: always; }
+  h1.section-title.no-break { page-break-before: avoid; }
+  @media print {
+    body { font-size: 12.5px; }
+    .cover { min-height: auto; padding: 56px 64px; }
+    pre, table { page-break-inside: avoid; }
+    h2 { page-break-after: avoid; }
+  }
+
+
+@page { size: Letter; margin: 20mm 16mm 18mm 16mm;
+        @bottom-center { content: counter(page); font-size: 9px; color:#888; } }
+body { max-width: none; padding: 0; font-size: 10.5px; }
+/* commands are case-sensitive: never transform heading text in this document */
+h1, h2, h3, h4, h5, h6, code, pre { text-transform: none !important; letter-spacing: normal; }
+h1 { font-size: 26px; margin: 0 0 .2em; }
+h1::before { content: "GOLDEN THREAD"; display:block; font-size: 10px; letter-spacing:.18em;
+             color:#888; font-weight:600; margin-bottom:.5em; }
+h2 { font-size: 15px; margin-top: 1.6em; break-after: avoid; }
+h3 { font-size: 12.5px; break-after: avoid; }
+pre, table { break-inside: avoid; font-size: 9px; }
+table { width:100%; border-collapse: collapse; }
+th, td { border:1px solid #ddd; padding:3px 5px; text-align:left; vertical-align:top; }
+</style></head><body><h1 id="golden-thread-user-manual">User Manual</h1>
+<p>Complete reference for all fourteen skills. Written against <strong>gt v0.9.6</strong>.</p>
+<hr />
+<h2 id="the-model">The model</h2>
+<p>Claude forgets everything between sessions. The vault doesn't. Golden Thread's
+job is to move what you learn <em>out</em> of a session into a file whose <strong>location</strong>
+tells you how widely it applies — then load only the slice the next session needs.</p>
+<pre><code>session conversation
+      ↓  gt-work
+Projects/&lt;slug&gt;/memory/*.md      this project, this detail
+      ↓  gt-promote
+research.md                      dated findings — `unverified` allowed, if labelled
+      ↓  gt-promote + gt-validate
+decisions.md · design.md         settled choices — independently verified
+      ↓  gt-promote + gt-validate
+Knowledge/                       true for several projects — independently verified
+      ↓  gt-promote + gt-validate
+global-memory/                   true everywhere — independently verified
+</code></pre>
+<p>Facts move <strong>up</strong> as they prove general. They never move back down, and nothing
+is silently deleted.</p>
+<p><strong>Verification gates the climb — it is not a step at the end.</strong> <code>research.md</code> holds
+dated findings and accepts an <code>unverified</code> figure so long as it is labelled. Every
+level above it <em>reads as settled</em>, so a figure entering <code>decisions.md</code>, <code>design.md</code>,
+<code>Knowledge/</code> or <code>global-memory/</code> — or driving a production change — must be
+<strong>independently verified</strong>: re-derived by a validator that never saw the reasoning.
+A second pass by the same session is only <code>self-verified</code>; it shares the assumptions
+that produced the error, so it confirms rather than checks. Run <code>/gt:gt-validate</code>
+<em>before</em> the promotion.</p>
+<blockquote>
+<p>This rung was added after an unverified analysis reached <code>decisions.md</code> as an ADR
+recommending a four-ticker production change. An independent validator refuted three
+of the four — two of which would have deepened portfolio drawdown while appearing to
+improve their own ticker's. The ladder carried the error upward because nothing on it
+asked how the number was checked.</p>
+</blockquote>
+<p><strong>The discipline:</strong> write a fact at the narrowest scope that is honest, and
+promote it only when a second project proves it general. A fact promoted too
+early becomes a rule you must remember to disbelieve.</p>
+<h3 id="loading-is-lazy-by-design">Loading is lazy, by design</h3>
+<p><code>gt-open</code> reads the project's core docs and then reads <strong><code>memory/MEMORY.md</code> only</strong>
+— an index of one line per file. The memory files themselves are read on demand.</p>
+<p>A project with 70 notes costs ~80 lines to open instead of ~2,000. This is why
+<code>MEMORY.md</code> descriptions matter: they are the entire basis for deciding whether a
+file is worth opening.</p>
+<hr />
+<h2 id="vault-layout">Vault layout</h2>
+<pre><code>&lt;vault&gt;/
+  CLAUDE.md              vault-wide conventions and page schema
+  index.md               navigational index of Knowledge pages
+  log.md                 audit trail
+  review-queue.md        items flagged for owner review
+  lint-declines.md       suppressions, each with its reason
+
+  Sources/               IMMUTABLE raw originals
+  Knowledge/             cross-project wiki pages
+  global-memory/         loaded in every session
+    MEMORY.md            the index — this is what actually gets read
+
+  Projects/
+    README.md            master list + Dataview views
+    CONVENTIONS.md       stages, properties, domain taxonomy, file roles
+    PROTOCOL.md          cross-project process rules
+    INFRASTRUCTURE.md    the server fleet, defined ONCE
+
+    &lt;slug&gt;/
+      README.md          status board + property frontmatter
+      source.md          where the code lives + deploy plan
+      idea.md            original brain dump — IMMUTABLE
+      research.md        append-only dated findings
+      decisions.md       append-only numbered ADRs
+      design.md          current architecture
+      spec.md            handoff artifact (when design is complete)
+      runbook.md         operational procedures (optional)
+      memory/
+        MEMORY.md        index — the only thing gt-open reads
+        &lt;topic&gt;.md       loaded on demand
+</code></pre>
+<h3 id="project-properties">Project properties</h3>
+<p>Every project <code>README.md</code> carries frontmatter. These are real Obsidian
+properties — they drive the tag pane, search, and the Dataview views.</p>
+<pre><code class="language-yaml">---
+type: project
+slug: my-project          # must match the folder name
+domain: trading           # coarse grouping
+stage: active             # idea|research|design|active|complete|archived
+topology: bastion-direct  # local|remote|bastion-jump|bastion-direct|n/a
+tags: [trading, platform, live]
+parent: other-slug        # sub-projects only
+---
+</code></pre>
+<blockquote>
+<p><strong>Categorise with properties, not folders.</strong> Do not add a category level under
+<code>Projects/</code>. <code>gt-lint</code> walks projects to find <code>memory/</code> directories; a category
+folder is fine for <em>that</em> check since v0.3.0, but folders also fragment
+<code>gt-open</code>'s project lookup and buy nothing Obsidian doesn't already give you
+through properties. The one legitimate second level is a real sub-project
+created with <code>--parent</code>.</p>
+</blockquote>
+<hr />
+<h2 id="source-topology">Source topology</h2>
+<p><code>source.md</code> records <strong>where the code actually lives</strong>. It is read first by
+<code>gt-open</code>, because acting without it is how you edit the wrong box.</p>
+<table>
+<thead>
+<tr>
+<th>Topology</th>
+<th>Meaning</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>local</code></td>
+<td>A folder on this machine. No deploy step.</td>
+</tr>
+<tr>
+<td><code>remote</code></td>
+<td>One repo, one server. Repo mirrors the prod structure; the server pulls from GitHub.</td>
+</tr>
+<tr>
+<td><code>bastion-jump</code></td>
+<td>Several servers, all reached through one gateway host.</td>
+</tr>
+<tr>
+<td><code>bastion-direct</code></td>
+<td>Several servers, each reachable independently.</td>
+</tr>
+</tbody>
+</table>
+<p>Addressing is <strong>role × env → host + path</strong>, because one machine can serve several
+vhosts and the same role exists in more than one environment.</p>
+<p>Bastion topologies also carry a <strong>file plan</strong>, marking each deployed file:</p>
+<ul>
+<li><strong>static</strong> — byte-identical on every target. Deploy from one canonical copy.</li>
+<li><strong>unique</strong> — a per-server variant. Never copy one host's version over another's.</li>
+</ul>
+<p>That distinction is the whole point. Two files with the same name on two hosts
+may be the same file that must not drift, or different files that must not be
+merged — and nothing but the file plan tells you which.</p>
+<p>The fleet itself is defined <strong>once</strong> in <code>Projects/INFRASTRUCTURE.md</code> and linked
+from each <code>source.md</code>. Never copy the host table into a project.</p>
+<hr />
+<h2 id="typical-use-cases">Typical use cases</h2>
+<p>Recipes for the situations that actually recur. Each names the command; the
+per-command detail follows in the sections below.</p>
+<h3 id="starting-something-new">Starting something new</h3>
+<pre><code>/gt:gt-create   →   work   →   /gt:gt-work
+</code></pre>
+<p><code>gt-create</code> gathers slug, domain, topology and tags, scaffolds the folder, and
+writes <code>idea.md</code> from what you actually said. <strong><code>idea.md</code> is immutable after
+that</strong> — it is the traceable "why", and the one file you never rewrite when the
+plan changes. Close the session with <code>gt-work</code> or the session's findings die with it.</p>
+<h3 id="picking-up-a-project-after-time-away">Picking up a project after time away</h3>
+<pre><code>/gt:gt-open &lt;slug&gt;
+</code></pre>
+<p>Reads the project docs in dependency order and stops at <code>memory/MEMORY.md</code>. Skim the
+returned summary for <strong>stage</strong>, <strong>hosts</strong> and <strong>blockers</strong> before touching anything —
+a stale host entry is cheapest to correct before work starts. Then pull individual
+memory notes by name as the work needs them.</p>
+<h3 id="what-should-i-work-on">"What should I work on?"</h3>
+<pre><code class="language-bash">python3 &lt;vault&gt;/Projects/golden-thread/tools/gt_tasks.py   # then read TASKS.md
+</code></pre>
+<p><strong>Regenerate first, always.</strong> Effective priority is computed against the clock — a
+<code>p:: 1</code> older than seven days escalates, a <code>due</code> inside three days escalates, an open
+<code>pp_escalate</code> window escalates. Reading a stale <code>TASKS.md</code> gives you last week's
+ranking with this week's confidence.</p>
+<p><code>waiting:: user</code> is your list; <code>waiting:: agent</code> is the session's.</p>
+<h3 id="bringing-an-existing-project-into-the-vault">Bringing an existing project into the vault</h3>
+<pre><code>/gt:gt-ingest
+</code></pre>
+<p>Copies — never moves or deletes. If the notes cross-reference each other by
+<code>[[wikilink]]</code>, <strong>count the links before renaming anything</strong>; Obsidian resolves links
+by filename, so a tidy-up destroys the graph. Prefer keeping filenames.</p>
+<h3 id="you-just-learned-something-where-does-it-go">You just learned something — where does it go?</h3>
+<pre><code>/gt:gt-work          (end of session)
+/gt:gt-promote       (when it proves general)
+</code></pre>
+<p>File at the <strong>narrowest scope that is honest</strong>. A finding that stopped changing
+graduates from <code>memory/</code> to <code>research.md</code>; a truth a <em>second</em> project hit graduates to
+<code>Knowledge/</code>. See "Where does this fact go?" below. Promotion is cheap; demotion is not.</p>
+<h3 id="a-number-is-about-to-be-recorded-as-fact">A number is about to be recorded as fact</h3>
+<pre><code>/gt:gt-validate
+</code></pre>
+<p>Before it lands in <code>decisions.md</code>, <code>design.md</code>, <code>Knowledge/</code> or <code>global-memory/</code>, and
+before any production change. The validator gets the claim, the rules and the
+artifact — never your reasoning. Budget for the possibility that it comes back
+<strong>refuted</strong>; that is the skill working, not failing.</p>
+<h3 id="answering-how-does-this-work">Answering "how does this work?"</h3>
+<pre><code>/gt:gt-query &lt;topic&gt;
+</code></pre>
+<p>Reads <code>index.md</code>, follows wikilinks into <code>Knowledge/</code>, then falls back to grep and
+project memory. If a page comes back <code>status: stale</code>, verify before acting on it.</p>
+<h3 id="keeping-the-vault-honest">Keeping the vault honest</h3>
+<pre><code>/gt:gt-lint            # broken links, orphans, unlisted memory, scope leaks
+/gt:gt-runbook-lint    # facts duplicated across runbooks
+/gt:gt-refresh         # upstream changes to Sources/
+</code></pre>
+<p>Run <code>gt-lint</code> after any structural change. Triage into three piles: <em>you broke it</em>
+(fix now), <em>already broken</em> (record in <code>review-queue.md</code>), <em>false positive</em> (suppress
+<strong>with the reason</strong>). The check that matters most is <code>memory-unlisted</code> — a memory file
+missing from <code>MEMORY.md</code> is a file Claude will never load.</p>
+<h3 id="capturing-what-you-jotted-down-elsewhere">Capturing what you jotted down elsewhere</h3>
+<pre><code>/gt:gt-review
+</code></pre>
+<p>Scans Obsidian daily notes for uncaptured tasks and ideas and promotes the ones you
+pick into tracked projects.</p>
+<hr />
+<h2 id="setup">Setup</h2>
+<h3 id="gtgt-init"><code>/gt:gt-init</code></h3>
+<p>First run, or wiring a new machine. Writes <code>~/.claude/vault-config.json</code> (the
+pointer every other skill reads), scaffolds the vault, and adds a Golden Thread
+section to <code>~/.claude/CLAUDE.md</code>. Also installs Core-rule enforcement hooks into
+<code>~/.claude/settings.json</code> (<code>UserPromptSubmit</code> + <code>Stop</code> hooks) so that Core rules
+are actively asserted, not merely stored. Idempotent.</p>
+<p>For a vault that predates the Core-rule tier, run the install step separately:</p>
+<pre><code class="language-bash">python3 $SCRIPTS/vault_init.py install-core-rules --vault ~/my-vault
+</code></pre>
+<blockquote>
+<p><code>CLAUDE.md</code> is read at <strong>session start</strong>. A rule added mid-session does not
+apply until you restart — that looks like the rule being ignored.</p>
+</blockquote>
+<h3 id="gtgt-create"><code>/gt:gt-create</code></h3>
+<p>Scaffolds a project. Gathers slug, title, tags, <strong>domain</strong>, sub-project parent,
+runbook, and <strong>topology</strong>; runs the script; then fills <code>idea.md</code> from what you
+actually said. <code>idea.md</code> is immutable afterwards — it is the traceable "why".</p>
+<hr />
+<h2 id="daily-work">Daily work</h2>
+<h3 id="gtgt-open-slug"><code>/gt:gt-open &lt;slug&gt;</code></h3>
+<p>Loads a project and stops. It is <strong>read-only</strong> — nothing is written during loading.</p>
+<p>Reads, in order: <code>CONVENTIONS.md</code> and <code>PROTOCOL.md</code> (once per session), the project
+<code>README.md</code> — frontmatter first, since <code>domain</code>/<code>stage</code>/<code>topology</code>/<code>tags</code> is the
+fastest read of where the project stands — then <code>source.md</code> → <code>idea.md</code> →
+<code>research.md</code> → <code>decisions.md</code> → <code>design.md</code> → <code>spec.md</code> → <code>runbook.md</code>, the linked
+fleet page, and finally <code>memory/MEMORY.md</code> — <strong>the index only</strong>. Individual memory
+files load on demand.</p>
+<p><strong><code>source.md</code> leads the project docs deliberately.</strong> It says which box serves which
+role in which environment. Acting before reading it is how you edit the wrong host,
+or overwrite a file that exists on three machines.</p>
+<p><strong><code>research.md</code> over ~200 lines is read by its headings</strong>, plus the entries relevant
+to the work at hand and the most recent few. It is append-only and grows without
+bound; reading it whole crowds out the context the actual work needs.</p>
+<p>Sub-projects load only when you name one, or the status board shows it as the active
+item.</p>
+<p>Announces the <code>review-queue.md</code> count once, then summarises stage, <strong>topology and
+hosts</strong>, next action, blockers, and what memory exists but is unloaded — the host
+list so you can correct a stale entry <em>before</em> work starts rather than after.</p>
+<h3 id="gtgt-work"><code>/gt:gt-work</code></h3>
+<p>End of session. The step people skip, and skipping it is what makes the vault decay.</p>
+<table>
+<thead>
+<tr>
+<th>Goes to</th>
+<th>What belongs there</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>research.md</code></td>
+<td>Dated findings and gotchas. <strong>New discoveries only.</strong></td>
+</tr>
+<tr>
+<td><code>decisions.md</code></td>
+<td>Numbered ADR: decision, context, rejected alternatives. <strong>Stable choices only.</strong></td>
+</tr>
+<tr>
+<td><code>design.md</code></td>
+<td>Rewritten in place if architecture changed. Describes <em>now</em>.</td>
+</tr>
+<tr>
+<td><code>memory/*.md</code></td>
+<td>Session state, updated in place.</td>
+</tr>
+<tr>
+<td><code>spec.md</code></td>
+<td>Created when design is complete enough to hand off.</td>
+</tr>
+</tbody>
+</table>
+<p>Memory files carry <code>level</code> and <code>enforcement</code> in frontmatter to make a rule's
+durability explicit:</p>
+<pre><code class="language-yaml">metadata:
+  type: core | feedback | user | reference
+  level: core | context | generic      # default: generic
+  enforcement: validated | reminder    # required only for level: core
+</code></pre>
+<p>Default to <code>generic</code>. Do <strong>not</strong> set <code>level: core</code> here — Core is a promotion,
+and it requires wiring an enforcement hook, which is <code>gt-promote</code>'s job.</p>
+<p>After writing, <code>gt-work</code> actively asks whether any finding applies beyond this
+project and should go to <code>Knowledge/</code>, <code>global-memory/</code>, or a new project.</p>
+<p>Also updates the <code>stage:</code>, <code>topology:</code>, and <code>domain:</code> properties in <code>README.md</code>
+when the project's reality changes.</p>
+<p><strong>Not in <code>decisions.md</code>:</strong> anything you might change next session. An ADR you
+reverse next week teaches the vault to lie to you.</p>
+<h3 id="gtgt-query"><code>/gt:gt-query</code></h3>
+<p>Reads <code>index.md</code>, follows wikilinks 2–3 hops into <code>Knowledge/</code>, falls back to
+grep, then project memory. Be specific. If a result is <code>status: stale</code>, verify it.</p>
+<h3 id="gtgt-ingest"><code>/gt:gt-ingest</code></h3>
+<p>Bulk-imports an existing project. Copies — never moves or deletes.</p>
+<p><strong>The trap:</strong> if the notes cross-reference each other by <code>[[wikilink]]</code>, renaming
+or merging files destroys that graph, because Obsidian resolves links by
+filename. Measure first:</p>
+<pre><code class="language-bash">grep -roh '\[\[[^]]*\]\]' --include='*.md' . | wc -l
+</code></pre>
+<p>Prefer keeping filenames. If you must repoint, match the <em>whole</em> link —
+<code>[[name]]</code> and <code>[[name|alias]]</code> — never a substring, or <code>[[foo]]</code> will corrupt
+<code>[[foo_bar]]</code>. Never repoint links inside <code>Sources/</code>.</p>
+<h3 id="gtgt-review"><code>/gt:gt-review</code></h3>
+<p>Scans Obsidian daily notes for uncaptured tasks and ideas, then promotes selected
+ones into tracked projects.</p>
+<hr />
+<h2 id="context-management">Context management</h2>
+<h3 id="gtgt-farm"><code>/gt:gt-farm</code></h3>
+<p>Routes work out of this context to an external AI service when work is bulk,
+mechanical, or genuinely benefits from a non-Claude second opinion.</p>
+<p>The unit is a <strong>work packet</strong>: self-contained, with a strict return contract
+(<code>FINDINGS</code> + <code>GAPS</code> blocks). The transport is swappable — the user pastes it
+into a web UI today; a script sends it to an API later. The packet is identical
+either way.</p>
+<p><strong>All four gates must pass before a task leaves.</strong> Any failure means the work
+stays here.</p>
+<table>
+<thead>
+<tr>
+<th>Gate</th>
+<th>Question</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>Stateless</strong></td>
+<td>Answerable with no vault or repo state?</td>
+</tr>
+<tr>
+<td><strong>Self-contained</strong></td>
+<td>Fits in a paragraph plus a list of URLs?</td>
+</tr>
+<tr>
+<td><strong>Checkable</strong></td>
+<td>Verifiable without redoing the work?</td>
+</tr>
+<tr>
+<td><strong>Releasable</strong></td>
+<td>Every input safe to hand a third party?</td>
+</tr>
+</tbody>
+</table>
+<p><strong>Releasable is default-deny.</strong> Never include: account identifiers, balances,
+hostnames, internal IPs, credential locations, non-public source code, or
+personal identifiers.</p>
+<p>Key rules:
+- One packet, one task. A packet asking three questions returns three half-answers.
+- Supply a vocabulary block with exact model IDs, product names, and version
+  numbers read from the system — never from memory.
+- Results come back as <code>unverified</code>. Promote a finding only after opening its
+  <code>source:</code> URL and confirming the claim.
+- <code>GAPS</code> is mandatory and <code>GAPS: None</code> must be justified, not asserted.
+- Cite the specific page carrying the claim, never a homepage.</p>
+<p>Packets are saved to <code>&lt;vault&gt;/Projects/external-ai-tools/packets/&lt;YYYY-MM-DD&gt;-&lt;slug&gt;.md</code>.</p>
+<hr />
+<h2 id="knowledge-management">Knowledge management</h2>
+<h3 id="gtgt-promote"><code>/gt:gt-promote</code></h3>
+<p>The judgement call: <strong>has a second project proved this general?</strong></p>
+<table>
+<thead>
+<tr>
+<th>From → To</th>
+<th>When</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>memory/</code> → <code>research</code>/<code>decisions</code></td>
+<td>The finding stopped changing session to session</td>
+</tr>
+<tr>
+<td>project → <code>Knowledge/</code></td>
+<td>A second project hit the same truth</td>
+</tr>
+<tr>
+<td><code>Knowledge/</code> → <code>global-memory/</code></td>
+<td>Needed in <em>every</em> session, <em>every</em> project</td>
+</tr>
+<tr>
+<td>anywhere → new project</td>
+<td>The idea doesn't belong where it is</td>
+</tr>
+</tbody>
+</table>
+<p>Nothing is deleted. Retiring sets <code>status: stale</code> and records what superseded it.</p>
+<p>Promoting a rule to Core (<code>level: core</code>) also wires the enforcement hook —
+<code>gt-promote</code> handles this; <code>gt-work</code> does not.</p>
+<h3 id="gtgt-refresh"><code>/gt:gt-refresh</code></h3>
+<p>Checks <code>Sources/</code> for upstream changes. Supersedes with a <strong>new</strong> immutable file
+carrying <code>supersedes:</code> — never edits the old one.</p>
+<hr />
+<h2 id="verification">Verification</h2>
+<h3 id="gtgt-validate"><code>/gt:gt-validate</code></h3>
+<p>Verify a claim by <strong>re-deriving</strong> it, not by reviewing it. Use before a finding is
+recorded as fact, before a production change, or whenever a number matters.</p>
+<p><strong>The one rule: the validator never receives the reasoning that produced the claim.</strong>
+Give it the reasoning and it grades the argument — inheriting the same blind spot.
+Give it only the claim, the rules and the artifact, and it has to go back to primary
+sources. That is the only thing that catches a wrong premise.</p>
+<p>Reduce the work to a <strong>single falsifiable assertion</strong>. "The analysis is sound" is not
+validatable; "widening NQ's target to 1.25 improves risk-adjusted return" is. Validate
+several claims <strong>separately</strong> — a bundled claim returns a bundled verdict, which hides
+which part failed.</p>
+<p>Loads the project's <code>validation-rules.md</code>, and the parent's too, since packs are
+inherited. Those are standing invariants the validator enforces whether or not the
+request mentions them — because <em>a requester who has already made a domain error will
+not think to ask the validator to check for it.</em> On conflict, the pack wins.</p>
+<table>
+<thead>
+<tr>
+<th>Class</th>
+<th>Use when the risk is</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>empirical</code></td>
+<td>A number, measurement or result could be wrong</td>
+</tr>
+<tr>
+<td><code>vantage</code></td>
+<td>The measuring position may not be able to observe the answer</td>
+</tr>
+<tr>
+<td><code>rule-compliance</code></td>
+<td>Work must satisfy <code>core-rules/</code> or <code>CONVENTIONS.md</code></td>
+</tr>
+<tr>
+<td><code>code</code></td>
+<td>Code may not do what its name, comment or docs claim</td>
+</tr>
+</tbody>
+</table>
+<p>Pick every class whose risk is present. <strong>Do not substitute one generic reviewer</strong> —
+that produces agreement, not verification.</p>
+<p>The packet is exactly three fields — <code>claim</code>, <code>rules</code>, <code>artifact</code> — then re-read it
+and strip your conclusions, your numbers, your confidence, and any adjective implying
+the expected answer. "Confirm that X" becomes "determine whether X". Withholding
+<em>reasoning</em> is isolation; withholding <em>access</em> is just a broken validator, so keep the
+hostnames, API shapes and filters it needs to reach the artifact alone.</p>
+<p>Run the validators <strong>independently</strong>, and read their derivation <em>before</em> re-reading
+your own — reading yours first turns the exercise back into review.</p>
+<p>Three verdicts: <strong>confirmed</strong>, <strong>refuted</strong> (quantify the divergence), and
+<strong>cannot-verify</strong> (name what was missing).</p>
+<p>Append the verdict to <code>research.md</code>. A refutation supersedes the original finding.</p>
+<blockquote>
+<p><strong><code>cannot-verify</code> is never a pass.</strong> A validator that could not check something and
+stayed quiet manufactures false assurance — worse than no validator at all.</p>
+</blockquote>
+<p><strong>You are the worst possible author of this packet</strong>, because you already know the
+answer and your framing leaks. Treat building it as an adversarial exercise against
+yourself. A validator disagreeing is a <em>result</em>, not a failure.</p>
+<hr />
+<h2 id="maintenance">Maintenance</h2>
+<h3 id="gtgt-lint"><code>/gt:gt-lint</code></h3>
+<table>
+<thead>
+<tr>
+<th>Check</th>
+<th>Catches</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>index-gap</code></td>
+<td>Knowledge page not in <code>index.md</code> — <code>gt-query</code> won't find it</td>
+</tr>
+<tr>
+<td><code>broken-link</code></td>
+<td><code>[[wikilink]]</code> resolving to nothing</td>
+</tr>
+<tr>
+<td><code>orphan</code></td>
+<td>Knowledge page linked from nowhere</td>
+</tr>
+<tr>
+<td><code>memory-unlisted</code></td>
+<td><code>memory/*.md</code> not in <code>MEMORY.md</code> — <strong>Claude will never load it</strong></td>
+</tr>
+<tr>
+<td><code>global-gap</code></td>
+<td><code>global-memory/*.md</code> not in its index</td>
+</tr>
+<tr>
+<td><code>memory-bloat</code></td>
+<td><code>global-memory</code> file over 30 lines</td>
+</tr>
+<tr>
+<td><code>global-scope-leak</code></td>
+<td>Project-specific content in <code>global-memory/</code></td>
+</tr>
+<tr>
+<td><code>superseded-cited</code></td>
+<td>Knowledge page citing a superseded source</td>
+</tr>
+<tr>
+<td><code>stale</code></td>
+<td>Knowledge page marked <code>status: stale</code></td>
+</tr>
+<tr>
+<td><code>source-todo</code></td>
+<td><code>source.md</code> with no topology or deployment targets</td>
+</tr>
+<tr>
+<td><code>frontmatter</code></td>
+<td>Project README missing properties, or slug ≠ folder</td>
+</tr>
+<tr>
+<td><code>core-misplaced</code></td>
+<td>A rule declares <code>level: core</code> but lives outside <code>core-rules/</code></td>
+</tr>
+<tr>
+<td><code>core-no-enforcement</code></td>
+<td><code>level: core</code> with no <code>enforcement</code> field declared</td>
+</tr>
+<tr>
+<td><code>core-unenforced</code></td>
+<td>The declared enforcement hook is not actually wired</td>
+</tr>
+</tbody>
+</table>
+<p><code>core-unenforced</code> is the critical one — it is the machine-checkable form of "rule
+stored but never asserted". Treat it as a real defect. <strong>Do not suppress it</strong> —
+suppressing <code>core-unenforced</code> recreates the original bug with a paper trail saying
+it was fine. Fix: <code>vault_init.py install-core-rules --vault &lt;vault&gt;</code>.</p>
+<p>Declines go in <code>lint-declines.md</code> as <code>suppress:</code> <strong>with the reason</strong>.</p>
+<p>Triage findings into three piles: <em>you broke it</em> (fix now), <em>already broken</em>
+(record in <code>review-queue.md</code> — don't guess at a target), <em>false positive</em>
+(suppress with reason).</p>
+<h3 id="gtgt-settings"><code>/gt:gt-settings</code></h3>
+<p>View and change what Golden Thread does automatically. Every automatic behaviour
+is registered here and can be switched off.</p>
+<table>
+<thead>
+<tr>
+<th>Setting</th>
+<th>Values</th>
+<th>Default</th>
+<th>What it does</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>component_updates</code></td>
+<td><code>off</code> · <code>report</code> · <code>confirm</code> · <code>auto</code></td>
+<td><code>report</code></td>
+<td>At session start, compares installed hooks/scripts against plugin source and reports drift</td>
+</tr>
+<tr>
+<td><code>report_card</code></td>
+<td><code>off</code> · <code>minimal</code> · <code>full</code></td>
+<td><code>minimal</code></td>
+<td>At <code>/compact</code>, summarises session hygiene</td>
+</tr>
+</tbody>
+</table>
+<pre><code class="language-bash">python3 $SCRIPTS/gt_settings.py show            # current state of all settings
+python3 $SCRIPTS/gt_settings.py explain &lt;name&gt;  # reasoning behind the default
+python3 $SCRIPTS/gt_settings.py set &lt;name&gt; &lt;value&gt;
+</code></pre>
+<p><code>component_updates</code> at <code>auto</code> will not overwrite an installed file that is newer
+than the source, and will not delete a file the source lacks — real drift ran
+that direction, so a naive "source is truth" updater would silently break
+enforcement on every session start.</p>
+<h3 id="gtgt-runbook-lint"><code>/gt:gt-runbook-lint</code></h3>
+<p>Finds procedures duplicated across runbooks and routes them to the right shared
+layer — <code>PROTOCOL.md</code>, a Knowledge page, or a repo <code>CLAUDE.md</code>.</p>
+<hr />
+<h2 id="where-does-this-fact-go">Where does this fact go?</h2>
+<table>
+<thead>
+<tr>
+<th>The fact</th>
+<th>Goes to</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>"This preset is wrong right now"</td>
+<td><code>memory/</code></td>
+</tr>
+<tr>
+<td>"This API rejects plural keys"</td>
+<td><code>research.md</code></td>
+</tr>
+<tr>
+<td>"We use POST for all mutations, and why"</td>
+<td><code>decisions.md</code></td>
+</tr>
+<tr>
+<td>"The system is structured like this now"</td>
+<td><code>design.md</code></td>
+</tr>
+<tr>
+<td>"This platform behaviour bit two projects"</td>
+<td><code>Knowledge/</code></td>
+</tr>
+<tr>
+<td>"Always diff before overwriting prod"</td>
+<td><code>global-memory/</code></td>
+</tr>
+<tr>
+<td>"How to restart the prod backtest"</td>
+<td><code>runbook.md</code></td>
+</tr>
+<tr>
+<td>"Never scp without backing up"</td>
+<td><code>PROTOCOL.md</code></td>
+</tr>
+<tr>
+<td>"This code lives on host X at path Y"</td>
+<td><code>source.md</code></td>
+</tr>
+<tr>
+<td>"Which box serves which role"</td>
+<td><code>INFRASTRUCTURE.md</code></td>
+</tr>
+</tbody>
+</table>
+<p>Two failure modes, opposite directions: <strong>too narrow</strong> buries a platform truth in
+one project, so the next rediscovers it the hard way; <strong>too wide</strong> promotes a
+quirk into <code>global-memory/</code>, where it loads into unrelated sessions as a rule
+that isn't true there. When unsure, file narrow — promotion is cheap, demotion isn't.</p>
+<hr />
+<h2 id="script-reference">Script reference</h2>
+<pre><code class="language-bash">SCRIPTS=~/.claude/plugins/cache/golden-thread-plugin/gt/0.9.6/scripts
+
+python3 $SCRIPTS/vault_init.py fresh --vault ~/my-vault --domain &quot;My Team&quot;
+
+python3 $SCRIPTS/vault_init.py create-project --vault ~/my-vault \
+  --name my-project --title &quot;My Project&quot; --tags &quot;backend,api&quot; \
+  --domain platform --topology bastion-direct \
+  --repo-url git@github.com:me/my-project.git --runbook
+
+python3 $SCRIPTS/vault_init.py create-project --vault ~/my-vault \
+  --name sub-feature --parent my-project --domain platform
+
+python3 $SCRIPTS/vault_init.py connect --vault ~/existing-vault
+
+python3 $SCRIPTS/vault_init.py install-core-rules --vault ~/my-vault
+
+python3 $SCRIPTS/gt_ingest.py ~/Projects/my-project --json
+
+python3 $SCRIPTS/gt_lint.py ~/my-vault --queue ~/my-vault/review-queue.md
+
+python3 $SCRIPTS/gt_settings.py show
+</code></pre>
+<p><code>gt_tasks.py</code> is the exception: it ships <strong>in the vault</strong>, not the plugin, at
+<code>Projects/golden-thread/tools/</code>. It regenerates <code>TASKS.md</code> from every project's
+<code>## Tasks</code> section.</p>
+<pre><code class="language-bash">python3 ~/my-vault/Projects/golden-thread/tools/gt_tasks.py
+</code></pre>
+<p>It infers the vault from its own location, so it needs no arguments; <code>--vault</code> is
+there to override that. <strong>Re-run it before reading <code>TASKS.md</code></strong> — project priority is
+computed against the clock (stale-P1 ageing, deadline windows, <code>pp_escalate</code>), so the
+ranking changes with time even when no file has changed. <code>TASKS.md</code> is generated and
+must never be hand-edited.</p>
+<hr />
+<h2 id="troubleshooting">Troubleshooting</h2>
+<p><strong>"vault-config.json not found"</strong> — run <code>/gt:gt-init</code>.</p>
+<p><strong>A rule in <code>CLAUDE.md</code> seems ignored</strong> — it is read at session start. Added
+mid-session, it applies from the <em>next</em> session. Same for hooks in
+<code>settings.json</code>: open <code>/hooks</code> once or restart.</p>
+<p><strong>Memory files aren't being read</strong> — that is intended. <code>gt-open</code> reads
+<code>MEMORY.md</code> and loads files on demand. Ask for one by name.</p>
+<p><strong>A memory file is never offered</strong> — run <code>/gt:gt-lint</code>; it is probably
+<code>memory-unlisted</code>, so nothing knows it exists.</p>
+<p><strong><code>/gt:gt-query</code> can't find a page you added</strong> — likely <code>index-gap</code>.</p>
+<p><strong>Lint suppression isn't working</strong> — paths are matched case-insensitively against
+the finding path; make sure you used the path as the finding reports it.</p>
+<p><strong>"conflict: vault-config.json points to a different vault"</strong> — run
+<code>vault_init.py connect --vault &lt;new-path&gt;</code>.</p>
+<p><strong><code>core-unenforced</code> finding in lint</strong> — Core rules are stored but not being
+asserted. Run <code>vault_init.py install-core-rules --vault &lt;vault&gt;</code> or wire the
+hooks by hand. Do not suppress this finding.</p></body></html>
