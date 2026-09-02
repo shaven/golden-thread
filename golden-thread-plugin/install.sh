@@ -123,7 +123,7 @@ if [ -d "$SRC/hooks" ]; then
   # Component drift detection + the session report card run FROM the hooks dir,
   # for the same reason the hooks themselves do: settings.json addresses them by
   # absolute path, so the path must survive a vault move or a project rename.
-  for extra in gt_components.py gt_report_card.py gt_settings.py gt_workers.py gt_version_check.py; do
+  for extra in gt_components.py gt_report_card.py gt_settings.py gt_workers.py gt_version_check.py gt_push_check.py; do
     [ -f "$SRC/scripts/$extra" ] && cp "$SRC/scripts/$extra" "$GT_HOOKS/$extra"
   done
   chmod +x "$GT_HOOKS"/*.sh 2>/dev/null || true
@@ -307,7 +307,7 @@ gt = os.path.expanduser('~/.claude/golden-thread/hooks')
 # path split on that space so the checker was handed "Golden" and reported a bogus
 # no-manifest drift on every session start.
 #
-# Three independent SessionStart concerns, deliberately separate commands: a failure
+# Four independent SessionStart concerns, deliberately separate commands: a failure
 # in one must not suppress the others.
 want = [
     ('SessionStart', 'gt_components.py',
@@ -320,6 +320,15 @@ want = [
     # correct without being rewritten on every version bump.
     ('SessionStart', 'gt_version_check.py',
      'python3 "%s/gt_version_check.py" check "%s"' % (gt, '$SCRIPT_DIR')),
+    # Takes no path: it reads vault-config.json itself, the same way the vault's own
+    # tooling does. Distribution is a fourth axis -- gt_components asks whether the
+    # installed files are right, gt_version whether the right version is installed,
+    # gt_workers whether anything was left running; this asks whether what this
+    # machine produced can ever be seen anywhere else. On 2026-09-02 the vault was 16
+    # commits ahead of origin, the oldest weeks old, with every session having
+    # committed correctly and none having pushed.
+    ('SessionStart', 'gt_push_check.py',
+     'python3 "%s/gt_push_check.py" check' % gt),
     ('PreCompact', 'gt_report_card.py', 'python3 "%s/gt_report_card.py"' % gt),
     ('SessionEnd', 'gt_report_card.py', 'python3 "%s/gt_report_card.py"' % gt),
 ]
@@ -327,7 +336,7 @@ changed = []
 for event, script, cmd in want:
     arr = hooks.setdefault(event, [])
     # Replace the entry for THIS script only, not every golden-thread entry for the
-    # event -- SessionStart now has three, and wiping by event would delete the
+    # event -- SessionStart now has four, and wiping by event would delete the
     # siblings registered moments earlier in this same loop.
     arr[:] = [e for e in arr
               if not any(script in (h.get('command') or '')

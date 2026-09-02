@@ -36,13 +36,17 @@
    "bytes": 4144,
    "sha256": "4484d1614875460d9f972d4c433c5240c1ee07f01503e41b32dae7898317ef9f"
   },
+  "scripts/gt_push_check.py": {
+   "bytes": 6879,
+   "sha256": "40d96494deed0991d0b14ae8f77e22a4a3b211cd6825bae96ab11c780d555707"
+  },
   "scripts/gt_report_card.py": {
    "bytes": 12184,
    "sha256": "33dc7d37edee740cf06a60dea8f74c8d0832e70a392b07010a4d9a07aa7a1eab"
   },
   "scripts/gt_settings.py": {
-   "bytes": 9788,
-   "sha256": "7ac00424497648ea2b27f6cabdc7aa171cddc308a2394b6702b98857696b8598"
+   "bytes": 11275,
+   "sha256": "371b432b16abf6c12fc4115583750e1bb08603e77fb0caa796cf7a5a7f3760e0"
   },
   "scripts/gt_version_check.py": {
    "bytes": 7611,
@@ -157,6 +161,6 @@
    "sha256": "7a9ef20b5b12ff7ce5e4c859467624bcb9bffaa7d51b5ab3b068feaf53c29ecd"
   }
  },
- "generated": "2026-09-02T06:05:23",
+ "generated": "2026-09-02T06:14:41",
  "version": "0.9.6"
 }

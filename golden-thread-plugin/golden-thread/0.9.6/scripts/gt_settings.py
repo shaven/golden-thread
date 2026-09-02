@@ -83,6 +83,30 @@ SETTINGS = {
             "someone was told work was happening and it is not. `reap` only ever kills\n"
             "stalled workers; one consuming CPU is never touched."),
     },
+    "push_check": {
+        "default": "report",
+        "values": ["off", "report"],
+        "summary": "Check at session start whether the vault has commits not yet pushed.",
+        "detail": (
+            "off     no checking\n"
+            "report  name the count, the age of the oldest, and the push command  (default)\n"
+            "\n"
+            "The vault is a git repo so its truth survives one disk and reaches the other\n"
+            "machines. A commit that never leaves is not backed up, is invisible to a\n"
+            "session on another host, and looks finished: gt-work reports success and the\n"
+            "tree goes clean. On 2026-09-02 the vault was found 16 commits ahead of origin\n"
+            "with the oldest dating back weeks. Nothing had failed -- every session had\n"
+            "committed correctly, none had pushed, and no check asked.\n"
+            "\n"
+            "A branch with NO UPSTREAM is reported separately and more loudly. It cannot be\n"
+            "ahead, so a naive count returns zero and reads as healthy, when in fact the\n"
+            "commits have nowhere to go at all.\n"
+            "\n"
+            "There is deliberately no `auto`. Pushing is outward-facing: it publishes to a\n"
+            "remote others read, it can be rejected, and an unpushed commit is sometimes\n"
+            "correct -- work held back on purpose. A push that surprises its author is\n"
+            "worse than a delay that annoys them."),
+    },
     "report_card": {
         "default": "minimal",
         "values": ["off", "minimal", "full"],
