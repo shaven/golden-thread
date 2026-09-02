@@ -69,7 +69,7 @@ alongside the code they describe. Start with Getting Started; the Manual is the 
 | [Install Guide](golden-thread-plugin/INSTALL.md) | Installing both plugins, wiring the hooks, adopting an existing vault |
 | [Obsidian & Daily Workflow](golden-thread-plugin/OBSIDIAN-WORKFLOW.md) · [PDF](golden-thread-plugin/OBSIDIAN-WORKFLOW.pdf) | Living in the vault day to day — daily notes, properties, Dataview |
 | [Developer Guide](golden-thread-plugin/golden-thread-developer-guide.html) · [PDF](golden-thread-plugin/golden-thread-developer-guide.pdf) | Internals: hooks, scripts, the component manifest, extending the plugin |
-| [Plugin Documentation](golden-thread-plugin/golden-thread-docs.md) · [HTML](golden-thread-plugin/golden-thread-docs.html) · [PDF](golden-thread-plugin/golden-thread-docs.pdf) | Reference rendering of the plugin's own docs |
+| [Plugin Documentation](golden-thread-plugin/golden-thread-docs.md) · [HTML](golden-thread-plugin/golden-thread-docs.html) · [PDF](golden-thread-plugin/golden-thread-docs.pdf) | A snapshot of **gt 0.6.0**, kept for reference — three releases behind. The Manual above supersedes it; its HTML and PDF were re-rendered later, so their dates look current while the content is not |
 | [`docs/workflow.html`](docs/workflow.html) · [`docs/ingesting.html`](docs/ingesting.html) | Standalone diagrams of the work and ingest loops |
 | `golden-thread.pdf` | The earliest write-up here (2026-08-10); predates the current plugin layout, kept for reference |
 
