@@ -1,0 +1,801 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Golden Thread — Developer Guide</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
+    font-size: 13.5px;
+    line-height: 1.65;
+    color: #1a1a1a;
+    background: #fff;
+  }
+
+  /* ── Cover ── */
+  .cover {
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: flex-start;
+    padding: 72px 80px;
+    background: #0f1117;
+    color: #fff;
+    page-break-after: always;
+  }
+  .cover .kicker {
+    font-size: 11px; font-weight: 600; letter-spacing: .15em;
+    text-transform: uppercase; color: #7c8cff; margin-bottom: 28px;
+  }
+  .cover h1 { font-size: 46px; font-weight: 700; line-height: 1.1; max-width: 600px; margin-bottom: 20px; }
+  .cover .subtitle { font-size: 18px; color: #9ba0b4; max-width: 500px; margin-bottom: 56px; line-height: 1.5; }
+  .cover .meta { font-size: 12px; color: #555d7a; border-top: 1px solid #1e2236; padding-top: 20px; width: 100%; }
+
+  /* ── Page body ── */
+  .page { max-width: 760px; margin: 0 auto; padding: 64px 64px 80px; }
+  .toc-page { page-break-after: always; }
+
+  /* ── TOC ── */
+  .toc h2 { font-size: 11px; font-weight: 600; letter-spacing: .12em; text-transform: uppercase; color: #7c8cff; margin-bottom: 28px; }
+  .toc ol { list-style: none; counter-reset: toc; }
+  .toc > ol > li { counter-increment: toc; border-bottom: 1px solid #f0f0f0; padding: 10px 0; }
+  .toc > ol > li::before { content: counter(toc, decimal-leading-zero); font-size: 11px; font-weight: 600; color: #9ba0b4; margin-right: 14px; font-variant-numeric: tabular-nums; }
+  .toc > ol > li > a { font-size: 14px; font-weight: 600; color: #1a1a1a; text-decoration: none; }
+  .toc-sub { list-style: none; padding-left: 30px; margin-top: 4px; }
+  .toc-sub li { font-size: 12.5px; color: #555; padding: 2px 0; }
+  .toc-sub li::before { content: "—  "; color: #ccc; }
+
+  /* ── Typography ── */
+  h1.section-title { font-size: 28px; font-weight: 700; color: #0f1117; margin-bottom: 8px; padding-top: 8px; }
+  .section-rule { border: none; border-top: 2px solid #7c8cff; width: 48px; margin-bottom: 28px; }
+  h2 { font-size: 17px; font-weight: 700; color: #0f1117; margin-top: 36px; margin-bottom: 10px; }
+  h3 { font-size: 13.5px; font-weight: 700; color: #0f1117; margin-top: 24px; margin-bottom: 6px; text-transform: uppercase; letter-spacing: .06em; }
+  p { margin-bottom: 14px; }
+  ul, ol { padding-left: 22px; margin-bottom: 14px; }
+  li { margin-bottom: 5px; }
+  strong { font-weight: 600; }
+  em { font-style: italic; }
+
+  /* ── Code ── */
+  code { font-family: "SF Mono","Fira Mono","Menlo",monospace; font-size: 12px; background: #f4f5f8; border-radius: 3px; padding: 1px 5px; }
+  pre { background: #0f1117; color: #c8d3f5; border-radius: 6px; padding: 18px 20px; overflow-x: auto; margin: 16px 0 20px; font-size: 12px; line-height: 1.6; }
+  pre code { background: none; padding: 0; color: inherit; font-size: inherit; }
+  .comment { color: #5c6370; }
+  .kw { color: #c792ea; }
+  .str { color: #c3e88d; }
+  .cmd { color: #82aaff; }
+
+  /* ── Tables ── */
+  table { width: 100%; border-collapse: collapse; margin: 16px 0 20px; font-size: 13px; }
+  th { background: #f4f5f8; text-align: left; padding: 8px 12px; font-weight: 600; font-size: 11.5px; text-transform: uppercase; letter-spacing: .06em; color: #555; border-bottom: 2px solid #e0e2ea; }
+  td { padding: 8px 12px; border-bottom: 1px solid #f0f0f4; vertical-align: top; }
+  tr:last-child td { border-bottom: none; }
+  td code { font-size: 11.5px; }
+
+  /* ── Callouts ── */
+  .callout { border-left: 3px solid #7c8cff; background: #f7f8ff; padding: 12px 16px; border-radius: 0 6px 6px 0; margin: 16px 0 20px; font-size: 13px; }
+  .callout.warning { border-color: #f5a623; background: #fffdf4; }
+  .callout.tip { border-color: #3ecf8e; background: #f4fdf9; }
+  .callout.danger { border-color: #e5534b; background: #fff5f5; }
+  .callout-label { font-size: 10.5px; font-weight: 700; text-transform: uppercase; letter-spacing: .1em; color: #7c8cff; margin-bottom: 4px; }
+  .callout.warning .callout-label { color: #f5a623; }
+  .callout.tip .callout-label { color: #3ecf8e; }
+  .callout.danger .callout-label { color: #e5534b; }
+
+  /* ── Skill badges ── */
+  .skill { display: inline-block; font-family: "SF Mono","Fira Mono","Menlo",monospace; font-size: 11.5px; font-weight: 600; background: #0f1117; color: #7c8cff; border-radius: 4px; padding: 2px 7px; white-space: nowrap; }
+
+  /* ── Diagram ── */
+  .diagram { background: #0f1117; color: #c8d3f5; border-radius: 6px; padding: 20px 24px; font-family: "SF Mono","Fira Mono","Menlo",monospace; font-size: 12px; line-height: 1.7; margin: 16px 0 20px; }
+  .diagram .dim { color: #5c6370; }
+  .diagram .hi { color: #82aaff; }
+
+  /* ── Print ── */
+  .page-break { page-break-after: always; }
+  h1.section-title { page-break-before: always; }
+  h1.section-title.no-break { page-break-before: avoid; }
+  @media print {
+    body { font-size: 12.5px; }
+    .cover { min-height: auto; padding: 56px 64px; }
+    pre, table { page-break-inside: avoid; }
+    h2 { page-break-after: avoid; }
+  }
+</style>
+</head>
+<body>
+
+<!-- COVER -->
+<div class="cover">
+  <div class="kicker">Developer Guide · v0.9.5</div>
+  <h1>Golden Thread</h1>
+  <div class="subtitle">
+    Persistent memory across Claude Code sessions —<br>
+    install, operate, verify, and maintain the vault.
+  </div>
+  <div class="meta">
+    September 2026 &nbsp;·&nbsp; Claude Code plugin &nbsp;·&nbsp; Requires Python 3.8+
+  </div>
+</div>
+
+<!-- TOC -->
+<div class="page toc-page">
+  <nav class="toc">
+    <h2>Contents</h2>
+    <ol>
+      <li>
+        <a href="#sec-concept">The core idea</a>
+        <ul class="toc-sub">
+          <li>Why Claude forgets — and how the vault doesn't</li>
+          <li>The promotion ladder</li>
+          <li>The Core-rule tier</li>
+          <li>Loading is lazy, by design</li>
+        </ul>
+      </li>
+      <li>
+        <a href="#sec-install">Installation</a>
+        <ul class="toc-sub">
+          <li>Install from GitHub or zip</li>
+          <li>What the installer does</li>
+        </ul>
+      </li>
+      <li>
+        <a href="#sec-setup">First-time setup</a>
+        <ul class="toc-sub">
+          <li>/gt:gt-init — initialize the vault</li>
+          <li>/gt:gt-create — scaffold a project</li>
+          <li>/gt:gt-ingest — import an existing project</li>
+        </ul>
+      </li>
+      <li>
+        <a href="#sec-layout">Vault layout</a>
+        <ul class="toc-sub">
+          <li>Top-level directories</li>
+          <li>Project folder anatomy</li>
+          <li>Source topology</li>
+        </ul>
+      </li>
+      <li>
+        <a href="#sec-daily">Daily workflow</a>
+        <ul class="toc-sub">
+          <li>/gt:gt-open — start a session</li>
+          <li>/gt:gt-work — end a session</li>
+          <li>/gt:gt-query — ask the vault a question</li>
+        </ul>
+      </li>
+      <li>
+        <a href="#sec-context">Context &amp; verification</a>
+        <ul class="toc-sub">
+          <li>/gt:gt-farm — route work to external AI</li>
+          <li>/gt:gt-validate — verify claims by re-deriving</li>
+        </ul>
+      </li>
+      <li>
+        <a href="#sec-knowledge">Knowledge management</a>
+        <ul class="toc-sub">
+          <li>/gt:gt-promote — graduate a finding</li>
+          <li>/gt:gt-refresh — update sources</li>
+          <li>Where does this fact go?</li>
+        </ul>
+      </li>
+      <li>
+        <a href="#sec-maintenance">Maintenance</a>
+        <ul class="toc-sub">
+          <li>/gt:gt-lint — health checks</li>
+          <li>/gt:gt-settings — automatic behaviour</li>
+          <li>/gt:gt-runbook-lint and /gt:gt-review</li>
+        </ul>
+      </li>
+      <li>
+        <a href="#sec-wiki">Knowledge wiki (gt-wiki)</a>
+      </li>
+      <li>
+        <a href="#sec-scripts">Script reference</a>
+      </li>
+      <li>
+        <a href="#sec-troubleshoot">Troubleshooting</a>
+      </li>
+    </ol>
+  </nav>
+</div>
+
+<!-- 1 · CONCEPT -->
+<div class="page">
+  <h1 class="section-title no-break" id="sec-concept">1. The core idea</h1>
+  <hr class="section-rule">
+
+  <p>
+    Claude's context window resets after every session. Golden Thread moves what
+    you learn <em>out of the session</em> and into a structured vault on disk —
+    before the session ends. The vault is an Obsidian folder tracked by git.
+    The right slice of it is loaded at the start of every session.
+  </p>
+
+  <h2>The promotion ladder</h2>
+  <p>
+    Every fact lives at the <strong>narrowest scope that is honest</strong> and
+    is promoted upward only when a second project proves it general.
+  </p>
+  <div class="diagram">
+    <span class="dim">session conversation</span>
+    <br><span class="dim">      ↓  /gt:gt-work</span>
+    <br><span class="hi">Projects/&lt;slug&gt;/memory/*.md</span>  <span class="dim">← this project, this detail</span>
+    <br><span class="dim">      ↓  /gt:gt-promote</span>
+    <br><span class="hi">research.md · decisions.md</span>   <span class="dim">← settled findings and choices</span>
+    <br><span class="dim">      ↓  /gt:gt-promote</span>
+    <br><span class="hi">Knowledge/</span>                    <span class="dim">← true for several projects</span>
+    <br><span class="dim">      ↓  /gt:gt-promote</span>
+    <br><span class="hi">global-memory/</span>               <span class="dim">← true in every session, everywhere</span>
+    <br><span class="dim">      ↓  /gt:gt-promote (with hook wiring)</span>
+    <br><span class="hi">core-rules/</span>                   <span class="dim">← enforced via hooks, not merely stored</span>
+  </div>
+  <p>
+    Facts move <strong>up</strong> as they prove general. They never move back
+    down. Retiring a fact sets <code>status: stale</code> and records what
+    superseded it — the file stays on disk.
+  </p>
+
+  <h2>The Core-rule tier</h2>
+  <p>
+    Above <code>global-memory/</code> sits the Core-rule tier. These are rules
+    enforced via hooks wired into <code>~/.claude/settings.json</code>
+    (<code>UserPromptSubmit</code> + <code>Stop</code> hooks) — they are
+    re-asserted every session, not just stored as files. <span class="skill">/gt:gt-init</span>
+    installs these hooks automatically.
+  </p>
+  <div class="callout danger">
+    <div class="callout-label">Stored ≠ enforced</div>
+    A rule in <code>core-rules/</code> with no wired hook is inert — it looks
+    correct and does nothing. <span class="skill">/gt:gt-lint</span> reports this
+    as <code>core-unenforced</code>. Treat it as a real defect; never suppress it.
+  </div>
+
+  <h2>Loading is lazy, by design</h2>
+  <p>
+    <span class="skill">/gt:gt-open</span> reads the project's core docs and then
+    reads <strong><code>memory/MEMORY.md</code> only</strong> — one line per file.
+    Memory files load on demand. A project with 70 notes costs ~80 lines to open
+    instead of ~2,000. The one-line description in <code>MEMORY.md</code> is the
+    entire basis for deciding whether a file is worth loading.
+  </p>
+
+  <div class="callout warning">
+    <div class="callout-label">The discipline</div>
+    Promote a fact only when a <strong>second project</strong> proves it general.
+    When in doubt, file it narrow — promotion is cheap, demotion isn't.
+  </div>
+</div>
+
+<!-- 2 · INSTALL -->
+<div class="page">
+  <h1 class="section-title" id="sec-install">2. Installation</h1>
+  <hr class="section-rule">
+
+  <p>Requirements: Python 3.8+, Claude Code installed and running.</p>
+
+  <h2>Option A — Clone from GitHub</h2>
+  <pre><code><span class="cmd">git clone</span> git@github.com:shaven/golden-thread.git
+<span class="cmd">cd</span> golden-thread/golden-thread-plugin
+<span class="cmd">bash</span> install.sh</code></pre>
+
+  <h2>Option B — Install from zip</h2>
+  <pre><code><span class="cmd">unzip</span> golden-thread-plugin.zip
+<span class="cmd">cd</span> golden-thread-plugin
+<span class="cmd">bash</span> install.sh</code></pre>
+
+  <div class="callout">
+    <div class="callout-label">Important</div>
+    <strong>Restart Claude Code after install.</strong> The <code>/gt:</code> skills
+    register at startup only and will not appear until you do.
+  </div>
+
+  <h2>What the installer does</h2>
+  <p>Two plugins are installed into Claude Code's plugin cache:</p>
+  <ul>
+    <li><strong><code>gt</code></strong> — memory, projects, session workflow, enforcement hooks</li>
+    <li><strong><code>gt-wiki</code></strong> — knowledge base with immutable sources</li>
+  </ul>
+  <pre><code>~/.claude/plugins/cache/golden-thread-plugin/gt/0.9.5/
+  .claude-plugin/   <span class="comment">← plugin metadata</span>
+  hooks/            <span class="comment">← enforcement hook scripts</span>
+  scripts/          <span class="comment">← vault_init.py, gt_lint.py, gt_settings.py, …</span>
+  skills/           <span class="comment">← /gt:* skill definitions (14 skills)</span>
+  templates/        <span class="comment">← vault scaffold templates</span></code></pre>
+
+  <h2>Updating</h2>
+  <pre><code><span class="comment"># after git pull or downloading a new zip:</span>
+<span class="cmd">bash</span> install.sh</code></pre>
+  <p>Each version installs into its own subdirectory; newer versions do not conflict with older ones.</p>
+
+  <h2>Uninstalling</h2>
+  <pre><code><span class="cmd">rm -rf</span> ~/.claude/plugins/cache/golden-thread-plugin</code></pre>
+  <p>Your vault and <code>~/.claude/vault-config.json</code> are unaffected.</p>
+</div>
+
+<!-- 3 · SETUP -->
+<div class="page">
+  <h1 class="section-title" id="sec-setup">3. First-time setup</h1>
+  <hr class="section-rule">
+
+  <h2><span class="skill">/gt:gt-init</span> — Initialize the vault</h2>
+  <p>Run once per machine. Claude will ask:</p>
+  <ol>
+    <li><strong>"Do you already have an Obsidian vault on this machine?"</strong>
+      <ul>
+        <li>Yes → provide the path. Golden Thread adds only missing files; existing notes are untouched.</li>
+        <li>No → choose a path (default: <code>~/Documents/Obsidian/GoldenThreadVault</code>). Obsidian is optional — the vault is plain Markdown and works without it.</li>
+      </ul>
+    </li>
+    <li>"What's your domain or team name?" — e.g. "Acme CloudOps" or "Platform Engineering"</li>
+  </ol>
+  <p>
+    The script writes <code>~/.claude/vault-config.json</code>, scaffolds the vault, and
+    <strong>installs Core-rule enforcement hooks</strong> into
+    <code>~/.claude/settings.json</code>. Idempotent — safe to re-run.
+  </p>
+  <p>For a vault that predates the Core-rule tier:</p>
+  <pre><code>python3 $SCRIPTS/vault_init.py install-core-rules --vault ~/my-vault</code></pre>
+
+  <div class="callout tip">
+    <div class="callout-label">Note</div>
+    <code>CLAUDE.md</code> is read at session start. Rules added mid-session apply
+    from the <em>next</em> session — that is not a bug; restart to pick them up.
+  </div>
+
+  <h2><span class="skill">/gt:gt-create</span> — Scaffold a new project</h2>
+  <table>
+    <thead><tr><th>Input</th><th>Notes</th></tr></thead>
+    <tbody>
+      <tr><td>Slug</td><td>Must match the folder name; lowercase, hyphens only</td></tr>
+      <tr><td>Title</td><td>Human-readable name</td></tr>
+      <tr><td>Domain</td><td>Coarse grouping, e.g. "platform", "data"</td></tr>
+      <tr><td>Topology</td><td>Where the code lives — see §4</td></tr>
+      <tr><td>Sub-project parent</td><td>Optional; slug of the parent project</td></tr>
+      <tr><td>Runbook</td><td>Whether to scaffold <code>runbook.md</code></td></tr>
+    </tbody>
+  </table>
+  <p>
+    After scaffolding, Claude fills <code>idea.md</code> from your description.
+    <strong><code>idea.md</code> is immutable once written</strong> — the traceable "why".
+  </p>
+
+  <h2><span class="skill">/gt:gt-ingest</span> — Import an existing project</h2>
+  <p>Copies notes and memory files into the vault. Never moves or deletes originals.</p>
+  <div class="callout warning">
+    <div class="callout-label">Wikilink trap</div>
+    Renaming files destroys <code>[[wikilink]]</code> graphs. Measure first:
+    <pre style="margin-top:8px;margin-bottom:0;"><code>grep -roh '\[\[[^]]*\]\]' --include='*.md' . | wc -l</code></pre>
+    Prefer keeping filenames. Never repoint links inside <code>Sources/</code>.
+  </div>
+</div>
+
+<!-- 4 · VAULT LAYOUT -->
+<div class="page">
+  <h1 class="section-title" id="sec-layout">4. Vault layout</h1>
+  <hr class="section-rule">
+
+  <pre><code>&lt;vault&gt;/
+  CLAUDE.md              <span class="comment">Conventions and page schema</span>
+  index.md               <span class="comment">Navigational index of all Knowledge pages</span>
+  log.md                 <span class="comment">Append-only audit trail</span>
+  review-queue.md        <span class="comment">Items flagged for owner review</span>
+  lint-declines.md       <span class="comment">Suppressions with reasons</span>
+
+  Sources/               <span class="comment">IMMUTABLE — never modified after creation</span>
+  Knowledge/             <span class="comment">Cross-project wiki pages</span>
+  global-memory/         <span class="comment">Loaded into every session</span>
+    MEMORY.md            <span class="comment">Index — what actually gets read at session start</span>
+
+  Projects/
+    CONVENTIONS.md       <span class="comment">Stages, properties, domain taxonomy</span>
+    PROTOCOL.md          <span class="comment">Cross-project process rules</span>
+    INFRASTRUCTURE.md    <span class="comment">Server fleet — defined ONCE, linked from projects</span>
+
+    &lt;slug&gt;/
+      README.md          <span class="comment">Status board + YAML frontmatter</span>
+      source.md          <span class="comment">Where the code lives; deploy topology</span>
+      idea.md            <span class="comment">Origin story — IMMUTABLE</span>
+      research.md        <span class="comment">Append-only dated findings</span>
+      decisions.md       <span class="comment">Append-only numbered ADRs</span>
+      design.md          <span class="comment">Current architecture — rewritten in place</span>
+      spec.md            <span class="comment">Handoff artifact (when design complete)</span>
+      runbook.md         <span class="comment">Operational procedures (optional)</span>
+      memory/
+        MEMORY.md        <span class="comment">Index — the ONLY file gt-open reads</span>
+        &lt;topic&gt;.md       <span class="comment">Loaded on demand</span></code></pre>
+
+  <h2>Project folder anatomy</h2>
+  <table>
+    <thead><tr><th>File</th><th>Mutability</th><th>Purpose</th></tr></thead>
+    <tbody>
+      <tr><td><code>idea.md</code></td><td>Immutable</td><td>The "why" — never changed after creation</td></tr>
+      <tr><td><code>source.md</code></td><td>Updated</td><td>Code location, deploy topology, file plan</td></tr>
+      <tr><td><code>research.md</code></td><td>Append-only</td><td>Dated findings and gotchas</td></tr>
+      <tr><td><code>decisions.md</code></td><td>Append-only</td><td>Numbered ADRs</td></tr>
+      <tr><td><code>design.md</code></td><td>Rewritten</td><td>Current architecture — always describes NOW</td></tr>
+      <tr><td><code>spec.md</code></td><td>Created once</td><td>Handoff artifact with acceptance criteria</td></tr>
+      <tr><td><code>runbook.md</code></td><td>Append / update</td><td>Operational procedures and landmines</td></tr>
+      <tr><td><code>memory/*.md</code></td><td>Updated per session</td><td>Session state; carries level/enforcement frontmatter</td></tr>
+    </tbody>
+  </table>
+
+  <h2>Source topology</h2>
+  <table>
+    <thead><tr><th>Topology</th><th>Meaning</th></tr></thead>
+    <tbody>
+      <tr><td><code>local</code></td><td>Folder on this machine. No deploy step.</td></tr>
+      <tr><td><code>remote</code></td><td>One repo, one server. Server pulls from GitHub.</td></tr>
+      <tr><td><code>bastion-jump</code></td><td>Several servers via one gateway host.</td></tr>
+      <tr><td><code>bastion-direct</code></td><td>Several servers, each independently reachable.</td></tr>
+    </tbody>
+  </table>
+  <p>
+    Bastion topologies carry a <strong>file plan</strong>: each deployed file is
+    marked <em>static</em> (byte-identical everywhere) or <em>unique</em>
+    (per-server; never cross-deployed). The fleet is defined once in
+    <code>Projects/INFRASTRUCTURE.md</code> — never copied into a project file.
+  </p>
+</div>
+
+<!-- 5 · DAILY WORKFLOW -->
+<div class="page">
+  <h1 class="section-title" id="sec-daily">5. Daily workflow</h1>
+  <hr class="section-rule">
+
+  <pre><code><span class="cmd">/gt:gt-open</span> my-project   <span class="comment"># load context, see where you left off</span>
+
+<span class="comment"># ... work happens ...</span>
+
+<span class="cmd">/gt:gt-work</span>              <span class="comment"># write back findings before closing</span></code></pre>
+
+  <h2><span class="skill">/gt:gt-open &lt;slug&gt;</span> — Start a session</h2>
+  <p>Reads CONVENTIONS.md and PROTOCOL.md once per session, then the project in order:</p>
+  <pre><code>source.md → idea.md → research.md → decisions.md
+          → design.md → spec.md → runbook.md
+          → INFRASTRUCTURE.md (bastion topologies)
+          → memory/MEMORY.md   <span class="comment"># index only; files load on demand</span></code></pre>
+  <p>
+    If <code>research.md</code> exceeds ~200 lines, reads headings first and only
+    loads targeted sections. Announces the review-queue item count if non-zero.
+    Summarises stage, topology, hosts, next action, blockers, and which memory
+    files exist but are unloaded.
+  </p>
+
+  <h2><span class="skill">/gt:gt-work</span> — End a session</h2>
+  <p>The step most people skip — and skipping it is what causes the vault to decay.</p>
+  <table>
+    <thead><tr><th>Destination</th><th>What belongs there</th></tr></thead>
+    <tbody>
+      <tr><td><code>research.md</code></td><td>New findings, dated. New discoveries only.</td></tr>
+      <tr><td><code>decisions.md</code></td><td>Numbered ADR with context and rejected alternatives. Stable choices only.</td></tr>
+      <tr><td><code>design.md</code></td><td>Rewritten in place when architecture changed. Describes <em>now</em>.</td></tr>
+      <tr><td><code>runbook.md</code></td><td>Operational commands and known landmines.</td></tr>
+      <tr><td><code>memory/*.md</code></td><td>Session state, updated in place.</td></tr>
+      <tr><td><code>spec.md</code></td><td>Created when design is complete enough to hand off.</td></tr>
+    </tbody>
+  </table>
+  <p>Memory files carry frontmatter to make durability explicit:</p>
+  <pre><code><span class="kw">metadata</span>:
+  <span class="kw">type</span>: core | feedback | user | reference
+  <span class="kw">level</span>: core | context | generic      <span class="comment"># default: generic</span>
+  <span class="kw">enforcement</span>: validated | reminder    <span class="comment"># required only for level: core</span></code></pre>
+  <p>
+    Default to <code>generic</code>. Do <strong>not</strong> set
+    <code>level: core</code> in <code>gt-work</code> — Core is a promotion that
+    requires wiring a hook, which is <code>gt-promote</code>'s job.
+  </p>
+  <p>
+    After writing, <code>gt-work</code> asks whether any finding applies beyond
+    this project and should be promoted. It also updates <code>stage:</code>,
+    <code>topology:</code>, and <code>domain:</code> in <code>README.md</code>
+    frontmatter when the project's reality changes.
+  </p>
+
+  <h2><span class="skill">/gt:gt-query</span> — Ask the vault a question</h2>
+  <p>
+    Reads <code>index.md</code>, follows wikilinks 2–3 hops into
+    <code>Knowledge/</code>, falls back to grep. Be specific. If a result shows
+    <code>status: stale</code>, verify it before acting.
+  </p>
+</div>
+
+<!-- 6 · CONTEXT & VERIFICATION -->
+<div class="page">
+  <h1 class="section-title" id="sec-context">6. Context &amp; verification</h1>
+  <hr class="section-rule">
+
+  <h2><span class="skill">/gt:gt-farm</span> — Route work to external AI</h2>
+  <p>
+    Routes bulk, mechanical, or second-opinion tasks <em>out</em> of this context
+    to an external AI service. The unit is a <strong>work packet</strong>: a
+    self-contained Markdown document with a strict <code>FINDINGS</code> /
+    <code>GAPS</code> return contract. Transport is swappable — paste into a web
+    UI today; a script sends it to an API later. The packet is identical either way.
+  </p>
+  <p><strong>All four gates must pass before a task leaves. Any failure means the work stays here.</strong></p>
+  <table>
+    <thead><tr><th>Gate</th><th>Question</th></tr></thead>
+    <tbody>
+      <tr><td><strong>Stateless</strong></td><td>Answerable with no vault or repo state?</td></tr>
+      <tr><td><strong>Self-contained</strong></td><td>Fits in a paragraph plus a list of URLs?</td></tr>
+      <tr><td><strong>Checkable</strong></td><td>Verifiable without redoing the work?</td></tr>
+      <tr><td><strong>Releasable</strong></td><td>Every input safe to hand a third party?</td></tr>
+    </tbody>
+  </table>
+  <div class="callout danger">
+    <div class="callout-label">Releasable is default-deny</div>
+    Never include: account identifiers, balances, hostnames, internal IPs,
+    credential locations, non-public source code, or personal identifiers.
+    Check this gate while <em>building</em> the packet, not before sending it.
+  </div>
+  <p>Key rules:</p>
+  <ul>
+    <li>One packet, one task. A packet asking three questions returns three half-answers.</li>
+    <li>Supply a vocabulary block with exact model IDs and product names read from the system — never from memory. A stale prior produces a stale query.</li>
+    <li>Results come back as <code>unverified</code>. Promote only after opening the <code>source:</code> URL and confirming the claim.</li>
+    <li><code>GAPS</code> is mandatory; <code>GAPS: None</code> must be justified, not asserted.</li>
+    <li>Cite the specific page carrying the claim — never a homepage or section index.</li>
+  </ul>
+  <p>Packets are saved to <code>&lt;vault&gt;/Projects/external-ai-tools/packets/YYYY-MM-DD-slug.md</code> for auditability.</p>
+
+  <h2><span class="skill">/gt:gt-validate</span> — Verify claims by re-deriving</h2>
+  <p>
+    Verifies a claim by <strong>re-deriving it</strong>, not by reviewing the
+    reasoning that produced it. Give a validator your reasoning and it grades
+    the argument — and inherits the same blind spot. Give it only the claim, the
+    rules, and the artifact, and it must go back to primary sources.
+  </p>
+  <p>Use before recording a finding as fact, before a production change, or when a number matters.</p>
+
+  <h3>Validator classes</h3>
+  <table>
+    <thead><tr><th>Class</th><th>Use when</th></tr></thead>
+    <tbody>
+      <tr><td><code>empirical</code></td><td>A number, measurement, or result could be wrong</td></tr>
+      <tr><td><code>vantage</code></td><td>The measurement position may not be able to observe the answer</td></tr>
+      <tr><td><code>rule-compliance</code></td><td>Work must satisfy <code>core-rules/</code> or <code>CONVENTIONS.md</code></td></tr>
+      <tr><td><code>code</code></td><td>Code may not do what its name, comment, or docs claim</td></tr>
+    </tbody>
+  </table>
+  <p>
+    Build the packet with exactly three fields: <code>claim</code>, <code>rules</code>,
+    <code>artifact</code>. Strip all conclusions, confidence signals, and adjectives
+    that imply the expected answer. If it says "confirm that X", rewrite it as
+    "determine whether X".
+  </p>
+  <p>
+    Outcomes: <strong>confirmed</strong> / <strong>refuted</strong> /
+    <strong>cannot-verify</strong>. <code>cannot-verify</code> is never a pass —
+    name what was missing. Append the verdict to <code>research.md</code>.
+    A refutation supersedes the original finding.
+  </p>
+</div>
+
+<!-- 7 · KNOWLEDGE MANAGEMENT -->
+<div class="page">
+  <h1 class="section-title" id="sec-knowledge">7. Knowledge management</h1>
+  <hr class="section-rule">
+
+  <h2><span class="skill">/gt:gt-promote</span> — Graduate a finding</h2>
+  <p>The judgement call: <strong>has a second project proved this general?</strong></p>
+  <table>
+    <thead><tr><th>From → To</th><th>When</th></tr></thead>
+    <tbody>
+      <tr><td><code>memory/</code> → <code>research</code>/<code>decisions</code></td><td>Finding stopped changing session to session</td></tr>
+      <tr><td>project → <code>Knowledge/</code></td><td>A second project hit the same truth</td></tr>
+      <tr><td><code>Knowledge/</code> → <code>global-memory/</code></td><td>Needed in every session, every project</td></tr>
+      <tr><td>any → Core tier</td><td>Rule must be enforced, not just stored — <code>gt-promote</code> wires the hook</td></tr>
+    </tbody>
+  </table>
+  <p>Nothing is deleted. Retiring sets <code>status: stale</code> and records the superseding fact.</p>
+
+  <h2><span class="skill">/gt:gt-refresh</span> — Update sources</h2>
+  <p>
+    Checks <code>Sources/</code> for upstream changes. Creates a new immutable file
+    with <code>supersedes:</code> — never edits the old one. Knowledge pages citing
+    the old source are flagged for update.
+  </p>
+
+  <h2>Where does this fact go?</h2>
+  <table>
+    <thead><tr><th>The fact</th><th>Goes to</th></tr></thead>
+    <tbody>
+      <tr><td>"This preset is wrong right now"</td><td><code>memory/</code></td></tr>
+      <tr><td>"This API rejects plural keys"</td><td><code>research.md</code></td></tr>
+      <tr><td>"We use POST for all mutations, and why"</td><td><code>decisions.md</code></td></tr>
+      <tr><td>"The system is structured like this now"</td><td><code>design.md</code></td></tr>
+      <tr><td>"This platform behaviour bit two projects"</td><td><code>Knowledge/</code></td></tr>
+      <tr><td>"Always diff before overwriting prod"</td><td><code>global-memory/</code></td></tr>
+      <tr><td>"How to restart the prod backtest"</td><td><code>runbook.md</code></td></tr>
+      <tr><td>"Never scp without backing up"</td><td><code>PROTOCOL.md</code></td></tr>
+      <tr><td>"This code lives on host X at path Y"</td><td><code>source.md</code></td></tr>
+      <tr><td>"Which box serves which role"</td><td><code>INFRASTRUCTURE.md</code></td></tr>
+    </tbody>
+  </table>
+  <div class="callout">
+    <div class="callout-label">Two failure modes</div>
+    <strong>Too narrow:</strong> a platform truth buried in one project — the next project rediscovers it the hard way.<br>
+    <strong>Too wide:</strong> a quirk in <code>global-memory/</code> loading into unrelated sessions as a rule that isn't true there.<br><br>
+    When unsure, file narrow. Promotion is cheap; demotion isn't.
+  </div>
+</div>
+
+<!-- 8 · MAINTENANCE -->
+<div class="page">
+  <h1 class="section-title" id="sec-maintenance">8. Maintenance</h1>
+  <hr class="section-rule">
+
+  <h2><span class="skill">/gt:gt-lint</span> — Health checks</h2>
+  <table>
+    <thead><tr><th>Check</th><th>What it catches</th></tr></thead>
+    <tbody>
+      <tr><td><code>index-gap</code></td><td>Knowledge page not in <code>index.md</code> — <code>gt-query</code> won't find it</td></tr>
+      <tr><td><code>broken-link</code></td><td><code>[[wikilink]]</code> resolving to nothing</td></tr>
+      <tr><td><code>orphan</code></td><td>Knowledge page linked from nowhere</td></tr>
+      <tr><td><code>memory-unlisted</code></td><td><code>memory/*.md</code> not in <code>MEMORY.md</code> — Claude will never load it</td></tr>
+      <tr><td><code>global-gap</code></td><td><code>global-memory/*.md</code> not in its index</td></tr>
+      <tr><td><code>memory-bloat</code></td><td><code>global-memory/</code> file over 30 lines</td></tr>
+      <tr><td><code>global-scope-leak</code></td><td>Project-specific content in <code>global-memory/</code></td></tr>
+      <tr><td><code>superseded-cited</code></td><td>Knowledge page citing a superseded source</td></tr>
+      <tr><td><code>stale</code></td><td>Knowledge page marked <code>status: stale</code></td></tr>
+      <tr><td><code>source-todo</code></td><td><code>source.md</code> with no topology or deployment targets</td></tr>
+      <tr><td><code>frontmatter</code></td><td>Project README missing properties, or slug ≠ folder name</td></tr>
+      <tr><td><code>core-misplaced</code></td><td>A rule declares <code>level: core</code> but lives outside <code>core-rules/</code></td></tr>
+      <tr><td><code>core-no-enforcement</code></td><td><code>level: core</code> with no <code>enforcement</code> field declared</td></tr>
+      <tr><td><code>core-unenforced</code></td><td>The declared enforcement hook is not actually wired</td></tr>
+    </tbody>
+  </table>
+  <div class="callout danger">
+    <div class="callout-label">Never suppress core-unenforced</div>
+    This is the machine-checkable form of "rule stored but never asserted".
+    Suppressing it recreates the original bug with a paper trail saying it was fine.<br>
+    Fix: <code>vault_init.py install-core-rules --vault &lt;vault&gt;</code>
+  </div>
+  <h3>Triage workflow</h3>
+  <ol>
+    <li><strong>You broke it</strong> — fix now</li>
+    <li><strong>Already broken</strong> — record in <code>review-queue.md</code>; don't guess at a target</li>
+    <li><strong>False positive</strong> — suppress in <code>lint-declines.md</code> with the reason</li>
+  </ol>
+
+  <h2><span class="skill">/gt:gt-settings</span> — Automatic behaviour</h2>
+  <p>View and toggle everything Golden Thread does without being asked.</p>
+  <table>
+    <thead><tr><th>Setting</th><th>Values</th><th>Default</th><th>What it does</th></tr></thead>
+    <tbody>
+      <tr><td><code>component_updates</code></td><td><code>off</code> · <code>report</code> · <code>confirm</code> · <code>auto</code></td><td><code>report</code></td><td>At session start, compares installed hooks/scripts against plugin source and reports drift</td></tr>
+      <tr><td><code>report_card</code></td><td><code>off</code> · <code>minimal</code> · <code>full</code></td><td><code>minimal</code></td><td>At <code>/compact</code>, summarises session hygiene</td></tr>
+    </tbody>
+  </table>
+  <pre><code>python3 $SCRIPTS/gt_settings.py show            <span class="comment"># current state</span>
+python3 $SCRIPTS/gt_settings.py explain &lt;name&gt;  <span class="comment"># reasoning behind the default</span>
+python3 $SCRIPTS/gt_settings.py set &lt;name&gt; &lt;value&gt;</code></pre>
+
+  <h2><span class="skill">/gt:gt-runbook-lint</span> and <span class="skill">/gt:gt-review</span></h2>
+  <p>
+    <strong>gt-runbook-lint</strong> finds procedures duplicated across runbooks
+    and routes them to the right shared layer: <code>PROTOCOL.md</code>, a
+    Knowledge page, or a repo <code>CLAUDE.md</code>.
+  </p>
+  <p>
+    <strong>gt-review</strong> scans Obsidian daily notes for uncaptured tasks and
+    ideas, then promotes selected ones into tracked projects.
+  </p>
+</div>
+
+<!-- 9 · WIKI -->
+<div class="page">
+  <h1 class="section-title" id="sec-wiki">9. Knowledge wiki (gt-wiki)</h1>
+  <hr class="section-rule">
+
+  <p>
+    The <code>gt-wiki</code> plugin adds a structured knowledge base with immutable
+    sources. Every ingested document is stored verbatim in <code>Sources/</code>
+    and never modified. Knowledge pages are synthesized summaries that link back
+    to the originals.
+  </p>
+
+  <h2>Setup and usage</h2>
+  <pre><code><span class="cmd">/gt:gt-wiki-init</span>                          <span class="comment"># initialize</span>
+<span class="cmd">/gt:gt-wiki-ingest</span> &lt;url or file path&gt;    <span class="comment"># add a source</span>
+<span class="cmd">/gt:gt-wiki</span>                               <span class="comment"># query</span>
+<span class="cmd">/gt:gt-wiki-lint</span>                          <span class="comment"># health check</span>
+<span class="cmd">/gt:gt-wiki-refresh</span>                       <span class="comment"># check sources for upstream changes</span></code></pre>
+
+  <h2>Page format</h2>
+  <pre><code><span class="comment">---</span>
+<span class="kw">title</span>: Page Title
+<span class="kw">category</span>: concept | tool | runbook | decision | reference
+<span class="kw">tags</span>:
+  - lowercase-hyphenated
+<span class="kw">sources</span>:
+  - "[[Sources/filename.md]]"
+<span class="kw">created</span>: YYYY-MM-DD
+<span class="kw">updated</span>: YYYY-MM-DD
+<span class="kw">status</span>: seed | growing | mature | stale
+<span class="comment">---</span></code></pre>
+
+  <div class="callout">
+    <div class="callout-label">Cross-links are the navigation layer</div>
+    Claude follows <code>[[wikilinks]]</code> hop by hop from <code>index.md</code>.
+    Link bidirectionally. Cross-domain links (A ↔ B from different areas) are the
+    most commonly missed and the most valuable for multi-hop questions.
+  </div>
+</div>
+
+<!-- 10 · SCRIPTS -->
+<div class="page">
+  <h1 class="section-title" id="sec-scripts">10. Script reference</h1>
+  <hr class="section-rule">
+
+  <pre><code>SCRIPTS=~/.claude/plugins/cache/golden-thread-plugin/gt/0.9.5/scripts</code></pre>
+
+  <h2>vault_init.py</h2>
+  <pre><code><span class="comment"># Fresh vault</span>
+python3 $SCRIPTS/vault_init.py fresh \
+  --vault ~/my-vault --domain "My Team"
+
+<span class="comment"># Create a project</span>
+python3 $SCRIPTS/vault_init.py create-project \
+  --vault ~/my-vault \
+  --name my-project --title "My Project" \
+  --tags "backend,api" --domain platform \
+  --topology bastion-direct --runbook
+
+<span class="comment"># Create a sub-project</span>
+python3 $SCRIPTS/vault_init.py create-project \
+  --vault ~/my-vault --name sub-feature \
+  --parent my-project --domain platform
+
+<span class="comment"># Connect an existing vault to a new machine</span>
+python3 $SCRIPTS/vault_init.py connect --vault ~/existing-vault
+
+<span class="comment"># Install Core-rule enforcement hooks (for older vaults)</span>
+python3 $SCRIPTS/vault_init.py install-core-rules --vault ~/my-vault</code></pre>
+
+  <h2>gt_ingest.py</h2>
+  <pre><code>python3 $SCRIPTS/gt_ingest.py ~/Projects/my-project --json</code></pre>
+
+  <h2>gt_lint.py</h2>
+  <pre><code>python3 $SCRIPTS/gt_lint.py ~/my-vault \
+  --queue ~/my-vault/review-queue.md</code></pre>
+
+  <h2>gt_settings.py</h2>
+  <pre><code>python3 $SCRIPTS/gt_settings.py show
+python3 $SCRIPTS/gt_settings.py explain component_updates
+python3 $SCRIPTS/gt_settings.py set report_card off</code></pre>
+</div>
+
+<!-- 11 · TROUBLESHOOTING -->
+<div class="page">
+  <h1 class="section-title" id="sec-troubleshoot">11. Troubleshooting</h1>
+  <hr class="section-rule">
+
+  <table>
+    <thead><tr><th>Symptom</th><th>Cause &amp; fix</th></tr></thead>
+    <tbody>
+      <tr><td>"vault-config.json not found"</td><td>Run <span class="skill">/gt:gt-init</span></td></tr>
+      <tr><td>Skills not showing after install</td><td>Restart Claude Code. Skills register at startup only.</td></tr>
+      <tr><td>A rule in <code>CLAUDE.md</code> is ignored</td><td>Read at session start only. Rules added mid-session apply next session. Run <code>/hooks</code> or restart.</td></tr>
+      <tr><td>Memory files aren't loading</td><td>By design — <code>gt-open</code> loads on demand. Ask for the file by name.</td></tr>
+      <tr><td>A memory file is never offered</td><td>Run <span class="skill">/gt:gt-lint</span> — likely <code>memory-unlisted</code>.</td></tr>
+      <tr><td><code>gt-query</code> can't find a page you added</td><td>Likely <code>index-gap</code>. Add the page to <code>index.md</code>.</td></tr>
+      <tr><td>Core rules apply inconsistently</td><td>Run <span class="skill">/gt:gt-lint</span> and look for <code>core-unenforced</code>. Fix: <code>vault_init.py install-core-rules --vault &lt;vault&gt;</code></td></tr>
+      <tr><td>Timestamp missing from responses</td><td>Enforcement hook unwired. Run <code>/hooks</code> or re-run <code>install.sh</code>.</td></tr>
+      <tr><td>Want to turn off the session report</td><td>Run <code>/gt:gt-settings set report_card off</code></td></tr>
+      <tr><td>Lint suppression isn't working</td><td>Paths are matched case-insensitively. Use the path exactly as lint reports it.</td></tr>
+      <tr><td>"conflict: vault-config.json points to a different vault"</td><td>Run <code>vault_init.py connect --vault &lt;new-path&gt;</code></td></tr>
+    </tbody>
+  </table>
+
+  <div style="margin-top:40px; padding-top:28px; border-top:1px solid #e8e8ed; font-size:12px; color:#888;">
+    Golden Thread v0.9.5 &nbsp;·&nbsp; September 2026 &nbsp;·&nbsp;
+    Plugin cache: <code>~/.claude/plugins/cache/golden-thread-plugin/gt/0.9.5/</code>
+  </div>
+</div>
+
+</body>
+</html>

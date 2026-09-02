@@ -1,0 +1,624 @@
+<!DOCTYPE html>
+<html xmlns="http://www.w3.org/1999/xhtml">
+<head>
+  <meta charset="utf-8" />
+  <meta name="generator" content="pandoc 3.10.1" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes" />
+  <title>Golden Thread Plugin</title>
+  <style>
+    /* Default styles provided by pandoc.
+    ** See https://pandoc.org/MANUAL.html#variables-for-html for config info.
+    */
+    span.smallcaps{font-variant: small-caps;}
+    div.columns{display: flex; gap: 1.5em;}
+    div.column{flex: auto;}
+    @media screen {
+    div.columns{gap: min(4vw, 1.5em);}
+    div.column{overflow-x: auto;}
+    }
+    div.hanging-indent{margin-left: 1.5em; text-indent: -1.5em;}
+    /* The extra [class] is a hack that increases specificity enough to
+       override a similar rule in reveal.js */
+    ul.task-list[class]{list-style: none;}
+    ul.task-list li input[type="checkbox"] {
+      font-size: inherit;
+      width: 0.8em;
+      margin: 0 0.8em 0.2em -1.6em;
+      vertical-align: middle;
+    }
+    .display.math{display: block; text-align: center; margin: 0.5rem auto;}
+    /* CSS for syntax highlighting */
+    html { -webkit-text-size-adjust: 100%; }
+    pre > code.sourceCode { white-space: pre; position: relative; }
+    pre > code.sourceCode > span { display: inline-block; line-height: 1.25; }
+    pre > code.sourceCode > span:empty { height: 1.2em; }
+    .sourceCode { overflow: visible; }
+    code.sourceCode > span { color: inherit; text-decoration: inherit; }
+    div.sourceCode { margin: 1em 0; }
+    pre.sourceCode { margin: 0; }
+    @media screen {
+    div.sourceCode { overflow: auto; }
+    }
+    @media print {
+    pre > code.sourceCode { white-space: pre-wrap; }
+    pre > code.sourceCode > span { text-indent: -5em; padding-left: 5em; }
+    }
+    pre.numberSource code
+      { counter-reset: source-line 0; }
+    pre.numberSource code > span
+      { position: relative; left: -4em; counter-increment: source-line; }
+    pre.numberSource code > span > a:first-child::before
+      { content: counter(source-line);
+        position: relative; left: -1em; text-align: right; vertical-align: baseline;
+        border: none; display: inline-block;
+        -webkit-touch-callout: none; -webkit-user-select: none;
+        -khtml-user-select: none; -moz-user-select: none;
+        -ms-user-select: none; user-select: none;
+        padding: 0 4px; width: 4em;
+        color: #aaaaaa;
+      }
+    pre.numberSource { margin-left: 3em; border-left: 1px solid #aaaaaa;  padding-left: 4px; }
+    div.sourceCode
+      {   }
+    @media screen {
+    pre > code.sourceCode > span > a:first-child::before { text-decoration: underline; }
+    }
+    code span.al { color: #ff0000; font-weight: bold; } /* Alert */
+    code span.an { color: #60a0b0; font-weight: bold; font-style: italic; } /* Annotation */
+    code span.at { color: #7d9029; } /* Attribute */
+    code span.bn { color: #40a070; } /* BaseN */
+    code span.bu { color: #008000; } /* BuiltIn */
+    code span.cf { color: #007020; font-weight: bold; } /* ControlFlow */
+    code span.ch { color: #4070a0; } /* Char */
+    code span.cn { color: #880000; } /* Constant */
+    code span.co { color: #60a0b0; font-style: italic; } /* Comment */
+    code span.cv { color: #60a0b0; font-weight: bold; font-style: italic; } /* CommentVar */
+    code span.do { color: #ba2121; font-style: italic; } /* Documentation */
+    code span.dt { color: #902000; } /* DataType */
+    code span.dv { color: #40a070; } /* DecVal */
+    code span.er { color: #ff0000; font-weight: bold; } /* Error */
+    code span.ex { } /* Extension */
+    code span.fl { color: #40a070; } /* Float */
+    code span.fu { color: #06287e; } /* Function */
+    code span.im { color: #008000; font-weight: bold; } /* Import */
+    code span.in { color: #60a0b0; font-weight: bold; font-style: italic; } /* Information */
+    code span.kw { color: #007020; font-weight: bold; } /* Keyword */
+    code span.op { color: #666666; } /* Operator */
+    code span.ot { color: #007020; } /* Other */
+    code span.pp { color: #bc7a00; } /* Preprocessor */
+    code span.sc { color: #4070a0; } /* SpecialChar */
+    code span.ss { color: #bb6688; } /* SpecialString */
+    code span.st { color: #4070a0; } /* String */
+    code span.va { color: #19177c; } /* Variable */
+    code span.vs { color: #4070a0; } /* VerbatimString */
+    code span.wa { color: #60a0b0; font-weight: bold; font-style: italic; } /* Warning */
+  </style>
+  <link rel="stylesheet" href="" />
+  <style>
+    body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif; max-width: 900px; margin: 40px auto; padding: 0 20px; color: #222; line-height: 1.6; }
+    h1 { font-size: 2em; border-bottom: 2px solid #333; padding-bottom: 8px; }
+    h2 { font-size: 1.4em; border-bottom: 1px solid #ccc; padding-bottom: 4px; margin-top: 2em; }
+    h3 { font-size: 1.1em; margin-top: 1.5em; }
+    table { border-collapse: collapse; width: 100%; margin: 1em 0; }
+    th, td { border: 1px solid #ccc; padding: 8px 12px; text-align: left; }
+    th { background: #f5f5f5; font-weight: 600; }
+    code { background: #f4f4f4; padding: 2px 5px; border-radius: 3px; font-size: 0.9em; }
+    pre { background: #f4f4f4; padding: 16px; border-radius: 4px; overflow-x: auto; }
+    pre code { background: none; padding: 0; }
+    hr { border: none; border-top: 1px solid #ddd; margin: 2em 0; }
+  </style>
+</head>
+<body>
+<header id="title-block-header">
+<h1 class="title">Golden Thread Plugin</h1>
+</header>
+<h1 id="golden-thread-plugin-documentation">Golden Thread Plugin —
+Documentation</h1>
+<h2 id="version-gt-0.6.0-gt-wiki-0.1.0">Version gt 0.6.0 / gt-wiki
+0.1.0</h2>
+<hr />
+<p>Golden Thread turns an Obsidian vault into the single source of truth
+for all AI memory across every project and every session. v0.6.0 adds a
+tiered rule enforcement model with hook-backed Core rules. gt-wiki 0.1.0
+adds an LLM-powered knowledge base with immutable sources and
+interlinked pages.</p>
+<hr />
+<h2 id="what-it-does">What It Does</h2>
+<p>Instead of scattered <code>.claude/memory/</code> files and CLAUDE.md
+snippets that live and die per session, Golden Thread gives every fact a
+permanent home in a structured vault. Knowledge flows up a hierarchy
+from session notes into the vault, and the right facts are always in
+scope when you need them.</p>
+<pre><code>session conversation
+      ↓  gt-work / gt-promote
+project memory  (memory/*.md)
+      ↓  gt-promote
+project files   (research.md / decisions.md / design.md / spec.md / runbook.md)
+      ↓  gt-promote
+Knowledge/      (cross-project wiki pages, backed by immutable Sources/)
+      ↓  gt-promote
+global-memory/  (loaded in every session, all projects)</code></pre>
+<p>Facts move up the hierarchy as they prove themselves general. They
+never move back down and are never silently deleted.</p>
+<hr />
+<h2 id="core-rules-gt-0.6.0">Core Rules (gt 0.6.0)</h2>
+<p>Golden Thread defines a tiered rule model that separates rules by
+scope and enforcement strength.</p>
+<p><strong>Three scope levels:</strong></p>
+<table>
+<colgroup>
+<col style="width: 50%" />
+<col style="width: 50%" />
+</colgroup>
+<thead>
+<tr>
+<th>Level</th>
+<th>Meaning</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Core</td>
+<td>Applies to every chat, every project, no exceptions.
+Un-removable.</td>
+</tr>
+<tr>
+<td>Context</td>
+<td>Applies to this project or session type only.</td>
+</tr>
+<tr>
+<td>Generic</td>
+<td>Default; no special standing.</td>
+</tr>
+</tbody>
+</table>
+<p><strong>Two enforcement strengths:</strong></p>
+<table>
+<colgroup>
+<col style="width: 50%" />
+<col style="width: 50%" />
+</colgroup>
+<thead>
+<tr>
+<th>Strength</th>
+<th>Meaning</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Reminder</td>
+<td>Injected on every turn via <code>UserPromptSubmit</code> hook.</td>
+</tr>
+<tr>
+<td>Validated</td>
+<td>Checked by a <code>Stop</code> hook that blocks any reply violating
+it; machine-enforced.</td>
+</tr>
+</tbody>
+</table>
+<p><strong>Core/Validated rules are hook-backed.</strong> Hook scripts
+install to <code>~/.claude/golden-thread/hooks/</code> during
+<code>install.sh</code>. <code>settings.json</code> references them by
+absolute path so they survive vault renames and project moves.
+<code>gt_paths.py</code> is a self-healing resolver — if a recorded path
+is stale, it locates <code>core-rules/</code> by scanning the vault
+rather than failing silently.</p>
+<p>The canonical rule definitions live in
+<code>Projects/golden-thread/core-rules/</code> inside the vault.
+Editing a rule file there changes what the hook injects — the rule text
+is never duplicated into the script.</p>
+<p><strong>The canary:</strong>
+<code>core_timestamp_every_message.md</code> is designated
+Core/Validated not because a missing timestamp causes real harm, but
+because it is trivially observable at the top of every reply. When the
+timestamp disappears, enforcement has broken.</p>
+<hr />
+<h2 id="gt-skills-11">gt Skills (11)</h2>
+<h3 id="setup">Setup</h3>
+<table>
+<colgroup>
+<col style="width: 50%" />
+<col style="width: 50%" />
+</colgroup>
+<thead>
+<tr>
+<th>Command</th>
+<th>What it does</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>/gt:gt-init</code></td>
+<td>Create a new vault from scratch, or wire an existing vault to a
+project. Idempotent — safe to re-run.</td>
+</tr>
+<tr>
+<td><code>/gt:gt-create</code></td>
+<td>Scaffold a new project folder with the standard structure. Captures
+your brain dump into <code>idea.md</code>. Supports sub-projects, tags,
+and runbook creation.</td>
+</tr>
+</tbody>
+</table>
+<h3 id="daily-work">Daily Work</h3>
+<table>
+<colgroup>
+<col style="width: 50%" />
+<col style="width: 50%" />
+</colgroup>
+<thead>
+<tr>
+<th>Command</th>
+<th>What it does</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>/gt:gt-open</code></td>
+<td>Load a project at session start. Reads all project docs in order
+(idea → research → decisions → design → spec → runbook → memory),
+summarizes state, and asks where to pick up.</td>
+</tr>
+<tr>
+<td><code>/gt:gt-work</code></td>
+<td>Write back session findings. Appends to <code>research.md</code>,
+adds ADRs to <code>decisions.md</code>, refines <code>design.md</code>,
+creates <code>spec.md</code> when design is complete, and flags content
+for PROTOCOL.md.</td>
+</tr>
+<tr>
+<td><code>/gt:gt-ingest</code></td>
+<td>Bulk-import an existing project’s memory files, CLAUDE.md rules, and
+notes into the vault. External sources are stored immutably in
+<code>Sources/</code> before being synthesized into Knowledge
+pages.</td>
+</tr>
+<tr>
+<td><code>/gt:gt-review</code></td>
+<td>Scan recent Obsidian daily notes for uncaptured tasks and ideas.
+Surfaces them grouped by date, then promotes selected ones into tracked
+project folders.</td>
+</tr>
+</tbody>
+</table>
+<h3 id="knowledge-management">Knowledge Management</h3>
+<table>
+<colgroup>
+<col style="width: 50%" />
+<col style="width: 50%" />
+</colgroup>
+<thead>
+<tr>
+<th>Command</th>
+<th>What it does</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>/gt:gt-query</code></td>
+<td>Look something up — reads <code>index.md</code> first, follows
+wikilinks, falls back to grep. The vault is always checked before the
+web.</td>
+</tr>
+<tr>
+<td><code>/gt:gt-promote</code></td>
+<td>Graduate a fact up the hierarchy: project memory → project files →
+Knowledge wiki page → global-memory. Also handles new project
+scaffolding and retiring stale content.</td>
+</tr>
+<tr>
+<td><code>/gt:gt-refresh</code></td>
+<td>Check <code>Sources/</code> for upstream changes. Supersedes
+outdated sources with new immutable files — never edits the old one.
+Updates Knowledge pages that cited the changed source.</td>
+</tr>
+</tbody>
+</table>
+<h3 id="maintenance">Maintenance</h3>
+<table>
+<colgroup>
+<col style="width: 50%" />
+<col style="width: 50%" />
+</colgroup>
+<thead>
+<tr>
+<th>Command</th>
+<th>What it does</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>/gt:gt-lint</code></td>
+<td>Audit the vault for structural problems: broken wikilinks, orphaned
+pages, missing index entries, unlisted memory files, Knowledge pages
+citing superseded sources, and stale pages.</td>
+</tr>
+<tr>
+<td><code>/gt:gt-runbook-lint</code></td>
+<td>Scan all project <code>runbook.md</code> files for content that has
+drifted into multiple runbooks. Routes duplicated content to the right
+shared layer via <code>gt-promote</code>.</td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h2 id="gt-wiki-skills-5">gt-wiki Skills (5)</h2>
+<p>The gt-wiki plugin provides an LLM-powered knowledge base separate
+from the Golden Thread memory hierarchy. Sources are ingested immutably;
+Knowledge pages are synthesized summaries linked bidirectionally.</p>
+<p><strong>Key design decision:</strong> The vault
+<code>CLAUDE.md</code> is kept slim (architecture + pointer only). Page
+format schema lives in <code>Knowledge/_template.md</code> and is read
+on demand by the ingest and refresh skills — it is not loaded into every
+session’s context.</p>
+<table>
+<colgroup>
+<col style="width: 50%" />
+<col style="width: 50%" />
+</colgroup>
+<thead>
+<tr>
+<th>Command</th>
+<th>What it does</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>/gt:gt-wiki-init</code></td>
+<td>Set up a new wiki vault from scratch. Runs
+<code>vault_init.py</code> deterministically — creates
+<code>Sources/</code>, <code>Knowledge/</code>, <code>index.md</code>,
+<code>log.md</code>, seeds <code>CLAUDE.md</code> from template, and
+stamps <code>Knowledge/_template.md</code>.</td>
+</tr>
+<tr>
+<td><code>/gt:gt-wiki</code></td>
+<td>Query the wiki. Reads <code>index.md</code> first, follows
+wikilinks, falls back to grep, deep-digs Sources for precision. Logs
+every query.</td>
+</tr>
+<tr>
+<td><code>/gt:gt-wiki-ingest</code></td>
+<td>Add a source: fetch or paste, store immutably in
+<code>Sources/</code>, discuss with user, write Knowledge pages per
+<code>_template.md</code>, cross-link bidirectionally, update index and
+log.</td>
+</tr>
+<tr>
+<td><code>/gt:gt-wiki-lint</code></td>
+<td>Run <code>wiki_lint.py</code> (10 deterministic checks). Interprets
+findings, proposes fixes, records declines in
+<code>lint-declines.md</code> so nothing gets re-litigated.</td>
+</tr>
+<tr>
+<td><code>/gt:gt-wiki-refresh</code></td>
+<td>Check selected sources for upstream changes. Supersedes changed ones
+with new immutable source files. Updates citing Knowledge pages.</td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h2 id="vault-structure">Vault Structure</h2>
+<pre><code>&lt;vault&gt;/
+  CLAUDE.md                   ← architecture + pointer to Knowledge/_template.md
+  index.md                    ← navigational index of all Knowledge pages
+  log.md                      ← audit trail: every create, ingest, promote, retire
+  review-queue.md             ← items flagged for owner review (written by gt-lint)
+
+  Sources/                    ← IMMUTABLE raw originals
+    YYYY-MM-DD &lt;title&gt;.md
+
+  Knowledge/                  ← cross-project wiki pages
+    _template.md              ← page format schema (read by ingest/refresh skills)
+    &lt;Page Title&gt;.md
+
+  global-memory/
+    MEMORY.md                 ← index; loaded every session
+    &lt;topic&gt;.md
+
+  Projects/
+    README.md                 ← master project list
+    CONVENTIONS.md            ← lifecycle phases, file roles, tag taxonomy
+    PROTOCOL.md               ← cross-project process rules
+    INFRASTRUCTURE.md         ← server fleet, defined once
+
+    &lt;project-slug&gt;/
+      README.md               ← status board + YAML frontmatter
+      source.md               ← where code lives, topology, deploy file plan
+      idea.md                 ← original brain dump — IMMUTABLE
+      research.md             ← append-only findings
+      decisions.md            ← append-only ADRs
+      design.md               ← current architecture
+      spec.md                 ← handoff artifact (created when design is complete)
+      runbook.md              ← operational procedures (optional)
+      memory/
+        MEMORY.md             ← session memory index
+        &lt;topic&gt;.md
+
+    golden-thread/
+      core-rules/             ← canonical Core rule definitions</code></pre>
+<hr />
+<h2 id="immutability-model">Immutability Model</h2>
+<table>
+<colgroup>
+<col style="width: 33%" />
+<col style="width: 33%" />
+<col style="width: 33%" />
+</colgroup>
+<thead>
+<tr>
+<th>File</th>
+<th>Mutability</th>
+<th>Rule</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>Sources/*.md</code></td>
+<td>Immutable</td>
+<td>Never edited; superseded by new files</td>
+</tr>
+<tr>
+<td><code>idea.md</code></td>
+<td>Immutable</td>
+<td>Origin story; never changed</td>
+</tr>
+<tr>
+<td><code>research.md</code></td>
+<td>Append-only</td>
+<td>History is extended, never rewritten</td>
+</tr>
+<tr>
+<td><code>decisions.md</code></td>
+<td>Append-only</td>
+<td>Reversed by adding a new ADR, never by editing</td>
+</tr>
+<tr>
+<td><code>design.md</code></td>
+<td>Mutable</td>
+<td>Always describes the current architecture</td>
+</tr>
+<tr>
+<td><code>spec.md</code></td>
+<td>Mutable (scope only)</td>
+<td>Self-contained handoff doc</td>
+</tr>
+<tr>
+<td><code>runbook.md</code></td>
+<td>Mutable</td>
+<td>Operational HOW-TO; incubator before CLAUDE.md</td>
+</tr>
+<tr>
+<td><code>PROTOCOL.md</code></td>
+<td>Append-only</td>
+<td>Cross-project process rules</td>
+</tr>
+<tr>
+<td><code>Knowledge/*.md</code></td>
+<td>Mutable</td>
+<td>Synthesized summaries; cite <code>Sources/</code></td>
+</tr>
+<tr>
+<td><code>core-rules/*.md</code></td>
+<td>Mutable</td>
+<td>Editing here changes what hooks inject</td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h2 id="context-footprint">Context Footprint</h2>
+<table>
+<colgroup>
+<col style="width: 33%" />
+<col style="width: 33%" />
+<col style="width: 33%" />
+</colgroup>
+<thead>
+<tr>
+<th>What loads</th>
+<th>When</th>
+<th>Approx tokens</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>~/.claude/CLAUDE.md</code> (global instructions)</td>
+<td>Every session</td>
+<td>~200</td>
+</tr>
+<tr>
+<td><code>&lt;vault&gt;/CLAUDE.md</code> (architecture + pointer)</td>
+<td>Every session in vault dir</td>
+<td>~100</td>
+</tr>
+<tr>
+<td><code>global-memory/MEMORY.md</code> (index only)</td>
+<td>Every session</td>
+<td>~50</td>
+</tr>
+<tr>
+<td><code>Knowledge/_template.md</code> (page schema)</td>
+<td>Only during ingest/refresh</td>
+<td>~150</td>
+</tr>
+<tr>
+<td>Project memory files</td>
+<td>On demand via <code>gt-open</code></td>
+<td>Varies</td>
+</tr>
+</tbody>
+</table>
+<p>The slim CLAUDE.md design (introduced in gt-wiki 0.1.0) drops the
+vault’s cold-start footprint from ~1,300 tokens to ~350.</p>
+<hr />
+<h2 id="source-topology">Source Topology</h2>
+<p>Every project records where its code lives in
+<code>source.md</code>.</p>
+<table>
+<colgroup>
+<col style="width: 50%" />
+<col style="width: 50%" />
+</colgroup>
+<thead>
+<tr>
+<th>Topology</th>
+<th>Meaning</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>local</code></td>
+<td>A folder on this machine. No deploy step.</td>
+</tr>
+<tr>
+<td><code>remote</code></td>
+<td>One repo, one server; server pulls from GitHub.</td>
+</tr>
+<tr>
+<td><code>bastion-jump</code></td>
+<td>Several servers, all reached through one gateway host.</td>
+</tr>
+<tr>
+<td><code>bastion-direct</code></td>
+<td>Several servers, each reachable independently.</td>
+</tr>
+</tbody>
+</table>
+<p>Bastion projects carry a <strong>file plan</strong> marking each
+deployed file <code>static</code> (byte-identical everywhere) or
+<code>unique</code> (per-server variant that must never be
+cross-deployed).</p>
+<hr />
+<h2 id="install">Install</h2>
+<div class="sourceCode" id="cb3"><pre
+class="sourceCode bash"><code class="sourceCode bash"><span id="cb3-1"><a href="#cb3-1" aria-hidden="true" tabindex="-1"></a><span class="co"># From zip</span></span>
+<span id="cb3-2"><a href="#cb3-2" aria-hidden="true" tabindex="-1"></a><span class="fu">unzip</span> golden-thread-plugin.zip</span>
+<span id="cb3-3"><a href="#cb3-3" aria-hidden="true" tabindex="-1"></a><span class="bu">cd</span> golden-thread-plugin</span>
+<span id="cb3-4"><a href="#cb3-4" aria-hidden="true" tabindex="-1"></a><span class="fu">bash</span> install.sh</span>
+<span id="cb3-5"><a href="#cb3-5" aria-hidden="true" tabindex="-1"></a><span class="co"># Restart Claude Code</span></span></code></pre></div>
+<p>Installs both <code>gt</code> (v0.6.0) and <code>gt-wiki</code>
+(v0.1.0) as separate plugins under the <code>golden-thread-plugin</code>
+marketplace. Requires Python 3.8+.</p>
+<hr />
+<h2 id="typical-session-pattern">Typical Session Pattern</h2>
+<div class="sourceCode" id="cb4"><pre
+class="sourceCode bash"><code class="sourceCode bash"><span id="cb4-1"><a href="#cb4-1" aria-hidden="true" tabindex="-1"></a><span class="ex">/gt:gt-open</span> my-project        <span class="co"># load project, summarize state</span></span>
+<span id="cb4-2"><a href="#cb4-2" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb4-3"><a href="#cb4-3" aria-hidden="true" tabindex="-1"></a><span class="co"># ... work happens ...</span></span>
+<span id="cb4-4"><a href="#cb4-4" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb4-5"><a href="#cb4-5" aria-hidden="true" tabindex="-1"></a><span class="ex">/gt:gt-work</span>                   <span class="co"># write back findings, update docs</span></span>
+<span id="cb4-6"><a href="#cb4-6" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb4-7"><a href="#cb4-7" aria-hidden="true" tabindex="-1"></a><span class="co"># periodically</span></span>
+<span id="cb4-8"><a href="#cb4-8" aria-hidden="true" tabindex="-1"></a><span class="ex">/gt:gt-lint</span>                   <span class="co"># catch structural drift</span></span>
+<span id="cb4-9"><a href="#cb4-9" aria-hidden="true" tabindex="-1"></a><span class="ex">/gt:gt-wiki-ingest</span> <span class="op">&lt;</span>url<span class="op">&gt;</span>      <span class="co"># add a source to the wiki</span></span>
+<span id="cb4-10"><a href="#cb4-10" aria-hidden="true" tabindex="-1"></a><span class="ex">/gt:gt-promote</span>                <span class="co"># graduate a finding to Knowledge or global-memory</span></span></code></pre></div>
+<hr />
+<h2 id="requirements">Requirements</h2>
+<ul>
+<li>Python 3.8+</li>
+<li>Claude Code (any version)</li>
+<li>Obsidian (optional — the vault is plain markdown; Obsidian is the
+GUI layer)</li>
+</ul>
+</body>
+</html>

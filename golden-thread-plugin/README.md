@@ -22,7 +22,7 @@ Facts move up the hierarchy as they prove themselves general. They never move ba
 
 ---
 
-## Eleven Skills
+## Fourteen Skills
 
 ### Setup
 
@@ -48,12 +48,20 @@ Facts move up the hierarchy as they prove themselves general. They never move ba
 | `/gt:gt-promote` | Graduate a fact, finding, or idea up the hierarchy: project memory → project files → Knowledge wiki page → global-memory. Also handles new project scaffolding and retiring stale content. |
 | `/gt:gt-refresh` | Check `Sources/` for upstream changes. Supersedes outdated sources with new immutable files — never edits the old one. Updates Knowledge pages that cited the changed source. |
 
+### Context & Verification
+
+| Command | What it does |
+|---|---|
+| `/gt:gt-farm` | Route bulk, mechanical, or second-opinion tasks to an external AI service as a self-contained work packet. All four gates (Stateless, Self-contained, Checkable, Releasable) must pass before a task leaves. Results come back unverified. |
+| `/gt:gt-validate` | Verify a claim by re-deriving it with a fresh-context validator — never by reviewing the reasoning that produced it. Use before recording a finding as fact or before a production change. |
+
 ### Maintenance
 
 | Command | What it does |
 |---|---|
-| `/gt:gt-lint` | Audit the vault for structural problems: broken wikilinks, orphaned pages, missing index entries, unlisted memory files, Knowledge pages citing superseded sources, and stale pages. Applies fixes with your approval. |
+| `/gt:gt-lint` | Audit the vault for structural problems: broken wikilinks, orphaned pages, missing index entries, unlisted memory files, Knowledge pages citing superseded sources, stale pages, and Core rules that are stored but not enforced. Applies fixes with your approval. |
 | `/gt:gt-runbook-lint` | Scan all project `runbook.md` files for content that has drifted into multiple runbooks. Classifies duplicated content by type and routes it to the right shared layer (PROTOCOL.md, Knowledge page, or repo CLAUDE.md) via `gt-promote`. |
+| `/gt:gt-settings` | View and change what Golden Thread does automatically: component drift checking at session start, and the session report card at compact. Every automatic behaviour can be switched off. |
 
 ---
 
@@ -127,7 +135,7 @@ Additionally, `research.md` and `decisions.md` are **append-only** — history i
 | `runbook.md` | Mutable | Operational HOW-TO for this project specifically |
 | `PROTOCOL.md` | Append-only | Cross-project process rules proven across multiple projects |
 | `Knowledge/*.md` | Mutable | Synthesized summaries; cite `Sources/` |
-| `memory/*.md` | Mutable | Session state; updated in place |
+| `memory/*.md` | Mutable | Session state; updated in place. Frontmatter carries `level` (core/context/generic) and `enforcement` (validated/reminder) fields that declare how durable a rule is. |
 | `source.md` | Mutable | Where the code lives, per role × env, plus the deploy file plan |
 | `INFRASTRUCTURE.md` | Mutable | The server fleet — defined once, never copied into a project |
 
@@ -191,6 +199,12 @@ second level is a genuine sub-project created with `--parent`.
 
 See [INSTALL.md](INSTALL.md) for step-by-step instructions, including how to install from a GitHub release.
 
+After running `/gt:gt-init`, Golden Thread also wires enforcement hooks into `~/.claude/settings.json`. These re-assert Core rules at session start and session end. If you ever need to rewire them manually:
+
+```bash
+python3 <scripts>/vault_init.py install-core-rules --vault <vault>
+```
+
 ---
 
 ## Typical Session Pattern
@@ -210,6 +224,8 @@ See [INSTALL.md](INSTALL.md) for step-by-step instructions, including how to ins
 /gt:gt-refresh                ← check if any source docs changed upstream
 /gt:gt-review                 ← promote daily note items to tracked projects
 /gt:gt-promote                ← graduate a finding to a Knowledge page or global-memory
+/gt:gt-validate               ← verify a claim before recording it as fact
+/gt:gt-farm                   ← route bulk or external-opinion tasks out of this context
 ```
 
 ---
@@ -220,11 +236,11 @@ Python scripts can also be run directly from the command line:
 
 ```bash
 # Create a new vault
-python3 golden-thread/0.3.0/scripts/vault_init.py fresh \
+python3 golden-thread/0.9.6/scripts/vault_init.py fresh \
   --vault ~/my-vault --domain "My Team"
 
 # Scaffold a project
-python3 golden-thread/0.3.0/scripts/vault_init.py create-project \
+python3 golden-thread/0.9.6/scripts/vault_init.py create-project \
   --vault ~/my-vault \
   --name my-project \
   --title "My Project" \
@@ -235,22 +251,29 @@ python3 golden-thread/0.3.0/scripts/vault_init.py create-project \
   --project-dir ~/Projects/my-project
 
 # Scaffold a sub-project
-python3 golden-thread/0.3.0/scripts/vault_init.py create-project \
+python3 golden-thread/0.9.6/scripts/vault_init.py create-project \
   --vault ~/my-vault \
   --name sub-feature \
   --parent my-project \
   --title "Sub Feature"
 
 # Point vault-config.json at an existing vault
-python3 golden-thread/0.3.0/scripts/vault_init.py connect \
+python3 golden-thread/0.9.6/scripts/vault_init.py connect \
   --vault ~/existing-vault
 
+# Install/rewire Core-rule enforcement hooks
+python3 golden-thread/0.9.6/scripts/vault_init.py install-core-rules \
+  --vault ~/my-vault
+
 # Scan a project directory for ingest candidates
-python3 golden-thread/0.3.0/scripts/gt_ingest.py ~/Projects/my-project --json
+python3 golden-thread/0.9.6/scripts/gt_ingest.py ~/Projects/my-project --json
 
 # Audit vault health
-python3 golden-thread/0.3.0/scripts/gt_lint.py ~/my-vault \
+python3 golden-thread/0.9.6/scripts/gt_lint.py ~/my-vault \
   --queue ~/my-vault/review-queue.md
+
+# View/change automatic behaviours
+python3 golden-thread/0.9.6/scripts/gt_settings.py show
 ```
 
 ---
@@ -265,7 +288,7 @@ python3 golden-thread/0.3.0/scripts/gt_lint.py ~/my-vault \
 
 ## Acknowledgments
 
-Plugin architecture and idempotency patterns inspired by the work of **Jonathan Tucci**.
+Special thanks to **Jonathan Tucci**, a developer who provided invaluable feedback that significantly shaped this system. Jonathan identified key drawbacks in the original design — particularly around lazy loading and the promotion discipline — and his insights directly informed the fixes that made Golden Thread practical to use at scale.
 
 ## License
 

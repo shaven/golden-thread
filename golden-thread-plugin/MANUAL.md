@@ -1,6 +1,6 @@
 # Golden Thread — User Manual
 
-Complete reference for all twelve skills. Written against **gt v0.9.3**.
+Complete reference for all fourteen skills. Written against **gt v0.9.6**.
 
 ---
 
@@ -61,7 +61,7 @@ file is worth opening.
 
 ```
 <vault>/
-  CLAUDE.md              Knowledge page conventions and schema
+  CLAUDE.md              vault-wide conventions and page schema
   index.md               navigational index of Knowledge pages
   log.md                 audit trail
   review-queue.md        items flagged for owner review
@@ -258,7 +258,15 @@ pick into tracked projects.
 
 First run, or wiring a new machine. Writes `~/.claude/vault-config.json` (the
 pointer every other skill reads), scaffolds the vault, and adds a Golden Thread
-section to `~/.claude/CLAUDE.md`. Idempotent.
+section to `~/.claude/CLAUDE.md`. Also installs Core-rule enforcement hooks into
+`~/.claude/settings.json` (`UserPromptSubmit` + `Stop` hooks) so that Core rules
+are actively asserted, not merely stored. Idempotent.
+
+For a vault that predates the Core-rule tier, run the install step separately:
+
+```bash
+python3 $SCRIPTS/vault_init.py install-core-rules --vault ~/my-vault
+```
 
 > `CLAUDE.md` is read at **session start**. A rule added mid-session does not
 > apply until you restart — that looks like the rule being ignored.
@@ -311,7 +319,24 @@ End of session. The step people skip, and skipping it is what makes the vault de
 | `memory/*.md` | Session state, updated in place. |
 | `spec.md` | Created when design is complete enough to hand off. |
 
-Also updates the `stage:` property when the project changes phase.
+Memory files carry `level` and `enforcement` in frontmatter to make a rule's
+durability explicit:
+
+```yaml
+metadata:
+  type: core | feedback | user | reference
+  level: core | context | generic      # default: generic
+  enforcement: validated | reminder    # required only for level: core
+```
+
+Default to `generic`. Do **not** set `level: core` here — Core is a promotion,
+and it requires wiring an enforcement hook, which is `gt-promote`'s job.
+
+After writing, `gt-work` actively asks whether any finding applies beyond this
+project and should go to `Knowledge/`, `global-memory/`, or a new project.
+
+Also updates the `stage:`, `topology:`, and `domain:` properties in `README.md`
+when the project's reality changes.
 
 **Not in `decisions.md`:** anything you might change next session. An ADR you
 reverse next week teaches the vault to lie to you.
@@ -344,6 +369,45 @@ ones into tracked projects.
 
 ---
 
+## Context management
+
+### `/gt:gt-farm`
+
+Routes work out of this context to an external AI service when work is bulk,
+mechanical, or genuinely benefits from a non-Claude second opinion.
+
+The unit is a **work packet**: self-contained, with a strict return contract
+(`FINDINGS` + `GAPS` blocks). The transport is swappable — the user pastes it
+into a web UI today; a script sends it to an API later. The packet is identical
+either way.
+
+**All four gates must pass before a task leaves.** Any failure means the work
+stays here.
+
+| Gate | Question |
+|---|---|
+| **Stateless** | Answerable with no vault or repo state? |
+| **Self-contained** | Fits in a paragraph plus a list of URLs? |
+| **Checkable** | Verifiable without redoing the work? |
+| **Releasable** | Every input safe to hand a third party? |
+
+**Releasable is default-deny.** Never include: account identifiers, balances,
+hostnames, internal IPs, credential locations, non-public source code, or
+personal identifiers.
+
+Key rules:
+- One packet, one task. A packet asking three questions returns three half-answers.
+- Supply a vocabulary block with exact model IDs, product names, and version
+  numbers read from the system — never from memory.
+- Results come back as `unverified`. Promote a finding only after opening its
+  `source:` URL and confirming the claim.
+- `GAPS` is mandatory and `GAPS: None` must be justified, not asserted.
+- Cite the specific page carrying the claim, never a homepage.
+
+Packets are saved to `<vault>/Projects/external-ai-tools/packets/<YYYY-MM-DD>-<slug>.md`.
+
+---
+
 ## Knowledge management
 
 ### `/gt:gt-promote`
@@ -358,6 +422,9 @@ The judgement call: **has a second project proved this general?**
 | anywhere → new project | The idea doesn't belong where it is |
 
 Nothing is deleted. Retiring sets `status: stale` and records what superseded it.
+
+Promoting a rule to Core (`level: core`) also wires the enforcement hook —
+`gt-promote` handles this; `gt-work` does not.
 
 ### `/gt:gt-refresh`
 
@@ -404,8 +471,13 @@ the expected answer. "Confirm that X" becomes "determine whether X". Withholding
 *reasoning* is isolation; withholding *access* is just a broken validator, so keep the
 hostnames, API shapes and filters it needs to reach the artifact alone.
 
+Run the validators **independently**, and read their derivation *before* re-reading
+your own — reading yours first turns the exercise back into review.
+
 Three verdicts: **confirmed**, **refuted** (quantify the divergence), and
 **cannot-verify** (name what was missing).
+
+Append the verdict to `research.md`. A refutation supersedes the original finding.
 
 > **`cannot-verify` is never a pass.** A validator that could not check something and
 > stayed quiet manufactures false assurance — worse than no validator at all.
@@ -433,12 +505,41 @@ yourself. A validator disagreeing is a *result*, not a failure.
 | `stale` | Knowledge page marked `status: stale` |
 | `source-todo` | `source.md` with no topology or deployment targets |
 | `frontmatter` | Project README missing properties, or slug ≠ folder |
+| `core-misplaced` | A rule declares `level: core` but lives outside `core-rules/` |
+| `core-no-enforcement` | `level: core` with no `enforcement` field declared |
+| `core-unenforced` | The declared enforcement hook is not actually wired |
+
+`core-unenforced` is the critical one — it is the machine-checkable form of "rule
+stored but never asserted". Treat it as a real defect. **Do not suppress it** —
+suppressing `core-unenforced` recreates the original bug with a paper trail saying
+it was fine. Fix: `vault_init.py install-core-rules --vault <vault>`.
 
 Declines go in `lint-declines.md` as `suppress:` **with the reason**.
 
 Triage findings into three piles: *you broke it* (fix now), *already broken*
 (record in `review-queue.md` — don't guess at a target), *false positive*
 (suppress with reason).
+
+### `/gt:gt-settings`
+
+View and change what Golden Thread does automatically. Every automatic behaviour
+is registered here and can be switched off.
+
+| Setting | Values | Default | What it does |
+|---|---|---|---|
+| `component_updates` | `off` · `report` · `confirm` · `auto` | `report` | At session start, compares installed hooks/scripts against plugin source and reports drift |
+| `report_card` | `off` · `minimal` · `full` | `minimal` | At `/compact`, summarises session hygiene |
+
+```bash
+python3 $SCRIPTS/gt_settings.py show            # current state of all settings
+python3 $SCRIPTS/gt_settings.py explain <name>  # reasoning behind the default
+python3 $SCRIPTS/gt_settings.py set <name> <value>
+```
+
+`component_updates` at `auto` will not overwrite an installed file that is newer
+than the source, and will not delete a file the source lacks — real drift ran
+that direction, so a naive "source is truth" updater would silently break
+enforcement on every session start.
 
 ### `/gt:gt-runbook-lint`
 
@@ -472,7 +573,7 @@ that isn't true there. When unsure, file narrow — promotion is cheap, demotion
 ## Script reference
 
 ```bash
-SCRIPTS=~/.claude/plugins/cache/golden-thread-plugin/gt/0.9.3/scripts
+SCRIPTS=~/.claude/plugins/cache/golden-thread-plugin/gt/0.9.6/scripts
 
 python3 $SCRIPTS/vault_init.py fresh --vault ~/my-vault --domain "My Team"
 
@@ -486,9 +587,13 @@ python3 $SCRIPTS/vault_init.py create-project --vault ~/my-vault \
 
 python3 $SCRIPTS/vault_init.py connect --vault ~/existing-vault
 
+python3 $SCRIPTS/vault_init.py install-core-rules --vault ~/my-vault
+
 python3 $SCRIPTS/gt_ingest.py ~/Projects/my-project --json
 
 python3 $SCRIPTS/gt_lint.py ~/my-vault --queue ~/my-vault/review-queue.md
+
+python3 $SCRIPTS/gt_settings.py show
 ```
 
 `gt_tasks.py` is the exception: it ships **in the vault**, not the plugin, at
@@ -528,3 +633,7 @@ the finding path; make sure you used the path as the finding reports it.
 
 **"conflict: vault-config.json points to a different vault"** — run
 `vault_init.py connect --vault <new-path>`.
+
+**`core-unenforced` finding in lint** — Core rules are stored but not being
+asserted. Run `vault_init.py install-core-rules --vault <vault>` or wire the
+hooks by hand. Do not suppress this finding.
