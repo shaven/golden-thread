@@ -34,7 +34,7 @@ Open any Claude Code session and run:
 
 Claude will ask for:
 1. A vault path — an Obsidian vault folder is ideal, but any folder works
-2. Your domain/team name — e.g. "Acme CloudOps" or "My Team"
+2. Your domain/team name — e.g. "Platform Engineering" or "My Team"
 
 The script creates the folder structure, writes `~/.claude/vault-config.json` (the pointer every other skill reads), and **installs Core-rule enforcement hooks** into `~/.claude/settings.json`. Safe to re-run on a machine you've already set up.
 
