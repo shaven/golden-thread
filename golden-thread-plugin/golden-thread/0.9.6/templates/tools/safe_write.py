@@ -107,39 +107,72 @@ def _record(entry):
 def _resolve_append(target, data, mode):
     """Turn an append into the equivalent whole-file write, before any strategy runs.
 
-    Only strategy 2 below writes to the target in place. Strategy 1 replaces it
+    Only strategy 2 writes to the target in place. Strategy 1 replaces it
     (`os.replace`), and strategies 3 and 4 write a NEW file whose recorded replay
     action is `mv <new> <target>`. Under any of those three, opening with mode="a"
     appends to an *empty* file and the destination ends up holding only the new
     bytes -- an append that silently truncates, reporting success. Resolving it
-    once, here, keeps every strategy writing a complete file and keeps the
-    sidecar/ledger `mv` actions correct.
+    once, here, gives every strategy the complete old+new content, which is what
+    makes the sidecar and ledger `mv` actions safe to replay.
+
+    The absence test is a READ, never `os.path.exists`. `exists()` answers False for
+    "I cannot tell" as well as for "not there": a file whose parent directory cannot
+    be traversed reports False while holding content. Treating that as a new file
+    reintroduced exactly the truncation this function exists to prevent, and the
+    ledger's own replay then made it permanent. Only FileNotFoundError means absent;
+    every other OSError means we could not read it, and we refuse.
     """
-    if "a" not in mode:
+    if not _is_append(mode):
         return data, mode
     binary = "b" in mode
     existing = b"" if binary else ""
-    if os.path.exists(target):
-        try:
-            with open(target, "rb" if binary else "r") as fh:
-                existing = fh.read()
-        except Exception as exc:
-            # Every strategy that follows would replace the target. Writing
-            # without what is already there is precisely the data loss this
-            # function exists to prevent, so refuse instead -- a caller that
-            # cannot append is recoverable; a truncated file may not be.
-            raise IOError(
-                "safe_write: cannot read %s in order to append to it (%s); "
-                "refusing rather than replacing it with only the new bytes"
-                % (target, exc))
+    try:
+        with open(target, "rb" if binary else "r") as fh:
+            existing = fh.read()
+    except FileNotFoundError:
+        pass                      # genuinely absent: an append is just a write
+    except OSError as exc:
+        # Every strategy that follows either replaces the target or records a `mv`
+        # over it. Writing without what is already there is precisely the data loss
+        # this function exists to prevent, so refuse -- a caller that cannot append
+        # is recoverable; a truncated file may not be.
+        raise OSError(
+            "safe_write: cannot read %s in order to append to it (%s); "
+            "refusing rather than replacing it with only the new bytes"
+            % (target, exc))
+    if binary and isinstance(data, str):
+        data = data.encode("utf-8")     # mirrors the bytes->binary coercion in write()
     return existing + data, ("wb" if binary else "w")
+
+
+def _is_append(mode):
+    """True only for a real append mode.
+
+    `"a" in mode` is a substring test, so it also matched "wa" -- not a valid mode
+    for open(), but rewritten to "w" here it would have been silently accepted as a
+    truncating write. Reject anything declaring more than one primary mode instead.
+    """
+    primary = [c for c in mode if c in "rwax"]
+    if len(primary) > 1:
+        raise ValueError("safe_write: ambiguous mode %r" % mode)
+    return primary == ["a"]
 
 
 def write(target, data, mode="w"):
     """Write `data` to `target`. Returns (path_written, strategy).
 
-    Raises only if every strategy fails, which would mean nothing on the machine
-    is writable.
+    Returns the path ACTUALLY written, which is not always `target`: strategies 3
+    and 4 write a sibling or ledger file and leave `target` untouched, recording a
+    `mv` for `replay()`. Callers that must know the bytes reached `target` have to
+    check the returned path, not just that the call returned.
+
+    Raises if every strategy fails, and -- for an append -- if `target` exists but
+    cannot be read (refusing is safer than replacing it with only the new bytes),
+    or if `mode` declares more than one primary mode.
+
+    Note: strategy 1 replaces the target via `os.replace` of a fresh `mkstemp`
+    file, so the target's permission bits, ownership and xattrs are NOT preserved
+    (a 0666 file becomes 0600). Callers that depend on the mode must re-apply it.
     """
     if isinstance(data, bytes) and "b" not in mode:
         mode += "b"

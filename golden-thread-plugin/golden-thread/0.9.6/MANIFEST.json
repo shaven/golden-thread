@@ -153,14 +153,14 @@
    "sha256": "16c54f56ccf0e311d28240c8b7424a0b4b359c9ab9c6552a21f84ad1ccf00096"
   },
   "templates/tools/safe_write.py": {
-   "bytes": 9787,
-   "sha256": "2b247a4574e45cbb7612581c8ad99b701b603c8505078c543a23a489e433af9b"
+   "bytes": 11643,
+   "sha256": "f6116a4c8685d6d7a891fd6ed8d2c887edef07994bd5dcb1df6f3753a175c762"
   },
   "templates/wiki-CLAUDE.md": {
    "bytes": 4243,
    "sha256": "7a9ef20b5b12ff7ce5e4c859467624bcb9bffaa7d51b5ab3b068feaf53c29ecd"
   }
  },
- "generated": "2026-09-02T06:59:46",
+ "generated": "2026-09-02T07:42:05",
  "version": "0.9.6"
 }
