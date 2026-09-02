@@ -104,6 +104,37 @@ def _record(entry):
     return None
 
 
+def _resolve_append(target, data, mode):
+    """Turn an append into the equivalent whole-file write, before any strategy runs.
+
+    Only strategy 2 below writes to the target in place. Strategy 1 replaces it
+    (`os.replace`), and strategies 3 and 4 write a NEW file whose recorded replay
+    action is `mv <new> <target>`. Under any of those three, opening with mode="a"
+    appends to an *empty* file and the destination ends up holding only the new
+    bytes -- an append that silently truncates, reporting success. Resolving it
+    once, here, keeps every strategy writing a complete file and keeps the
+    sidecar/ledger `mv` actions correct.
+    """
+    if "a" not in mode:
+        return data, mode
+    binary = "b" in mode
+    existing = b"" if binary else ""
+    if os.path.exists(target):
+        try:
+            with open(target, "rb" if binary else "r") as fh:
+                existing = fh.read()
+        except Exception as exc:
+            # Every strategy that follows would replace the target. Writing
+            # without what is already there is precisely the data loss this
+            # function exists to prevent, so refuse instead -- a caller that
+            # cannot append is recoverable; a truncated file may not be.
+            raise IOError(
+                "safe_write: cannot read %s in order to append to it (%s); "
+                "refusing rather than replacing it with only the new bytes"
+                % (target, exc))
+    return existing + data, ("wb" if binary else "w")
+
+
 def write(target, data, mode="w"):
     """Write `data` to `target`. Returns (path_written, strategy).
 
@@ -113,6 +144,7 @@ def write(target, data, mode="w"):
     if isinstance(data, bytes) and "b" not in mode:
         mode += "b"
     target = os.path.abspath(target)
+    data, mode = _resolve_append(target, data, mode)
     parent = os.path.dirname(target)
 
     # 1. atomic replace via a sibling temp file
