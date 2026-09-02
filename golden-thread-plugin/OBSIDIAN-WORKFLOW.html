@@ -1,0 +1,454 @@
+<!DOCTYPE html><html lang='en'><head><meta charset='utf-8'><title>Golden Thread — Obsidian & Daily Workflow Guide</title><style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
+    font-size: 13.5px;
+    line-height: 1.65;
+    color: #1a1a1a;
+    background: #fff;
+  }
+
+  /* ── Cover ── */
+  .cover {
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: flex-start;
+    padding: 72px 80px;
+    background: #0f1117;
+    color: #fff;
+    page-break-after: always;
+  }
+  .cover .kicker {
+    font-size: 11px; font-weight: 600; letter-spacing: .15em;
+    text-transform: uppercase; color: #7c8cff; margin-bottom: 28px;
+  }
+  .cover h1 { font-size: 46px; font-weight: 700; line-height: 1.1; max-width: 600px; margin-bottom: 20px; }
+  .cover .subtitle { font-size: 18px; color: #9ba0b4; max-width: 500px; margin-bottom: 56px; line-height: 1.5; }
+  .cover .meta { font-size: 12px; color: #555d7a; border-top: 1px solid #1e2236; padding-top: 20px; width: 100%; }
+
+  /* ── Page body ── */
+  .page { max-width: 760px; margin: 0 auto; padding: 64px 64px 80px; }
+  .toc-page { page-break-after: always; }
+
+  /* ── TOC ── */
+  .toc h2 { font-size: 11px; font-weight: 600; letter-spacing: .12em; text-transform: uppercase; color: #7c8cff; margin-bottom: 28px; }
+  .toc ol { list-style: none; counter-reset: toc; }
+  .toc > ol > li { counter-increment: toc; border-bottom: 1px solid #f0f0f0; padding: 10px 0; }
+  .toc > ol > li::before { content: counter(toc, decimal-leading-zero); font-size: 11px; font-weight: 600; color: #9ba0b4; margin-right: 14px; font-variant-numeric: tabular-nums; }
+  .toc > ol > li > a { font-size: 14px; font-weight: 600; color: #1a1a1a; text-decoration: none; }
+  .toc-sub { list-style: none; padding-left: 30px; margin-top: 4px; }
+  .toc-sub li { font-size: 12.5px; color: #555; padding: 2px 0; }
+  .toc-sub li::before { content: "—  "; color: #ccc; }
+
+  /* ── Typography ── */
+  h1.section-title { font-size: 28px; font-weight: 700; color: #0f1117; margin-bottom: 8px; padding-top: 8px; }
+  .section-rule { border: none; border-top: 2px solid #7c8cff; width: 48px; margin-bottom: 28px; }
+  h2 { font-size: 17px; font-weight: 700; color: #0f1117; margin-top: 36px; margin-bottom: 10px; }
+  h3 { font-size: 13.5px; font-weight: 700; color: #0f1117; margin-top: 24px; margin-bottom: 6px; text-transform: uppercase; letter-spacing: .06em; }
+  p { margin-bottom: 14px; }
+  ul, ol { padding-left: 22px; margin-bottom: 14px; }
+  li { margin-bottom: 5px; }
+  strong { font-weight: 600; }
+  em { font-style: italic; }
+
+  /* ── Code ── */
+  code { font-family: "SF Mono","Fira Mono","Menlo",monospace; font-size: 12px; background: #f4f5f8; border-radius: 3px; padding: 1px 5px; }
+  pre { background: #0f1117; color: #c8d3f5; border-radius: 6px; padding: 18px 20px; overflow-x: auto; margin: 16px 0 20px; font-size: 12px; line-height: 1.6; }
+  pre code { background: none; padding: 0; color: inherit; font-size: inherit; }
+  .comment { color: #5c6370; }
+  .kw { color: #c792ea; }
+  .str { color: #c3e88d; }
+  .cmd { color: #82aaff; }
+
+  /* ── Tables ── */
+  table { width: 100%; border-collapse: collapse; margin: 16px 0 20px; font-size: 13px; }
+  th { background: #f4f5f8; text-align: left; padding: 8px 12px; font-weight: 600; font-size: 11.5px; text-transform: uppercase; letter-spacing: .06em; color: #555; border-bottom: 2px solid #e0e2ea; }
+  td { padding: 8px 12px; border-bottom: 1px solid #f0f0f4; vertical-align: top; }
+  tr:last-child td { border-bottom: none; }
+  td code { font-size: 11.5px; }
+
+  /* ── Callouts ── */
+  .callout { border-left: 3px solid #7c8cff; background: #f7f8ff; padding: 12px 16px; border-radius: 0 6px 6px 0; margin: 16px 0 20px; font-size: 13px; }
+  .callout.warning { border-color: #f5a623; background: #fffdf4; }
+  .callout.tip { border-color: #3ecf8e; background: #f4fdf9; }
+  .callout.danger { border-color: #e5534b; background: #fff5f5; }
+  .callout-label { font-size: 10.5px; font-weight: 700; text-transform: uppercase; letter-spacing: .1em; color: #7c8cff; margin-bottom: 4px; }
+  .callout.warning .callout-label { color: #f5a623; }
+  .callout.tip .callout-label { color: #3ecf8e; }
+  .callout.danger .callout-label { color: #e5534b; }
+
+  /* ── Skill badges ── */
+  .skill { display: inline-block; font-family: "SF Mono","Fira Mono","Menlo",monospace; font-size: 11.5px; font-weight: 600; background: #0f1117; color: #7c8cff; border-radius: 4px; padding: 2px 7px; white-space: nowrap; }
+
+  /* ── Diagram ── */
+  .diagram { background: #0f1117; color: #c8d3f5; border-radius: 6px; padding: 20px 24px; font-family: "SF Mono","Fira Mono","Menlo",monospace; font-size: 12px; line-height: 1.7; margin: 16px 0 20px; }
+  .diagram .dim { color: #5c6370; }
+  .diagram .hi { color: #82aaff; }
+
+  /* ── Print ── */
+  .page-break { page-break-after: always; }
+  h1.section-title { page-break-before: always; }
+  h1.section-title.no-break { page-break-before: avoid; }
+  @media print {
+    body { font-size: 12.5px; }
+    .cover { min-height: auto; padding: 56px 64px; }
+    pre, table { page-break-inside: avoid; }
+    h2 { page-break-after: avoid; }
+  }
+
+  body{max-width:52rem;margin:0 auto;padding:2.2rem 2rem;}
+  h1,h2,h3{break-after:avoid;} table{break-inside:avoid;}
+</style></head><body><h1 id="golden-thread-obsidian-daily-workflow-guide">Golden Thread — Obsidian &amp; Daily Workflow Guide</h1>
+<p>How to use Golden Thread day-to-day, combining Obsidian as your reading/navigation layer with Claude Code skills as your writing layer.</p>
+<hr />
+<h2 id="the-division-of-labor">The Division of Labor</h2>
+<table>
+<thead>
+<tr>
+<th>You use...</th>
+<th>For...</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>Obsidian</strong></td>
+<td>Reading, browsing, graph navigation, search, reviewing what exists</td>
+</tr>
+<tr>
+<td><strong>Claude Code skills</strong></td>
+<td>Writing, updating, promoting, maintaining the vault</td>
+</tr>
+</tbody>
+</table>
+<p>The vault is plain markdown files. Obsidian is the human GUI. Claude Code is the AI's write interface. You can edit vault files directly in Obsidian — but the skills handle the ceremony (frontmatter, cross-links, log entries, index updates) so you don't have to.</p>
+<hr />
+<h2 id="how-the-vault-looks-in-obsidian">How the Vault Looks in Obsidian</h2>
+<h3 id="the-file-tree">The file tree</h3>
+<pre><code>GoldenThreadVault/
+  CLAUDE.md              ← AI instructions (don't edit manually)
+  index.md               ← Knowledge page catalog — your navigation hub
+  log.md                 ← audit trail of every operation
+  review-queue.md        ← items flagged for your review
+
+  Sources/               ← raw ingested docs — never edit these
+  Knowledge/             ← cross-project wiki pages
+    _template.md         ← page format reference (don't use as a page)
+
+  global-memory/         ← facts loaded in every Claude session
+    MEMORY.md            ← one-line index (this is what Claude reads)
+
+  Projects/
+    README.md            ← master project list (open this first)
+    CONVENTIONS.md       ← how projects are structured
+    PROTOCOL.md          ← cross-project process rules
+    INFRASTRUCTURE.md    ← your server fleet (defined once, linked everywhere)
+
+    shel/                ← a project
+      README.md          ← status board — your daily check-in file
+      idea.md            ← origin story (never changes)
+      research.md        ← findings (append-only)
+      decisions.md       ← ADRs (append-only)
+      design.md          ← current architecture
+      runbook.md         ← operational commands
+      harvester/         ← sub-project (same structure)
+      memory/
+        MEMORY.md        ← session memory index
+</code></pre>
+<h3 id="key-obsidian-views">Key Obsidian views</h3>
+<ul>
+<li><strong>Graph view</strong> — shows how Knowledge pages link to each other. Clusters reveal related areas. Isolated nodes are orphans (<code>gt-lint</code> will catch them).</li>
+<li><strong>Backlinks panel</strong> — open a page and see everything that links to it. Use this to understand impact before changing a Knowledge page.</li>
+<li><strong>Search</strong> — vault-wide full text. Faster than <code>gt-query</code> for exact strings you know exist.</li>
+<li><strong>Tag pane</strong> — project tags from <code>README.md</code> frontmatter. Useful for filtering by domain.</li>
+<li><strong>Dataview plugin</strong> (if installed) — <code>Projects/README.md</code> contains Dataview queries that auto-generate project status tables from frontmatter.</li>
+</ul>
+<hr />
+<h2 id="daily-workflow-step-by-step">Daily Workflow — Step by Step</h2>
+<h3 id="morning-start-a-session">Morning: start a session</h3>
+<p><strong>1. Check your project status in Obsidian</strong></p>
+<p>Open <code>Projects/&lt;slug&gt;/README.md</code>. The status board shows sub-projects, current phase, and next action. This is your daily brief — read it before opening Claude Code.</p>
+<p><strong>2. Open the project in Claude Code</strong></p>
+<pre><code>/gt:gt-open &lt;project-slug&gt;
+</code></pre>
+<p>Claude reads all project docs (idea → research → decisions → design → spec → runbook) plus the memory index, then summarizes: current stage, next action, blockers. Ask it to load specific memory files if you need session state from last time.</p>
+<p><strong>3. (Optional) Check the wiki</strong></p>
+<p>If you're about to work on something that might already be documented:</p>
+<pre><code>/gt:gt-wiki &lt;question&gt;
+</code></pre>
+<p>The wiki is checked before the web — if your team has already figured something out, it's here.</p>
+<hr />
+<h3 id="during-the-session-active-work">During the session: active work</h3>
+<p><strong>Looking something up</strong></p>
+<pre><code>/gt:gt-query &lt;question&gt;
+</code></pre>
+<p>Reads <code>index.md</code>, follows wikilinks, falls back to grep. Use this for platform behavior, conventions, past decisions. If a result shows <code>status: stale</code>, verify it before acting on it.</p>
+<p><strong>Adding a source to the wiki</strong></p>
+<pre><code>/gt:gt-wiki-ingest &lt;url or file path&gt;
+</code></pre>
+<p>Stores the source immutably, discusses what pages it should generate, then waits for your approval before writing anything.</p>
+<p><strong>Making a decision mid-session</strong></p>
+<p>Don't wait until <code>gt-work</code> for architectural decisions. Capture them immediately:</p>
+<blockquote>
+<p>"Add an ADR: we're switching from polling to webhooks because..."</p>
+</blockquote>
+<p>Claude will write the numbered ADR to <code>decisions.md</code>. ADRs are append-only — to reverse one, add a new ADR that supersedes it.</p>
+<p><strong>Writing something to the runbook</strong></p>
+<p>Any command, landmine, or setup step worth keeping:</p>
+<blockquote>
+<p>"Add this to the runbook: <code>node setup.js</code> must be re-run after token expiry (~24h)"</p>
+</blockquote>
+<p>Claude appends it to <code>runbook.md</code>. Runbook is the incubator — facts that survive several sessions get promoted to the repo's <code>CLAUDE.md</code>.</p>
+<hr />
+<h3 id="end-of-session-write-back">End of session: write back</h3>
+<pre><code>/gt:gt-work
+</code></pre>
+<p>The most important command. Claude will:</p>
+<ul>
+<li>Append dated findings to <code>research.md</code></li>
+<li>Add any new ADRs to <code>decisions.md</code></li>
+<li>Rewrite <code>design.md</code> if the architecture changed</li>
+<li>Update <code>memory/*.md</code> with session state</li>
+<li>Create <code>spec.md</code> if design is complete enough to hand off</li>
+<li>Update the <code>stage:</code> property on the README if the project phase changed</li>
+</ul>
+<p><strong>What not to skip:</strong> if you close the session without running <code>gt-work</code>, those findings exist only in Claude's context and are gone when the session ends.</p>
+<hr />
+<h3 id="weekly-periodic">Weekly / periodic</h3>
+<p><strong>Review daily notes</strong></p>
+<pre><code>/gt:gt-review
+</code></pre>
+<p>Scans your Obsidian daily notes for tasks and ideas that were captured there but never promoted into a tracked project. Surfaces them grouped by date and lets you route each one.</p>
+<p><strong>Graduate a finding</strong></p>
+<pre><code>/gt:gt-promote
+</code></pre>
+<p>Use when a fact has proven true across more than one project. Promotes it from project memory → <code>Knowledge/</code> → <code>global-memory/</code>. Also handles retiring stale content and scaffolding new projects.</p>
+<p><strong>Check sources for changes</strong></p>
+<pre><code>/gt:gt-wiki-refresh
+</code></pre>
+<p>Checks sources with <code>remote:</code> or <code>url:</code> fields for upstream changes. Supersedes changed ones with new immutable files — never edits the old source.</p>
+<p><strong>Lint the vault</strong></p>
+<pre><code>/gt:gt-lint
+</code></pre>
+<p>Runs deterministic checks and reports findings grouped by type. You approve each fix — nothing is auto-applied. Declines are recorded in <code>lint-declines.md</code> so they don't get re-raised.</p>
+<p><strong>Lint runbooks</strong></p>
+<pre><code>/gt:gt-runbook-lint
+</code></pre>
+<p>Scans all <code>runbook.md</code> files for procedures that have drifted into multiple runbooks. Routes duplicates to the right shared layer.</p>
+<p><strong>Lint the wiki</strong></p>
+<pre><code>/gt:gt-wiki-lint
+</code></pre>
+<p>10 checks on the wiki: broken links, orphans, missing reciprocal links, unsourced pages, superseded sources still cited, review-due pages, index mismatches, status schema errors, declared expiries, and unlinked mentions.</p>
+<hr />
+<h2 id="full-command-reference">Full Command Reference</h2>
+<h3 id="setup-run-once">Setup (run once)</h3>
+<table>
+<thead>
+<tr>
+<th>Command</th>
+<th>When to use</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>/gt:gt-init</code></td>
+<td>First install on a new machine, or wiring an existing vault to a new project. Idempotent — safe to re-run.</td>
+</tr>
+<tr>
+<td><code>/gt:gt-wiki-init</code></td>
+<td>Set up a new wiki vault from scratch. Creates <code>Sources/</code>, <code>Knowledge/</code>, <code>index.md</code>, <code>log.md</code>, and seeds <code>CLAUDE.md</code>.</td>
+</tr>
+</tbody>
+</table>
+<h3 id="every-session">Every session</h3>
+<table>
+<thead>
+<tr>
+<th>Command</th>
+<th>When to use</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>/gt:gt-open &lt;slug&gt;</code></td>
+<td><strong>Start of every session.</strong> Loads project context and asks where to pick up.</td>
+</tr>
+<tr>
+<td><code>/gt:gt-work</code></td>
+<td><strong>End of every session.</strong> Writes back findings, decisions, design updates, memory state. Do not skip.</td>
+</tr>
+</tbody>
+</table>
+<h3 id="during-work">During work</h3>
+<table>
+<thead>
+<tr>
+<th>Command</th>
+<th>When to use</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>/gt:gt-query &lt;question&gt;</code></td>
+<td>Look something up in the vault before going to the web.</td>
+</tr>
+<tr>
+<td><code>/gt:gt-wiki &lt;question&gt;</code></td>
+<td>Query the structured wiki knowledge base.</td>
+</tr>
+<tr>
+<td><code>/gt:gt-wiki-ingest &lt;source&gt;</code></td>
+<td>Add a URL, file, or pasted content to the wiki. Stores immutably, generates pages with your approval.</td>
+</tr>
+</tbody>
+</table>
+<h3 id="promotion-and-growth">Promotion and growth</h3>
+<table>
+<thead>
+<tr>
+<th>Command</th>
+<th>When to use</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>/gt:gt-create</code></td>
+<td>Scaffold a new project. Captures your brain dump into the immutable <code>idea.md</code>.</td>
+</tr>
+<tr>
+<td><code>/gt:gt-ingest</code></td>
+<td>Import an existing project's notes, memory files, and CLAUDE.md rules into the vault.</td>
+</tr>
+<tr>
+<td><code>/gt:gt-promote</code></td>
+<td>Graduate a fact up the hierarchy when a second project proves it general.</td>
+</tr>
+<tr>
+<td><code>/gt:gt-review</code></td>
+<td>Pull uncaptured items from Obsidian daily notes into tracked projects.</td>
+</tr>
+</tbody>
+</table>
+<h3 id="maintenance-weekly-or-as-needed">Maintenance (weekly or as needed)</h3>
+<table>
+<thead>
+<tr>
+<th>Command</th>
+<th>When to use</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>/gt:gt-lint</code></td>
+<td>Audit vault structure: broken links, orphans, unlisted memory files, stale pages.</td>
+</tr>
+<tr>
+<td><code>/gt:gt-runbook-lint</code></td>
+<td>Find procedures duplicated across project runbooks.</td>
+</tr>
+<tr>
+<td><code>/gt:gt-refresh</code></td>
+<td>Check <code>Sources/</code> for upstream changes and supersede outdated ones.</td>
+</tr>
+<tr>
+<td><code>/gt:gt-wiki-lint</code></td>
+<td>Health-check the wiki vault.</td>
+</tr>
+<tr>
+<td><code>/gt:gt-wiki-refresh</code></td>
+<td>Check wiki sources for upstream changes.</td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h2 id="what-to-edit-in-obsidian-vs-claude-code">What to Edit in Obsidian vs. Claude Code</h2>
+<table>
+<thead>
+<tr>
+<th>File</th>
+<th>Edit in Obsidian?</th>
+<th>Edit via skill?</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>Projects/&lt;slug&gt;/README.md</code></td>
+<td>Yes — status board updates</td>
+<td><code>gt-work</code> updates stage</td>
+</tr>
+<tr>
+<td><code>research.md</code></td>
+<td>Read freely; add a dated note if you must</td>
+<td><code>gt-work</code> for session findings</td>
+</tr>
+<tr>
+<td><code>decisions.md</code></td>
+<td>Read only — append-only, don't edit past entries</td>
+<td><code>gt-work</code> / mid-session ask</td>
+</tr>
+<tr>
+<td><code>design.md</code></td>
+<td>Yes — light edits fine</td>
+<td><code>gt-work</code> for architecture changes</td>
+</tr>
+<tr>
+<td><code>runbook.md</code></td>
+<td>Yes — add commands directly</td>
+<td>Mid-session ask or <code>gt-work</code></td>
+</tr>
+<tr>
+<td><code>Knowledge/*.md</code></td>
+<td>Yes — corrections fine</td>
+<td><code>gt-wiki-ingest</code> for new pages</td>
+</tr>
+<tr>
+<td><code>Sources/*</code></td>
+<td><strong>Never</strong> — immutable</td>
+<td><code>gt-wiki-refresh</code> for changes</td>
+</tr>
+<tr>
+<td><code>global-memory/*.md</code></td>
+<td>Light edits fine</td>
+<td><code>gt-promote</code> for promotion</td>
+</tr>
+<tr>
+<td><code>CLAUDE.md</code></td>
+<td><strong>Avoid</strong> — AI reads this at session start</td>
+<td>Skills seed and update this</td>
+</tr>
+<tr>
+<td><code>index.md</code></td>
+<td>Read only</td>
+<td>Updated automatically by skills</td>
+</tr>
+<tr>
+<td><code>log.md</code></td>
+<td>Read only — append-only audit trail</td>
+<td>Updated automatically by skills</td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h2 id="the-promotion-ladder">The Promotion Ladder</h2>
+<p>When a fact graduates, it moves up:</p>
+<pre><code>memory/*.md          this session, this project detail
+    ↓  gt-work
+research.md          settled finding, this project
+    ↓  gt-promote
+Knowledge/           true across multiple projects
+    ↓  gt-promote
+global-memory/       needed in every session, every project
+</code></pre>
+<p><strong>The rule:</strong> promote when a second project hits the same truth. File narrow when unsure — promotion is cheap, and a fact promoted too early becomes a rule that isn't true everywhere.</p>
+<hr />
+<h2 id="tips-for-obsidian">Tips for Obsidian</h2>
+<ul>
+<li><strong>Start from <code>Projects/README.md</code></strong> not the file tree — it's the master index.</li>
+<li><strong>Follow wikilinks</strong> in Knowledge pages — the graph is the navigation system, not folders.</li>
+<li><strong>Use backlinks</strong> before editing a Knowledge page to see what depends on it.</li>
+<li><strong><code>index.md</code> is the Knowledge entry point</strong> — every page is one hop from there.</li>
+<li><strong><code>log.md</code> tells you what happened</strong> — if something looks wrong, check the log first.</li>
+<li><strong><code>review-queue.md</code></strong> is written by <code>gt-lint</code> — check it after every lint run.</li>
+</ul></body></html>

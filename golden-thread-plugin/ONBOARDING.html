@@ -1,0 +1,227 @@
+<!DOCTYPE html><html lang='en'><head><meta charset='utf-8'><title>Golden Thread — Getting Started</title><style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
+    font-size: 13.5px;
+    line-height: 1.65;
+    color: #1a1a1a;
+    background: #fff;
+  }
+
+  /* ── Cover ── */
+  .cover {
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: flex-start;
+    padding: 72px 80px;
+    background: #0f1117;
+    color: #fff;
+    page-break-after: always;
+  }
+  .cover .kicker {
+    font-size: 11px; font-weight: 600; letter-spacing: .15em;
+    text-transform: uppercase; color: #7c8cff; margin-bottom: 28px;
+  }
+  .cover h1 { font-size: 46px; font-weight: 700; line-height: 1.1; max-width: 600px; margin-bottom: 20px; }
+  .cover .subtitle { font-size: 18px; color: #9ba0b4; max-width: 500px; margin-bottom: 56px; line-height: 1.5; }
+  .cover .meta { font-size: 12px; color: #555d7a; border-top: 1px solid #1e2236; padding-top: 20px; width: 100%; }
+
+  /* ── Page body ── */
+  .page { max-width: 760px; margin: 0 auto; padding: 64px 64px 80px; }
+  .toc-page { page-break-after: always; }
+
+  /* ── TOC ── */
+  .toc h2 { font-size: 11px; font-weight: 600; letter-spacing: .12em; text-transform: uppercase; color: #7c8cff; margin-bottom: 28px; }
+  .toc ol { list-style: none; counter-reset: toc; }
+  .toc > ol > li { counter-increment: toc; border-bottom: 1px solid #f0f0f0; padding: 10px 0; }
+  .toc > ol > li::before { content: counter(toc, decimal-leading-zero); font-size: 11px; font-weight: 600; color: #9ba0b4; margin-right: 14px; font-variant-numeric: tabular-nums; }
+  .toc > ol > li > a { font-size: 14px; font-weight: 600; color: #1a1a1a; text-decoration: none; }
+  .toc-sub { list-style: none; padding-left: 30px; margin-top: 4px; }
+  .toc-sub li { font-size: 12.5px; color: #555; padding: 2px 0; }
+  .toc-sub li::before { content: "—  "; color: #ccc; }
+
+  /* ── Typography ── */
+  h1.section-title { font-size: 28px; font-weight: 700; color: #0f1117; margin-bottom: 8px; padding-top: 8px; }
+  .section-rule { border: none; border-top: 2px solid #7c8cff; width: 48px; margin-bottom: 28px; }
+  h2 { font-size: 17px; font-weight: 700; color: #0f1117; margin-top: 36px; margin-bottom: 10px; }
+  h3 { font-size: 13.5px; font-weight: 700; color: #0f1117; margin-top: 24px; margin-bottom: 6px; text-transform: uppercase; letter-spacing: .06em; }
+  p { margin-bottom: 14px; }
+  ul, ol { padding-left: 22px; margin-bottom: 14px; }
+  li { margin-bottom: 5px; }
+  strong { font-weight: 600; }
+  em { font-style: italic; }
+
+  /* ── Code ── */
+  code { font-family: "SF Mono","Fira Mono","Menlo",monospace; font-size: 12px; background: #f4f5f8; border-radius: 3px; padding: 1px 5px; }
+  pre { background: #0f1117; color: #c8d3f5; border-radius: 6px; padding: 18px 20px; overflow-x: auto; margin: 16px 0 20px; font-size: 12px; line-height: 1.6; }
+  pre code { background: none; padding: 0; color: inherit; font-size: inherit; }
+  .comment { color: #5c6370; }
+  .kw { color: #c792ea; }
+  .str { color: #c3e88d; }
+  .cmd { color: #82aaff; }
+
+  /* ── Tables ── */
+  table { width: 100%; border-collapse: collapse; margin: 16px 0 20px; font-size: 13px; }
+  th { background: #f4f5f8; text-align: left; padding: 8px 12px; font-weight: 600; font-size: 11.5px; text-transform: uppercase; letter-spacing: .06em; color: #555; border-bottom: 2px solid #e0e2ea; }
+  td { padding: 8px 12px; border-bottom: 1px solid #f0f0f4; vertical-align: top; }
+  tr:last-child td { border-bottom: none; }
+  td code { font-size: 11.5px; }
+
+  /* ── Callouts ── */
+  .callout { border-left: 3px solid #7c8cff; background: #f7f8ff; padding: 12px 16px; border-radius: 0 6px 6px 0; margin: 16px 0 20px; font-size: 13px; }
+  .callout.warning { border-color: #f5a623; background: #fffdf4; }
+  .callout.tip { border-color: #3ecf8e; background: #f4fdf9; }
+  .callout.danger { border-color: #e5534b; background: #fff5f5; }
+  .callout-label { font-size: 10.5px; font-weight: 700; text-transform: uppercase; letter-spacing: .1em; color: #7c8cff; margin-bottom: 4px; }
+  .callout.warning .callout-label { color: #f5a623; }
+  .callout.tip .callout-label { color: #3ecf8e; }
+  .callout.danger .callout-label { color: #e5534b; }
+
+  /* ── Skill badges ── */
+  .skill { display: inline-block; font-family: "SF Mono","Fira Mono","Menlo",monospace; font-size: 11.5px; font-weight: 600; background: #0f1117; color: #7c8cff; border-radius: 4px; padding: 2px 7px; white-space: nowrap; }
+
+  /* ── Diagram ── */
+  .diagram { background: #0f1117; color: #c8d3f5; border-radius: 6px; padding: 20px 24px; font-family: "SF Mono","Fira Mono","Menlo",monospace; font-size: 12px; line-height: 1.7; margin: 16px 0 20px; }
+  .diagram .dim { color: #5c6370; }
+  .diagram .hi { color: #82aaff; }
+
+  /* ── Print ── */
+  .page-break { page-break-after: always; }
+  h1.section-title { page-break-before: always; }
+  h1.section-title.no-break { page-break-before: avoid; }
+  @media print {
+    body { font-size: 12.5px; }
+    .cover { min-height: auto; padding: 56px 64px; }
+    pre, table { page-break-inside: avoid; }
+    h2 { page-break-after: avoid; }
+  }
+
+  body{max-width:52rem;margin:0 auto;padding:2.2rem 2rem;}
+  h1,h2,h3{break-after:avoid;} table{break-inside:avoid;}
+</style></head><body><h1 id="golden-thread-getting-started">Golden Thread — Getting Started</h1>
+<p>A guided walkthrough for your first session. Five steps, ~10 minutes.</p>
+<p><strong>Requirements:</strong> Python 3.8+, Claude Code installed. Written against <strong>gt v0.9.6</strong>.</p>
+<hr />
+<h2 id="step-1-install">Step 1 — Install</h2>
+<p>Unzip the plugin and run the installer:</p>
+<pre><code class="language-bash">unzip golden-thread-plugin.zip
+cd golden-thread-plugin
+bash install.sh
+</code></pre>
+<p>Then <strong>restart Claude Code</strong>. The <code>/gt:</code> skills are not available until you do.</p>
+<p>The installer sets up two plugins:
+- <strong><code>gt</code></strong> — memory, projects, session workflow, and enforcement hooks
+- <strong><code>gt-wiki</code></strong> — knowledge base with immutable sources</p>
+<hr />
+<h2 id="step-2-initialize-your-vault">Step 2 — Initialize your vault</h2>
+<p>Open any Claude Code session and run:</p>
+<pre><code>/gt:gt-init
+</code></pre>
+<p>Claude will ask for:
+1. A vault path — an Obsidian vault folder is ideal, but any folder works
+2. Your domain/team name — e.g. "Platform Engineering" or "My Team"</p>
+<p>The script creates the folder structure, writes <code>~/.claude/vault-config.json</code> (the pointer every other skill reads), and <strong>installs Core-rule enforcement hooks</strong> into <code>~/.claude/settings.json</code>. Safe to re-run on a machine you've already set up.</p>
+<blockquote>
+<p><strong>If you already have an Obsidian vault</strong>, just give <code>gt-init</code> that path. It will only add what's missing — your existing notes are untouched.</p>
+</blockquote>
+<hr />
+<h2 id="step-3-create-your-first-project">Step 3 — Create your first project</h2>
+<pre><code>/gt:gt-create
+</code></pre>
+<p>Claude will ask for a project name and a quick brain dump of what it is. That brain dump becomes <code>idea.md</code> — the immutable origin story for the project.</p>
+<p>For a project you're already working on, use:</p>
+<pre><code>/gt:gt-ingest
+</code></pre>
+<p>This scans your existing notes and memory files and imports them into the vault without touching the originals.</p>
+<hr />
+<h2 id="step-4-open-a-project-at-the-start-of-each-session">Step 4 — Open a project at the start of each session</h2>
+<pre><code>/gt:gt-open &lt;project-name&gt;
+</code></pre>
+<p>This reads your project docs in order — idea → research → decisions → design → spec → runbook — reads CONVENTIONS.md and PROTOCOL.md once per session, then reads the session memory index and stops. It summarizes where things stand and asks where to pick up.</p>
+<p><strong>Why it stops at the index:</strong> a project with 70 notes would otherwise dump 2,000 lines into context. <code>gt-open</code> reads the one-line index and loads individual files only when you need them. If <code>research.md</code> exceeds ~200 lines, it reads headings first, then only the relevant sections.</p>
+<hr />
+<h2 id="step-5-write-back-at-the-end-of-each-session">Step 5 — Write back at the end of each session</h2>
+<pre><code>/gt:gt-work
+</code></pre>
+<p>This is the step that keeps the vault alive. Claude will write back what was learned:</p>
+<table>
+<thead>
+<tr>
+<th>Destination</th>
+<th>What goes there</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>research.md</code></td>
+<td>New findings and gotchas, dated</td>
+</tr>
+<tr>
+<td><code>decisions.md</code></td>
+<td>Architectural choices (ADRs)</td>
+</tr>
+<tr>
+<td><code>design.md</code></td>
+<td>Updated architecture if it changed</td>
+</tr>
+<tr>
+<td><code>runbook.md</code></td>
+<td>Operational commands and landmines</td>
+</tr>
+<tr>
+<td><code>memory/*.md</code></td>
+<td>Session state</td>
+</tr>
+</tbody>
+</table>
+<p><code>gt-work</code> also checks whether any findings should be promoted wider (to <code>Knowledge/</code> or <code>global-memory/</code>) and asks you before writing. It updates the project's <code>README.md</code> frontmatter properties (<code>stage</code>, <code>topology</code>) if the project changed phase.</p>
+<p><strong>Skipping <code>gt-work</code> is how the vault decays.</strong> Facts that aren't written down are forgotten by the next session.</p>
+<hr />
+<h2 id="typical-session-pattern">Typical session pattern</h2>
+<pre><code>/gt:gt-open my-project     ← load context, see where you left off
+
+# ... work happens ...
+
+/gt:gt-work                ← write back findings before closing
+</code></pre>
+<hr />
+<h2 id="periodic-maintenance">Periodic maintenance</h2>
+<pre><code>/gt:gt-lint                ← find broken links, orphaned pages, unlisted memory files, unenforced Core rules
+/gt:gt-promote             ← graduate a finding that proved true across projects
+/gt:gt-refresh             ← check if any source documents changed upstream
+/gt:gt-review              ← pull uncaptured items from Obsidian daily notes
+/gt:gt-settings            ← view and toggle what Golden Thread does automatically
+/gt:gt-farm                ← route bulk or mechanical tasks to an external AI service as a work packet
+/gt:gt-validate            ← independently verify a claim before recording it as fact
+</code></pre>
+<hr />
+<h2 id="adding-a-knowledge-base-gt-wiki">Adding a knowledge base (gt-wiki)</h2>
+<p>If you want a structured wiki alongside your project memory:</p>
+<pre><code>/gt:gt-wiki-init
+</code></pre>
+<p>Then add sources:</p>
+<pre><code>/gt:gt-wiki-ingest &lt;url or file path&gt;
+</code></pre>
+<p>Query it:</p>
+<pre><code>/gt:gt-wiki
+</code></pre>
+<p>The wiki uses immutable sources — every ingested document is stored verbatim and never modified. Knowledge pages are synthesized summaries that link to the originals.</p>
+<hr />
+<h2 id="key-concepts-in-one-paragraph">Key concepts in one paragraph</h2>
+<p>The vault is organized by <strong>how widely a fact applies</strong>. Session findings go in <code>memory/</code>. Settled discoveries go in <code>research.md</code>. Choices that shaped the architecture go in <code>decisions.md</code>. Facts true across multiple projects go in <code>Knowledge/</code>. Facts needed in every session everywhere go in <code>global-memory/</code>. Above all of these sits the <strong>Core-rule tier</strong>: rules enforced via hooks wired into <code>~/.claude/settings.json</code>, not merely stored as files. <code>gt-init</code> installs these hooks automatically. Promote a fact when a second project proves it general — not before. When unsure, file it narrow; promotion is cheap, demotion isn't. One more principle: <strong>claims should be verified by re-deriving them, not by reviewing the reasoning that produced them</strong> — a reviewer who sees your reasoning inherits your blind spot. Use <code>/gt:gt-validate</code> before recording any finding that matters.</p>
+<hr />
+<h2 id="troubleshooting">Troubleshooting</h2>
+<p><strong>Skills not showing up</strong> — restart Claude Code after install.</p>
+<p><strong>"vault-config.json not found"</strong> — run <code>/gt:gt-init</code>.</p>
+<p><strong>A rule seems ignored</strong> — <code>CLAUDE.md</code> is read at session start; rules added mid-session apply from the next session.</p>
+<p><strong>Memory files aren't loading</strong> — that's by design. Ask for a file by name, or run <code>/gt:gt-lint</code> to check if it's unlisted.</p>
+<p><strong>Core rules seem to apply sometimes but not always</strong> — run <code>/gt:gt-lint</code> and look for <code>core-unenforced</code> findings. The hook may not be wired. Fix:</p>
+<pre><code class="language-bash">python3 &lt;plugin&gt;/scripts/vault_init.py install-core-rules --vault &lt;vault&gt;
+</code></pre>
+<p><strong>I want to turn off the automatic session report</strong> — run <code>/gt:gt-settings set report_card off</code>.</p>
+<p><strong>Timestamp missing from responses</strong> — the enforcement hook is unwired. Run <code>/hooks</code> in Claude Code or restart. If it persists, re-run <code>install.sh</code>.</p>
+<hr />
+<p>For the complete skill reference, see <a href="MANUAL.md">MANUAL.md</a>.</p></body></html>
