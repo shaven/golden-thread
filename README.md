@@ -12,7 +12,7 @@ it at startup, look things up while working, and write back what they learn.
 Its distinguishing idea is the second problem, the one most memory systems never
 address: **writing a rule down does not mean it gets followed.**
 
-Plugin **v0.9.0**. Four Core rules currently enforced, two of them *validated* — a
+Plugin **v0.9.6**. Six Core rules currently enforced, three of them *validated* — a
 `Stop` hook inspects the finished reply and blocks it if the rule was broken.
 
 ## "In context" is not "applied"
@@ -31,16 +31,18 @@ The Core tier is deliberately small; every addition dilutes the reliability of t
 
 | Rule | Enforcement | What it does |
 |---|---|---|
+| `core_concurrent_session_claim` | **validated** | Register the session and claim a vault file before writing it; never write one another live session holds |
 | `core_no_secrets_in_transcript` | **validated** | Never put a secret's value into the session — not to inspect, redact or check it |
 | `core_timestamp_every_message` | **validated** | Begin every reply with the current wall-clock timestamp |
 | `core_global_memory_scope` | reminder | `global-memory/` holds only facts needed in *every* project |
 | `core_memory_load_policy` | reminder | Do not auto-load the full memory index |
+| `core_verification_state` | reminder | Label every derived figure with `unverified`, `self-verified` or `independently verified` |
 
 Two ways in: the user **designates** a rule, or an existing fact is **promoted** and
 must answer three questions — would its absence cause incorrect code, cause rework, or
 cascade into lower-level rules being written wrongly?
 
-The two validated rules show why both paths exist. `core_no_secrets_in_transcript`
+Two of the validated rules show why both paths exist. `core_no_secrets_in_transcript`
 answers yes to all three. `core_timestamp_every_message` answers **no to all three** and
 is Core anyway: it is the *canary*, kept because its absence is visible rather than
 costly, so a broken hook announces itself.
@@ -49,11 +51,30 @@ costly, so a broken hook announces itself.
 
 | Path | What it is |
 |---|---|
-| `golden-thread-plugin/golden-thread/<ver>/` | The `gt` plugin — 12 skills, scripts, templates, hooks |
+| `golden-thread-plugin/golden-thread/<ver>/` | The `gt` plugin — 14 skills, scripts, templates, hooks |
 | `golden-thread-plugin/golden-thread-wiki/<ver>/` | The `gt-wiki` plugin — 5 skills for standalone wiki vaults |
 | `golden-thread-plugin/install.sh` | Installs both, wires the hooks, registers the marketplace |
 
 The vault *content* lives in a separate private repo. This one is the machinery.
+
+## Documentation
+
+The guides live one level down, under [`golden-thread-plugin/`](golden-thread-plugin/),
+alongside the code they describe. Start with Getting Started; the Manual is the reference.
+
+| Document | What it covers |
+|---|---|
+| [Getting Started](golden-thread-plugin/ONBOARDING.md) · [PDF](golden-thread-plugin/ONBOARDING.pdf) | A guided first session in five steps, about ten minutes |
+| [User Manual](golden-thread-plugin/MANUAL.md) · [PDF](golden-thread-plugin/MANUAL.pdf) | Complete reference: every skill, the vault layout, verification, the promotion ladder |
+| [Install Guide](golden-thread-plugin/INSTALL.md) | Installing both plugins, wiring the hooks, adopting an existing vault |
+| [Obsidian & Daily Workflow](golden-thread-plugin/OBSIDIAN-WORKFLOW.md) · [PDF](golden-thread-plugin/OBSIDIAN-WORKFLOW.pdf) | Living in the vault day to day — daily notes, properties, Dataview |
+| [Developer Guide](golden-thread-plugin/golden-thread-developer-guide.html) · [PDF](golden-thread-plugin/golden-thread-developer-guide.pdf) | Internals: hooks, scripts, the component manifest, extending the plugin |
+| [Plugin Documentation](golden-thread-plugin/golden-thread-docs.md) · [HTML](golden-thread-plugin/golden-thread-docs.html) · [PDF](golden-thread-plugin/golden-thread-docs.pdf) | Reference rendering of the plugin's own docs |
+| [`docs/workflow.html`](docs/workflow.html) · [`docs/ingesting.html`](docs/ingesting.html) | Standalone diagrams of the work and ingest loops |
+| `golden-thread.pdf` | The earliest write-up here (2026-08-10); predates the current plugin layout, kept for reference |
+
+The PDFs and HTML are rendered from the markdown beside them — when the two disagree,
+**the markdown is the source of truth.**
 
 ## Install
 
@@ -80,7 +101,7 @@ cannot be reached and the rules are not loaded — the banner names the cause.
 
 ## The skills
 
-Twelve skills. Each composes through files rather than through other skills, so
+Fourteen skills. Each composes through files rather than through other skills, so
 removing any one leaves the rest working.
 
 | Skill | What it does |
@@ -95,7 +116,9 @@ removing any one leaves the rest working.
 | `gt-ingest` | Imports an existing project's notes. Copies, never moves or deletes. Stores external sources immutably in `Sources/` before synthesising them, so the raw input survives whatever you later conclude from it. |
 | `gt-review` | Sweeps Obsidian daily notes for tasks and ideas that were jotted down and never captured, then promotes the ones you pick into tracked projects. |
 | `gt-refresh` | Checks `Sources/` for upstream changes. Supersedes with a *new* immutable file carrying `supersedes:` rather than editing the old one, so the record of what you believed and when stays intact. |
-| `gt-lint` | Runs 13 deterministic health checks — broken links, orphans, index gaps, scope leaks, staleness, superseded sources — plus `core-unenforced`, which catches a rule that is stored but never re-asserted. |
+| `gt-lint` | Runs 14 deterministic health checks — broken links, orphans, index gaps, scope leaks, staleness, superseded sources — plus `core-unenforced`, which catches a rule that is stored but never re-asserted. |
+| `gt-farm` | Hands bulk or mechanical work to an external AI service as a self-contained packet with a strict return contract — bulk fetching, freshness sweeps, or a genuinely non-Claude second opinion. The packet is identical whether you paste it into a web UI or send it to an API. |
+| `gt-settings` | Shows and changes everything the plugin does on its own — component drift checking, the version check, orphaned-worker detection, the unpushed-commit check, and the session report card. Every automatic behaviour is registered here and every one can be switched off. |
 | `gt-runbook-lint` | Finds procedures duplicated across project runbooks and routes them to the right shared layer: `PROTOCOL.md`, a `Knowledge/` page, or a repo `CLAUDE.md`. Duplication across two runbooks is the signal a fact belongs one layer out. |
 
 ## Typical use
@@ -132,7 +155,7 @@ level; audience decides whether it should also leave.
 ## Maintenance is code, not judgement
 
 The dangerous failure is not the fact you never captured — it is the fact you captured,
-kept, and still serve after reality moved on. `gt_lint.py` runs 13 deterministic checks
+kept, and still serve after reality moved on. `gt_lint.py` runs 14 deterministic checks
 (broken links, orphans, index gaps, scope leaks, 90-day staleness, superseded sources)
 and `core-unenforced`, which catches a rule that is **stored but never re-asserted** —
 the exact failure this system exists to close.
