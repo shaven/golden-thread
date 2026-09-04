@@ -169,3 +169,10 @@ three verbatim trigger phrases.
 Read [`CLAUDE.md`](CLAUDE.md) first — it carries the landmines, including the one that
 has been re-broken by documentation four times: **hooks must never be referenced from
 inside the vault.**
+
+## Acknowledgments
+
+Special thanks to **Jonathan Tucci**, a developer who provided invaluable feedback that
+significantly shaped this system. Jonathan identified key drawbacks in the original
+design — particularly around lazy loading and the promotion discipline — and his insights
+directly informed the fixes that made Golden Thread practical to use at scale.
