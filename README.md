@@ -15,6 +15,26 @@ address: **writing a rule down does not mean it gets followed.**
 Plugin **v0.9.6**. Six Core rules currently enforced, three of them *validated* — a
 `Stop` hook inspects the finished reply and blocks it if the rule was broken.
 
+## Who this is for
+
+You run several projects at once and the ideas never arrive in the right one. You are
+deep in project A when the fix for project B occurs to you, a session ends before the
+finding is written down, and by Monday you cannot remember which of the six things you
+touched last week was the urgent one. If your attention scatters, from ADHD or simply
+from load, a system that depends on remembering to file things in the right place will
+not hold.
+
+Golden Thread is built so that **capture never waits for the right context.** Write the
+thought in today's daily note, in whatever session or project you happen to be in. A
+review sweep later finds every note that never got filed and routes each one to the
+project it belongs to. Every project keeps its open tasks in one place, and a single
+generated rollup ranks them across *all* projects, escalating by age and deadline, so
+"what should I work on?" has one answer instead of six status pages.
+
+The result is one place to look. Sessions read from it at startup, write back what they
+learned at the end, and the rules you most need to hold are re-asserted every turn
+instead of trusted to memory.
+
 ## Feedback
 
 If you are using Golden Thread, or tried it and bounced off, I would like to hear about
@@ -72,7 +92,7 @@ alongside the code they describe. Start with Getting Started; the Manual is the 
 
 | Document | What it covers |
 |---|---|
-| [Getting Started](golden-thread-plugin/ONBOARDING.md) · [PDF](golden-thread-plugin/ONBOARDING.pdf) | A guided first session in five steps, about ten minutes |
+| [Getting Started](golden-thread-plugin/ONBOARDING.md) · [PDF](golden-thread-plugin/ONBOARDING.pdf) | A guided first session in six steps, about fifteen minutes |
 | [User Manual](golden-thread-plugin/MANUAL.md) · [PDF](golden-thread-plugin/MANUAL.pdf) | Complete reference: every skill, the vault layout, verification, the promotion ladder |
 | [Install Guide](golden-thread-plugin/INSTALL.md) | Installing both plugins, wiring the hooks, adopting an existing vault |
 | [Obsidian & Daily Workflow](golden-thread-plugin/OBSIDIAN-WORKFLOW.md) · [PDF](golden-thread-plugin/OBSIDIAN-WORKFLOW.pdf) | Living in the vault day to day — daily notes, properties, Dataview |

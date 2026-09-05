@@ -1,6 +1,6 @@
 # Golden Thread — Getting Started
 
-A guided walkthrough for your first session. Five steps, ~10 minutes.
+A guided walkthrough for your first session. Six steps, ~15 minutes.
 
 **Requirements:** Python 3.8+, Claude Code installed. Written against **gt v0.9.6**.
 
@@ -91,6 +91,56 @@ This is the step that keeps the vault alive. Claude will write back what was lea
 `gt-work` also checks whether any findings should be promoted wider (to `Knowledge/` or `global-memory/`) and asks you before writing. It updates the project's `README.md` frontmatter properties (`stage`, `topology`) if the project changed phase.
 
 **Skipping `gt-work` is how the vault decays.** Facts that aren't written down are forgotten by the next session.
+
+---
+
+## Step 6 — Capture from anywhere, then ask what's next
+
+Steps 4 and 5 keep one project honest. This step is what keeps *all* of them in view,
+and it is the step that matters most if your attention is split across many things.
+
+**Capture wherever you are.** You are working in project A and a thought about project
+B arrives. Do not switch projects. Write it in today's Obsidian daily note as a plain
+checkbox:
+
+```
+- [ ] Chrome extension: the confirm dialog retry may be resubmitting instead of confirming
+```
+
+Daily notes live in `<vault>/Daily Notes/` by default (`daily_notes_path` in the vault's
+`CLAUDE.md` overrides that). Anything with no `[[wikilink]]` to a project is, by
+definition, not yet captured.
+
+**Sweep the inbox.** Once a week, or whenever the notes pile up:
+
+```
+/gt:gt-review
+```
+
+Claude reads the recent daily notes, lists every unfiled checkbox and idea grouped by
+date, and asks which ones to route. Each item becomes a task under an existing project,
+a new sub-project, or a new project with its own `idea.md`. It offers to link the daily
+note back to the project, so the same thought is never surfaced twice.
+
+**Ask what's next.** Every project keeps its open tasks under `## Tasks` in its
+`README.md`, one checkbox per task, with optional fields:
+
+```
+- [ ] Reproduce the dialog retry against a live page [p:: 1] [waiting:: agent] [since:: 2026-09-05]
+```
+
+One command rolls every project's tasks into a single ranked list:
+
+```bash
+python3 <vault>/Projects/golden-thread/tools/gt_tasks.py    # then read TASKS.md
+```
+
+Rank is computed against the clock, not stored: a `p:: 1` older than seven days
+escalates, a `due` inside three days escalates. **Regenerate before reading** — a stale
+`TASKS.md` is last week's ranking. `waiting:: user` is the list of things blocked on
+you; `waiting:: agent` is what the next session should pick up.
+
+That is the loop: capture without switching, sweep to file, regenerate to decide.
 
 ---
 
