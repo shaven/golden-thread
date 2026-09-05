@@ -21,8 +21,8 @@
    "sha256": "e306a150da44292d39124476f5404358cfcc2f1318fb329702a47f138106c05d"
   },
   "scripts/gt_components.py": {
-   "bytes": 12279,
-   "sha256": "75cf5180d421efcb553bf226ea636f0d3c9da210b1f0651bddf7b8d3e5e98293"
+   "bytes": 13752,
+   "sha256": "51dbb4cf933ec1a0f0373166f40aa8eb79e8721dc79b167c0c62caf229b76249"
   },
   "scripts/gt_ingest.py": {
    "bytes": 9101,
@@ -37,24 +37,24 @@
    "sha256": "4484d1614875460d9f972d4c433c5240c1ee07f01503e41b32dae7898317ef9f"
   },
   "scripts/gt_push_check.py": {
-   "bytes": 6879,
-   "sha256": "40d96494deed0991d0b14ae8f77e22a4a3b211cd6825bae96ab11c780d555707"
+   "bytes": 10614,
+   "sha256": "97448249bb05b6a3dbb39cf1ab65aa1ca7bc9390ea427fbd5919a70a2954873c"
   },
   "scripts/gt_report_card.py": {
    "bytes": 12184,
    "sha256": "33dc7d37edee740cf06a60dea8f74c8d0832e70a392b07010a4d9a07aa7a1eab"
   },
   "scripts/gt_settings.py": {
-   "bytes": 11275,
-   "sha256": "371b432b16abf6c12fc4115583750e1bb08603e77fb0caa796cf7a5a7f3760e0"
+   "bytes": 12795,
+   "sha256": "fa60c0ed3b0eb4b6c4452823b9d7f033122e65ab693b1822e42d7edd9652a339"
   },
   "scripts/gt_version_check.py": {
-   "bytes": 7611,
-   "sha256": "f43efcdd6015eba908038ff80999e834e6c5b3d7d3d266eae5b8cd6b5b8da331"
+   "bytes": 7991,
+   "sha256": "9d2e3b5baf5f1ff7cb6b84e9153b801cb5673f8ccf076d89c3c8099238a541f6"
   },
   "scripts/gt_workers.py": {
-   "bytes": 12377,
-   "sha256": "fae129036a85db339d1da5c65f0ca1f92c8e4796b744185edb06b008697449f5"
+   "bytes": 12760,
+   "sha256": "e994c495d7f28159c1fe8ad78ef6cf2155336b6e90c2a25d84918c2e1e5f696f"
   },
   "scripts/skill_lint.py": {
    "bytes": 4162,
@@ -153,14 +153,14 @@
    "sha256": "16c54f56ccf0e311d28240c8b7424a0b4b359c9ab9c6552a21f84ad1ccf00096"
   },
   "templates/tools/safe_write.py": {
-   "bytes": 11625,
-   "sha256": "be3ab95ccdbda285887f9274e19d1374dc7a8d313eea24564084dcde768cb204"
+   "bytes": 12889,
+   "sha256": "443244903358685dbd6b2d40654c798737cb23fdb4659035336c0b075a009ced"
   },
   "templates/wiki-CLAUDE.md": {
    "bytes": 4243,
    "sha256": "7a9ef20b5b12ff7ce5e4c859467624bcb9bffaa7d51b5ab3b068feaf53c29ecd"
   }
  },
- "generated": "2026-09-05T10:56:06",
- "version": "0.9.6"
+ "generated": "2026-09-05T10:56:39",
+ "version": "0.9.7"
 }

@@ -123,7 +123,9 @@ if [ -d "$SRC/hooks" ]; then
   # Component drift detection + the session report card run FROM the hooks dir,
   # for the same reason the hooks themselves do: settings.json addresses them by
   # absolute path, so the path must survive a vault move or a project rename.
-  for extra in gt_components.py gt_report_card.py gt_settings.py gt_workers.py gt_version_check.py gt_push_check.py; do
+  # The list lives in gt_components.HOOK_DIR_SCRIPTS, which also maps these files
+  # for drift checking -- a second copy here would be a copy that drifts.
+  for extra in $(python3 "$SRC/scripts/gt_components.py" hookdir-scripts); do
     [ -f "$SRC/scripts/$extra" ] && cp "$SRC/scripts/$extra" "$GT_HOOKS/$extra"
   done
   chmod +x "$GT_HOOKS"/*.sh 2>/dev/null || true
@@ -194,59 +196,72 @@ echo "Populated marketplace plugin directories with skills/scripts/templates"
 
 echo "Created marketplace entries → $MARKETPLACE"
 
-# 3. Register in known_marketplaces.json
-python3 - <<EOF
-import json, os
-path = '$KNOWN'
-os.makedirs(os.path.dirname(path), exist_ok=True)
-d = json.load(open(path)) if os.path.exists(path) else {}
-d['golden-thread-plugin'] = {
-    'source': {'source': 'directory', 'path': '$MARKETPLACE'},
-    'installLocation': '$MARKETPLACE',
-    'lastUpdated': '2026-08-15T00:00:00.000Z'
-}
-open(path, 'w').write(json.dumps(d, indent=2) + '\n')
-print('Registered in known_marketplaces.json')
-EOF
-
-# 4. Register in installed_plugins.json
-python3 - <<EOF
-import json, os
+# 3-5. Register in known_marketplaces.json, installed_plugins.json and
+# settings.json (enabledPlugins).
+#
+# Values reach Python through argv, never by interpolating shell variables into
+# Python source. 0.9.6 wrote `path = '$KNOWN'`, so any path holding an apostrophe
+# (an iCloud or OneDrive folder called "Sam's Projects") became a syntax error
+# halfway through an install that had already copied the hooks -- a half-installed
+# plugin with no message saying so. Now that strangers clone this, their folder
+# names are not ours to assume.
+#
+# Each file is written to a sibling temp file and renamed into place, and the
+# original is backed up once per install under ~/.claude/golden-thread/backups/.
+# A crash mid-write used to leave settings.json truncated.
+python3 - "$KNOWN" "$MARKETPLACE" "$INSTALLED" "$CACHE" "$VERSION" "$WIKI_CACHE" "$WIKI_VERSION" "$SETTINGS" "$PLUGIN_KEY" "$WIKI_PLUGIN_KEY" <<'EOF'
+import json, os, sys, tempfile, time
 from datetime import datetime, timezone
-path = '$INSTALLED'
-os.makedirs(os.path.dirname(path), exist_ok=True)
-d = json.load(open(path)) if os.path.exists(path) else {'version': 2, 'plugins': {}}
-now = datetime.now(timezone.utc).strftime('%Y-%m-%dT%H:%M:%S.000Z')
-d['plugins']['$PLUGIN_KEY'] = [{
-    'scope': 'user',
-    'installPath': '$CACHE',
-    'version': '$VERSION',
-    'installedAt': now,
-    'lastUpdated': now,
-    'gitCommitSha': 'local'
-}]
-d['plugins']['$WIKI_PLUGIN_KEY'] = [{
-    'scope': 'user',
-    'installPath': '$WIKI_CACHE',
-    'version': '$WIKI_VERSION',
-    'installedAt': now,
-    'lastUpdated': now,
-    'gitCommitSha': 'local'
-}]
-open(path, 'w').write(json.dumps(d, indent=2) + '\n')
-print('Registered in installed_plugins.json')
-EOF
+(known, marketplace, installed, cache, version, wiki_cache, wiki_version,
+ settings, plugin_key, wiki_plugin_key) = sys.argv[1:11]
+STAMP = time.strftime("%Y%m%d_%H%M%S")
+BACKUPS = os.path.expanduser("~/.claude/golden-thread/backups")
 
-# 5. Register in settings.json (enabledPlugins)
-python3 - <<EOF
-import json, os
-path = '$SETTINGS'
-os.makedirs(os.path.dirname(path), exist_ok=True)
-d = json.load(open(path)) if os.path.exists(path) else {}
-d.setdefault('enabledPlugins', {})['$PLUGIN_KEY'] = True
-d['enabledPlugins']['$WIKI_PLUGIN_KEY'] = True
-open(path, 'w').write(json.dumps(d, indent=2) + '\n')
-print('Registered in settings.json')
+def load(path, default):
+    if not os.path.exists(path):
+        return default
+    with open(path) as fh:
+        return json.load(fh)
+
+def save(path, d):
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+    if os.path.exists(path):
+        os.makedirs(BACKUPS, exist_ok=True)
+        bak = os.path.join(BACKUPS, "%s.%s" % (os.path.basename(path), STAMP))
+        if not os.path.exists(bak):
+            with open(path, "rb") as src, open(bak, "wb") as dst:
+                dst.write(src.read())
+    fd, tmp = tempfile.mkstemp(dir=os.path.dirname(path), prefix=".gt-")
+    with os.fdopen(fd, "w") as fh:
+        fh.write(json.dumps(d, indent=2) + "\n")
+        fh.flush()
+        os.fsync(fh.fileno())
+    os.replace(tmp, path)
+
+d = load(known, {})
+d["golden-thread-plugin"] = {
+    "source": {"source": "directory", "path": marketplace},
+    "installLocation": marketplace,
+    "lastUpdated": "2026-08-15T00:00:00.000Z",
+}
+save(known, d)
+print("Registered in known_marketplaces.json")
+
+d = load(installed, {"version": 2, "plugins": {}})
+now = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%S.000Z")
+for key, path, ver in ((plugin_key, cache, version), (wiki_plugin_key, wiki_cache, wiki_version)):
+    d.setdefault("plugins", {})[key] = [{
+        "scope": "user", "installPath": path, "version": ver,
+        "installedAt": now, "lastUpdated": now, "gitCommitSha": "local",
+    }]
+save(installed, d)
+print("Registered in installed_plugins.json")
+
+d = load(settings, {})
+d.setdefault("enabledPlugins", {})[plugin_key] = True
+d["enabledPlugins"][wiki_plugin_key] = True
+save(settings, d)
+print("Registered in settings.json  (backups in %s)" % BACKUPS)
 EOF
 
 echo ""
@@ -289,12 +304,15 @@ echo "Restart Claude Code to load the plugins."
 #                  a report card produced at the very end of a session competes for
 #                  the context it needs to be written.
 # SessionEnd    -> gt_report_card.py        : backstop for sessions that never compact.
-python3 - <<EOF
-import json, os
+python3 - "$SRC" "$SCRIPT_DIR" <<'EOF'
+import json, os, sys, tempfile
+src, script_dir = sys.argv[1:3]
 p = os.path.expanduser('~/.claude/settings.json')
 d = json.load(open(p)) if os.path.exists(p) else {}
 hooks = d.setdefault('hooks', {})
 gt = os.path.expanduser('~/.claude/golden-thread/hooks')
+# Every command carries --hook: it is the flag, not a tty test, that tells the
+# script to wrap its report as hook JSON. See gt_settings.hook_args.
 # (event, script filename, command). The script is named EXPLICITLY rather than
 # parsed back out of the command: the previous version derived it with
 # cmd.split('/')[-1], which returns the last segment of the whole string -- for any
@@ -311,15 +329,15 @@ gt = os.path.expanduser('~/.claude/golden-thread/hooks')
 # in one must not suppress the others.
 want = [
     ('SessionStart', 'gt_components.py',
-     'python3 "%s/gt_components.py" check "%s"' % (gt, '$SRC')),
+     'python3 "%s/gt_components.py" check "%s" --hook' % (gt, src)),
     ('SessionStart', 'gt_workers.py',
-     'python3 "%s/gt_workers.py" check' % gt),
+     'python3 "%s/gt_workers.py" check --hook' % gt),
     # Handed the SOURCE ROOT, not a version dir -- deliberately. gt_components is
     # pinned to the version it was installed against, which is exactly what makes it
     # blind to a newer release sitting beside it; passing the root keeps this hook
     # correct without being rewritten on every version bump.
     ('SessionStart', 'gt_version_check.py',
-     'python3 "%s/gt_version_check.py" check "%s"' % (gt, '$SCRIPT_DIR')),
+     'python3 "%s/gt_version_check.py" check "%s" --hook' % (gt, script_dir)),
     # Takes no path: it reads vault-config.json itself, the same way the vault's own
     # tooling does. Distribution is a fourth axis -- gt_components asks whether the
     # installed files are right, gt_version whether the right version is installed,
@@ -328,7 +346,7 @@ want = [
     # commits ahead of origin, the oldest weeks old, with every session having
     # committed correctly and none having pushed.
     ('SessionStart', 'gt_push_check.py',
-     'python3 "%s/gt_push_check.py" check' % gt),
+     'python3 "%s/gt_push_check.py" check --hook' % gt),
     ('PreCompact', 'gt_report_card.py', 'python3 "%s/gt_report_card.py"' % gt),
     ('SessionEnd', 'gt_report_card.py', 'python3 "%s/gt_report_card.py"' % gt),
 ]
@@ -343,7 +361,12 @@ for event, script, cmd in want:
                          for h in e.get('hooks', []))]
     arr.append({'hooks': [{'type': 'command', 'command': cmd}]})
     changed.append('%s/%s' % (event, script))
-open(p, 'w').write(json.dumps(d, indent=2) + '\n')
+fd, tmp = tempfile.mkstemp(dir=os.path.dirname(p), prefix='.gt-')
+with os.fdopen(fd, 'w') as fh:
+    fh.write(json.dumps(d, indent=2) + '\n')
+    fh.flush()
+    os.fsync(fh.fileno())
+os.replace(tmp, p)
 print('Registered hooks: ' + ', '.join(sorted(changed)))
 EOF
 
@@ -354,30 +377,30 @@ EOF
 # local state -- which is exactly why it belongs in the installer rather than in a
 # README nobody re-reads on a new machine.
 VAULT_PATH=$(python3 -c "import json,os;p=os.path.expanduser('~/.claude/vault-config.json');print(json.load(open(p)).get('vault_path','')) if os.path.exists(p) else print('')" 2>/dev/null)
-if [ -n "$VAULT_PATH" ] && [ -d "$VAULT_PATH/.git" ]; then
+# Ask git, not the filesystem: .git is a FILE for a worktree, a submodule or a
+# --separate-git-dir checkout, and `-d .git` skipped all of those silently.
+if [ -n "$VAULT_PATH" ] && git -C "$VAULT_PATH" rev-parse --git-dir >/dev/null 2>&1; then
   mkdir -p "$VAULT_PATH/.githooks" "$VAULT_PATH/Projects/golden-thread/tools"
   if [ -d "$SRC/templates/githooks" ]; then
     cp "$SRC/templates/githooks/"* "$VAULT_PATH/.githooks/" 2>/dev/null || true
     chmod +x "$VAULT_PATH/.githooks/"* 2>/dev/null || true
   fi
-  # Tools are only SEEDED, never overwritten: a vault's copy may have been fixed
-  # locally, and clobbering it here would repeat the mistake this release exists
-  # to fix -- an update that silently reverts work only present on one machine.
+  # Tools are SEEDED when absent. When present, the vault's copy is compared to
+  # the template BY CONTENT, with the same rule gt_components applies to hooks:
   #
-  # Seeding alone is not enough once a CORRECTNESS fix lands, though. A vault
-  # seeded before one keeps the broken copy through every future reinstall and
-  # nothing says so. That is how safe_write's truncating append would have
-  # survived 0.9.6 on every machine that already had a vault: reinstalling looks
-  # like it updated the tools, and for the file that mattered it did nothing.
+  #   identical            -> verified, nothing to do
+  #   differs, vault NEWER -> "ahead": a local edit. Reported, never overwritten,
+  #                           because clobbering it would repeat the mistake this
+  #                           mechanism exists to fix -- an update that silently
+  #                           reverts work only present on one machine.
+  #   differs, vault OLDER -> "stale": predates the template. Backed up OUTSIDE the
+  #                           vault, then replaced.
   #
-  # So a tool may declare the function that must be present. A copy missing it
-  # predates the fix and is repaired rather than left -- after backing the local
-  # file up, so a genuine local edit is recoverable instead of lost. Tools with
-  # no declared contract keep the old seed-only behaviour untouched.
-  #
-  # Only list a function here when its absence means a KNOWN defect. A contract
-  # asserted for its own sake would "repair" files whose only sin was being edited.
-  TOOL_CONTRACTS="safe_write.py:_resolve_append"
+  # 0.9.6 asked instead whether the file *named* one function (`grep "def X"`),
+  # which a broken draft, a commented-out sketch or a renamed helper all satisfy,
+  # and left its backup inside the git-tracked tools/ directory for the next
+  # `git add -A` to commit. A contract on a symbol is not a contract on behaviour.
+  BACKUPS="$HOME/.claude/golden-thread/backups"
   if [ -d "$SRC/templates/tools" ]; then
     for t in "$SRC/templates/tools/"*.py; do
       [ -f "$t" ] || continue
@@ -388,21 +411,30 @@ if [ -n "$VAULT_PATH" ] && [ -d "$VAULT_PATH/.git" ]; then
         echo "Seeded vault tool → $base"
         continue
       fi
-      want=""
-      for pair in $TOOL_CONTRACTS; do
-        case "$pair" in "$base":*) want="${pair#*:}" ;; esac
-      done
-      [ -n "$want" ] || continue
-      if grep -q "def $want" "$dest"; then
-        echo "Vault tool verified → $base defines $want()"
-      else
-        bak="$dest.bak_$(date +%Y%m%d_%H%M%S)_missing_$want"
-        cp "$dest" "$bak"
-        cp "$t" "$dest"
-        echo "⚠ Vault tool REPLACED → $base was missing $want() and predates a"
-        echo "  correctness fix. Your previous copy is kept at $(basename "$bak")"
-        echo "  -- diff it if you had local edits."
-      fi
+      state=$(python3 - "$t" "$dest" <<'EOF'
+import hashlib, os, sys
+t, d = sys.argv[1:3]
+h = lambda p: hashlib.sha256(open(p, "rb").read()).hexdigest()
+if h(t) == h(d):
+    print("same")
+elif os.path.getmtime(d) > os.path.getmtime(t):
+    print("ahead")
+else:
+    print("stale")
+EOF
+)
+      case "$state" in
+        same)  echo "Vault tool verified → $base matches the $VERSION template" ;;
+        ahead) echo "⚠ Vault tool AHEAD → $base differs from the $VERSION template and is newer;"
+               echo "  left in place. Diff it against $t"
+               echo "  and fold the change back into the plugin if it is a fix." ;;
+        *)     mkdir -p "$BACKUPS"
+               bak="$BACKUPS/$base.$(date +%Y%m%d_%H%M%S)"
+               cp "$dest" "$bak"
+               cp "$t" "$dest"
+               echo "⚠ Vault tool REPLACED → $base predates the $VERSION template."
+               echo "  Your previous copy is at $bak -- diff it if you had local edits." ;;
+      esac
     done
   fi
   git -C "$VAULT_PATH" config core.hooksPath .githooks 2>/dev/null \

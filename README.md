@@ -12,7 +12,7 @@ it at startup, look things up while working, and write back what they learn.
 Its distinguishing idea is the second problem, the one most memory systems never
 address: **writing a rule down does not mean it gets followed.**
 
-Plugin **v0.9.6**. Six Core rules currently enforced, three of them *validated* — a
+Plugin **v0.9.7**. Six Core rules currently enforced, three of them *validated* — a
 `Stop` hook inspects the finished reply and blocks it if the rule was broken.
 
 ## Who this is for
