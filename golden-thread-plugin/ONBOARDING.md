@@ -2,7 +2,7 @@
 
 A guided walkthrough for your first session. Six steps, ~15 minutes.
 
-**Requirements:** Python 3.8+, Claude Code installed. Written against **gt v0.9.7**.
+**Requirements:** Python 3.8+, Claude Code installed. Written against **gt v0.9.8**.
 
 ---
 
@@ -100,16 +100,15 @@ Steps 4 and 5 keep one project honest. This step is what keeps *all* of them in 
 and it is the step that matters most if your attention is split across many things.
 
 **Capture wherever you are.** You are working in project A and a thought about project
-B arrives. Do not switch projects. Write it in today's Obsidian daily note as a plain
-checkbox:
+B arrives. Do not switch projects. Add one checkbox line to `<vault>/INBOX.md`:
 
 ```
 - [ ] Chrome extension: the confirm dialog retry may be resubmitting instead of confirming
 ```
 
-Daily notes live in `<vault>/Daily Notes/` by default (`daily_notes_path` in the vault's
-`CLAUDE.md` overrides that). Anything with no `[[wikilink]]` to a project is, by
-definition, not yet captured.
+No project, no priority, no date. The rollup shows every unchecked inbox line at the
+top of `TASKS.md`, so it cannot be lost, and nowhere else, so it does not rank. (If you
+keep Obsidian daily notes, the sweep reads those too.)
 
 **Sweep the inbox.** Once a week, or whenever the notes pile up:
 
@@ -117,10 +116,10 @@ definition, not yet captured.
 /gt:gt-review
 ```
 
-Claude reads the recent daily notes, lists every unfiled checkbox and idea grouped by
-date, and asks which ones to route. Each item becomes a task under an existing project,
-a new sub-project, or a new project with its own `idea.md`. It offers to link the daily
-note back to the project, so the same thought is never surfaced twice.
+Claude reads the inbox, asks where each line belongs, and files it: a task under an
+existing project, a sub-project, or a new project with its own `idea.md`. The inbox line
+is checked off with a `→ [[slug]]` pointer so the same thought is never surfaced twice.
+An idea becomes a `p:: 3` task with no due date.
 
 **Ask what's next.** Every project keeps its open tasks under `## Tasks` in its
 `README.md`, one checkbox per task, with optional fields:
@@ -142,6 +141,13 @@ you; `waiting:: agent` is what the next session should pick up.
 
 That is the loop: capture without switching, sweep to file, regenerate to decide.
 
+**Close what is finished.** The rollup's *Review* section, the `/compact` report card
+and `gt-work` all ask the same question when a project's signals say it may be done:
+most tasks past due, most tasks checked, three quiet weeks, or nothing open. Answer
+yes, no or later; every answer is recorded so the question learns your pattern. Closing
+sets `stage: complete` and shelves leftover tasks at `p:: 7` — they stay in the README,
+they just stop outranking live work.
+
 ---
 
 ## Typical session pattern
@@ -162,7 +168,7 @@ That is the loop: capture without switching, sweep to file, regenerate to decide
 /gt:gt-lint                ← find broken links, orphaned pages, unlisted memory files, unenforced Core rules
 /gt:gt-promote             ← graduate a finding that proved true across projects
 /gt:gt-refresh             ← check if any source documents changed upstream
-/gt:gt-review              ← pull uncaptured items from Obsidian daily notes
+/gt:gt-review              ← file the inbox (INBOX.md, plus daily notes if you keep them)
 /gt:gt-settings            ← view and toggle what Golden Thread does automatically
 /gt:gt-farm                ← route bulk or mechanical tasks to an external AI service as a work packet
 /gt:gt-validate            ← independently verify a claim before recording it as fact

@@ -12,7 +12,7 @@ it at startup, look things up while working, and write back what they learn.
 Its distinguishing idea is the second problem, the one most memory systems never
 address: **writing a rule down does not mean it gets followed.**
 
-Plugin **v0.9.7**. Six Core rules currently enforced, three of them *validated* — a
+Plugin **v0.9.8**. Six Core rules currently enforced, three of them *validated* — a
 `Stop` hook inspects the finished reply and blocks it if the rule was broken.
 
 ## Who this is for
@@ -25,9 +25,8 @@ from load, a system that depends on remembering to file things in the right plac
 not hold.
 
 Golden Thread is built so that **capture never waits for the right context.** Write the
-thought in today's daily note, in whatever session or project you happen to be in. A
-review sweep later finds every note that never got filed and routes each one to the
-project it belongs to. Every project keeps its open tasks in one place, and a single
+thought as one line in the vault's inbox, from whatever session or project you happen
+to be in. A review sweep later routes each line to the project it belongs to. Every project keeps its open tasks in one place, and a single
 generated rollup ranks them across *all* projects, escalating by age and deadline, so
 "what should I work on?" has one answer instead of six status pages.
 
@@ -142,7 +141,7 @@ removing any one leaves the rest working.
 | `gt-validate` | Re-derives a claim with a validator given only the claim, the rules and the artifact — never the reasoning that produced it. Four classes: `empirical`, `vantage`, `rule-compliance`, `code`. Returns confirmed, refuted, or cannot-verify, and the third never counts as a pass. |
 | `gt-query` | Answers "how does this work?" — reads `index.md`, follows wikilinks into `Knowledge/`, then falls back to grep and project memory. Flags anything returned that is marked `status: stale`. |
 | `gt-ingest` | Imports an existing project's notes. Copies, never moves or deletes. Stores external sources immutably in `Sources/` before synthesising them, so the raw input survives whatever you later conclude from it. |
-| `gt-review` | Sweeps Obsidian daily notes for tasks and ideas that were jotted down and never captured, then promotes the ones you pick into tracked projects. |
+| `gt-review` | Empties the inbox: routes each captured-but-unfiled line (INBOX.md, plus daily notes if you keep them) into a tracked project. |
 | `gt-refresh` | Checks `Sources/` for upstream changes. Supersedes with a *new* immutable file carrying `supersedes:` rather than editing the old one, so the record of what you believed and when stays intact. |
 | `gt-lint` | Runs 14 deterministic health checks — broken links, orphans, index gaps, scope leaks, staleness, superseded sources — plus `core-unenforced`, which catches a rule that is stored but never re-asserted. |
 | `gt-farm` | Hands bulk or mechanical work to an external AI service as a self-contained packet with a strict return contract — bulk fetching, freshness sweeps, or a genuinely non-Claude second opinion. The packet is identical whether you paste it into a web UI or send it to an API. |

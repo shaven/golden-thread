@@ -1,6 +1,6 @@
 # Golden Thread — User Manual
 
-Complete reference for all fourteen skills. Written against **gt v0.9.7**.
+Complete reference for all fourteen skills. Written against **gt v0.9.8**.
 
 ---
 
@@ -187,6 +187,15 @@ ranking with this week's confidence.
 
 `waiting:: user` is your list; `waiting:: agent` is the session's.
 
+Two sections sit above the ranked lists. **Inbox** shows every unchecked line in
+`INBOX.md` — thoughts captured from anywhere and not yet filed — so nothing is lost
+and nothing unfiled ranks. **Review** shows projects the close-out probe thinks may
+be finished, with the reasons, so closing a project is asked about rather than
+forgotten (see *Closing a project*).
+
+Tasks at `p:: 7` or higher are **shelved**: kept in the README as a record, excluded
+from every section and every escalation rule, counted in *Project standing* only.
+
 ### Bringing an existing project into the vault
 
 ```
@@ -241,14 +250,46 @@ Run `gt-lint` after any structural change. Triage into three piles: *you broke i
 **with the reason**). The check that matters most is `memory-unlisted` — a memory file
 missing from `MEMORY.md` is a file Claude will never load.
 
-### Capturing what you jotted down elsewhere
+### Capturing a thought without leaving what you are doing
+
+Add one checkbox line to `<vault>/INBOX.md`, from any session, in any project:
+
+```
+- [ ] Backtesting: try the nq_pullback set against a cold cache
+```
+
+No project, no priority, no date. Then go back to work. Later:
 
 ```
 /gt:gt-review
 ```
 
-Scans Obsidian daily notes for uncaptured tasks and ideas and promotes the ones you
-pick into tracked projects.
+reads the inbox (and daily notes, if you keep them), asks where each line belongs,
+files it as a task or a project, and checks the inbox line off with a `→ [[slug]]`
+pointer. An idea filed as a task gets `p:: 3` and no due date — a due date on an
+idea makes the deadline rule rank it above real work.
+
+### Closing a project
+
+Delivery is not closure. A shipped project whose tasks stay open keeps escalating
+through its past due dates and outranks live work; on 2026-09-05 a talk delivered
+two days earlier held 24 of the top rows in the rollup.
+
+```bash
+python3 <vault>/Projects/golden-thread/tools/gt_closeout.py candidates
+```
+
+names projects whose signals say they may be finished: most open tasks past due,
+most tasks checked with nothing urgent left, three quiet weeks, or nothing open. The
+same probe runs at `/compact` and session end (setting `closeout_check`), and
+`gt-work` asks after the last urgent task is checked. The question is always put to
+you, never acted on.
+
+Closing means: `stage: complete`, leftover tasks to `p:: 7` (shelved, not deleted),
+`pp: 3`, a last `research.md` entry, and a look at what to promote. Every ask and
+every answer is recorded in `Projects/golden-thread/closeout-signals.jsonl`;
+`gt_closeout.py history` shows what "ready" has actually looked like for you, which
+is what the thresholds get tuned against.
 
 ---
 
@@ -364,8 +405,9 @@ Prefer keeping filenames. If you must repoint, match the *whole* link —
 
 ### `/gt:gt-review`
 
-Scans Obsidian daily notes for uncaptured tasks and ideas, then promotes selected
-ones into tracked projects.
+Empties `INBOX.md`: reads every unchecked line (and daily notes, if configured),
+asks where each belongs, files it as a task or project, and checks the inbox line
+off with a pointer. Regenerates the rollup at the end.
 
 ---
 
@@ -573,7 +615,7 @@ that isn't true there. When unsure, file narrow — promotion is cheap, demotion
 ## Script reference
 
 ```bash
-SCRIPTS=~/.claude/plugins/cache/golden-thread-plugin/gt/0.9.7/scripts
+SCRIPTS=~/.claude/plugins/cache/golden-thread-plugin/gt/0.9.8/scripts
 
 python3 $SCRIPTS/vault_init.py fresh --vault ~/my-vault --domain "My Team"
 

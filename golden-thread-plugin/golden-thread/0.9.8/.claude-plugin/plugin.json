@@ -1,0 +1,9 @@
+{
+  "name": "gt",
+  "version": "0.9.8",
+  "description": "Golden Thread: vault-based AI memory system with an enforced Core-rule tier. Turns an Obsidian vault into the single source of truth for all Claude Code sessions, and installs hooks that re-assert and validate the rules that must never drift.",
+  "author": {
+    "name": "Stacy Haven",
+    "email": "shaven@shavenconsulting.com"
+  }
+}
