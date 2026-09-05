@@ -15,6 +15,14 @@ address: **writing a rule down does not mean it gets followed.**
 Plugin **v0.9.6**. Six Core rules currently enforced, three of them *validated* — a
 `Stop` hook inspects the finished reply and blocks it if the rule was broken.
 
+## Feedback
+
+If you are using Golden Thread, or tried it and bounced off, I would like to hear about
+it. Questions, ideas, and "this worked for me" belong in
+[Discussions](https://github.com/shaven/golden-thread/discussions). Bugs and anything
+that behaved differently from the documentation belong in
+[Issues](https://github.com/shaven/golden-thread/issues). Both are read.
+
 ## "In context" is not "applied"
 
 A rule can sit in a loaded file for an entire session and still be quietly dropped for
@@ -176,3 +184,7 @@ Special thanks to **Jonathan Tucci**, a developer who provided invaluable feedba
 significantly shaped this system. Jonathan identified key drawbacks in the original
 design — particularly around lazy loading and the promotion discipline — and his insights
 directly informed the fixes that made Golden Thread practical to use at scale.
+
+## License
+
+[MIT](LICENSE).
