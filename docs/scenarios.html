@@ -1,0 +1,638 @@
+<title>Golden Thread Scenarios</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,600&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+:root{
+  --ground:#F4F6F9; --surface:#FFFFFF; --ink:#1B222C; --muted:#5B6574; --line:#D3D9E1;
+  --thread:#A4760E; --thread-soft:#F5EBD2; --code-bg:#EDF0F4; --quote:#E9EDF2;
+  --font-display:"Fraunces",Georgia,"Times New Roman",serif;
+  --font-body:"IBM Plex Sans","Helvetica Neue",Arial,sans-serif;
+  --font-mono:"IBM Plex Mono","SFMono-Regular",Menlo,Consolas,monospace;
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --ground:#12161C; --surface:#191F27; --ink:#E4E8ED; --muted:#98A2B0; --line:#2B333E;
+    --thread:#D8A93B; --thread-soft:#2E2612; --code-bg:#20272F; --quote:#1F262E;
+  }
+}
+:root[data-theme="dark"]{
+  --ground:#12161C; --surface:#191F27; --ink:#E4E8ED; --muted:#98A2B0; --line:#2B333E;
+  --thread:#D8A93B; --thread-soft:#2E2612; --code-bg:#20272F; --quote:#1F262E;
+}
+*{box-sizing:border-box}
+body{background:var(--ground);color:var(--ink);font-family:var(--font-body);font-size:16px;line-height:1.6;margin:0}
+a{color:var(--thread);text-decoration:none}
+a:hover,a:focus-visible{text-decoration:underline;outline:none}
+a:focus-visible{outline:2px solid var(--thread);outline-offset:2px}
+.wrap{display:grid;grid-template-columns:240px minmax(0,1fr);gap:56px;max-width:1120px;margin:0 auto;padding:48px 32px 96px}
+nav.toc{position:sticky;top:32px;align-self:start;font-size:13.5px}
+nav.toc .label{font-family:var(--font-mono);font-size:11px;letter-spacing:.12em;text-transform:uppercase;color:var(--muted);margin-bottom:12px}
+nav.toc ol{list-style:none;margin:0;padding:0;border-left:2px solid var(--line)}
+nav.toc li a{display:block;padding:5px 0 5px 14px;color:var(--muted);border-left:2px solid transparent;margin-left:-2px}
+nav.toc li a:hover{color:var(--ink);border-left-color:var(--thread);text-decoration:none}
+nav.toc li.ref{margin-top:10px;padding-top:10px;border-top:1px solid var(--line)}
+main{max-width:70ch}
+header.masthead{margin-bottom:48px}
+.eyebrow{font-family:var(--font-mono);font-size:12px;letter-spacing:.12em;text-transform:uppercase;color:var(--thread);margin:0 0 10px}
+h1{font-family:var(--font-display);font-weight:600;font-size:44px;line-height:1.08;letter-spacing:-.01em;margin:0 0 18px;text-wrap:balance}
+.lede{font-size:18px;color:var(--muted);margin:0 0 14px;max-width:62ch}
+.note{font-size:14px;color:var(--muted);border-left:2px solid var(--thread);padding:2px 0 2px 14px;margin:18px 0 0}
+h2{font-family:var(--font-display);font-weight:600;font-size:30px;line-height:1.15;margin:72px 0 8px;text-wrap:balance;letter-spacing:-.005em}
+h2 .num{font-family:var(--font-mono);font-size:12px;letter-spacing:.12em;text-transform:uppercase;color:var(--thread);display:block;margin-bottom:8px;font-weight:500}
+h3{font-family:var(--font-display);font-weight:600;font-size:21px;margin:40px 0 8px;text-wrap:balance}
+h4{font-family:var(--font-body);font-weight:600;font-size:16px;margin:28px 0 6px}
+h4 code{font-size:15px}
+p{margin:0 0 14px}
+ul,ol{margin:0 0 14px;padding-left:22px}
+li{margin-bottom:5px}
+li > ul, li > ol{margin-top:5px}
+code{font-family:var(--font-mono);font-size:.88em;background:var(--code-bg);padding:1px 5px;border-radius:3px}
+pre{font-family:var(--font-mono);font-size:13px;line-height:1.55;background:var(--code-bg);border:1px solid var(--line);padding:14px 16px;overflow-x:auto;margin:10px 0 16px;border-radius:4px}
+pre code{background:none;padding:0;font-size:inherit}
+.say{background:var(--quote);border-left:3px solid var(--thread);padding:10px 16px;margin:14px 0;font-style:italic}
+.say b{font-style:normal;font-family:var(--font-mono);font-size:11px;letter-spacing:.1em;text-transform:uppercase;color:var(--muted);display:block;margin-bottom:2px}
+.bought{background:var(--thread-soft);border:1px solid var(--line);padding:14px 18px;margin:20px 0 6px;border-radius:4px}
+.bought b{font-family:var(--font-mono);font-size:11px;letter-spacing:.1em;text-transform:uppercase;color:var(--thread);display:block;margin-bottom:4px;font-weight:500}
+.bought p:last-child{margin:0}
+.situation{color:var(--muted);margin-bottom:18px}
+.situation b{color:var(--ink);font-weight:600}
+.tablewrap{overflow-x:auto;margin:12px 0 18px}
+table{border-collapse:collapse;width:100%;font-size:14px;line-height:1.45}
+th,td{text-align:left;vertical-align:top;padding:8px 12px 8px 0;border-bottom:1px solid var(--line)}
+th{font-family:var(--font-mono);font-size:11px;letter-spacing:.1em;text-transform:uppercase;color:var(--muted);font-weight:500;border-bottom:2px solid var(--line)}
+td code{white-space:nowrap}
+td:first-child{white-space:nowrap}
+.tablewrap.wide td:first-child{white-space:normal}
+/* stage timeline */
+.stages{list-style:none;margin:28px 0 8px;padding:0;position:relative}
+.stages::before{content:"";position:absolute;left:9px;top:10px;bottom:10px;width:2px;background:var(--thread)}
+.stages li{position:relative;padding:0 0 20px 34px}
+.stages li::before{content:"";position:absolute;left:4px;top:7px;width:12px;height:12px;border-radius:50%;background:var(--surface);border:2px solid var(--thread)}
+.stages .when{font-family:var(--font-mono);font-size:11px;letter-spacing:.1em;text-transform:uppercase;color:var(--muted);display:block;margin-bottom:2px}
+.stages .cmds{font-family:var(--font-mono);font-size:13.5px;line-height:1.7}
+.stages .cmds span{display:inline-block;background:var(--code-bg);padding:0 6px;border-radius:3px;margin:0 4px 4px 0}
+.auto{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin:8px 0 8px}
+.auto div{border-top:2px solid var(--line);padding-top:10px;font-size:14.5px}
+.auto b{display:block;font-weight:600;margin-bottom:4px}
+hr{border:0;border-top:1px solid var(--line);margin:56px 0}
+@media (max-width:860px){
+  .wrap{grid-template-columns:1fr;gap:24px;padding:28px 18px 64px}
+  nav.toc{position:static}
+  nav.toc ol{display:flex;flex-wrap:wrap;gap:2px 10px;border:0}
+  nav.toc li a{padding:3px 0;border:0}
+  nav.toc li.ref{margin:0;padding:0;border:0}
+  h1{font-size:34px}
+  .auto{grid-template-columns:1fr}
+}
+@media (prefers-reduced-motion: no-preference){ html{scroll-behavior:smooth} }
+</style>
+
+<div class="wrap">
+<nav class="toc" aria-label="Scenarios">
+  <div class="label">Scenarios</div>
+  <ol>
+    <li><a href="#shape">The shape every scenario follows</a></li>
+    <li><a href="#s0">0 · First day on a new machine</a></li>
+    <li><a href="#s1">1 · Greenfield, idea to close</a></li>
+    <li><a href="#s2">2 · Brownfield ingest</a></li>
+    <li><a href="#s3">3 · Production operations</a></li>
+    <li><a href="#s4">4 · Farming, sources, refresh</a></li>
+    <li><a href="#s5">5 · Inbox, review, what's next</a></li>
+    <li><a href="#s6">6 · The other endings</a></li>
+    <li><a href="#s7">7 · Maintenance day</a></li>
+    <li><a href="#s8">8 · The gt-wiki mode</a></li>
+    <li class="ref"><a href="#ref">Command reference</a></li>
+    <li><a href="#files">Files and write direction</a></li>
+  </ol>
+</nav>
+
+<main>
+<header class="masthead">
+  <p class="eyebrow">docs / scenarios.md · 2026-09-05</p>
+  <h1>Golden Thread Scenarios</h1>
+  <p class="lede">Every command in the <code>gt</code> and <code>gt-wiki</code> plugins, shown inside a complete session path: opening a project, everything that happens while it is open, and every way it can end. Each step names what you say, what the skill reads and writes, and what that buys you.</p>
+  <p class="note">Every file excerpt is illustrative. Project slugs, hosts, file names and figures are invented stand-ins; the contents shown are examples of shape, not records of fact. Skill names are as installed: <code>/gt:gt-open</code>, not <code>/gt-open</code>.</p>
+</header>
+
+<section id="shape">
+<h2>The shape that every scenario follows</h2>
+<ol class="stages">
+  <li><span class="when">One time, per machine</span><div class="cmds"><span>/gt:gt-init</span><span>/gt:gt-settings</span></div>wire the vault and hooks, choose what runs on its own</li>
+  <li><span class="when">A project arrives</span><div class="cmds"><span>/gt:gt-create</span><span>/gt:gt-ingest</span><span>/gt:gt-review</span></div>new, existing, or filed from <code>INBOX.md</code></li>
+  <li><span class="when">Every session</span><div class="cmds"><span>/gt:gt-open</span><span>work</span><span>/gt:gt-work</span></div>during work: <span class="cmds"><span>/gt:gt-query</span><span>/gt:gt-validate</span><span>/gt:gt-farm</span><span>INBOX.md</span></span></li>
+  <li><span class="when">Between sessions</span><div class="cmds"><span>/gt:gt-promote</span><span>/gt:gt-lint</span><span>/gt:gt-runbook-lint</span><span>/gt:gt-refresh</span><span>gt_tasks.py</span><span>gt_closeout.py</span></div></li>
+  <li><span class="when">The project ends</span><div class="cmds"><span>close</span><span>rename</span><span>merge</span><span>archive</span><span>later</span></div>then promote what it taught</li>
+</ol>
+<p>Two things run without being asked and appear in every scenario:</p>
+<div class="auto">
+  <div><b>Session start</b>Hooks print plugin version, component drift, orphaned workers and unpushed commits. The assistant's first line restates them. Silence is the failure case, so a clean check is announced too.</div>
+  <div><b>Every turn</b>The <code>UserPromptSubmit</code> hook injects the six Core rules; the <code>Stop</code> hook validates the reply (timestamp, no claimed-file writes). You never invoke these.</div>
+</div>
+</section>
+
+<section id="s0">
+<h2><span class="num">Scenario 0</span>First day on a new machine</h2>
+<p class="situation"><b>Situation.</b> You have cloned the vault onto a laptop. The rules are there as files. Nothing is enforcing them.</p>
+
+<h3>Step 1: <code>/gt:gt-init</code></h3>
+<div class="say"><b>You say</b>set up golden thread here</div>
+<p>What it does:</p>
+<ol>
+<li>Reads <code>~/.claude/vault-config.json</code>. It is missing, so this is a fresh install.</li>
+<li>Asks two questions: do you already have a vault (yes, give the path) and your domain name, used to customise the schema.</li>
+<li>Asks whether to wire a project right now. You say no.</li>
+<li>Runs <code>vault_init.py fresh --vault &lt;path&gt; --domain "&lt;domain&gt;"</code>. Because the vault already exists, almost every line comes back <em>Already exists</em>. It creates only what is missing and never overwrites.</li>
+<li>Installs <code>Projects/golden-thread/core-rules/</code> if absent and <strong>wires the two hooks</strong> into user-global <code>~/.claude/settings.json</code>: <code>UserPromptSubmit</code> for the reminder tier, <code>Stop</code> for the validated tier.</li>
+<li>Adds a Golden Thread section to <code>~/.claude/CLAUDE.md</code>.</li>
+</ol>
+<p>Verification it tells you to run:</p>
+<pre><code>echo '{}' | ~/.claude/golden-thread/hooks/inject_core_rules.sh</code></pre>
+<p>The six Core rules print. If they do not, the tier is inert and the skill says so.</p>
+<div class="bought"><b>What this bought you</b><p>Without it, the vault's Core rules are documents. One recorded incident had the timestamp rule sitting in memory while silently not applied for dozens of turns. After <code>gt-init</code>, it is re-asserted every turn, on every project, and a missing timestamp is a visible alarm that enforcement has broken.</p></div>
+
+<h3>Step 2: <code>/gt:gt-settings</code></h3>
+<div class="say"><b>You say</b>what does golden thread do on its own?</div>
+<ol>
+<li>Runs <code>gt_settings.py show</code>. Prints each setting, its value, whether that is explicit or default, and the options:
+<div class="tablewrap"><table><tr><th>Setting</th><th>Values</th><th>Default</th></tr>
+<tr><td><code>component_updates</code></td><td>off · report · confirm · auto</td><td>report</td></tr>
+<tr><td><code>report_card</code></td><td>off · minimal · full</td><td>minimal</td></tr></table></div></li>
+<li>You ask what <code>auto</code> means. It runs <code>gt_settings.py explain component_updates</code> and reads back the incident that set the default: in one recorded case two of three enforcement scripts existed on one machine only. <code>auto</code> never overwrites an installed file that is newer than the source, because the real drift ran that direction.</li>
+<li>You say <em>set report_card to full</em>. It runs <code>gt_settings.py set report_card full</code> and reports the change.</li>
+</ol>
+<div class="bought"><b>What this bought you</b><p>Every automatic behaviour is in one registry and every one can be turned off. You are never surprised by the tooling acting on its own.</p></div>
+
+<h3>Step 3: <code>/gt:gt-lint</code></h3>
+<div class="say"><b>You say</b>lint the vault</div>
+<p>Runs <code>gt_lint.py &lt;vault&gt; --queue &lt;vault&gt;/review-queue.md</code> and walks each finding with a yes/no. On a fresh machine the ones that matter are the three Core checks:</p>
+<div class="tablewrap"><table><tr><th>Finding</th><th>Meaning</th></tr>
+<tr><td><code>core-misplaced</code></td><td>a <code>level: core</code> file outside <code>core-rules/</code></td></tr>
+<tr><td><code>core-no-enforcement</code></td><td><code>level: core</code> with no <code>enforcement</code> declared</td></tr>
+<tr><td><code>core-unenforced</code></td><td>the declared mechanism is not wired in <code>settings.json</code></td></tr></table></div>
+<p><code>core-unenforced</code> is the one that confirms Step 1 worked. It must not fire. The skill refuses to suppress it: suppressing that check re-creates the original bug with a paper trail saying it was fine.</p>
+<p><strong>End state.</strong> Vault wired, hooks live, settings known, lint clean. You have not opened a project yet.</p>
+</section>
+
+<section id="s1">
+<h2><span class="num">Scenario 1</span>Greenfield: an idea becomes a closed project</h2>
+<p class="situation"><b>Situation.</b> You want to build a tool that reads a mailbox and triages incoming mail. Nothing exists yet. This scenario shows the whole arc from today.</p>
+
+<h3>Session A: capture</h3>
+<h4><code>/gt:gt-create</code></h4>
+<div class="say"><b>You say</b>new project called mail-triage. It connects to the mail provider, pulls new mail, classifies it, and feeds the other projects. Personal domain. Runs on my laptop for now.</div>
+<ol>
+<li><strong>Gathers inputs, inferring what it can.</strong> Slug <code>mail-triage</code>, title "Mail Triage", domain <code>personal</code> (from <code>CONVENTIONS.md</code>), tags from the taxonomy, topology <code>local</code> (you said laptop), no runbook yet, no parent.</li>
+<li><strong>Checks for conflict.</strong> <code>Projects/mail-triage/</code> must not exist. If it did, it stops and asks: work in the existing folder or choose another name?</li>
+<li><strong>Runs the script.</strong> Scaffolding is never done by hand:
+<pre><code>python3 &lt;plugin&gt;/scripts/vault_init.py create-project \
+  --vault "&lt;vault&gt;" --name mail-triage --title "Mail Triage" \
+  --tags "personal,automation" --domain personal --topology local</code></pre>
+Shows CREATED lines for <code>README.md</code>, <code>idea.md</code>, <code>source.md</code>, <code>research.md</code>, <code>decisions.md</code>, <code>design.md</code>, <code>memory/MEMORY.md</code>, and registers the project in <code>Projects/README.md</code>.</li>
+<li><strong>Fills <code>idea.md</code></strong> with everything you said, near-verbatim. Not a summary. This file is immutable after creation; it is the origin story you will read in six months to remember why.</li>
+<li><strong>Cross-links</strong> to related projects if you named any.</li>
+</ol>
+<p>Then it tells you: <em>Next: run <code>/gt:gt-open mail-triage</code> at the start of future sessions.</em></p>
+<div class="bought"><b>What this bought you</b><p>Every project starts with an identical layout, so every later command knows where to look. The brain dump is captured while it is fresh, and the project is already visible in the vault's Dataview views because <code>domain</code> and <code>stage</code> are set in frontmatter.</p></div>
+
+<h3>Session B: research</h3>
+<h4><code>/gt:gt-open mail-triage</code></h4>
+<div class="say"><b>You say</b>open mail-triage</div>
+<ol>
+<li>Reads <code>CONVENTIONS.md</code> and <code>PROTOCOL.md</code> once per session.</li>
+<li>Reads <code>README.md</code> frontmatter first: <code>stage: idea</code>, <code>topology: local</code>, <code>domain: personal</code>. Then the status board and <code>## Tasks</code>.</li>
+<li>Reads <code>source.md</code> <strong>before anything else that could lead to touching code</strong>. For a local project this is one line. For a bastion project it is the difference between editing the right host and the wrong one.</li>
+<li>Reads <code>idea.md</code>, <code>research.md</code>, <code>decisions.md</code>, <code>design.md</code>. All nearly empty.</li>
+<li>Reads <code>memory/MEMORY.md</code>, the index only. Does not follow the links.</li>
+<li>Checks <code>review-queue.md</code> and mentions the count once.</li>
+<li>Summarises: stage, topology, next action, blockers, and how many memory files exist but are not loaded.</li>
+<li>Asks: <em>Where do you want to pick up?</em></li>
+</ol>
+<div class="say"><b>You say</b>figure out how to authenticate to the mail provider</div>
+
+<h4>Work, with <code>/gt:gt-query</code> in the middle</h4>
+<p>While working, you wonder whether the vault already knows anything about OAuth refresh tokens.</p>
+<div class="say"><b>You say</b>does the vault have anything on OAuth refresh tokens?</div>
+<ol>
+<li>Reads <code>index.md</code>, scans for a match.</li>
+<li>Found: follows the wikilink into <code>Knowledge/</code>, reads the whole page, follows two or three hops of related links, summarises.</li>
+<li>If a page is <code>status: stale</code>, it says so.</li>
+<li>Not found in the index: greps <code>Knowledge/</code> and <code>global-memory/</code>.</li>
+<li>Still nothing: checks the current project's <code>memory/MEMORY.md</code>.</li>
+<li>Still nothing: says <em>The vault doesn't have anything on OAuth refresh tokens yet</em> and offers two options, ingest existing notes with <code>/gt:gt-ingest</code>, or write what it knows now as a <code>status: seed</code> Knowledge page via <code>/gt:gt-promote</code>.</li>
+<li>Logs the query to <code>log.md</code> either way. Repeated queries are the signal that something deserves a page.</li>
+</ol>
+<div class="bought"><b>What this bought you</b><p>You never re-derive something the vault already holds, and you never confuse "the vault has nothing" with "I did not look." Say the vault had a page from the <code>doorbell-camera/device-auth</code> sub-project on the doorbell vendor's OAuth. The query surfaces it in one hop, and the lesson it recorded about refresh-token expiry is now in this session instead of being relearned.</p></div>
+
+<h4>Capturing a stray thought: <code>INBOX.md</code></h4>
+<p>Mid-research you think: <em>the doorbell project should also use the same token refresh pattern.</em> That belongs to <code>doorbell-camera</code>, not here.</p>
+<div class="say"><b>You say</b>inbox that</div>
+<p>The assistant appends one line to <code>INBOX.md</code> at the vault root:</p>
+<pre><code>- [ ] device-auth should share mail-triage's token refresh pattern [project:: doorbell-camera]</code></pre>
+<p>No priority, no date, no interruption. It shows at the top of <code>TASKS.md</code> under <strong>Inbox</strong> so it cannot be lost, and nowhere else so it does not rank.</p>
+<div class="bought"><b>What this bought you</b><p>The thought is out of your head and out of the wrong project's <code>research.md</code>, in three seconds, without leaving the task.</p></div>
+
+<h4><code>/gt:gt-work</code> at the end of the session</h4>
+<div class="say"><b>You say</b>write back</div>
+<ol>
+<li>Confirms the project (obvious from context; it does not ask).</li>
+<li><strong>Classifies each finding</strong> before writing anything:
+<div class="tablewrap wide"><table><tr><th>Finding from this session</th><th>Scope</th><th>Destination</th></tr>
+<tr><td>The mail API needs a Desktop OAuth client, not Web</td><td>This project</td><td><code>research.md</code></td></tr>
+<tr><td>Refresh tokens for unverified apps expire in 7 days</td><td>Cross-project</td><td>candidate for <code>Knowledge/</code></td></tr>
+<tr><td>Chose IMAP-over-OAuth rather than the REST API</td><td>This project, stable</td><td><code>decisions.md</code> ADR-1</td></tr>
+<tr><td>"Remember to try the batch endpoint"</td><td>Session-only</td><td>not written</td></tr></table></div></li>
+<li>Appends to <code>research.md</code> as dated entries. Append-only; nothing above is edited.</li>
+<li>Appends <code>ADR-1</code> to <code>decisions.md</code> with Decision, Context, Rejected alternatives. Only because the decision is stable. A decision that might flip next session stays in <code>research.md</code>.</li>
+<li>Rewrites the changed sections of <code>design.md</code> in place. It always describes NOW.</li>
+<li>Updates <code>README.md</code> frontmatter: <code>stage: idea</code> becomes <code>stage: research</code>. The <code>## Stage</code> heading in the body is made to agree, because the property is what the Dataview views read.</li>
+<li>Adds a task under <code>## Tasks</code>:
+<pre><code>- [ ] Verify the 7-day refresh-token expiry with a real unverified client [p:: 2] [waiting:: agent] [since:: 2026-09-05]</code></pre></li>
+<li><strong>Flags the promotion candidate.</strong> <em>The 7-day expiry looks like it applies beyond mail-triage. Add it to Knowledge now, or flag for <code>/gt:gt-promote</code> later?</em> You say later. It stays in <code>research.md</code> with a <code>→ promote</code> note. A fact earns its way up by recurring; one project is not enough.</li>
+<li>Appends to <code>log.md</code>:
+<pre><code>2026-09-05 [work] mail-triage — wrote 2 finding(s), 1 ADR(s), updated design</code></pre></li>
+<li>Runs the closeout probe. Nothing fires; the project just started.</li>
+</ol>
+<div class="bought"><b>What this bought you</b><p>Next session starts from <code>research.md</code> and ADR-1 instead of from your memory of what you tried. The decision you made has its rejected alternatives written down, so nobody proposes the REST API again in three weeks without seeing why it lost.</p></div>
+
+<h3>Session C: a number that matters</h3>
+<p>The next session opens the same way. You are measuring how fast the parser can classify a backlog, and you reach a claim: <em>the classifier handles 400 messages a minute on the laptop.</em> You want that number in <code>design.md</code>, which sizes the scheduling.</p>
+<h4><code>/gt:gt-validate</code></h4>
+<div class="say"><b>You say</b>validate that before it goes in design.md</div>
+<ol>
+<li><strong>Reduces it to a single falsifiable assertion.</strong> "The classifier processes at least 400 messages per minute on this machine against the seeded test mailbox." Bundled claims return bundled verdicts, which hide which part failed.</li>
+<li><strong>Loads the rule pack.</strong> Reads <code>Projects/mail-triage/validation-rules.md</code> if it exists. Sub-projects inherit their parent's pack. The pack holds standing invariants the validator enforces whether or not you asked for them, because a requester who has made a domain error will not think to ask about it.</li>
+<li><strong>Chooses the validator class.</strong> A number could be wrong: <code>empirical</code>. The measurement position could also be blind to something (was the cache warm?): <code>vantage</code> as well. Two validators, not one generic reviewer.</li>
+<li><strong>Builds the packet.</strong> Exactly three fields:
+<pre><code>claim:    The classifier processes ≥400 messages/min against the seeded mailbox.
+rules:    &lt;pack, verbatim, provenance blocks stripped&gt; + "cold start, cache cleared"
+artifact: bench/run_classify.py, mailbox fixture at bench/fixtures/seed_1000.mbox</code></pre>
+Then <strong>strips</strong> its own numbers, its confidence, the transcript, and every "confirm that" (rewritten as "determine whether"). The validator must never see the reasoning, or it grades the argument and inherits the same blind spot.</li>
+<li><strong>Dispatches</strong> one background subagent per class with the matching prompt.</li>
+<li><strong>Compares in the right order</strong>: reads the validator's derivation before re-reading its own.</li>
+<li>Reports one of three verdicts and never rounds <code>cannot-verify</code> up to a pass:
+<ul><li><code>confirmed</code>: re-derived, matches.</li><li><code>refuted</code>: re-derived, does not match, with the divergence quantified.</li><li><code>cannot-verify</code>: inputs insufficient, naming what was missing.</li></ul></li>
+<li><strong>Records</strong> the verdict in <code>research.md</code> with date, claim, class, outcome. Logs <code>work</code>.</li>
+</ol>
+<p>Say the <code>vantage</code> validator comes back: the fixture is 1,000 messages but 700 are duplicates of 30 senders, so the rate reflects a warm sender cache. Verdict: <code>refuted</code>, real cold rate 140/min.</p>
+<div class="bought"><b>What this bought you</b><p>The wrong number never reached <code>design.md</code>. Per <code>PROTOCOL.md</code>, <code>decisions.md</code> and <code>design.md</code> require <code>independently verified</code>; <code>research.md</code> accepts <code>unverified</code> because it is dated findings, not conclusions. In one recorded incident an unverified analysis reached <code>decisions.md</code> as an ADR recommending a four-part production change, and a validator later refuted three of the four parts. The ladder carried the error up because nothing asked how the number was checked. This rung is that question.</p><p>The label goes on the figure wherever it appears: <code>140/min, independently verified</code>.</p></div>
+
+<h3>Session D: design settles, spec is written</h3>
+<p>Several sessions later, <code>design.md</code> has no open questions. <code>/gt:gt-work</code> notices and asks: <em>Is the design settled enough to write a spec?</em> You say yes. It creates <code>spec.md</code>:</p>
+<pre><code># Mail Triage Implementation Spec
+
+## What to change
+## Expected behavior
+## Tests to write
+## Acceptance criteria
+- [ ] Cold-start classification ≥100 msg/min on the seeded mailbox
+- [ ] Token refresh survives a 7-day unverified-app expiry without user action</code></pre>
+<p>The spec must be implementable by someone reading only the spec. It references <code>research.md</code> and <code>decisions.md</code> for the why rather than duplicating them. The stage moves to <code>design</code>, then <code>active</code> once implementation begins.</p>
+<div class="bought"><b>What this bought you</b><p>A handoff artifact. You can give this to a fresh session, another agent, or a person, with zero prior context, and the acceptance criteria are the definition of done.</p></div>
+
+<h3>Session E: the last task, and the close</h3>
+<p>You check off the last acceptance criterion. <code>/gt:gt-work</code> does its normal write-back and then hits the rule: <em>you just checked off the last open task at <code>p:: 2</code> or better.</em> It runs:</p>
+<pre><code>python3 Projects/golden-thread/tools/gt_closeout.py signals mail-triage</code></pre>
+<p>Rule <code>R4</code> fires (nothing open). It records that it is asking:</p>
+<pre><code>python3 Projects/golden-thread/tools/gt_closeout.py ask mail-triage gt-work</code></pre>
+<p>and asks: <em>mail-triage looks finished: nothing open, all acceptance criteria checked. Close it? yes / no / later, and why?</em></p>
+<div class="say"><b>You say</b>yes, it's shipped and running on the laptop cron.</div>
+<pre><code>python3 Projects/golden-thread/tools/gt_closeout.py answer mail-triage yes "shipped, on laptop cron"</code></pre>
+<p>Closing means:</p>
+<ul>
+<li><code>README.md</code> frontmatter <code>stage: complete</code>, <code>pp: 3</code>.</li>
+<li>Any leftover open task moved to <code>[p:: 7]</code>, so it stays in the README as a record but leaves the rollup and stops escalating the project. <strong>Never deleted.</strong></li>
+<li>A final <code>research.md</code> entry saying what shipped.</li>
+<li>Then the promotion check, because a finished project is where the vault's most general lessons usually are.</li>
+</ul>
+<div class="bought"><b>What this bought you</b><p>Delivery is not closure; closure is a decision, and the system asks rather than assumes. Every ask and answer is appended to <code>closeout-signals.jsonl</code>, so after ten or so answers the thresholds can be tuned to how you actually close things.</p></div>
+
+<h3>After the close: <code>/gt:gt-promote</code></h3>
+<div class="say"><b>You say</b>promote the token expiry finding</div>
+<ol>
+<li><strong>Identifies</strong> the item. You named it; it also accepts "review promotion candidates", which scans <code>research.md</code> and <code>decisions.md</code> for <code>→ promote</code> notes.</li>
+<li><strong>Determines the destination</strong> with two questions: does this apply beyond <code>mail-triage</code>? Yes, <code>device-auth</code> hit the same expiry. Does every session need it regardless of project? No.</li>
+<li><strong>Writes <code>Knowledge/OAuth Refresh Token Expiry.md</code></strong> with the full frontmatter (<code>category: reference</code>, <code>status: seed</code>, <code>created</code>, <code>updated</code>, <code>sources: []</code>), adds one line to <code>index.md</code>, cross-links from related pages in both directions.</li>
+<li>Logs with the closed verb vocabulary:
+<pre><code>2026-09-05 [graduate] mail-triage/research.md → Knowledge/OAuth Refresh Token Expiry.md: 7-day expiry for unverified apps</code></pre></li>
+</ol>
+<p>Had you said it belongs in every session, it would have asked the global-scope question first: zero project slugs, zero project-specific URLs, proven in two unrelated projects, under 30 lines. Failing any of those, it keeps the page in <code>Knowledge/</code> and suppresses the promotion.</p>
+<div class="bought"><b>What this bought you</b><p>The next project that touches the same OAuth flow finds this in one <code>/gt:gt-query</code> hop. The fact moved up the ladder because it recurred, with a human approving the move, and the log records where it came from.</p></div>
+</section>
+
+<section id="s2">
+<h2><span class="num">Scenario 2</span>Brownfield: an existing codebase with scattered notes</h2>
+<p class="situation"><b>Situation.</b> You have a repo with a <code>.claude/memory/</code> folder, a <code>CLAUDE.md</code> full of rules, deploy scripts naming three servers, and a README. None of it is in the vault.</p>
+<h3><code>/gt:gt-ingest</code></h3>
+<div class="say"><b>You say</b>ingest ~/code/invoice-archiver into the vault as invoice-archiver</div>
+<ol>
+<li>Confirms the project directory and the slug. The vault folder does not exist, so it runs <code>vault_init.py create-project</code> first.</li>
+<li><strong>Scans</strong> with <code>gt_ingest.py &lt;dir&gt; --json</code> and gets a list of candidates, each with a <code>suggested_dest</code>.</li>
+<li><strong>Presents by group</strong>, asking before doing anything:
+<div class="tablewrap wide"><table><tr><th>Group</th><th>What it found</th><th>Would go to</th></tr>
+<tr><td>decisions</td><td>4 CLAUDE.md rules ("never run migrations on prod without a backup")</td><td><code>decisions.md</code></td></tr>
+<tr><td>research</td><td>6 memory files of gotchas</td><td><code>research.md</code></td></tr>
+<tr><td>design</td><td>the README architecture section</td><td><code>design.md</code></td></tr>
+<tr><td>knowledge</td><td>a note on the shared database's pooling limits</td><td><code>Sources/</code> then <code>Knowledge/</code></td></tr>
+<tr><td>global_memory</td><td>the internal package registry URL</td><td><code>global-memory/</code></td></tr>
+<tr><td>ideas</td><td>"we should build a receipt OCR service"</td><td>new project scaffold, or skip</td></tr>
+<tr><td>skip</td><td><code>user.md</code> personal prefs</td><td>excluded silently</td></tr></table></div></li>
+<li><strong>Asks for an explicit yes</strong> before writing: <em>This will COPY files. Nothing is deleted from their current location.</em></li>
+<li><strong>Executes.</strong> Decisions, research and design append as dated sections. The knowledge item is stored <strong>immutably first</strong> as <code>Sources/2026-09-05 Database Pooling Limits.md</code> with <code>title</code>, <code>local_path</code>, <code>fetched</code>, <code>supersedes: []</code> frontmatter, then synthesised into a <code>status: seed</code> Knowledge page citing it, and indexed. The idea becomes <code>Projects/receipt-ocr/idea.md</code> if you say scaffold.</li>
+<li>Updates <code>Projects/invoice-archiver/memory/MEMORY.md</code> to point at what moved.</li>
+<li>Logs <code>[ingest]</code>.</li>
+<li><strong>Populates <code>source.md</code></strong> from the evidence it just read. The deploy scripts name three hosts through a gateway: topology <code>bastion-jump</code>. Host aliases resolved against <code>~/.ssh/config</code>. A file the notes say "had to be fixed separately on each box" is recorded as <code>static</code> and unmanaged. Anything inferred is marked <code>TODO — verify</code> and listed in the summary.</li>
+<li>Offers to wire the Golden Thread section into the repo's <code>CLAUDE.md</code>.</li>
+</ol>
+<div class="bought"><b>What this bought you</b><p>A month of learned gotchas is in the vault in the right files, the originals are untouched, and the topology questions only you can answer are listed while the material is fresh. The next <code>/gt:gt-open</code> reads <code>source.md</code> and knows which of three boxes is production before anyone touches code.</p></div>
+
+<h3><code>/gt:gt-lint</code> after ingest</h3>
+<p>The ingest summary says to run it. Typical findings on a fresh ingest:</p>
+<ul>
+<li><code>memory-unlisted</code>: a moved memory file the index missed. Shows the line; you say yes.</li>
+<li><code>orphan</code>: the new Knowledge page has no inbound link besides the index. It proposes linking from a related page.</li>
+<li><code>broken-link</code>: a wikilink in a memory file pointed at a note that was skipped. Options: remove the link or create the target.</li>
+</ul>
+<p>Declined fixes go to <code>lint-declines.md</code> so they are not re-asked.</p>
+
+<h3><code>/gt:gt-open invoice-archiver</code></h3>
+<p>Now the open reads a populated <code>source.md</code> first, and because it links <code>[[INFRASTRUCTURE]]</code> for the fleet, reads that page too rather than a copied host table. The summary names topology and targets so you can correct a stale entry <strong>before</strong> work starts. The three <code>TODO — verify</code> gaps are the first thing it lists.</p>
+</section>
+
+<section id="s3">
+<h2><span class="num">Scenario 3</span>Production operations on a shared vault</h2>
+<p class="situation"><b>Situation.</b> A live incident on the order-fulfilment platform. Live customer orders, a bastion fleet, and a second Claude session is already working the same vault. This is the scenario the Core rules were built around.</p>
+
+<h3><code>/gt:gt-open order-router</code></h3>
+<p>The open reads <code>source.md</code> first, follows <code>[[INFRASTRUCTURE]]</code> for which host serves which role in which environment, reads the <code>##</code> headings of a long <code>research.md</code> rather than all of it, and notes the project's <code>validation-rules.md</code> pack. It reports memory files available but not loaded, and tells you the vault has N items in <code>review-queue.md</code>.</p>
+
+<h3>Registration and claims, before the first write</h3>
+<p><code>PROTOCOL.md</code> and Core rule 1: register the session and claim a file before writing it. The assistant runs:</p>
+<pre><code>gt_session.py register --task "ADR-6 retry-path staging" \
+  --files Projects/order-router/research.md log.md
+gt_session.py list</code></pre>
+<p><code>list</code> shows the other live session and what it holds. Liveness is decided by <code>pid</code> and host, not the clock. If it holds <code>log.md</code>, this session <strong>does not edit <code>log.md</code></strong>. It stages its line under <code>Projects/golden-thread/pending/&lt;name&gt;.logline</code> to be appended when the claim clears. The <code>PreToolUse</code> guard hook denies a Write or Edit against a claimed file regardless, naming the holder.</p>
+<div class="bought"><b>What this bought you</b><p>In one recorded incident two sessions wrote the same <code>research.md</code> minutes apart with no branches, no merge, and no conflict marker. Nothing was lost only because one checked <code>git status</code> before committing. Now a collision is prevented rather than discovered.</p></div>
+
+<h3>Working: the runbook incubator</h3>
+<p>While staging the fix you learn: <em>the relay only reloads its config on SIGHUP, and a restart drops all client sockets.</em> That is a fact about the code, useful to anyone touching it whether or not they have ever seen this vault.</p>
+<p>The assistant writes it to <code>runbook.md</code> <strong>immediately, with no ceremony</strong>. That file is the incubator: the one place stability can be observed. It is not yet in the repo's <code>CLAUDE.md</code>, because a fact still in motion is not safe to publish.</p>
+
+<h3>Secrets: Core rule 2</h3>
+<p>Reading <code>order_handler.js</code> you find a hard-coded credential. The assistant records its <strong>location</strong> and that it must be rotated. It does not read the value into the session, does not print it to redact it, does not check whether it matches anything. The task line in the README says <em>value deliberately not recorded anywhere in the vault.</em></p>
+
+<h3><code>/gt:gt-validate</code> before a production change</h3>
+<p><code>PROTOCOL.md</code>: a production change requires <code>independently verified</code>. The claim is <em>6/6 patches apply cleanly to the current production builds.</em> Class: <code>code</code> (does the code do what its name claims) plus <code>rule-compliance</code> (the project's rule pack, here <code>R2</code>, the no-double-dispatch invariant). The packet carries the pack's operational half verbatim and <strong>never</strong> the provenance blocks between the markers, because those name the incident figures a claim may be about, and a validator handed the answer can no longer re-derive it.</p>
+<p>The verdict lands in <code>research.md</code> labelled. A <code>self-verified</code> from the same session is recorded as exactly that, not upgraded.</p>
+
+<h3><code>/gt:gt-work</code></h3>
+<p>Write-back as in Scenario 1, plus:</p>
+<ul>
+<li>The runbook entry stays in <code>runbook.md</code>.</li>
+<li>A stable ruling becomes an ADR. When you explained <em>why</em> the flat batch-size cap is deliberate, the assistant asked in one line whether to write it as an ADR rather than absorbing it. That rule exists because a deliberate decision was written up as a defect four times over two days before an ADR recorded the reasoning.</li>
+<li>The stage property is checked against reality.</li>
+<li>The closeout probe runs; nothing fires on an active project with open P1s.</li>
+<li><code>gt_session.py release</code> deletes the session file. Absence means finished.</li>
+</ul>
+
+<h3>Weeks later: <code>/gt:gt-runbook-lint</code></h3>
+<div class="say"><b>You say</b>lint runbooks</div>
+<ol>
+<li>Finds every <code>runbook.md</code> under <code>Projects/</code>, sub-projects included. Fewer than two and it stops.</li>
+<li>Reads them and <strong>clusters</strong> near-identical content: the same SSH-through-bastion preamble in three runbooks, the same "diff before overwriting" warning in four.</li>
+<li>Classifies each cluster:
+<div class="tablewrap wide"><table><tr><th>Cluster</th><th>Type</th><th>Destination</th></tr>
+<tr><td>"diff local vs remote before scp to prod"</td><td>process rule, all projects</td><td><code>PROTOCOL.md</code></td></tr>
+<tr><td>"the relay reloads on SIGHUP"</td><td>repo fact, one system</td><td>that project's <code>CLAUDE.md</code></td></tr>
+<tr><td>"systemd unit names on app-1"</td><td>platform fact, this stack</td><td><code>Knowledge/</code> page</td></tr>
+<tr><td>two procedures with similar wording, different steps</td><td>coincidence</td><td>left in place</td></tr></table></div></li>
+<li>Shows each cluster and asks: promote or leave?</li>
+<li>Routes approved ones through <code>/gt:gt-promote</code>, then replaces the duplicated lines in each runbook with a pointer: <code>&gt; See: Projects/PROTOCOL.md § Working Rules</code>.</li>
+<li>Logs <code>[runbook-lint] N clusters, M promoted, P false positives</code>.</li>
+</ol>
+<div class="bought"><b>What this bought you</b><p>Repetition across runbooks is the signal that a fact is general. Four copies of "diff before overwrite" become one rule in <code>PROTOCOL.md</code> that every session reads, and the four runbooks point at it instead of drifting apart.</p></div>
+
+<h3>Graduating a repo fact to <code>CLAUDE.md</code></h3>
+<p>The SIGHUP fact survived three sessions unchanged. That is the trigger. <code>/gt:gt-promote</code> moves it to <code>Projects/order-router/CLAUDE.md</code>, which is committed to the repo root. The content rule is absolute: <strong>self-contained</strong>. A reader with no vault gets full value; vault paths appear only in an optional trailing section resolved through <code>~/.claude/vault-config.json</code>. This is the only channel that costs the reader nothing, because every Claude Code session in that repo reads it automatically. Logged with <code>graduate</code>, naming the destination repo from <code>source.md</code>.</p>
+</section>
+
+<section id="s4">
+<h2><span class="num">Scenario 4</span>Research-heavy: farming, sources, and refresh</h2>
+<p class="situation"><b>Situation.</b> You need to know current rate limits and pricing across three external weather APIs before deciding which one the <code>weather-feed</code> project should use. That is a lot of page reading, and the reading itself is not the scarce resource. Context is.</p>
+
+<h3><code>/gt:gt-farm</code></h3>
+<div class="say"><b>You say</b>farm out the API comparison</div>
+<ol>
+<li><strong>Applies the four gates. Most things do not leave.</strong>
+<div class="tablewrap wide"><table><tr><th>Gate</th><th>Question</th><th>This task</th></tr>
+<tr><td>Stateless</td><td>answerable with no vault or repo state?</td><td>yes, public docs</td></tr>
+<tr><td>Self-contained</td><td>fits in a paragraph plus URLs?</td><td>yes</td></tr>
+<tr><td>Checkable</td><td>verifiable without redoing the work?</td><td>yes, if it cites pages</td></tr>
+<tr><td>Releasable</td><td>every input safe for a third party?</td><td><strong>only after abstracting</strong></td></tr></table></div>
+The first draft mentioned account tier and volume. Those are stripped; the question is rephrased in public terms. Releasable is default-deny, and it is checked while building the packet, not before sending.</li>
+<li><strong>Picks the vendor</strong> from the vendor table in the farm project's <code>design.md</code>. Broad research with citations: a research API. A second opinion where being wrong is expensive: a non-Claude model, which is the one thing more Claude cannot buy.</li>
+<li><strong>Builds the packet</strong> in plain Markdown: <code>### TASK</code>, <code>### INPUTS</code>, a mandatory <code>### CURRENT VOCABULARY</code> block, and a strict <code>### RETURN CONTRACT</code> of <code>FINDINGS</code> (claim, page-level source or <code>NONE</code>, confidence) and mandatory <code>GAPS</code>.</li>
+<li><strong>Supplies the vocabulary from the system, never from memory.</strong> Model ids come from a live list call, versions from the manifest, today's date from the clock. Measured on the same packet: without a vocabulary block the model searched two generations stale and invented a rate-limit table; with it, the model scoped its queries and put the unknown in <code>GAPS</code>. The fix is prompt-side and free.</li>
+<li><strong>Chooses plain mode</strong>, because research mode will not honour the return contract. Depth is a rung-0, human-reads-it capability only.</li>
+<li>Saves the packet to <code>Projects/external-research/packets/2026-09-05-api-limits.md</code>.</li>
+<li><strong>Transport:</strong> copies from the file, never from terminal text, because rendered long lines are silently truncated:
+<pre><code>sed -n '/^### TASK/,$p' &lt;packet-file&gt; | pbcopy</code></pre>
+and tells you where to paste it. You are the transport at rung 0, which keeps it within the vendor's terms.</li>
+<li><strong>Ingests the return.</strong> Everything enters <code>unverified</code>. A finding becomes <code>self-verified</code> only by opening its <code>source:</code> URL and confirming the statement is on that page. <code>source: NONE</code> is a legal answer and better than an invented one. A claim that merely <em>follows from</em> a source is marked <code>NONE</code>. A return whose findings are all <code>NONE</code> is an opinion, filed as such. Results go next to the packet.</li>
+</ol>
+<div class="bought"><b>What this bought you</b><p>Twenty pages of raw material never entered this context. What came back is a checkable list, and the check is a mechanical open-the-URL step rather than trust in how certain the tool sounded.</p></div>
+
+<h3><code>/gt:gt-ingest</code> for the source that matters</h3>
+<p>One vendor's rate-limit page is the deciding fact. You say: <em>ingest that page.</em> Ingest stores it immutably as <code>Sources/2026-09-05 Vendor X Rate Limits.md</code> with <code>url</code> and <code>fetched</code>, then writes the Knowledge page citing it. Knowledge pages are summaries; Sources are ground truth. When a number matters, the source is one hop away.</p>
+
+<h3><code>/gt:gt-validate</code> on the decision</h3>
+<p>Before the choice goes into <code>decisions.md</code> as an ADR, the claim <em>Vendor X's free tier covers our daily pull volume</em> is validated <code>empirical</code> against the Source file and the project's measured pull count. <code>decisions.md</code> requires <code>independently verified</code>; the ADR is written with that label.</p>
+
+<h3>Three months later: <code>/gt:gt-refresh</code></h3>
+<div class="say"><b>You say</b>are my sources still current?</div>
+<ol>
+<li>Lists every <code>Sources/</code> file with a <code>url:</code> or <code>local_path:</code> and asks which to check. Default: all remote ones. It fetches only what is in scope.</li>
+<li>Fetches each and compares to the stored copy. Unchanged: noted, moves on.</li>
+<li><strong>Changed: supersedes, never edits.</strong> Stores the new version as <code>Sources/2026-12-05 Vendor X Rate Limits.md</code> with <code>supersedes: ["Sources/2026-09-05 Vendor X Rate Limits.md"]</code>. The old file stays on disk byte-for-byte as the historical record.</li>
+<li>Greps <code>Knowledge/</code> for pages citing the old file. For each, shows what changed, proposes content updates, repoints <code>sources:</code>, sets <code>status: growing</code> if content was revised. <strong>You approve each page update</strong> before it is written.</li>
+<li>Logs <code>[refresh]</code> with counts and one <code>[supersede]</code> line per source.</li>
+</ol>
+<p>If a citing page is missed, the next <code>/gt:gt-lint</code> catches it as <code>superseded-cited</code>, the only finding that may justify <code>status: stale</code>.</p>
+<div class="bought"><b>What this bought you</b><p>The decision in ADR-2 was made against a dated source. When that source changes, you find out, the page that summarised it is updated with your approval, and the original evidence is never overwritten. A page marked <code>stale</code> means "probably wrong," never "old," so the flag stays trustworthy.</p></div>
+</section>
+
+<section id="s5">
+<h2><span class="num">Scenario 5</span>The interrupted week: inbox, review, and "what's next?"</h2>
+<p class="situation"><b>Situation.</b> Over a week of short sessions on four projects you jotted six thoughts into <code>INBOX.md</code> from wherever you were. Now you have a free afternoon and no idea where to start.</p>
+
+<h3><code>/gt:gt-review</code></h3>
+<div class="say"><b>You say</b>review my inbox</div>
+<ol>
+<li>Reads <code>INBOX.md</code>. Every unchecked <code>- [ ]</code> line is an uncaptured item by definition. A <code>[project:: slug]</code> field is your hint; it is honoured unless clearly wrong.</li>
+<li>Reads daily notes only if the vault has a <code>daily_notes_path</code> or a <code>Daily Notes/</code> folder. Otherwise it skips silently and does not suggest creating one.</li>
+<li>Cross-references <code>Projects/README.md</code> to avoid duplicates.</li>
+<li>Presents each item with a classification:
+<div class="tablewrap wide"><table><tr><th>Inbox line</th><th>Looks like</th></tr>
+<tr><td>device-auth should share the token refresh pattern</td><td>task under <code>doorbell-camera</code></td></tr>
+<tr><td>"receipt OCR service"</td><td>new standalone project</td></tr>
+<tr><td>"check whether the firewall blocks mDNS across VLANs"</td><td>task under <code>home-network</code></td></tr>
+<tr><td>"chat webhooks should live in a file not the source"</td><td>already exists as a task, skip</td></tr></table></div></li>
+<li>Asks which to promote. For a new project it asks two or three targeted questions (goal in one sentence, domain and tags, standalone or under a parent) and then runs the <code>/gt:gt-create</code> mechanics. For a task it writes under the target project's <code>## Tasks</code> with <code>[since:: today]</code> and the priority you gave. An <strong>idea gets <code>p:: 3</code> and no due date</strong>, because a due date on an idea makes the deadline rule rank it above real work.</li>
+<li>Checks off each inbox line with a pointer so it reads as history:
+<pre><code>- [x] device-auth should share the token refresh pattern → [[doorbell-camera]]</code></pre>
+Never deleted. It registers the session and claims <code>INBOX.md</code> first, like any shared file.</li>
+<li>Reports counts, then <strong>regenerates the rollup</strong>:
+<pre><code>python3 Projects/golden-thread/tools/gt_tasks.py</code></pre></li>
+</ol>
+
+<h3>"What's next?" is answered by <code>TASKS.md</code></h3>
+<div class="say"><b>You say</b>what's next?</div>
+<p>The assistant re-runs <code>gt_tasks.py</code> first, because project priority is computed against the clock, not stored, then reads <code>TASKS.md</code>. Its sections, top to bottom:</p>
+<ol>
+<li><strong>Inbox</strong>: unchecked <code>INBOX.md</code> lines. Now empty.</li>
+<li><strong>Review</strong>: projects <code>gt_closeout.py</code> thinks may be finished, with reasons. Each row is a question, answered with <code>gt_closeout.py answer &lt;slug&gt; yes|no|later</code>.</li>
+<li><strong>Waiting on you</strong>: <code>waiting:: user</code> tasks ranked <code>PP&lt;effective&gt;-P&lt;task&gt;</code>.</li>
+<li>Then the agent's list, external, parked, and project standing.</li>
+</ol>
+<p>The ranking is composed from two stored values and four computed rules:</p>
+<div class="tablewrap"><table><tr><th>Stored</th><th>Where</th></tr>
+<tr><td><code>pp</code> (project priority, 0 to 3)</td><td>project <code>README.md</code> frontmatter</td></tr>
+<tr><td><code>p</code> (task priority, 1 to 3, 7+ shelved)</td><td>the task line</td></tr></table></div>
+<div class="tablewrap"><table><tr><th>Computed at the moment of asking</th><th>Trigger</th></tr>
+<tr><td>Time window</td><td><code>pp_escalate</code> window is open right now</td></tr>
+<tr><td>Stale P1</td><td>a <code>p:: 1</code> older than 7 days by <code>since</code></td></tr>
+<tr><td>Deadline</td><td>any task <code>due</code> within 3 days</td></tr>
+<tr><td>Blocking</td><td>a task carries <code>blocks:: &lt;slug&gt;</code></td></tr></table></div>
+<p>None of the four applies to a shelved task or to a <code>complete</code> or <code>archived</code> project.</p>
+<div class="bought"><b>What this bought you</b><p>The vault's demonstrated failure is not misprioritisation. It is decisions correctly made and then silently never executed: records flagged and left unactioned for two weeks, a migration scheduled twice and never run. Ranking cannot catch those. Ageing can. The stale-P1 rule is the one that matters most, and it fires without anyone remembering to look.</p></div>
+</section>
+
+<section id="s6">
+<h2><span class="num">Scenario 6</span>The other endings: rename, merge, archive, "later"</h2>
+<p>Closing with <code>stage: complete</code> is one ending. Projects also get redefined, combined and retired. All are supported operations, because a hand-done rename leaves links pointing at nothing. Nothing is ever deleted.</p>
+
+<h3>Rename</h3>
+<p>The <code>event-relay</code> project turned out to be about the whole event-to-consumer chain.</p>
+<div class="say"><b>You say</b>rename it to event-pipeline</div>
+<pre><code>vault_init.py rename-project --vault &lt;v&gt; --from event-relay --to event-pipeline</code></pre>
+<p>It moves the folder and re-points every wikilink it can find. <code>/gt:gt-lint</code> afterwards reports <code>project-missing</code> for any reference it could not see (Obsidian fails these silently), and you fix those by hand or leave a tombstone at the old slug.</p>
+
+<h3>Merge</h3>
+<p>A rehearsal project <code>talk-rehearsal</code> belongs inside <code>conference-talk</code>.</p>
+<div class="say"><b>You say</b>merge talk-rehearsal into conference-talk</div>
+<pre><code>vault_init.py merge-project --vault &lt;v&gt; --from talk-rehearsal --into conference-talk</code></pre>
+<div class="tablewrap wide"><table><tr><th>Content</th><th>Handling</th></tr>
+<tr><td><code>memory/*.md</code></td><td>moved, filenames preserved so links resolve; clashes renamed and flagged</td></tr>
+<tr><td><code>idea.md</code></td><td>immutable, preserved verbatim as <code>memory/idea_talk-rehearsal.md</code></td></tr>
+<tr><td><code>research.md</code></td><td>appended; dated and append-only, so interleaving is safe</td></tr>
+<tr><td><code>decisions.md</code></td><td>appended with ADR ids renumbered, original id kept in the heading</td></tr>
+<tr><td><code>design.md</code>, <code>source.md</code></td><td>appended under a <strong>NEEDS REVIEW</strong> banner, not merged; two architectures cannot be combined mechanically</td></tr>
+<tr><td>frontmatter</td><td>destination's kept; the question parked in <code>review-queue.md</code></td></tr></table></div>
+<p>The source folder is left as a <strong>tombstone</strong> README recording where it went, so notes written before the merge still lead somewhere. Everything needing judgement lands in <code>review-queue.md</code>; work through it and re-run <code>/gt:gt-lint</code> before calling the merge done.</p>
+
+<h3>Archive</h3>
+<div class="say"><b>You say</b>archive standards-sync, superseded by the Core tier</div>
+<pre><code>vault_init.py archive-project --vault &lt;v&gt; --slug standards-sync --reason "superseded by core-rules"</code></pre>
+<p><code>archived</code> is the stage; <code>retire</code> is the log verb. Every note, decision and link stays intact. The escalation rules stop applying to it.</p>
+
+<h3>"No" and "later"</h3>
+<p>The closeout probe asks about a project that has gone three quiet weeks (<code>R3</code>).</p>
+<div class="say"><b>You say</b>no, it's waiting on the partner to enable the API, not finished.</div>
+<pre><code>gt_closeout.py answer partner-api no "waiting on partner API enablement"</code></pre>
+<p>The task is re-tagged <code>[waiting:: external]</code>, and the record is how the thresholds learn that three quiet weeks on an externally blocked project is not a close signal for you.</p>
+
+<h3>Promote a rule to Core</h3>
+<div class="say"><b>You say</b>from now on, never write a claimed file. Make that a Core rule.</div>
+<p>That is <strong>designation</strong>: it is Core from that moment, no test, no prior incident required. Requiring a failure first means accepting the failure. <code>/gt:gt-promote</code> treats this as a wiring job, not a move:</p>
+<ol>
+<li>Choose enforcement honestly: <code>validated</code> if mechanically checkable (this one is: a <code>PreToolUse</code> guard), <code>reminder</code> otherwise.</li>
+<li>Set frontmatter <code>type: core</code>, <code>level: core</code>, <code>enforcement: validated</code>, <code>promoted</code>.</li>
+<li>Move the file to <code>core-rules/core_&lt;topic&gt;.md</code>, phrased as an imperative.</li>
+<li>Wire the mechanism. Reminder-tier needs no script edit; the injector reads the folder at run time. Validated-tier adds a check to the hook.</li>
+<li><strong>Verify it fires</strong> by running the injector and confirming the rule appears.</li>
+<li>Update the pointer in <code>global-memory/MEMORY.md</code>.</li>
+<li><code>/gt:gt-lint</code>: <code>core-unenforced</code> must not fire.</li>
+<li>Log <code>graduate</code>.</li>
+</ol>
+<p>For an existing item moving up from levels 1 to 5, the three-question gate applies instead: if this were <em>not</em> enforced, would it cause incorrect code, rework, or a cascade into lower rules? Any single yes qualifies. The canary rule (timestamp every message) answers no to all three and is Core regardless, because its absence is visible: it is the health check on enforcement itself.</p>
+<p>Demotion runs in reverse, and the order matters: <strong>unwire first</strong>, then move the file. A hook left pointing at a rule that no longer exists is worse than either state.</p>
+</section>
+
+<section id="s7">
+<h2><span class="num">Scenario 7</span>Vault maintenance day</h2>
+<p>Once a month, with no project open. Each of these is idempotent and asks before writing.</p>
+<div class="tablewrap wide"><table><tr><th>Order</th><th>Command</th><th>What it catches</th></tr>
+<tr><td>1</td><td><code>/gt:gt-lint</code></td><td>broken links, orphans, index gaps, unlisted memory files, global-memory files over 30 lines, project slugs leaking into global scope, pages citing superseded sources, <code>stale</code> pages, unenforced Core rules, links to renamed projects</td></tr>
+<tr><td>2</td><td><code>/gt:gt-runbook-lint</code></td><td>facts repeated across runbooks that should be one rule somewhere higher</td></tr>
+<tr><td>3</td><td><code>/gt:gt-refresh</code></td><td>upstream sources that changed since they were fetched</td></tr>
+<tr><td>4</td><td><code>/gt:gt-promote</code> "review promotion candidates"</td><td><code>→ promote</code> notes in research and decisions; <code>status: seed</code> pages ready to become <code>growing</code></td></tr>
+<tr><td>5</td><td><code>gt_closeout.py candidates</code></td><td>projects whose signals say they may be done</td></tr>
+<tr><td>6</td><td><code>gt_tasks.py</code></td><td>regenerate the rollup after all of the above</td></tr>
+<tr><td>7</td><td><code>/gt:gt-settings</code></td><td>confirm nothing automatic has been switched off by accident</td></tr></table></div>
+<p><code>gt-lint</code>'s <code>memory-bloat</code> finding is worth a specific note: a <code>global-memory/</code> file over 30 lines is loaded in every session for every project. The fix it proposes is to move the detail to a <code>Knowledge/</code> page and leave a pointer plus three to five essential constants. <code>global-scope-leak</code> is the companion: a project slug in <code>global-memory/</code> means a project-specific fact is being paid for everywhere.</p>
+<div class="bought"><b>What this bought you</b><p>Structural drift is caught by a script rather than noticed by accident. Each fix is shown and approved individually, and declines are recorded in <code>lint-declines.md</code> so the same false positive is not re-argued every month.</p></div>
+</section>
+
+<section id="s8">
+<h2><span class="num">Scenario 8</span>The <code>gt-wiki</code> mode: a standalone knowledge base</h2>
+<p>The <code>gt-wiki</code> plugin is the same Sources-and-Knowledge machinery without the project workspace. It is for a vault whose purpose is documentation rather than execution: a team's platform wiki, a domain reference. The five commands map onto their <code>gt</code> counterparts.</p>
+<div class="tablewrap wide"><table><tr><th>gt-wiki command</th><th>Does</th><th>gt equivalent</th></tr>
+<tr><td><code>/gt-wiki:gt-wiki-init</code></td><td><code>vault_init.py wiki --vault &lt;path&gt; --domain "&lt;domain&gt;"</code>; creates <code>Sources/</code>, <code>Knowledge/</code>, <code>index.md</code>, <code>log.md</code>, <code>Knowledge/_template.md</code>, records <code>vault-config.json</code>; runs <code>wiki_lint.py</code> and expects 0 findings</td><td><code>/gt:gt-init</code></td></tr>
+<tr><td><code>/gt-wiki:gt-wiki</code></td><td><strong>always check first</strong> before exploring repos: reads <code>index.md</code>, follows links, greps as fallback, reads <code>Sources/</code> when exact numbers matter, answers with citations, logs the query, flags contradictions between pages immediately</td><td><code>/gt:gt-query</code></td></tr>
+<tr><td><code>/gt-wiki:gt-wiki-ingest &lt;url | file | paste&gt;</code></td><td>duplicate check against <code>index.md</code> and <code>Sources/</code> frontmatter; stores raw content immutably; discusses which pages to create or update; waits for approval; writes one concept per page; cross-links in five directions (upstream, downstream, sibling, hub, cross-domain); updates index and log</td><td>the knowledge half of <code>/gt:gt-ingest</code></td></tr>
+<tr><td><code>/gt-wiki:gt-wiki-lint</code></td><td><code>wiki_lint.py</code>: broken links, orphans, missing reciprocal links, unsourced pages, superseded citations, review-due by age (a signal, never <code>stale</code>), index mismatches, status schema, unlinked mentions; declines to <code>lint-declines.md</code></td><td><code>/gt:gt-lint</code></td></tr>
+<tr><td><code>/gt-wiki:gt-wiki-refresh</code></td><td>fetch in-scope sources, supersede changed ones with a new dated file and <code>supersedes:</code>, update citing pages with approval</td><td><code>/gt:gt-refresh</code></td></tr></table></div>
+<p>A worked path: a teammate asks <em>how does our deploy pipeline handle rollbacks?</em> <code>/gt-wiki:gt-wiki</code> reads the index, finds <code>Deploy Pipeline.md</code>, follows its link to <code>Rollback Procedure.md</code>, notices the two pages disagree on whether database migrations roll back, <strong>flags the contradiction right away</strong> rather than waiting for lint, answers with both citations, logs the query, and offers to file the resolved answer back as a page once you settle it. A page created from that conversation still gets a lightweight <code>Sources/2026-09-05 Conversation - rollback migrations.md</code> so the page-to-source chain stays uniform.</p>
+</section>
+
+<hr>
+
+<section id="ref">
+<h2>Command reference: where each one appears and what it saves you</h2>
+<div class="tablewrap wide"><table><tr><th>Command</th><th>Scenario</th><th>The failure it prevents</th></tr>
+<tr><td><code>/gt:gt-init</code></td><td>0</td><td>rules present as documents but never re-asserted</td></tr>
+<tr><td><code>/gt:gt-settings</code></td><td>0, 7</td><td>tooling acting on its own without an off switch</td></tr>
+<tr><td><code>/gt:gt-create</code></td><td>1, 5</td><td>inconsistent project layouts; the origin idea lost</td></tr>
+<tr><td><code>/gt:gt-ingest</code></td><td>2, 4</td><td>a month of learned gotchas stranded in a repo folder</td></tr>
+<tr><td><code>/gt:gt-open</code></td><td>1, 2, 3</td><td>re-explaining context every session; editing the wrong host</td></tr>
+<tr><td><code>/gt:gt-query</code></td><td>1</td><td>re-deriving what the vault already holds</td></tr>
+<tr><td><code>/gt:gt-work</code></td><td>1, 3</td><td>findings and decisions evaporating at session end; stage drift</td></tr>
+<tr><td><code>/gt:gt-validate</code></td><td>1, 3, 4</td><td>an unverified number reaching a decision or production</td></tr>
+<tr><td><code>/gt:gt-farm</code></td><td>4</td><td>spending context on raw material instead of judgement; unverifiable answers</td></tr>
+<tr><td><code>/gt:gt-promote</code></td><td>1, 3, 6, 7</td><td>facts stuck at the wrong scope; Core rules stored but unwired</td></tr>
+<tr><td><code>/gt:gt-review</code></td><td>5</td><td>thoughts captured in the wrong place and lost</td></tr>
+<tr><td><code>/gt:gt-lint</code></td><td>0, 2, 7</td><td>structural drift noticed by accident</td></tr>
+<tr><td><code>/gt:gt-runbook-lint</code></td><td>3, 7</td><td>the same fact in four runbooks, drifting apart</td></tr>
+<tr><td><code>/gt:gt-refresh</code></td><td>4, 7</td><td>a decision resting on a source that changed</td></tr>
+<tr><td><code>gt_tasks.py</code></td><td>5, 7</td><td>not knowing what's next; decisions made and silently never executed</td></tr>
+<tr><td><code>gt_closeout.py</code></td><td>1, 5, 6, 7</td><td>finished projects outranking live work; closure assumed rather than asked</td></tr>
+<tr><td><code>gt_session.py</code></td><td>3</td><td>two sessions overwriting each other in one working tree</td></tr>
+<tr><td><code>vault_init.py rename / merge / archive</code></td><td>6</td><td>hand-done lifecycle changes leaving links pointing at nothing</td></tr>
+<tr><td><code>gt-wiki</code> family</td><td>8</td><td>a knowledge base with no execution workspace, same guarantees</td></tr></table></div>
+</section>
+
+<section id="files">
+<h2>The files each session touches, and in which direction</h2>
+<div class="tablewrap wide"><table><tr><th>File</th><th>Written by</th><th>Rule</th></tr>
+<tr><td><code>idea.md</code></td><td>gt-create, gt-review</td><td>immutable after creation</td></tr>
+<tr><td><code>research.md</code></td><td>gt-work, gt-validate, gt-ingest</td><td>append-only, dated; supersede inline</td></tr>
+<tr><td><code>decisions.md</code></td><td>gt-work, gt-ingest, gt-promote</td><td>append-only ADRs; requires <code>independently verified</code></td></tr>
+<tr><td><code>design.md</code></td><td>gt-work, gt-ingest</td><td>rewritten in place; describes now</td></tr>
+<tr><td><code>spec.md</code></td><td>gt-work</td><td>created when design is settled; criteria checked off, never deleted</td></tr>
+<tr><td><code>runbook.md</code></td><td>gt-work</td><td>the incubator; graduates to <code>CLAUDE.md</code> when stable</td></tr>
+<tr><td><code>CLAUDE.md</code> (project)</td><td>gt-promote</td><td>self-contained; leaves the vault with the repo</td></tr>
+<tr><td><code>source.md</code></td><td>gt-create, gt-ingest, gt-work</td><td>read first on open; links the fleet, never copies it</td></tr>
+<tr><td><code>README.md</code> frontmatter and <code>## Tasks</code></td><td>gt-work, gt-review, closeout</td><td>properties drive the views; tasks live here, nowhere else</td></tr>
+<tr><td><code>memory/*.md</code></td><td>gt-work</td><td>updated in place; indexed in <code>MEMORY.md</code>; loaded on demand</td></tr>
+<tr><td><code>Knowledge/*.md</code></td><td>gt-promote, gt-ingest, gt-refresh</td><td>frontmatter schema; cites <code>Sources/</code></td></tr>
+<tr><td><code>Sources/*.md</code></td><td>gt-ingest, gt-refresh</td><td>immutable; superseded, never edited</td></tr>
+<tr><td><code>global-memory/*.md</code></td><td>gt-promote</td><td>under 30 lines; zero project slugs</td></tr>
+<tr><td><code>core-rules/*.md</code></td><td>gt-promote</td><td>rules, not facts; wired and verified to fire</td></tr>
+<tr><td><code>INBOX.md</code></td><td>any session</td><td>one line per thought; checked off with <code>→ [[slug]]</code></td></tr>
+<tr><td><code>TASKS.md</code></td><td>gt_tasks.py</td><td>generated; never hand-edited</td></tr>
+<tr><td><code>log.md</code></td><td>every command</td><td>append-only; closed verb vocabulary</td></tr>
+<tr><td><code>review-queue.md</code></td><td>merge, lint</td><td>decisions only you can make</td></tr>
+<tr><td><code>lint-declines.md</code></td><td>lint</td><td>suppressed findings with rationale</td></tr>
+<tr><td><code>closeout-signals.jsonl</code></td><td>gt_closeout.py</td><td>every ask and answer, for tuning</td></tr>
+<tr><td><code>sessions/</code>, <code>pending/</code></td><td>gt_session.py</td><td>claims and staged edits for the concurrent case</td></tr></table></div>
+</section>
+</main>
+</div>
