@@ -29,8 +29,8 @@
    "sha256": "a728c8b60714bfe670cdb9d3056c94968c4b8aa7790d751b9aba6ef753267a45"
   },
   "scripts/gt_lint.py": {
-   "bytes": 32303,
-   "sha256": "dc16f7bf3f2165c9b84272d05effd9868b44e27de600cefe1365873f470502cd"
+   "bytes": 32301,
+   "sha256": "8ee327a0917a9ecf643be2dc7666258140592672c756462702a29b5f545135be"
   },
   "scripts/gt_paths.py": {
    "bytes": 4144,
@@ -43,10 +43,6 @@
   "scripts/gt_settings.py": {
    "bytes": 7887,
    "sha256": "35c559c236f7c38c184f60bc02398d09761184b30a8a1fb04d765b1ac94ffcc8"
-  },
-  "scripts/gt_settings.py.bak_20260830": {
-   "bytes": 6679,
-   "sha256": "92199129cf2ee3f98a88531213c6915cab8f7b1c684ad1411c1e11648c53d9b1"
   },
   "scripts/gt_version_check.py": {
    "bytes": 7005,
@@ -145,14 +141,14 @@
    "sha256": "16c54f56ccf0e311d28240c8b7424a0b4b359c9ab9c6552a21f84ad1ccf00096"
   },
   "templates/tools/safe_write.py": {
-   "bytes": 8218,
-   "sha256": "d1f300adb40472621c08322611e6af1018b550838147e914477e565c6b7c86cc"
+   "bytes": 8200,
+   "sha256": "6c2e03bd04a63819ed1f49456da6ce8adb71eefc21ec07ecb6fd44a5d79b3e77"
   },
   "templates/wiki-CLAUDE.md": {
    "bytes": 4243,
    "sha256": "7a9ef20b5b12ff7ce5e4c859467624bcb9bffaa7d51b5ab3b068feaf53c29ecd"
   }
  },
- "generated": "2026-08-30T14:43:03",
+ "generated": "2026-09-05T10:17:07",
  "version": "0.9.4"
 }
