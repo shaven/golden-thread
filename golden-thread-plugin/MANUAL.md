@@ -1,6 +1,6 @@
 # Golden Thread — User Manual
 
-Complete reference for all fourteen skills. Written against **gt v0.9.8**.
+Complete reference for all fourteen skills. Written against **gt v0.9.9**.
 
 ---
 
@@ -615,7 +615,7 @@ that isn't true there. When unsure, file narrow — promotion is cheap, demotion
 ## Script reference
 
 ```bash
-SCRIPTS=~/.claude/plugins/cache/golden-thread-plugin/gt/0.9.8/scripts
+SCRIPTS=~/.claude/plugins/cache/golden-thread-plugin/gt/0.9.9/scripts
 
 python3 $SCRIPTS/vault_init.py fresh --vault ~/my-vault --domain "My Team"
 
@@ -638,9 +638,11 @@ python3 $SCRIPTS/gt_lint.py ~/my-vault --queue ~/my-vault/review-queue.md
 python3 $SCRIPTS/gt_settings.py show
 ```
 
-`gt_tasks.py` is the exception: it ships **in the vault**, not the plugin, at
-`Projects/golden-thread/tools/`. It regenerates `TASKS.md` from every project's
-`## Tasks` section.
+`gt_tasks.py` runs **from the vault**, at `Projects/golden-thread/tools/`, beside
+`gt_closeout.py`, `gt_session.py`, `gt_edits.py` and `safe_write.py`. All five ship as
+templates and are seeded there by `vault_init.py fresh` or `connect` (what
+`/gt:gt-init` runs); `install.sh` refreshes copies that predate the installed
+template. It regenerates `TASKS.md` from every project's `## Tasks` section.
 
 ```bash
 python3 ~/my-vault/Projects/golden-thread/tools/gt_tasks.py

@@ -12,7 +12,7 @@ it at startup, look things up while working, and write back what they learn.
 Its distinguishing idea is the second problem, the one most memory systems never
 address: **writing a rule down does not mean it gets followed.**
 
-Plugin **v0.9.8**. Six Core rules currently enforced, three of them *validated* — a
+Plugin **v0.9.9**. Six Core rules currently enforced, three of them *validated* — a
 `Stop` hook inspects the finished reply and blocks it if the rule was broken.
 
 ## Who this is for
@@ -196,6 +196,18 @@ three verbatim trigger phrases.
 Read [`CLAUDE.md`](CLAUDE.md) first — it carries the landmines, including the one that
 has been re-broken by documentation four times: **hooks must never be referenced from
 inside the vault.**
+
+Before pushing, prove the repo still stands on its own:
+
+```bash
+bash golden-thread-plugin/selftest.sh
+```
+
+It installs into a throwaway home, scaffolds a vault and a project the way `/gt:gt-init`
+does, and asserts that every file the manual tells a new user to run exists, that the
+hooks answer, and that the fresh vault lints clean. Nothing on the machine is touched.
+The vault this system was built in is a separate, private repo; nothing here depends
+on it.
 
 ## Acknowledgments
 

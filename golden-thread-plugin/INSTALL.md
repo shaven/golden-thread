@@ -41,9 +41,8 @@ bash install.sh
 ## Option C — One-liner (no git required)
 
 ```bash
-curl -fsSL https://github.com/YOUR_USERNAME/golden-thread-plugin/archive/refs/heads/main.tar.gz \
-  | tar -xz --strip-components=1 -C /tmp/golden-thread-plugin --mkdir \
-  && bash /tmp/golden-thread-plugin/install.sh
+curl -fsSL https://github.com/shaven/golden-thread/archive/refs/heads/main.tar.gz | tar -xz -C /tmp \
+  && bash /tmp/golden-thread-main/golden-thread-plugin/install.sh
 ```
 
 ---
@@ -72,6 +71,12 @@ absolute path — so the path survives a project rename, a vault move, or a vers
 
 Re-running `install.sh` is safe. Note it **removes superseded caches** for the plugin
 rather than leaving them beside the new one.
+
+`install.sh` does **not** choose or create a vault. The vault path is written to
+`~/.claude/vault-config.json` by `/gt:gt-init` (below), which runs `vault_init.py` in
+`fresh` or `connect` mode; that step also seeds the vault tools, the inbox, the git
+hooks and the first `TASKS.md`. If a vault is already configured when `install.sh`
+runs, it refreshes that vault's tools to the installed templates.
 
 After installing, **restart Claude Code** — plugins and hooks load at session start.
 Then confirm enforcement is actually live, because a rule that is not wired is not a rule:
@@ -103,20 +108,17 @@ everything the plugin does on its own.
 
 ---
 
-## Hosting on GitHub
+## Verifying an install, or a fork
 
-1. Create a new GitHub repo (public or private).
-2. Push this directory to it:
-   ```bash
-   cd golden-thread-plugin
-   git init
-   git add .
-   git commit -m "Initial release"
-   git remote add origin https://github.com/YOUR_USERNAME/golden-thread-plugin
-   git push -u origin main
-   ```
-3. Replace `YOUR_USERNAME` in the install commands above with your GitHub username.
-4. To publish a versioned zip: run `bash package.sh` and attach `golden-thread-plugin.zip` to a GitHub release.
+```bash
+bash golden-thread-plugin/selftest.sh
+```
+
+Runs the whole sequence above — `install.sh`, then `fresh`, then `create-project` —
+inside a throwaway home and checks that every file the manual names exists, that the
+hooks answer, and that the new vault lints clean. Nothing on your machine is touched.
+Run it before publishing a fork; to publish a versioned zip, run `bash package.sh` and
+attach `golden-thread-plugin.zip` to a release.
 
 ---
 
@@ -125,11 +127,18 @@ everything the plugin does on its own.
 Run `/gt:gt-init` and enter the vault path when asked. The `vault_init.py` script uses `ensure_file` throughout — it only creates files that don't exist, so your existing content is safe.
 
 Golden Thread adds these files/directories only if missing:
-- `CLAUDE.md` — knowledge page schema
+- `CLAUDE.md` — how a session reads the vault, and the enforcement check
 - `index.md` — Knowledge index stub
 - `log.md` — activity log stub
+- `INBOX.md` — the capture point; rendered at the top of `TASKS.md`
+- `TASKS.md` — generated rollup of every project's tasks
 - `global-memory/MEMORY.md` — global memory index
-- `Projects/CONVENTIONS.md` and `Projects/PROTOCOL.md`
+- `Projects/CONVENTIONS.md`, `Projects/PROTOCOL.md`, `Projects/INFRASTRUCTURE.md`
+- `Projects/golden-thread/` — the Core rules, the vault tools (`gt_tasks.py`,
+  `gt_closeout.py`, `gt_session.py`, `gt_edits.py`, `safe_write.py`), and the
+  session and pending directories the tools create
+- `.githooks/` and `core.hooksPath` — per-edit attribution, and `git init` if the
+  vault is not yet a repo
 
 ---
 

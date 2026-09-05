@@ -61,12 +61,16 @@
    "sha256": "e90f18ee05ae00394781790405f54ce4b776b28b723bf8eb3ca0b14336ad1ef2"
   },
   "scripts/vault_init.py": {
-   "bytes": 38897,
-   "sha256": "7c1db250629df1681d0145447aabb8acc789c5e5ca6737778424900cada1fafb"
+   "bytes": 42653,
+   "sha256": "087c2ca77d8afe096f743a7d2f57623ef236f1e6dbad813996c4408b38ddd219"
   },
   "templates/CONVENTIONS.md": {
-   "bytes": 6372,
-   "sha256": "f07fcb9d4b8e9aabf67a88489e8937fe5d6d957be498d0f10e8df52db8bfc615"
+   "bytes": 19163,
+   "sha256": "dc317a899460781b3fca4870618003807d0aacedf6044b75f4876cdaf0d138f1"
+  },
+  "templates/INBOX.md": {
+   "bytes": 817,
+   "sha256": "036fe2517b084f4b413b577288ac6243684bba18d36fe1c90839a21fbdb4a6b6"
   },
   "templates/INFRASTRUCTURE.md": {
    "bytes": 1484,
@@ -77,20 +81,20 @@
    "sha256": "dfe407a83c7413960e67fab436f62c92aa5d7756d2d540ad41a259885a1b9073"
   },
   "templates/PROTOCOL.md": {
-   "bytes": 8234,
-   "sha256": "228c8247b853aa33d3d02f33eff5b34f78d80b52d909630787dacf005461541f"
+   "bytes": 21872,
+   "sha256": "2ffc70c79da74743c6045883eb6629c8d13e24a1f701b866c334cb5ba1fe1888"
   },
   "templates/core-rules/README.md": {
-   "bytes": 2976,
-   "sha256": "e659dde7d3d3701839bd7972106de4fe6d3b59555647f1392eb3f3cfe9da078a"
+   "bytes": 2974,
+   "sha256": "5c27712dd1af8a47813735520c1943fde2ae559c14f155ad61e4b1b4fae84862"
   },
   "templates/core-rules/core_concurrent_session_claim.md": {
    "bytes": 4867,
    "sha256": "bdb5b107e9bcce4b61a07dfc934b64688cb4852620bbcc2dd896f0264b2a0c7d"
   },
   "templates/core-rules/core_global_memory_scope.md": {
-   "bytes": 1352,
-   "sha256": "4d0519e04be156374b7a1e851dbf3c15406f78b388beb1b746fe64b3eba08e65"
+   "bytes": 1364,
+   "sha256": "94564bcfd2dde45d696af76ab6c02a8be52d0dff265874addff7e2eb59e8b59b"
   },
   "templates/core-rules/core_memory_load_policy.md": {
    "bytes": 1226,
@@ -109,8 +113,8 @@
    "sha256": "abe377c2fc6ce803c4c5b0cfa67a07f92775c9fa665b8056da6bbf5336084a86"
   },
   "templates/core-rules/core_verification_state.md": {
-   "bytes": 3145,
-   "sha256": "91ed153429c1a85c450fef1c519d076bf12dfd8582dd3787432d56ae3c7227b8"
+   "bytes": 3153,
+   "sha256": "9904c087b6a6b4b8f56b417850dad3113f6e85e9bca02ff359b6c35d0b19efe9"
   },
   "templates/core-rules/enforcement.md": {
    "bytes": 3650,
@@ -156,15 +160,19 @@
    "bytes": 14314,
    "sha256": "16c54f56ccf0e311d28240c8b7424a0b4b359c9ab9c6552a21f84ad1ccf00096"
   },
+  "templates/tools/gt_tasks.py": {
+   "bytes": 14862,
+   "sha256": "be47164ed235672297becb3417879674d5b7a90b8d632793f9319845ce911338"
+  },
   "templates/tools/safe_write.py": {
    "bytes": 12889,
    "sha256": "443244903358685dbd6b2d40654c798737cb23fdb4659035336c0b075a009ced"
   },
   "templates/wiki-CLAUDE.md": {
-   "bytes": 4243,
-   "sha256": "7a9ef20b5b12ff7ce5e4c859467624bcb9bffaa7d51b5ab3b068feaf53c29ecd"
+   "bytes": 6578,
+   "sha256": "383c0e4b30c8c9c9447c4798f37debf1f4a0402b1e3ee068e7629e9d1ab21859"
   }
  },
- "generated": "2026-09-05T11:35:30",
- "version": "0.9.8"
+ "generated": "2026-09-05T11:39:16",
+ "version": "0.9.9"
 }
