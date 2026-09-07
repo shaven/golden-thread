@@ -1,6 +1,6 @@
 # Golden Thread — User Manual
 
-Complete reference for all fourteen skills. Written against **gt v0.9.9**.
+Complete reference for all fourteen skills. Written against **gt v0.9.10**.
 
 ---
 
@@ -615,7 +615,7 @@ that isn't true there. When unsure, file narrow — promotion is cheap, demotion
 ## Script reference
 
 ```bash
-SCRIPTS=~/.claude/plugins/cache/golden-thread-plugin/gt/0.9.9/scripts
+SCRIPTS=~/.claude/plugins/cache/golden-thread-plugin/gt/0.9.10/scripts
 
 python3 $SCRIPTS/vault_init.py fresh --vault ~/my-vault --domain "My Team"
 
