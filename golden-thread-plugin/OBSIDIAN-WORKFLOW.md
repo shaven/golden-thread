@@ -105,9 +105,10 @@ Off: Footnotes, Slash commands, Importer, Unique note creator, Random note, Slid
 recorder, Workspaces, Publish, Web viewer.
 
 Two of these matter beyond convenience. **File recovery** is the only undo for an edit that a
-session made and git never saw. **Sync** is Obsidian Sync, and the reference vault is also in
-Dropbox: two sync engines on one folder is a conflict source, and neither knows about `.git`.
-If you use Obsidian Sync, keep the vault out of any other synced folder, or turn Sync off.
+session made and git never saw. **Sync** is Obsidian Sync: in the reference vault the toggle is
+on but no sync vault is connected (there is no `.obsidian/sync.json`), so nothing syncs and
+nothing conflicts with Dropbox. If you ever connect one, keep the vault out of any other synced
+folder first: two sync engines on one folder is a conflict source, and neither knows about `.git`.
 
 ## Daily Workflow — Step by Step
 

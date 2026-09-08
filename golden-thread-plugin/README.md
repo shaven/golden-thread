@@ -311,7 +311,7 @@ git; Bases can replace Dataview tables if you prefer.
 | **Recent Files**, **Home tab**, **Iconize**, **Style Settings**, **Trash Explorer**, **BRAT** | Quality of life: recent-file list, browser-style start tab, icons, theme variables, `.trash` recovery, beta-plugin installs. |
 
 Full detail, including which plugins are installed but off and the core plugins to leave off,
-is in [OBSIDIAN-WORKFLOW.md](OBSIDIAN-WORKFLOW.md#plugins).
+is in [OBSIDIAN-WORKFLOW.md](OBSIDIAN-WORKFLOW.md#plugins). One caution: never run Obsidian Sync and another sync engine (Dropbox, OneDrive) on the same vault folder.
 
 ## Requirements
 
