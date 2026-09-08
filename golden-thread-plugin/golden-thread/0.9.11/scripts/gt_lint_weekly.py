@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Weekly vault lint. Runs gt_lint.py and, if present, the gt-wiki wiki_lint.py against the vault
 named in ~/.claude/vault-config.json, writes the report into the vault under
-Projects/golden-thread/lint/<date>.md (and latest.md), and drops ONE line into INBOX.md when
+Projects/golden-thread/lint/latest.md (history as <date>.log, unscanned), and drops ONE line into INBOX.md when
 there is anything to act on -- so the next session sees it in the TASKS rollup's Inbox section.
 
 Wired by a launchd agent (see the golden-thread runbook); harmless to run by hand:
@@ -56,7 +56,11 @@ def main():
     for name, body in sections:
         report += [f"## {name}", "", "```", body.strip(), "```", ""]
     text = "\n".join(report)
-    dated = os.path.join(out_dir, f"{today}.md")
+    # The report quotes finding strings, which contain [[wikilinks]] that may be broken by
+    # definition; if the report were scanned by the next run it would report itself. History
+    # goes to a .log (not scanned), and the single Markdown copy `latest.md` is declared to the
+    # vault linter in lint-declines.md (`suppress: latest.md`).
+    dated = os.path.join(out_dir, f"{today}.log")
     open(dated, "w").write(text)
     open(os.path.join(out_dir, "latest.md"), "w").write(text)
     log(f"report written: {dated} findings={total} {counts}")
@@ -77,7 +81,7 @@ def main():
             pass
     line = (f"- [ ] Weekly vault lint {today}: **{total} findings** ("
             + ", ".join(f"{k} {v}" for k, v in sorted(counts.items(), key=lambda kv: -kv[1]))
-            + f") — report `Projects/golden-thread/lint/{today}.md`; fix at source or decline in `lint-declines.md` [project:: golden-thread] [since:: {today}]\n")
+            + f") — report `Projects/golden-thread/lint/latest.md` (history: `{today}.log`); fix at source or decline in `lint-declines.md` [project:: golden-thread] [since:: {today}]\n")
     existing = open(inbox, errors="ignore").read()
     if f"Weekly vault lint {today}" in existing:
         log("inbox line for today already present"); return 0
