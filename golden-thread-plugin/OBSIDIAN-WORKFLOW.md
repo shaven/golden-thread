@@ -57,9 +57,57 @@ GoldenThreadVault/
 - **Backlinks panel** — open a page and see everything that links to it. Use this to understand impact before changing a Knowledge page.
 - **Search** — vault-wide full text. Faster than `gt-query` for exact strings you know exist.
 - **Tag pane** — project tags from `README.md` frontmatter. Useful for filtering by domain.
-- **Dataview plugin** (if installed) — `Projects/README.md` contains Dataview queries that auto-generate project status tables from frontmatter.
+- **Dataview plugin** (required) — `Projects/README.md` and `TASKS.md` contain Dataview queries that render the live project and task tables; see [Plugins](#plugins).
 
 ---
+
+## Plugins
+
+The reference vault's plugin set, verified on 2026-09-08 against `.obsidian/community-plugins.json`,
+each plugin's `manifest.json`, and `.obsidian/core-plugins.json`. Theme is the default; no CSS snippets.
+
+### Community plugins, enabled (15)
+
+| Plugin | ID | Version | What it does | Golden Thread use |
+|---|---|---|---|---|
+| Dataview | `dataview` | 0.5.68 | Queries over vault metadata | **Required.** 3 queries in `Projects/README.md`, 3 in `TASKS.md` ("Live views"); indexes the inline task fields (`p`, `waiting`, `since`, `due`) |
+| Terminal | `terminal` | 3.27.1 | Consoles and shells inside Obsidian | Claude Code in a pane beside the notes (default profiles; nothing custom) |
+| Calendar | `calendar` | 1.5.10 | Calendar of daily notes | Daily-notes navigation for the review sweep |
+| Text Extractor | `text-extractor` | 0.7.0 | OCR from images and PDFs | Ingesting scanned sources |
+| Advanced Tables | `table-editor-obsidian` | 0.23.2 | Table navigation, formatting, formulas | Hand-editing task and inventory tables |
+| Templater | `templater-obsidian` | 2.25.0 | Templates with scripting | Optional; no templates folder is configured in the reference vault |
+| Excalidraw | `obsidian-excalidraw-plugin` | 2.26.4 | Drawings | Design sketches |
+| Auto Card Link | `auto-card-link` | 1.2.3 | URL → card-style link | Capturing web sources |
+| URL Formatter | `url-formatter` | 1.2.0 | Pasted URL → `[text](url)` | The "paste a link, get Markdown" behaviour |
+| Recent Files | `recent-files-obsidian` | 1.7.10 | Recently opened list | Convenience |
+| Home tab | `home-tab` | 1.2.2 | Browser-like start tab | Convenience |
+| Iconize | `obsidian-icon-folder` | 2.14.7 | Icons on files and folders | Convenience |
+| Style Settings | `obsidian-style-settings` | 1.0.9 | Theme/plugin CSS variables | Convenience |
+| Trash Explorer | `obsidian-trash-explorer` | 1.2.4 | Restore from `.trash` | Recovery |
+| BRAT | `obsidian42-brat` | 2.2.0 | Install beta plugins | Beta installs |
+
+### Installed but disabled (3)
+
+| Plugin | ID | Version | Note |
+|---|---|---|---|
+| Omnisearch | `omnisearch` | 1.30.1 | Full-text search engine. Listed as in use by the owner but **off** in the config; turn it on or remove it |
+| Auto Linkify | `auto-linkify` | 1.0.0 | Also formats pasted URLs; superseded by URL Formatter, so off is right |
+| Claudian | `realclaudian` | 2.0.40 | Embeds Claude Code and other agents in the vault; off (Terminal covers it) |
+
+### Core plugins
+
+On: Files (`file-explorer`), Search (`global-search`), Quick switcher, Graph view, Backlinks,
+Outgoing links, Tags view (`tag-pane`), Canvas, Properties, Page preview, Daily notes, Templates,
+Note composer, Command palette, Editor status, Bookmarks, Outline, Word count, File recovery,
+**Sync**, Bases.
+
+Off: Footnotes, Slash commands, Importer, Unique note creator, Random note, Slides, Audio
+recorder, Workspaces, Publish, Web viewer.
+
+Two of these matter beyond convenience. **File recovery** is the only undo for an edit that a
+session made and git never saw. **Sync** is Obsidian Sync, and the reference vault is also in
+Dropbox: two sync engines on one folder is a conflict source, and neither knows about `.git`.
+If you use Obsidian Sync, keep the vault out of any other synced folder, or turn Sync off.
 
 ## Daily Workflow — Step by Step
 

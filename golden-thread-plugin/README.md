@@ -278,6 +278,41 @@ python3 golden-thread/0.9.11/scripts/gt_settings.py show
 
 ---
 
+## Obsidian Setup
+
+Golden Thread works with any folder, but it is designed to be read in Obsidian, and a few
+plugins carry real weight. This is the set the reference vault runs, verified against its
+`.obsidian/` configuration on 2026-09-08 (plugin IDs in parentheses are what Obsidian's
+settings and `community-plugins.json` use).
+
+**Required**
+
+| Plugin | Why |
+|---|---|
+| **Dataview** (`dataview`) | `Projects/README.md` and `TASKS.md` render their live tables from Dataview queries, and every task line carries inline fields (`[p:: ]`, `[waiting:: ]`, `[since:: ]`, `[due:: ]`) that Dataview indexes. Without it those pages are static text. |
+
+**Core plugins to turn on** (built in): Files, Search, Quick switcher, Graph view, Backlinks,
+Outgoing links, Tags view, Properties, Daily notes, Templates, Command palette, Outline,
+File recovery, Bases. Backlinks and Graph are how the wiki is navigated; Daily notes is what
+`/gt:gt-review` sweeps when a daily-notes folder exists; File recovery is the safety net beside
+git; Bases can replace Dataview tables if you prefer.
+
+**Recommended community plugins**
+
+| Plugin | Role in the workflow |
+|---|---|
+| **Terminal** (`terminal`) | Run Claude Code in a pane inside the vault, so the session and the notes share a window. |
+| **Calendar** (`calendar`) | Navigate daily notes; pairs with the Daily notes core plugin. |
+| **Text Extractor** (`text-extractor`) | OCR for PDFs and images you ingest into `Sources/`. |
+| **Advanced Tables** (`table-editor-obsidian`) | Editing the task, source and inventory tables by hand. |
+| **Templater** (`templater-obsidian`) | Optional scripting for note templates; the vault scaffolds projects by script, so this is convenience. |
+| **Excalidraw** (`obsidian-excalidraw-plugin`) | Design sketches next to `design.md`. |
+| **Auto Card Link** (`auto-card-link`), **URL Formatter** (`url-formatter`) | Paste a URL and get a card or a Markdown link; useful when capturing a source. |
+| **Recent Files**, **Home tab**, **Iconize**, **Style Settings**, **Trash Explorer**, **BRAT** | Quality of life: recent-file list, browser-style start tab, icons, theme variables, `.trash` recovery, beta-plugin installs. |
+
+Full detail, including which plugins are installed but off and the core plugins to leave off,
+is in [OBSIDIAN-WORKFLOW.md](OBSIDIAN-WORKFLOW.md#plugins).
+
 ## Requirements
 
 - Python 3.8+
