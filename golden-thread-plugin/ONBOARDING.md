@@ -157,6 +157,9 @@ they just stop outranking live work.
 
 # ... work happens ...
 
+/gt:gt-route               ← lost? drifted? "where is this going, and where
+                             does it belong?" Safe to run any number of times
+
 /gt:gt-work                ← write back findings before closing
 ```
 

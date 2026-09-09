@@ -68,6 +68,7 @@ The canonical rule definitions live in `Projects/golden-thread/core-rules/` insi
 | Command | What it does |
 |---|---|
 | `/gt:gt-open` | Load a project at session start. Reads all project docs in order (idea → research → decisions → design → spec → runbook → memory), summarizes state, and asks where to pick up. |
+| `/gt:gt-route` | Mid-session. Names what the session has actually become, says where its output belongs, and checks you are in the right project, harness and model. For when a session drifted from what it opened with, or you cannot name what you are doing. |
 | `/gt:gt-work` | Write back session findings. Appends to `research.md`, adds ADRs to `decisions.md`, refines `design.md`, creates `spec.md` when design is complete, and flags content for PROTOCOL.md. |
 | `/gt:gt-ingest` | Bulk-import an existing project's memory files, CLAUDE.md rules, and notes into the vault. External sources are stored immutably in `Sources/` before being synthesized into Knowledge pages. |
 | `/gt:gt-review` | Scan recent Obsidian daily notes for uncaptured tasks and ideas. Surfaces them grouped by date, then promotes selected ones into tracked project folders. |
@@ -216,6 +217,10 @@ Installs both `gt` (v0.6.0) and `gt-wiki` (v0.1.0) as separate plugins under the
 /gt:gt-open my-project        # load project, summarize state
 
 # ... work happens ...
+
+/gt:gt-route                  # "where is this going?" — run it when the session
+                              # has drifted, or before writing something down and
+                              # you are unsure which file it belongs in
 
 /gt:gt-work                   # write back findings, update docs
 

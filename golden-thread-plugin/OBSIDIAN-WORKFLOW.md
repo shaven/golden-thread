@@ -259,6 +259,7 @@ Scans all `runbook.md` files for procedures that have drifted into multiple runb
 | Command | When to use |
 |---|---|
 | `/gt:gt-open <slug>` | **Start of every session.** Loads project context and asks where to pick up. |
+| `/gt:gt-route` | **Any time in the middle.** Names what the session has become, where its output belongs, and whether the project, harness and model are right. Cheap — run it whenever the ground has shifted. |
 | `/gt:gt-work` | **End of every session.** Writes back findings, decisions, design updates, memory state. Do not skip. |
 
 ### During work
