@@ -112,23 +112,13 @@
 <header id="title-block-header">
 <h1 class="title">Golden Thread Plugin</h1>
 </header>
-<h1 id="golden-thread-plugin-documentation">Golden Thread Plugin —
-Documentation</h1>
-<h2 id="version-gt-0.6.0-gt-wiki-0.1.0">Version gt 0.6.0 / gt-wiki
-0.1.0</h2>
+<h1>Golden Thread Plugin — Documentation</h1>
+<h2>Version gt 0.9.12 / gt-wiki 0.1.1</h2>
 <hr />
-<p>Golden Thread turns an Obsidian vault into the single source of truth
-for all AI memory across every project and every session. v0.6.0 adds a
-tiered rule enforcement model with hook-backed Core rules. gt-wiki 0.1.0
-adds an LLM-powered knowledge base with immutable sources and
-interlinked pages.</p>
+<p>Golden Thread turns an Obsidian vault into the single source of truth for all AI memory across every project and every session. The tiered rule model introduced in v0.6.0 now carries <strong>seven hook-backed Core rules</strong> enforced at three points in the turn, and 0.9.12 adds <code>gt-route</code> for the middle of a session. gt-wiki 0.1.1 provides an LLM-powered knowledge base with immutable sources and interlinked pages.</p>
 <hr />
-<h2 id="what-it-does">What It Does</h2>
-<p>Instead of scattered <code>.claude/memory/</code> files and CLAUDE.md
-snippets that live and die per session, Golden Thread gives every fact a
-permanent home in a structured vault. Knowledge flows up a hierarchy
-from session notes into the vault, and the right facts are always in
-scope when you need them.</p>
+<h2>What It Does</h2>
+<p>Instead of scattered <code>.claude/memory/</code> files and CLAUDE.md snippets that live and die per session, Golden Thread gives every fact a permanent home in a structured vault. Knowledge flows up a hierarchy from session notes into the vault, and the right facts are always in scope when you need them.</p>
 <pre><code>session conversation
       ↓  gt-work / gt-promote
 project memory  (memory/*.md)
@@ -137,19 +127,54 @@ project files   (research.md / decisions.md / design.md / spec.md / runbook.md)
       ↓  gt-promote
 Knowledge/      (cross-project wiki pages, backed by immutable Sources/)
       ↓  gt-promote
-global-memory/  (loaded in every session, all projects)</code></pre>
-<p>Facts move up the hierarchy as they prove themselves general. They
-never move back down and are never silently deleted.</p>
+global-memory/  (loaded in every session, all projects)
+</code></pre>
+<p>Facts move up the hierarchy as they prove themselves general. They never move back down and are never silently deleted.</p>
 <hr />
-<h2 id="core-rules-gt-0.6.0">Core Rules (gt 0.6.0)</h2>
-<p>Golden Thread defines a tiered rule model that separates rules by
-scope and enforcement strength.</p>
+<h2>Core Rules (gt 0.9.12)</h2>
+<p>Golden Thread defines a tiered rule model that separates rules by scope and enforcement strength.
+<strong>Seven Core rules ship as of 0.9.12</strong>, up from one at 0.6.0:</p>
+<table>
+<thead>
+<tr>
+<th>#</th>
+<th>Rule</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>1</td>
+<td>Register your session and claim a vault file before writing it; never write a file another live session has claimed.</td>
+</tr>
+<tr>
+<td>2</td>
+<td>Never put a secret's value into the session — not to inspect it, not to redact it, not to check it.</td>
+</tr>
+<tr>
+<td>3</td>
+<td>Begin every response with the current wall-clock timestamp — before any other text you emit.</td>
+</tr>
+<tr>
+<td>4</td>
+<td><code>global-memory/</code> contains only facts needed in EVERY project.</td>
+</tr>
+<tr>
+<td>5</td>
+<td>Do not auto-load the full memory index.</td>
+</tr>
+<tr>
+<td>6</td>
+<td>A secret's value rests only in the secrets store or a mode-600 file the store wrote — never in source, a vault file, a repo, a log, or a session.</td>
+</tr>
+<tr>
+<td>7</td>
+<td>Label every derived figure you present as fact with its verification state — <code>unverified</code>, <code>self-verified</code>, or <code>independently verified</code>.</td>
+</tr>
+</tbody>
+</table>
+<p>Verify the set at any time with <code>echo '{}' | ~/.claude/golden-thread/hooks/inject_core_rules.sh</code>.</p>
 <p><strong>Three scope levels:</strong></p>
 <table>
-<colgroup>
-<col style="width: 50%" />
-<col style="width: 50%" />
-</colgroup>
 <thead>
 <tr>
 <th>Level</th>
@@ -159,8 +184,7 @@ scope and enforcement strength.</p>
 <tbody>
 <tr>
 <td>Core</td>
-<td>Applies to every chat, every project, no exceptions.
-Un-removable.</td>
+<td>Applies to every chat, every project, no exceptions. Un-removable.</td>
 </tr>
 <tr>
 <td>Context</td>
@@ -174,10 +198,6 @@ Un-removable.</td>
 </table>
 <p><strong>Two enforcement strengths:</strong></p>
 <table>
-<colgroup>
-<col style="width: 50%" />
-<col style="width: 50%" />
-</colgroup>
 <thead>
 <tr>
 <th>Strength</th>
@@ -191,35 +211,21 @@ Un-removable.</td>
 </tr>
 <tr>
 <td>Validated</td>
-<td>Checked by a <code>Stop</code> hook that blocks any reply violating
-it; machine-enforced.</td>
+<td>Checked by a <code>Stop</code> hook that blocks any reply violating it; machine-enforced.</td>
 </tr>
 </tbody>
 </table>
-<p><strong>Core/Validated rules are hook-backed.</strong> Hook scripts
-install to <code>~/.claude/golden-thread/hooks/</code> during
-<code>install.sh</code>. <code>settings.json</code> references them by
-absolute path so they survive vault renames and project moves.
-<code>gt_paths.py</code> is a self-healing resolver — if a recorded path
-is stale, it locates <code>core-rules/</code> by scanning the vault
-rather than failing silently.</p>
-<p>The canonical rule definitions live in
-<code>Projects/golden-thread/core-rules/</code> inside the vault.
-Editing a rule file there changes what the hook injects — the rule text
-is never duplicated into the script.</p>
-<p><strong>The canary:</strong>
-<code>core_timestamp_every_message.md</code> is designated
-Core/Validated not because a missing timestamp causes real harm, but
-because it is trivially observable at the top of every reply. When the
-timestamp disappears, enforcement has broken.</p>
+<p>Since 0.9.5 a third point exists: a <strong><code>PreToolUse</code></strong> hook (<code>guard_session_claims.sh</code>) denies a
+<code>Write</code>/<code>Edit</code> to a vault file another live session holds a claim on. It fails open on any parse
+failure, and deliberately does not cover <code>Bash</code> writes — parsing arbitrary shell fails open so
+often it would train the guard to be ignored.</p>
+<p><strong>Core/Validated rules are hook-backed.</strong> Hook scripts install to <code>~/.claude/golden-thread/hooks/</code> during <code>install.sh</code>. <code>settings.json</code> references them by absolute path so they survive vault renames and project moves. <code>gt_paths.py</code> is a self-healing resolver — if a recorded path is stale, it locates <code>core-rules/</code> by scanning the vault rather than failing silently.</p>
+<p>The canonical rule definitions live in <code>Projects/golden-thread/core-rules/</code> inside the vault. Editing a rule file there changes what the hook injects — the rule text is never duplicated into the script.</p>
+<p><strong>The canary:</strong> <code>core_timestamp_every_message.md</code> is designated Core/Validated not because a missing timestamp causes real harm, but because it is trivially observable at the top of every reply. When the timestamp disappears, enforcement has broken.</p>
 <hr />
-<h2 id="gt-skills-11">gt Skills (11)</h2>
-<h3 id="setup">Setup</h3>
+<h2>gt Skills (15)</h2>
+<h3>Setup</h3>
 <table>
-<colgroup>
-<col style="width: 50%" />
-<col style="width: 50%" />
-</colgroup>
 <thead>
 <tr>
 <th>Command</th>
@@ -229,23 +235,16 @@ timestamp disappears, enforcement has broken.</p>
 <tbody>
 <tr>
 <td><code>/gt:gt-init</code></td>
-<td>Create a new vault from scratch, or wire an existing vault to a
-project. Idempotent — safe to re-run.</td>
+<td>Create a new vault from scratch, or wire an existing vault to a project. Idempotent — safe to re-run.</td>
 </tr>
 <tr>
 <td><code>/gt:gt-create</code></td>
-<td>Scaffold a new project folder with the standard structure. Captures
-your brain dump into <code>idea.md</code>. Supports sub-projects, tags,
-and runbook creation.</td>
+<td>Scaffold a new project folder with the standard structure. Captures your brain dump into <code>idea.md</code>. Supports sub-projects, tags, and runbook creation.</td>
 </tr>
 </tbody>
 </table>
-<h3 id="daily-work">Daily Work</h3>
+<h3>Daily Work</h3>
 <table>
-<colgroup>
-<col style="width: 50%" />
-<col style="width: 50%" />
-</colgroup>
 <thead>
 <tr>
 <th>Command</th>
@@ -255,38 +254,28 @@ and runbook creation.</td>
 <tbody>
 <tr>
 <td><code>/gt:gt-open</code></td>
-<td>Load a project at session start. Reads all project docs in order
-(idea → research → decisions → design → spec → runbook → memory),
-summarizes state, and asks where to pick up.</td>
+<td>Load a project at session start. Reads all project docs in order (idea → research → decisions → design → spec → runbook → memory), summarizes state, and asks where to pick up.</td>
+</tr>
+<tr>
+<td><code>/gt:gt-route</code></td>
+<td>Mid-session. Names what the session has actually become, says where its output belongs, and checks you are in the right project, harness and model. For when a session drifted from what it opened with, or you cannot name what you are doing.</td>
 </tr>
 <tr>
 <td><code>/gt:gt-work</code></td>
-<td>Write back session findings. Appends to <code>research.md</code>,
-adds ADRs to <code>decisions.md</code>, refines <code>design.md</code>,
-creates <code>spec.md</code> when design is complete, and flags content
-for PROTOCOL.md.</td>
+<td>Write back session findings. Appends to <code>research.md</code>, adds ADRs to <code>decisions.md</code>, refines <code>design.md</code>, creates <code>spec.md</code> when design is complete, and flags content for PROTOCOL.md.</td>
 </tr>
 <tr>
 <td><code>/gt:gt-ingest</code></td>
-<td>Bulk-import an existing project’s memory files, CLAUDE.md rules, and
-notes into the vault. External sources are stored immutably in
-<code>Sources/</code> before being synthesized into Knowledge
-pages.</td>
+<td>Bulk-import an existing project's memory files, CLAUDE.md rules, and notes into the vault. External sources are stored immutably in <code>Sources/</code> before being synthesized into Knowledge pages.</td>
 </tr>
 <tr>
 <td><code>/gt:gt-review</code></td>
-<td>Scan recent Obsidian daily notes for uncaptured tasks and ideas.
-Surfaces them grouped by date, then promotes selected ones into tracked
-project folders.</td>
+<td>Scan recent Obsidian daily notes for uncaptured tasks and ideas. Surfaces them grouped by date, then promotes selected ones into tracked project folders.</td>
 </tr>
 </tbody>
 </table>
-<h3 id="knowledge-management">Knowledge Management</h3>
+<h3>Knowledge Management</h3>
 <table>
-<colgroup>
-<col style="width: 50%" />
-<col style="width: 50%" />
-</colgroup>
 <thead>
 <tr>
 <th>Command</th>
@@ -296,30 +285,39 @@ project folders.</td>
 <tbody>
 <tr>
 <td><code>/gt:gt-query</code></td>
-<td>Look something up — reads <code>index.md</code> first, follows
-wikilinks, falls back to grep. The vault is always checked before the
-web.</td>
+<td>Look something up — reads <code>index.md</code> first, follows wikilinks, falls back to grep. The vault is always checked before the web.</td>
 </tr>
 <tr>
 <td><code>/gt:gt-promote</code></td>
-<td>Graduate a fact up the hierarchy: project memory → project files →
-Knowledge wiki page → global-memory. Also handles new project
-scaffolding and retiring stale content.</td>
+<td>Graduate a fact up the hierarchy: project memory → project files → Knowledge wiki page → global-memory. Also handles new project scaffolding and retiring stale content.</td>
 </tr>
 <tr>
 <td><code>/gt:gt-refresh</code></td>
-<td>Check <code>Sources/</code> for upstream changes. Supersedes
-outdated sources with new immutable files — never edits the old one.
-Updates Knowledge pages that cited the changed source.</td>
+<td>Check <code>Sources/</code> for upstream changes. Supersedes outdated sources with new immutable files — never edits the old one. Updates Knowledge pages that cited the changed source.</td>
 </tr>
 </tbody>
 </table>
-<h3 id="maintenance">Maintenance</h3>
+<h3>Context &amp; Verification</h3>
 <table>
-<colgroup>
-<col style="width: 50%" />
-<col style="width: 50%" />
-</colgroup>
+<thead>
+<tr>
+<th>Command</th>
+<th>What it does</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>/gt:gt-farm</code></td>
+<td>Route bulk, mechanical, or second-opinion tasks to an external AI service as a self-contained work packet. All four gates (Stateless, Self-contained, Checkable, Releasable) must pass before a task leaves. Results come back unverified.</td>
+</tr>
+<tr>
+<td><code>/gt:gt-validate</code></td>
+<td>Verify a claim by re-deriving it with a fresh-context validator — never by reviewing the reasoning that produced it. Use before recording a finding as fact or before a production change.</td>
+</tr>
+</tbody>
+</table>
+<h3>Maintenance</h3>
+<table>
 <thead>
 <tr>
 <th>Command</th>
@@ -329,33 +327,23 @@ Updates Knowledge pages that cited the changed source.</td>
 <tbody>
 <tr>
 <td><code>/gt:gt-lint</code></td>
-<td>Audit the vault for structural problems: broken wikilinks, orphaned
-pages, missing index entries, unlisted memory files, Knowledge pages
-citing superseded sources, and stale pages.</td>
+<td>Audit the vault for structural problems: 14 checks covering broken wikilinks, orphaned pages, missing index entries, unlisted memory files, Knowledge pages citing superseded sources, stale pages, and <code>core-unenforced</code> — a Core rule that is stored but wired to no hook.</td>
 </tr>
 <tr>
 <td><code>/gt:gt-runbook-lint</code></td>
-<td>Scan all project <code>runbook.md</code> files for content that has
-drifted into multiple runbooks. Routes duplicated content to the right
-shared layer via <code>gt-promote</code>.</td>
+<td>Scan all project <code>runbook.md</code> files for content that has drifted into multiple runbooks. Routes duplicated content to the right shared layer via <code>gt-promote</code>.</td>
+</tr>
+<tr>
+<td><code>/gt:gt-settings</code></td>
+<td>View and change what Golden Thread does on its own: component drift checking at session start, and the session report card at compact. Every automatic behaviour can be switched off.</td>
 </tr>
 </tbody>
 </table>
 <hr />
-<h2 id="gt-wiki-skills-5">gt-wiki Skills (5)</h2>
-<p>The gt-wiki plugin provides an LLM-powered knowledge base separate
-from the Golden Thread memory hierarchy. Sources are ingested immutably;
-Knowledge pages are synthesized summaries linked bidirectionally.</p>
-<p><strong>Key design decision:</strong> The vault
-<code>CLAUDE.md</code> is kept slim (architecture + pointer only). Page
-format schema lives in <code>Knowledge/_template.md</code> and is read
-on demand by the ingest and refresh skills — it is not loaded into every
-session’s context.</p>
+<h2>gt-wiki Skills (5)</h2>
+<p>The gt-wiki plugin provides an LLM-powered knowledge base separate from the Golden Thread memory hierarchy. Sources are ingested immutably; Knowledge pages are synthesized summaries linked bidirectionally.</p>
+<p><strong>Key design decision:</strong> The vault <code>CLAUDE.md</code> is kept slim (architecture + pointer only). Page format schema lives in <code>Knowledge/_template.md</code> and is read on demand by the ingest and refresh skills — it is not loaded into every session's context.</p>
 <table>
-<colgroup>
-<col style="width: 50%" />
-<col style="width: 50%" />
-</colgroup>
 <thead>
 <tr>
 <th>Command</th>
@@ -365,40 +353,28 @@ session’s context.</p>
 <tbody>
 <tr>
 <td><code>/gt:gt-wiki-init</code></td>
-<td>Set up a new wiki vault from scratch. Runs
-<code>vault_init.py</code> deterministically — creates
-<code>Sources/</code>, <code>Knowledge/</code>, <code>index.md</code>,
-<code>log.md</code>, seeds <code>CLAUDE.md</code> from template, and
-stamps <code>Knowledge/_template.md</code>.</td>
+<td>Set up a new wiki vault from scratch. Runs <code>vault_init.py</code> deterministically — creates <code>Sources/</code>, <code>Knowledge/</code>, <code>index.md</code>, <code>log.md</code>, seeds <code>CLAUDE.md</code> from template, and stamps <code>Knowledge/_template.md</code>.</td>
 </tr>
 <tr>
 <td><code>/gt:gt-wiki</code></td>
-<td>Query the wiki. Reads <code>index.md</code> first, follows
-wikilinks, falls back to grep, deep-digs Sources for precision. Logs
-every query.</td>
+<td>Query the wiki. Reads <code>index.md</code> first, follows wikilinks, falls back to grep, deep-digs Sources for precision. Logs every query.</td>
 </tr>
 <tr>
 <td><code>/gt:gt-wiki-ingest</code></td>
-<td>Add a source: fetch or paste, store immutably in
-<code>Sources/</code>, discuss with user, write Knowledge pages per
-<code>_template.md</code>, cross-link bidirectionally, update index and
-log.</td>
+<td>Add a source: fetch or paste, store immutably in <code>Sources/</code>, discuss with user, write Knowledge pages per <code>_template.md</code>, cross-link bidirectionally, update index and log.</td>
 </tr>
 <tr>
 <td><code>/gt:gt-wiki-lint</code></td>
-<td>Run <code>wiki_lint.py</code> (10 deterministic checks). Interprets
-findings, proposes fixes, records declines in
-<code>lint-declines.md</code> so nothing gets re-litigated.</td>
+<td>Run <code>wiki_lint.py</code> (10 deterministic checks). Interprets findings, proposes fixes, records declines in <code>lint-declines.md</code> so nothing gets re-litigated.</td>
 </tr>
 <tr>
 <td><code>/gt:gt-wiki-refresh</code></td>
-<td>Check selected sources for upstream changes. Supersedes changed ones
-with new immutable source files. Updates citing Knowledge pages.</td>
+<td>Check selected sources for upstream changes. Supersedes changed ones with new immutable source files. Updates citing Knowledge pages.</td>
 </tr>
 </tbody>
 </table>
 <hr />
-<h2 id="vault-structure">Vault Structure</h2>
+<h2>Vault Structure</h2>
 <pre><code>&lt;vault&gt;/
   CLAUDE.md                   ← architecture + pointer to Knowledge/_template.md
   index.md                    ← navigational index of all Knowledge pages
@@ -436,15 +412,11 @@ with new immutable source files. Updates citing Knowledge pages.</td>
         &lt;topic&gt;.md
 
     golden-thread/
-      core-rules/             ← canonical Core rule definitions</code></pre>
+      core-rules/             ← canonical Core rule definitions
+</code></pre>
 <hr />
-<h2 id="immutability-model">Immutability Model</h2>
+<h2>Immutability Model</h2>
 <table>
-<colgroup>
-<col style="width: 33%" />
-<col style="width: 33%" />
-<col style="width: 33%" />
-</colgroup>
 <thead>
 <tr>
 <th>File</th>
@@ -506,13 +478,8 @@ with new immutable source files. Updates citing Knowledge pages.</td>
 </tbody>
 </table>
 <hr />
-<h2 id="context-footprint">Context Footprint</h2>
+<h2>Context Footprint</h2>
 <table>
-<colgroup>
-<col style="width: 33%" />
-<col style="width: 33%" />
-<col style="width: 33%" />
-</colgroup>
 <thead>
 <tr>
 <th>What loads</th>
@@ -548,17 +515,11 @@ with new immutable source files. Updates citing Knowledge pages.</td>
 </tr>
 </tbody>
 </table>
-<p>The slim CLAUDE.md design (introduced in gt-wiki 0.1.0) drops the
-vault’s cold-start footprint from ~1,300 tokens to ~350.</p>
+<p>The slim CLAUDE.md design (introduced in gt-wiki 0.1.0) drops the vault's cold-start footprint from ~1,300 tokens to ~350.</p>
 <hr />
-<h2 id="source-topology">Source Topology</h2>
-<p>Every project records where its code lives in
-<code>source.md</code>.</p>
+<h2>Source Topology</h2>
+<p>Every project records where its code lives in <code>source.md</code>.</p>
 <table>
-<colgroup>
-<col style="width: 50%" />
-<col style="width: 50%" />
-</colgroup>
 <thead>
 <tr>
 <th>Topology</th>
@@ -584,41 +545,40 @@ vault’s cold-start footprint from ~1,300 tokens to ~350.</p>
 </tr>
 </tbody>
 </table>
-<p>Bastion projects carry a <strong>file plan</strong> marking each
-deployed file <code>static</code> (byte-identical everywhere) or
-<code>unique</code> (per-server variant that must never be
-cross-deployed).</p>
+<p>Bastion projects carry a <strong>file plan</strong> marking each deployed file <code>static</code> (byte-identical everywhere) or <code>unique</code> (per-server variant that must never be cross-deployed).</p>
 <hr />
-<h2 id="install">Install</h2>
-<div class="sourceCode" id="cb3"><pre
-class="sourceCode bash"><code class="sourceCode bash"><span id="cb3-1"><a href="#cb3-1" aria-hidden="true" tabindex="-1"></a><span class="co"># From zip</span></span>
-<span id="cb3-2"><a href="#cb3-2" aria-hidden="true" tabindex="-1"></a><span class="fu">unzip</span> golden-thread-plugin.zip</span>
-<span id="cb3-3"><a href="#cb3-3" aria-hidden="true" tabindex="-1"></a><span class="bu">cd</span> golden-thread-plugin</span>
-<span id="cb3-4"><a href="#cb3-4" aria-hidden="true" tabindex="-1"></a><span class="fu">bash</span> install.sh</span>
-<span id="cb3-5"><a href="#cb3-5" aria-hidden="true" tabindex="-1"></a><span class="co"># Restart Claude Code</span></span></code></pre></div>
-<p>Installs both <code>gt</code> (v0.6.0) and <code>gt-wiki</code>
-(v0.1.0) as separate plugins under the <code>golden-thread-plugin</code>
-marketplace. Requires Python 3.8+.</p>
+<h2>Install</h2>
+<pre><code class="language-bash"># From zip
+unzip golden-thread-plugin.zip
+cd golden-thread-plugin
+bash install.sh
+# Restart Claude Code
+</code></pre>
+<p>Installs both <code>gt</code> (v0.9.12) and <code>gt-wiki</code> (v0.1.1) as separate plugins under the <code>golden-thread-plugin</code> marketplace. Requires Python 3.8+.</p>
+<p><code>install.sh</code> installs the <strong>newest version directory</strong> present, not a hardcoded constant — pass an argument only to roll back deliberately (<code>./install.sh 0.9.3</code>). Never pipe it to <code>head</code>: <code>set -o pipefail</code> turns the closed pipe into an abort partway through, leaving the cache updated and registration undone.</p>
 <hr />
-<h2 id="typical-session-pattern">Typical Session Pattern</h2>
-<div class="sourceCode" id="cb4"><pre
-class="sourceCode bash"><code class="sourceCode bash"><span id="cb4-1"><a href="#cb4-1" aria-hidden="true" tabindex="-1"></a><span class="ex">/gt:gt-open</span> my-project        <span class="co"># load project, summarize state</span></span>
-<span id="cb4-2"><a href="#cb4-2" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb4-3"><a href="#cb4-3" aria-hidden="true" tabindex="-1"></a><span class="co"># ... work happens ...</span></span>
-<span id="cb4-4"><a href="#cb4-4" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb4-5"><a href="#cb4-5" aria-hidden="true" tabindex="-1"></a><span class="ex">/gt:gt-work</span>                   <span class="co"># write back findings, update docs</span></span>
-<span id="cb4-6"><a href="#cb4-6" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb4-7"><a href="#cb4-7" aria-hidden="true" tabindex="-1"></a><span class="co"># periodically</span></span>
-<span id="cb4-8"><a href="#cb4-8" aria-hidden="true" tabindex="-1"></a><span class="ex">/gt:gt-lint</span>                   <span class="co"># catch structural drift</span></span>
-<span id="cb4-9"><a href="#cb4-9" aria-hidden="true" tabindex="-1"></a><span class="ex">/gt:gt-wiki-ingest</span> <span class="op">&lt;</span>url<span class="op">&gt;</span>      <span class="co"># add a source to the wiki</span></span>
-<span id="cb4-10"><a href="#cb4-10" aria-hidden="true" tabindex="-1"></a><span class="ex">/gt:gt-promote</span>                <span class="co"># graduate a finding to Knowledge or global-memory</span></span></code></pre></div>
+<h2>Typical Session Pattern</h2>
+<pre><code class="language-bash">/gt:gt-open my-project        # load project, summarize state
+
+# ... work happens ...
+
+/gt:gt-route                  # &quot;where is this going?&quot; — run it when the session
+                              # has drifted, or before writing something down and
+                              # you are unsure which file it belongs in
+
+/gt:gt-work                   # write back findings, update docs
+
+# periodically
+/gt:gt-lint                   # catch structural drift
+/gt:gt-wiki-ingest &lt;url&gt;      # add a source to the wiki
+/gt:gt-promote                # graduate a finding to Knowledge or global-memory
+</code></pre>
 <hr />
-<h2 id="requirements">Requirements</h2>
+<h2>Requirements</h2>
 <ul>
 <li>Python 3.8+</li>
 <li>Claude Code (any version)</li>
-<li>Obsidian (optional — the vault is plain markdown; Obsidian is the
-GUI layer)</li>
+<li>Obsidian (optional — the vault is plain markdown; Obsidian is the GUI layer)</li>
 </ul>
 </body>
 </html>

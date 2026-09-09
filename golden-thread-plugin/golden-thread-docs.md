@@ -1,9 +1,9 @@
 # Golden Thread Plugin — Documentation
-## Version gt 0.6.0 / gt-wiki 0.1.0
+## Version gt 0.9.12 / gt-wiki 0.1.1
 
 ---
 
-Golden Thread turns an Obsidian vault into the single source of truth for all AI memory across every project and every session. v0.6.0 adds a tiered rule enforcement model with hook-backed Core rules. gt-wiki 0.1.0 adds an LLM-powered knowledge base with immutable sources and interlinked pages.
+Golden Thread turns an Obsidian vault into the single source of truth for all AI memory across every project and every session. The tiered rule model introduced in v0.6.0 now carries **seven hook-backed Core rules** enforced at three points in the turn, and 0.9.12 adds `gt-route` for the middle of a session. gt-wiki 0.1.1 provides an LLM-powered knowledge base with immutable sources and interlinked pages.
 
 ---
 
@@ -27,9 +27,22 @@ Facts move up the hierarchy as they prove themselves general. They never move ba
 
 ---
 
-## Core Rules (gt 0.6.0)
+## Core Rules (gt 0.9.12)
 
 Golden Thread defines a tiered rule model that separates rules by scope and enforcement strength.
+**Seven Core rules ship as of 0.9.12**, up from one at 0.6.0:
+
+| # | Rule |
+|---|---|
+| 1 | Register your session and claim a vault file before writing it; never write a file another live session has claimed. |
+| 2 | Never put a secret's value into the session — not to inspect it, not to redact it, not to check it. |
+| 3 | Begin every response with the current wall-clock timestamp — before any other text you emit. |
+| 4 | `global-memory/` contains only facts needed in EVERY project. |
+| 5 | Do not auto-load the full memory index. |
+| 6 | A secret's value rests only in the secrets store or a mode-600 file the store wrote — never in source, a vault file, a repo, a log, or a session. |
+| 7 | Label every derived figure you present as fact with its verification state — `unverified`, `self-verified`, or `independently verified`. |
+
+Verify the set at any time with `echo '{}' | ~/.claude/golden-thread/hooks/inject_core_rules.sh`.
 
 **Three scope levels:**
 
@@ -46,6 +59,11 @@ Golden Thread defines a tiered rule model that separates rules by scope and enfo
 | Reminder | Injected on every turn via `UserPromptSubmit` hook. |
 | Validated | Checked by a `Stop` hook that blocks any reply violating it; machine-enforced. |
 
+Since 0.9.5 a third point exists: a **`PreToolUse`** hook (`guard_session_claims.sh`) denies a
+`Write`/`Edit` to a vault file another live session holds a claim on. It fails open on any parse
+failure, and deliberately does not cover `Bash` writes — parsing arbitrary shell fails open so
+often it would train the guard to be ignored.
+
 **Core/Validated rules are hook-backed.** Hook scripts install to `~/.claude/golden-thread/hooks/` during `install.sh`. `settings.json` references them by absolute path so they survive vault renames and project moves. `gt_paths.py` is a self-healing resolver — if a recorded path is stale, it locates `core-rules/` by scanning the vault rather than failing silently.
 
 The canonical rule definitions live in `Projects/golden-thread/core-rules/` inside the vault. Editing a rule file there changes what the hook injects — the rule text is never duplicated into the script.
@@ -54,7 +72,7 @@ The canonical rule definitions live in `Projects/golden-thread/core-rules/` insi
 
 ---
 
-## gt Skills (11)
+## gt Skills (15)
 
 ### Setup
 
@@ -68,6 +86,7 @@ The canonical rule definitions live in `Projects/golden-thread/core-rules/` insi
 | Command | What it does |
 |---|---|
 | `/gt:gt-open` | Load a project at session start. Reads all project docs in order (idea → research → decisions → design → spec → runbook → memory), summarizes state, and asks where to pick up. |
+| `/gt:gt-route` | Mid-session. Names what the session has actually become, says where its output belongs, and checks you are in the right project, harness and model. For when a session drifted from what it opened with, or you cannot name what you are doing. |
 | `/gt:gt-work` | Write back session findings. Appends to `research.md`, adds ADRs to `decisions.md`, refines `design.md`, creates `spec.md` when design is complete, and flags content for PROTOCOL.md. |
 | `/gt:gt-ingest` | Bulk-import an existing project's memory files, CLAUDE.md rules, and notes into the vault. External sources are stored immutably in `Sources/` before being synthesized into Knowledge pages. |
 | `/gt:gt-review` | Scan recent Obsidian daily notes for uncaptured tasks and ideas. Surfaces them grouped by date, then promotes selected ones into tracked project folders. |
@@ -80,12 +99,20 @@ The canonical rule definitions live in `Projects/golden-thread/core-rules/` insi
 | `/gt:gt-promote` | Graduate a fact up the hierarchy: project memory → project files → Knowledge wiki page → global-memory. Also handles new project scaffolding and retiring stale content. |
 | `/gt:gt-refresh` | Check `Sources/` for upstream changes. Supersedes outdated sources with new immutable files — never edits the old one. Updates Knowledge pages that cited the changed source. |
 
+### Context & Verification
+
+| Command | What it does |
+|---|---|
+| `/gt:gt-farm` | Route bulk, mechanical, or second-opinion tasks to an external AI service as a self-contained work packet. All four gates (Stateless, Self-contained, Checkable, Releasable) must pass before a task leaves. Results come back unverified. |
+| `/gt:gt-validate` | Verify a claim by re-deriving it with a fresh-context validator — never by reviewing the reasoning that produced it. Use before recording a finding as fact or before a production change. |
+
 ### Maintenance
 
 | Command | What it does |
 |---|---|
-| `/gt:gt-lint` | Audit the vault for structural problems: broken wikilinks, orphaned pages, missing index entries, unlisted memory files, Knowledge pages citing superseded sources, and stale pages. |
+| `/gt:gt-lint` | Audit the vault for structural problems: 14 checks covering broken wikilinks, orphaned pages, missing index entries, unlisted memory files, Knowledge pages citing superseded sources, stale pages, and `core-unenforced` — a Core rule that is stored but wired to no hook. |
 | `/gt:gt-runbook-lint` | Scan all project `runbook.md` files for content that has drifted into multiple runbooks. Routes duplicated content to the right shared layer via `gt-promote`. |
+| `/gt:gt-settings` | View and change what Golden Thread does on its own: component drift checking at session start, and the session report card at compact. Every automatic behaviour can be switched off. |
 
 ---
 
@@ -206,7 +233,9 @@ bash install.sh
 # Restart Claude Code
 ```
 
-Installs both `gt` (v0.6.0) and `gt-wiki` (v0.1.0) as separate plugins under the `golden-thread-plugin` marketplace. Requires Python 3.8+.
+Installs both `gt` (v0.9.12) and `gt-wiki` (v0.1.1) as separate plugins under the `golden-thread-plugin` marketplace. Requires Python 3.8+.
+
+`install.sh` installs the **newest version directory** present, not a hardcoded constant — pass an argument only to roll back deliberately (`./install.sh 0.9.3`). Never pipe it to `head`: `set -o pipefail` turns the closed pipe into an abort partway through, leaving the cache updated and registration undone.
 
 ---
 
@@ -216,6 +245,10 @@ Installs both `gt` (v0.6.0) and `gt-wiki` (v0.1.0) as separate plugins under the
 /gt:gt-open my-project        # load project, summarize state
 
 # ... work happens ...
+
+/gt:gt-route                  # "where is this going?" — run it when the session
+                              # has drifted, or before writing something down and
+                              # you are unsure which file it belongs in
 
 /gt:gt-work                   # write back findings, update docs
 
