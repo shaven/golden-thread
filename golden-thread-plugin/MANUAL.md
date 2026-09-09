@@ -1,6 +1,6 @@
 # Golden Thread — User Manual
 
-Complete reference for all fourteen skills. Written against **gt v0.9.11**.
+Complete reference for all fifteen skills. Written against **gt v0.9.12**.
 
 ---
 
@@ -348,6 +348,38 @@ Announces the `review-queue.md` count once, then summarises stage, **topology an
 hosts**, next action, blockers, and what memory exists but is unloaded — the host
 list so you can correct a stale entry *before* work starts rather than after.
 
+### `/gt:gt-route`
+
+The middle of a session. `gt-open` runs before the session knows what it is; `gt-work`
+runs after it is over. Between them sits the part where the work actually changes shape,
+and nothing served it.
+
+Run it whenever the ground has shifted, or whenever you cannot name what you are doing.
+It reads only the conversation already in context — never project files, because reading
+`research.md` to decide where a note goes costs more than the note — and answers four things:
+
+1. **What this has become.** Restated in a sentence, with the drift named explicitly if
+   the session no longer resembles what it opened with. This is most of the value: the
+   drift is usually felt before it is articulated.
+2. **Where the output belongs** — the [Where does this fact go?](#where-does-this-fact-go)
+   table, applied to the material actually in hand, naming more than one destination when
+   more than one is true.
+3. **Whether the work is in the right place** — project loaded, harness (a real PTY belongs
+   in a terminal; vault context belongs in Claudian), and whether the model matches the
+   difficulty. It reports mismatches; it changes nothing.
+4. **One next action.** A skill to invoke or a file to append to — not a menu.
+
+It **writes nothing**, with a single exception: one `INBOX.md` checkbox line, which is
+what `INBOX.md` is for. Everything else is handed to the skill that owns the destination,
+which does the writing under its own claim.
+
+**"Nothing, keep going" is a valid answer** and the skill is built to give it. A check that
+always finds work is a check nobody runs twice.
+
+Use it when a session opened as one thing and became another; when a finding might belong
+to a project other than the one loaded; when you are about to write something down and are
+not sure which file; or when you simply feel lost. Being wrong costs one re-run.
+
 ### `/gt:gt-work`
 
 End of session. The step people skip, and skipping it is what makes the vault decay.
@@ -610,12 +642,17 @@ one project, so the next rediscovers it the hard way; **too wide** promotes a
 quirk into `global-memory/`, where it loads into unrelated sessions as a rule
 that isn't true there. When unsure, file narrow — promotion is cheap, demotion isn't.
 
+**`/gt:gt-route` applies this table for you**, against the material actually in hand,
+without your having to hold the table in your head mid-session. Reach for it when the
+answer is not obvious — including when the honest answer is that the fact belongs to a
+project other than the one loaded.
+
 ---
 
 ## Script reference
 
 ```bash
-SCRIPTS=~/.claude/plugins/cache/golden-thread-plugin/gt/0.9.11/scripts
+SCRIPTS=~/.claude/plugins/cache/golden-thread-plugin/gt/0.9.12/scripts
 
 python3 $SCRIPTS/vault_init.py fresh --vault ~/my-vault --domain "My Team"
 

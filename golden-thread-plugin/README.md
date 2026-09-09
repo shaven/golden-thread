@@ -36,6 +36,7 @@ Facts move up the hierarchy as they prove themselves general. They never move ba
 | Command | What it does |
 |---|---|
 | `/gt:gt-open` | Load a project at the start of a session. Reads all project docs in order (idea → research → decisions → design → spec → runbook → memory), then summarizes the project state and asks where to pick up. |
+| `/gt:gt-route` | Mid-session check: what has this session actually become, where does its output belong, and is it happening in the right project, harness and model? Serves the middle of a session, where `gt-open` cannot see yet and `gt-work` sees too late. Cheap and repeatable — not a gate. |
 | `/gt:gt-work` | Write back session findings at the end of a session. Appends to `research.md`, adds ADRs to `decisions.md`, refines `design.md`, creates `spec.md` when design is complete, and flags content for PROTOCOL.md. |
 | `/gt:gt-ingest` | Bulk-import an existing project's memory files, CLAUDE.md rules, and notes into the vault. External sources are stored immutably in `Sources/` before being synthesized into Knowledge pages. |
 | `/gt:gt-review` | Scan recent Obsidian daily notes for uncaptured tasks and ideas. Surfaces them grouped by date, then promotes selected ones into tracked project folders. |
@@ -215,6 +216,9 @@ python3 <scripts>/vault_init.py install-core-rules --vault <vault>
 
 # During session
 (work happens — Claude Code keeps context)
+/gt:gt-route                  ← "where is this going?" — names the drift, says where the
+                                output belongs and whether you are in the right project,
+                                harness and model. Run it whenever the ground has shifted.
 
 # End of session
 /gt:gt-work                   ← writes findings, ADRs, updates design, creates spec if ready
@@ -236,11 +240,11 @@ Python scripts can also be run directly from the command line:
 
 ```bash
 # Create a new vault
-python3 golden-thread/0.9.11/scripts/vault_init.py fresh \
+python3 golden-thread/0.9.12/scripts/vault_init.py fresh \
   --vault ~/my-vault --domain "My Team"
 
 # Scaffold a project
-python3 golden-thread/0.9.11/scripts/vault_init.py create-project \
+python3 golden-thread/0.9.12/scripts/vault_init.py create-project \
   --vault ~/my-vault \
   --name my-project \
   --title "My Project" \
@@ -251,29 +255,29 @@ python3 golden-thread/0.9.11/scripts/vault_init.py create-project \
   --project-dir ~/Projects/my-project
 
 # Scaffold a sub-project
-python3 golden-thread/0.9.11/scripts/vault_init.py create-project \
+python3 golden-thread/0.9.12/scripts/vault_init.py create-project \
   --vault ~/my-vault \
   --name sub-feature \
   --parent my-project \
   --title "Sub Feature"
 
 # Point vault-config.json at an existing vault
-python3 golden-thread/0.9.11/scripts/vault_init.py connect \
+python3 golden-thread/0.9.12/scripts/vault_init.py connect \
   --vault ~/existing-vault
 
 # Install/rewire Core-rule enforcement hooks
-python3 golden-thread/0.9.11/scripts/vault_init.py install-core-rules \
+python3 golden-thread/0.9.12/scripts/vault_init.py install-core-rules \
   --vault ~/my-vault
 
 # Scan a project directory for ingest candidates
-python3 golden-thread/0.9.11/scripts/gt_ingest.py ~/Projects/my-project --json
+python3 golden-thread/0.9.12/scripts/gt_ingest.py ~/Projects/my-project --json
 
 # Audit vault health
-python3 golden-thread/0.9.11/scripts/gt_lint.py ~/my-vault \
+python3 golden-thread/0.9.12/scripts/gt_lint.py ~/my-vault \
   --queue ~/my-vault/review-queue.md
 
 # View/change automatic behaviours
-python3 golden-thread/0.9.11/scripts/gt_settings.py show
+python3 golden-thread/0.9.12/scripts/gt_settings.py show
 ```
 
 ---

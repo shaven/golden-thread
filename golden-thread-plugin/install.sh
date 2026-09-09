@@ -272,6 +272,7 @@ echo "  /gt:gt-init          set up the vault, wire a project, write vault-confi
 echo "  /gt:gt-open          load a project — source.md first, memory index only"
 echo "  /gt:gt-create        scaffold a project and freeze its idea.md"
 echo "  /gt:gt-ingest        import an existing project's notes (copies, never moves)"
+echo "  /gt:gt-route         mid-session: what is this now, where does it go, right place?"
 echo "  /gt:gt-work          write the session back to research/decisions/design"
 echo "  /gt:gt-promote       graduate a fact up a level, or out to a repo CLAUDE.md"
 echo "  /gt:gt-validate      re-derive a claim with a fresh-context validator"
