@@ -113,7 +113,7 @@ h3 { font-size: 12.5px; break-after: avoid; }
 pre, table { break-inside: avoid; font-size: 9px; }
 table { width:100%; border-collapse: collapse; }
 th, td { border:1px solid #ddd; padding:3px 5px; text-align:left; vertical-align:top; }
-</style></head><body><h1 id="golden-thread-user-manual">User Manual</h1>
+</style></head><body><h1 id="golden-thread-user-manual">Golden Thread — User Manual</h1>
 <p>Complete reference for all fifteen skills. Written against <strong>gt v0.9.12</strong>.</p>
 <hr />
 <h2 id="the-model">The model</h2>
@@ -280,6 +280,13 @@ memory notes by name as the work needs them.</p>
 <code>pp_escalate</code> window escalates. Reading a stale <code>TASKS.md</code> gives you last week's
 ranking with this week's confidence.</p>
 <p><code>waiting:: user</code> is your list; <code>waiting:: agent</code> is the session's.</p>
+<p>Two sections sit above the ranked lists. <strong>Inbox</strong> shows every unchecked line in
+<code>INBOX.md</code> — thoughts captured from anywhere and not yet filed — so nothing is lost
+and nothing unfiled ranks. <strong>Review</strong> shows projects the close-out probe thinks may
+be finished, with the reasons, so closing a project is asked about rather than
+forgotten (see <em>Closing a project</em>).</p>
+<p>Tasks at <code>p:: 7</code> or higher are <strong>shelved</strong>: kept in the README as a record, excluded
+from every section and every escalation rule, counted in <em>Project standing</em> only.</p>
 <h3 id="bringing-an-existing-project-into-the-vault">Bringing an existing project into the vault</h3>
 <pre><code>/gt:gt-ingest
 </code></pre>
@@ -314,11 +321,33 @@ project memory. If a page comes back <code>status: stale</code>, verify before a
 (fix now), <em>already broken</em> (record in <code>review-queue.md</code>), <em>false positive</em> (suppress
 <strong>with the reason</strong>). The check that matters most is <code>memory-unlisted</code> — a memory file
 missing from <code>MEMORY.md</code> is a file Claude will never load.</p>
-<h3 id="capturing-what-you-jotted-down-elsewhere">Capturing what you jotted down elsewhere</h3>
+<h3 id="capturing-a-thought-without-leaving-what-you-are-doing">Capturing a thought without leaving what you are doing</h3>
+<p>Add one checkbox line to <code>&lt;vault&gt;/INBOX.md</code>, from any session, in any project:</p>
+<pre><code>- [ ] Backtesting: try the nq_pullback set against a cold cache
+</code></pre>
+<p>No project, no priority, no date. Then go back to work. Later:</p>
 <pre><code>/gt:gt-review
 </code></pre>
-<p>Scans Obsidian daily notes for uncaptured tasks and ideas and promotes the ones you
-pick into tracked projects.</p>
+<p>reads the inbox (and daily notes, if you keep them), asks where each line belongs,
+files it as a task or a project, and checks the inbox line off with a <code>→ [[slug]]</code>
+pointer. An idea filed as a task gets <code>p:: 3</code> and no due date — a due date on an
+idea makes the deadline rule rank it above real work.</p>
+<h3 id="closing-a-project">Closing a project</h3>
+<p>Delivery is not closure. A shipped project whose tasks stay open keeps escalating
+through its past due dates and outranks live work; on 2026-09-05 a talk delivered
+two days earlier held 24 of the top rows in the rollup.</p>
+<pre><code class="language-bash">python3 &lt;vault&gt;/Projects/golden-thread/tools/gt_closeout.py candidates
+</code></pre>
+<p>names projects whose signals say they may be finished: most open tasks past due,
+most tasks checked with nothing urgent left, three quiet weeks, or nothing open. The
+same probe runs at <code>/compact</code> and session end (setting <code>closeout_check</code>), and
+<code>gt-work</code> asks after the last urgent task is checked. The question is always put to
+you, never acted on.</p>
+<p>Closing means: <code>stage: complete</code>, leftover tasks to <code>p:: 7</code> (shelved, not deleted),
+<code>pp: 3</code>, a last <code>research.md</code> entry, and a look at what to promote. Every ask and
+every answer is recorded in <code>Projects/golden-thread/closeout-signals.jsonl</code>;
+<code>gt_closeout.py history</code> shows what "ready" has actually looked like for you, which
+is what the thresholds get tuned against.</p>
 <hr />
 <h2 id="setup">Setup</h2>
 <h3 id="gtgt-init"><code>/gt:gt-init</code></h3>
@@ -360,33 +389,32 @@ item.</p>
 hosts</strong>, next action, blockers, and what memory exists but is unloaded — the host
 list so you can correct a stale entry <em>before</em> work starts rather than after.</p>
 <h3 id="gtgt-route"><code>/gt:gt-route</code></h3>
-<p>The middle of a session. <code>gt-open</code> runs before the session knows what it is;
-<code>gt-work</code> runs after it is over. Between them sits the part where the work actually
-changes shape, and nothing served it.</p>
+<p>The middle of a session. <code>gt-open</code> runs before the session knows what it is; <code>gt-work</code>
+runs after it is over. Between them sits the part where the work actually changes shape,
+and nothing served it.</p>
 <p>Run it whenever the ground has shifted, or whenever you cannot name what you are doing.
 It reads only the conversation already in context — never project files, because reading
-<code>research.md</code> to decide where a note goes costs more than the note — and answers
-four things:</p>
+<code>research.md</code> to decide where a note goes costs more than the note — and answers four things:</p>
 <ol>
-<li><strong>What this has become.</strong> Restated in a sentence, with the drift named
-explicitly if the session no longer resembles what it opened with. This is most of the value:
-the drift is usually felt before it is articulated.</li>
-<li><strong>Where the output belongs</strong> — the <a href="#where-does-this-fact-go">Where
-does this fact go?</a> table, applied to the material actually in hand, naming more than one
-destination when more than one is true.</li>
-<li><strong>Whether the work is in the right place</strong> — project loaded, harness (a real
-PTY belongs in a terminal; vault context belongs in Claudian), and whether the model matches
-the difficulty. It reports mismatches; it changes nothing.</li>
+<li><strong>What this has become.</strong> Restated in a sentence, with the drift named explicitly if
+   the session no longer resembles what it opened with. This is most of the value: the
+   drift is usually felt before it is articulated.</li>
+<li><strong>Where the output belongs</strong> — the <a href="#where-does-this-fact-go">Where does this fact go?</a>
+   table, applied to the material actually in hand, naming more than one destination when
+   more than one is true.</li>
+<li><strong>Whether the work is in the right place</strong> — project loaded, harness (a real PTY belongs
+   in a terminal; vault context belongs in Claudian), and whether the model matches the
+   difficulty. It reports mismatches; it changes nothing.</li>
 <li><strong>One next action.</strong> A skill to invoke or a file to append to — not a menu.</li>
 </ol>
-<p>It <strong>writes nothing</strong>, with a single exception: one <code>INBOX.md</code>
-checkbox line, which is what <code>INBOX.md</code> is for. Everything else is handed to the
-skill that owns the destination, which does the writing under its own claim.</p>
-<p><strong>"Nothing, keep going" is a valid answer</strong> and the skill is built to give it.
-A check that always finds work is a check nobody runs twice.</p>
-<p>Use it when a session opened as one thing and became another; when a finding might belong to
-a project other than the one loaded; when you are about to write something down and are not
-sure which file; or when you simply feel lost. Being wrong costs one re-run.</p>
+<p>It <strong>writes nothing</strong>, with a single exception: one <code>INBOX.md</code> checkbox line, which is
+what <code>INBOX.md</code> is for. Everything else is handed to the skill that owns the destination,
+which does the writing under its own claim.</p>
+<p><strong>"Nothing, keep going" is a valid answer</strong> and the skill is built to give it. A check that
+always finds work is a check nobody runs twice.</p>
+<p>Use it when a session opened as one thing and became another; when a finding might belong
+to a project other than the one loaded; when you are about to write something down and are
+not sure which file; or when you simply feel lost. Being wrong costs one re-run.</p>
 <h3 id="gtgt-work"><code>/gt:gt-work</code></h3>
 <p>End of session. The step people skip, and skipping it is what makes the vault decay.</p>
 <table>
@@ -448,8 +476,9 @@ filename. Measure first:</p>
 <code>[[name]]</code> and <code>[[name|alias]]</code> — never a substring, or <code>[[foo]]</code> will corrupt
 <code>[[foo_bar]]</code>. Never repoint links inside <code>Sources/</code>.</p>
 <h3 id="gtgt-review"><code>/gt:gt-review</code></h3>
-<p>Scans Obsidian daily notes for uncaptured tasks and ideas, then promotes selected
-ones into tracked projects.</p>
+<p>Empties <code>INBOX.md</code>: reads every unchecked line (and daily notes, if configured),
+asks where each belongs, files it as a task or project, and checks the inbox line
+off with a pointer. Regenerates the rollup at the end.</p>
 <hr />
 <h2 id="context-management">Context management</h2>
 <h3 id="gtgt-farm"><code>/gt:gt-farm</code></h3>
@@ -768,9 +797,9 @@ layer — <code>PROTOCOL.md</code>, a Knowledge page, or a repo <code>CLAUDE.md<
 one project, so the next rediscovers it the hard way; <strong>too wide</strong> promotes a
 quirk into <code>global-memory/</code>, where it loads into unrelated sessions as a rule
 that isn't true there. When unsure, file narrow — promotion is cheap, demotion isn't.</p>
-<p><strong><code>/gt:gt-route</code> applies this table for you</strong>, against the material
-actually in hand, without your having to hold the table in your head mid-session. Reach for it
-when the answer is not obvious — including when the honest answer is that the fact belongs to a
+<p><strong><code>/gt:gt-route</code> applies this table for you</strong>, against the material actually in hand,
+without your having to hold the table in your head mid-session. Reach for it when the
+answer is not obvious — including when the honest answer is that the fact belongs to a
 project other than the one loaded.</p>
 <hr />
 <h2 id="script-reference">Script reference</h2>
@@ -796,9 +825,11 @@ python3 $SCRIPTS/gt_lint.py ~/my-vault --queue ~/my-vault/review-queue.md
 
 python3 $SCRIPTS/gt_settings.py show
 </code></pre>
-<p><code>gt_tasks.py</code> is the exception: it ships <strong>in the vault</strong>, not the plugin, at
-<code>Projects/golden-thread/tools/</code>. It regenerates <code>TASKS.md</code> from every project's
-<code>## Tasks</code> section.</p>
+<p><code>gt_tasks.py</code> runs <strong>from the vault</strong>, at <code>Projects/golden-thread/tools/</code>, beside
+<code>gt_closeout.py</code>, <code>gt_session.py</code>, <code>gt_edits.py</code> and <code>safe_write.py</code>. All five ship as
+templates and are seeded there by <code>vault_init.py fresh</code> or <code>connect</code> (what
+<code>/gt:gt-init</code> runs); <code>install.sh</code> refreshes copies that predate the installed
+template. It regenerates <code>TASKS.md</code> from every project's <code>## Tasks</code> section.</p>
 <pre><code class="language-bash">python3 ~/my-vault/Projects/golden-thread/tools/gt_tasks.py
 </code></pre>
 <p>It infers the vault from its own location, so it needs no arguments; <code>--vault</code> is
@@ -823,4 +854,6 @@ the finding path; make sure you used the path as the finding reports it.</p>
 <code>vault_init.py connect --vault &lt;new-path&gt;</code>.</p>
 <p><strong><code>core-unenforced</code> finding in lint</strong> — Core rules are stored but not being
 asserted. Run <code>vault_init.py install-core-rules --vault &lt;vault&gt;</code> or wire the
-hooks by hand. Do not suppress this finding.</p></body></html>
+hooks by hand. Do not suppress this finding.</p>
+</body>
+</html>

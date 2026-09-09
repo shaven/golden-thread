@@ -157,6 +157,16 @@ def check_one(md, htm):
             if len(h) > 6 and h not in ht and h not in allowed:
                 findings.append(f'heading absent from .html: "{h[:58]}"')
 
+    # 4. Internal links that point at no anchor. WeasyPrint fails the PDF render
+    #    on these ("No anchor #x for internal URI reference"); Chrome renders them
+    #    silently dead, which is worse. Found the hard way when a rebuild dropped
+    #    every heading id and only the WeasyPrint pipeline complained.
+    raw = read(htm)
+    ids = set(re.findall(r'id="([^"]+)"', raw))
+    for target in sorted(set(re.findall(r'href="#([^"]+)"', raw))):
+        if target not in ids:
+            findings.append(f"dead internal link: #{target} has no matching id")
+
     return findings
 
 
@@ -177,9 +187,14 @@ def build_one(md, htm):
         return f"SKIP {htm}: no <body> found"
     head = m.group(1)
 
+    # `toc` is not optional: it is what puts id= on the headings. Without it
+    # python-markdown emits bare <h2>, every in-document [text](#anchor) link
+    # dangles, and WeasyPrint fails the render with "No anchor #... for internal
+    # URI reference". pandoc emitted those ids, so dropping the extension
+    # silently breaks links the previous renderer had made work.
     body = markdown.markdown(
         read(md),
-        extensions=["tables", "fenced_code", "sane_lists", "attr_list"],
+        extensions=["tables", "fenced_code", "sane_lists", "attr_list", "toc"],
     )
     with open(os.path.join(REPO, htm), "w", encoding="utf-8") as f:
         f.write(head + body + "\n</body>\n</html>\n")

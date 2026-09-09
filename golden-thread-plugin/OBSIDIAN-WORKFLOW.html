@@ -163,9 +163,174 @@
 <li><strong>Backlinks panel</strong> — open a page and see everything that links to it. Use this to understand impact before changing a Knowledge page.</li>
 <li><strong>Search</strong> — vault-wide full text. Faster than <code>gt-query</code> for exact strings you know exist.</li>
 <li><strong>Tag pane</strong> — project tags from <code>README.md</code> frontmatter. Useful for filtering by domain.</li>
-<li><strong>Dataview plugin</strong> (if installed) — <code>Projects/README.md</code> contains Dataview queries that auto-generate project status tables from frontmatter.</li>
+<li><strong>Dataview plugin</strong> (required) — <code>Projects/README.md</code> and <code>TASKS.md</code> contain Dataview queries that render the live project and task tables; see <a href="#plugins">Plugins</a>.</li>
 </ul>
 <hr />
+<h2 id="plugins">Plugins</h2>
+<p>The reference vault's plugin set, verified on 2026-09-08 against <code>.obsidian/community-plugins.json</code>,
+each plugin's <code>manifest.json</code>, and <code>.obsidian/core-plugins.json</code>. Theme is the default; no CSS snippets.</p>
+<h3 id="community-plugins-enabled-15">Community plugins, enabled (15)</h3>
+<table>
+<thead>
+<tr>
+<th>Plugin</th>
+<th>ID</th>
+<th>Version</th>
+<th>What it does</th>
+<th>Golden Thread use</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Dataview</td>
+<td><code>dataview</code></td>
+<td>0.5.68</td>
+<td>Queries over vault metadata</td>
+<td><strong>Required.</strong> 3 queries in <code>Projects/README.md</code>, 3 in <code>TASKS.md</code> ("Live views"); indexes the inline task fields (<code>p</code>, <code>waiting</code>, <code>since</code>, <code>due</code>)</td>
+</tr>
+<tr>
+<td>Terminal</td>
+<td><code>terminal</code></td>
+<td>3.27.1</td>
+<td>Consoles and shells inside Obsidian</td>
+<td>Claude Code in a pane beside the notes (default profiles; nothing custom)</td>
+</tr>
+<tr>
+<td>Calendar</td>
+<td><code>calendar</code></td>
+<td>1.5.10</td>
+<td>Calendar of daily notes</td>
+<td>Daily-notes navigation for the review sweep</td>
+</tr>
+<tr>
+<td>Text Extractor</td>
+<td><code>text-extractor</code></td>
+<td>0.7.0</td>
+<td>OCR from images and PDFs</td>
+<td>Ingesting scanned sources</td>
+</tr>
+<tr>
+<td>Advanced Tables</td>
+<td><code>table-editor-obsidian</code></td>
+<td>0.23.2</td>
+<td>Table navigation, formatting, formulas</td>
+<td>Hand-editing task and inventory tables</td>
+</tr>
+<tr>
+<td>Templater</td>
+<td><code>templater-obsidian</code></td>
+<td>2.25.0</td>
+<td>Templates with scripting</td>
+<td>Optional; no templates folder is configured in the reference vault</td>
+</tr>
+<tr>
+<td>Excalidraw</td>
+<td><code>obsidian-excalidraw-plugin</code></td>
+<td>2.26.4</td>
+<td>Drawings</td>
+<td>Design sketches</td>
+</tr>
+<tr>
+<td>Auto Card Link</td>
+<td><code>auto-card-link</code></td>
+<td>1.2.3</td>
+<td>URL → card-style link</td>
+<td>Capturing web sources</td>
+</tr>
+<tr>
+<td>URL Formatter</td>
+<td><code>url-formatter</code></td>
+<td>1.2.0</td>
+<td>Pasted URL → <code>[text](url)</code></td>
+<td>The "paste a link, get Markdown" behaviour</td>
+</tr>
+<tr>
+<td>Recent Files</td>
+<td><code>recent-files-obsidian</code></td>
+<td>1.7.10</td>
+<td>Recently opened list</td>
+<td>Convenience</td>
+</tr>
+<tr>
+<td>Home tab</td>
+<td><code>home-tab</code></td>
+<td>1.2.2</td>
+<td>Browser-like start tab</td>
+<td>Convenience</td>
+</tr>
+<tr>
+<td>Iconize</td>
+<td><code>obsidian-icon-folder</code></td>
+<td>2.14.7</td>
+<td>Icons on files and folders</td>
+<td>Convenience</td>
+</tr>
+<tr>
+<td>Style Settings</td>
+<td><code>obsidian-style-settings</code></td>
+<td>1.0.9</td>
+<td>Theme/plugin CSS variables</td>
+<td>Convenience</td>
+</tr>
+<tr>
+<td>Trash Explorer</td>
+<td><code>obsidian-trash-explorer</code></td>
+<td>1.2.4</td>
+<td>Restore from <code>.trash</code></td>
+<td>Recovery</td>
+</tr>
+<tr>
+<td>BRAT</td>
+<td><code>obsidian42-brat</code></td>
+<td>2.2.0</td>
+<td>Install beta plugins</td>
+<td>Beta installs</td>
+</tr>
+</tbody>
+</table>
+<h3 id="installed-but-disabled-3">Installed but disabled (3)</h3>
+<table>
+<thead>
+<tr>
+<th>Plugin</th>
+<th>ID</th>
+<th>Version</th>
+<th>Note</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Omnisearch</td>
+<td><code>omnisearch</code></td>
+<td>1.30.1</td>
+<td>Full-text search engine. Listed as in use by the owner but <strong>off</strong> in the config; turn it on or remove it</td>
+</tr>
+<tr>
+<td>Auto Linkify</td>
+<td><code>auto-linkify</code></td>
+<td>1.0.0</td>
+<td>Also formats pasted URLs; superseded by URL Formatter, so off is right</td>
+</tr>
+<tr>
+<td>Claudian</td>
+<td><code>realclaudian</code></td>
+<td>2.0.40</td>
+<td>Embeds Claude Code and other agents in the vault; off (Terminal covers it)</td>
+</tr>
+</tbody>
+</table>
+<h3 id="core-plugins">Core plugins</h3>
+<p>On: Files (<code>file-explorer</code>), Search (<code>global-search</code>), Quick switcher, Graph view, Backlinks,
+Outgoing links, Tags view (<code>tag-pane</code>), Canvas, Properties, Page preview, Daily notes, Templates,
+Note composer, Command palette, Editor status, Bookmarks, Outline, Word count, File recovery,
+<strong>Sync</strong>, Bases.</p>
+<p>Off: Footnotes, Slash commands, Importer, Unique note creator, Random note, Slides, Audio
+recorder, Workspaces, Publish, Web viewer.</p>
+<p>Two of these matter beyond convenience. <strong>File recovery</strong> is the only undo for an edit that a
+session made and git never saw. <strong>Sync</strong> is Obsidian Sync: in the reference vault the toggle is
+on but no sync vault is connected (there is no <code>.obsidian/sync.json</code>), so nothing syncs and
+nothing conflicts with Dropbox. If you ever connect one, keep the vault out of any other synced
+folder first: two sync engines on one folder is a conflict source, and neither knows about <code>.git</code>.</p>
 <h2 id="daily-workflow-step-by-step">Daily Workflow — Step by Step</h2>
 <h3 id="morning-start-a-session">Morning: start a session</h3>
 <p><strong>1. Check your project status in Obsidian</strong></p>
@@ -455,4 +620,6 @@ global-memory/       needed in every session, every project
 <li><strong><code>index.md</code> is the Knowledge entry point</strong> — every page is one hop from there.</li>
 <li><strong><code>log.md</code> tells you what happened</strong> — if something looks wrong, check the log first.</li>
 <li><strong><code>review-queue.md</code></strong> is written by <code>gt-lint</code> — check it after every lint run.</li>
-</ul></body></html>
+</ul>
+</body>
+</html>

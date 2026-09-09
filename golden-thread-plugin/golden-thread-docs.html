@@ -112,12 +112,12 @@
 <header id="title-block-header">
 <h1 class="title">Golden Thread Plugin</h1>
 </header>
-<h1>Golden Thread Plugin — Documentation</h1>
-<h2>Version gt 0.9.12 / gt-wiki 0.1.1</h2>
+<h1 id="golden-thread-plugin-documentation">Golden Thread Plugin — Documentation</h1>
+<h2 id="version-gt-0912-gt-wiki-011">Version gt 0.9.12 / gt-wiki 0.1.1</h2>
 <hr />
 <p>Golden Thread turns an Obsidian vault into the single source of truth for all AI memory across every project and every session. The tiered rule model introduced in v0.6.0 now carries <strong>seven hook-backed Core rules</strong> enforced at three points in the turn, and 0.9.12 adds <code>gt-route</code> for the middle of a session. gt-wiki 0.1.1 provides an LLM-powered knowledge base with immutable sources and interlinked pages.</p>
 <hr />
-<h2>What It Does</h2>
+<h2 id="what-it-does">What It Does</h2>
 <p>Instead of scattered <code>.claude/memory/</code> files and CLAUDE.md snippets that live and die per session, Golden Thread gives every fact a permanent home in a structured vault. Knowledge flows up a hierarchy from session notes into the vault, and the right facts are always in scope when you need them.</p>
 <pre><code>session conversation
       ↓  gt-work / gt-promote
@@ -131,7 +131,7 @@ global-memory/  (loaded in every session, all projects)
 </code></pre>
 <p>Facts move up the hierarchy as they prove themselves general. They never move back down and are never silently deleted.</p>
 <hr />
-<h2>Core Rules (gt 0.9.12)</h2>
+<h2 id="core-rules-gt-0912">Core Rules (gt 0.9.12)</h2>
 <p>Golden Thread defines a tiered rule model that separates rules by scope and enforcement strength.
 <strong>Seven Core rules ship as of 0.9.12</strong>, up from one at 0.6.0:</p>
 <table>
@@ -223,8 +223,8 @@ often it would train the guard to be ignored.</p>
 <p>The canonical rule definitions live in <code>Projects/golden-thread/core-rules/</code> inside the vault. Editing a rule file there changes what the hook injects — the rule text is never duplicated into the script.</p>
 <p><strong>The canary:</strong> <code>core_timestamp_every_message.md</code> is designated Core/Validated not because a missing timestamp causes real harm, but because it is trivially observable at the top of every reply. When the timestamp disappears, enforcement has broken.</p>
 <hr />
-<h2>gt Skills (15)</h2>
-<h3>Setup</h3>
+<h2 id="gt-skills-15">gt Skills (15)</h2>
+<h3 id="setup">Setup</h3>
 <table>
 <thead>
 <tr>
@@ -243,7 +243,7 @@ often it would train the guard to be ignored.</p>
 </tr>
 </tbody>
 </table>
-<h3>Daily Work</h3>
+<h3 id="daily-work">Daily Work</h3>
 <table>
 <thead>
 <tr>
@@ -274,7 +274,7 @@ often it would train the guard to be ignored.</p>
 </tr>
 </tbody>
 </table>
-<h3>Knowledge Management</h3>
+<h3 id="knowledge-management">Knowledge Management</h3>
 <table>
 <thead>
 <tr>
@@ -297,7 +297,7 @@ often it would train the guard to be ignored.</p>
 </tr>
 </tbody>
 </table>
-<h3>Context &amp; Verification</h3>
+<h3 id="context-verification">Context &amp; Verification</h3>
 <table>
 <thead>
 <tr>
@@ -316,7 +316,7 @@ often it would train the guard to be ignored.</p>
 </tr>
 </tbody>
 </table>
-<h3>Maintenance</h3>
+<h3 id="maintenance">Maintenance</h3>
 <table>
 <thead>
 <tr>
@@ -340,7 +340,7 @@ often it would train the guard to be ignored.</p>
 </tbody>
 </table>
 <hr />
-<h2>gt-wiki Skills (5)</h2>
+<h2 id="gt-wiki-skills-5">gt-wiki Skills (5)</h2>
 <p>The gt-wiki plugin provides an LLM-powered knowledge base separate from the Golden Thread memory hierarchy. Sources are ingested immutably; Knowledge pages are synthesized summaries linked bidirectionally.</p>
 <p><strong>Key design decision:</strong> The vault <code>CLAUDE.md</code> is kept slim (architecture + pointer only). Page format schema lives in <code>Knowledge/_template.md</code> and is read on demand by the ingest and refresh skills — it is not loaded into every session's context.</p>
 <table>
@@ -374,7 +374,7 @@ often it would train the guard to be ignored.</p>
 </tbody>
 </table>
 <hr />
-<h2>Vault Structure</h2>
+<h2 id="vault-structure">Vault Structure</h2>
 <pre><code>&lt;vault&gt;/
   CLAUDE.md                   ← architecture + pointer to Knowledge/_template.md
   index.md                    ← navigational index of all Knowledge pages
@@ -415,7 +415,7 @@ often it would train the guard to be ignored.</p>
       core-rules/             ← canonical Core rule definitions
 </code></pre>
 <hr />
-<h2>Immutability Model</h2>
+<h2 id="immutability-model">Immutability Model</h2>
 <table>
 <thead>
 <tr>
@@ -478,7 +478,7 @@ often it would train the guard to be ignored.</p>
 </tbody>
 </table>
 <hr />
-<h2>Context Footprint</h2>
+<h2 id="context-footprint">Context Footprint</h2>
 <table>
 <thead>
 <tr>
@@ -517,7 +517,7 @@ often it would train the guard to be ignored.</p>
 </table>
 <p>The slim CLAUDE.md design (introduced in gt-wiki 0.1.0) drops the vault's cold-start footprint from ~1,300 tokens to ~350.</p>
 <hr />
-<h2>Source Topology</h2>
+<h2 id="source-topology">Source Topology</h2>
 <p>Every project records where its code lives in <code>source.md</code>.</p>
 <table>
 <thead>
@@ -547,7 +547,7 @@ often it would train the guard to be ignored.</p>
 </table>
 <p>Bastion projects carry a <strong>file plan</strong> marking each deployed file <code>static</code> (byte-identical everywhere) or <code>unique</code> (per-server variant that must never be cross-deployed).</p>
 <hr />
-<h2>Install</h2>
+<h2 id="install">Install</h2>
 <pre><code class="language-bash"># From zip
 unzip golden-thread-plugin.zip
 cd golden-thread-plugin
@@ -557,7 +557,7 @@ bash install.sh
 <p>Installs both <code>gt</code> (v0.9.12) and <code>gt-wiki</code> (v0.1.1) as separate plugins under the <code>golden-thread-plugin</code> marketplace. Requires Python 3.8+.</p>
 <p><code>install.sh</code> installs the <strong>newest version directory</strong> present, not a hardcoded constant — pass an argument only to roll back deliberately (<code>./install.sh 0.9.3</code>). Never pipe it to <code>head</code>: <code>set -o pipefail</code> turns the closed pipe into an abort partway through, leaving the cache updated and registration undone.</p>
 <hr />
-<h2>Typical Session Pattern</h2>
+<h2 id="typical-session-pattern">Typical Session Pattern</h2>
 <pre><code class="language-bash">/gt:gt-open my-project        # load project, summarize state
 
 # ... work happens ...
@@ -574,7 +574,7 @@ bash install.sh
 /gt:gt-promote                # graduate a finding to Knowledge or global-memory
 </code></pre>
 <hr />
-<h2>Requirements</h2>
+<h2 id="requirements">Requirements</h2>
 <ul>
 <li>Python 3.8+</li>
 <li>Claude Code (any version)</li>
