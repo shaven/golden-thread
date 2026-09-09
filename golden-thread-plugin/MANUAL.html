@@ -114,7 +114,7 @@ pre, table { break-inside: avoid; font-size: 9px; }
 table { width:100%; border-collapse: collapse; }
 th, td { border:1px solid #ddd; padding:3px 5px; text-align:left; vertical-align:top; }
 </style></head><body><h1 id="golden-thread-user-manual">User Manual</h1>
-<p>Complete reference for all fourteen skills. Written against <strong>gt v0.9.6</strong>.</p>
+<p>Complete reference for all fifteen skills. Written against <strong>gt v0.9.12</strong>.</p>
 <hr />
 <h2 id="the-model">The model</h2>
 <p>Claude forgets everything between sessions. The vault doesn't. Golden Thread's
@@ -359,6 +359,34 @@ item.</p>
 <p>Announces the <code>review-queue.md</code> count once, then summarises stage, <strong>topology and
 hosts</strong>, next action, blockers, and what memory exists but is unloaded — the host
 list so you can correct a stale entry <em>before</em> work starts rather than after.</p>
+<h3 id="gtgt-route"><code>/gt:gt-route</code></h3>
+<p>The middle of a session. <code>gt-open</code> runs before the session knows what it is;
+<code>gt-work</code> runs after it is over. Between them sits the part where the work actually
+changes shape, and nothing served it.</p>
+<p>Run it whenever the ground has shifted, or whenever you cannot name what you are doing.
+It reads only the conversation already in context — never project files, because reading
+<code>research.md</code> to decide where a note goes costs more than the note — and answers
+four things:</p>
+<ol>
+<li><strong>What this has become.</strong> Restated in a sentence, with the drift named
+explicitly if the session no longer resembles what it opened with. This is most of the value:
+the drift is usually felt before it is articulated.</li>
+<li><strong>Where the output belongs</strong> — the <a href="#where-does-this-fact-go">Where
+does this fact go?</a> table, applied to the material actually in hand, naming more than one
+destination when more than one is true.</li>
+<li><strong>Whether the work is in the right place</strong> — project loaded, harness (a real
+PTY belongs in a terminal; vault context belongs in Claudian), and whether the model matches
+the difficulty. It reports mismatches; it changes nothing.</li>
+<li><strong>One next action.</strong> A skill to invoke or a file to append to — not a menu.</li>
+</ol>
+<p>It <strong>writes nothing</strong>, with a single exception: one <code>INBOX.md</code>
+checkbox line, which is what <code>INBOX.md</code> is for. Everything else is handed to the
+skill that owns the destination, which does the writing under its own claim.</p>
+<p><strong>"Nothing, keep going" is a valid answer</strong> and the skill is built to give it.
+A check that always finds work is a check nobody runs twice.</p>
+<p>Use it when a session opened as one thing and became another; when a finding might belong to
+a project other than the one loaded; when you are about to write something down and are not
+sure which file; or when you simply feel lost. Being wrong costs one re-run.</p>
 <h3 id="gtgt-work"><code>/gt:gt-work</code></h3>
 <p>End of session. The step people skip, and skipping it is what makes the vault decay.</p>
 <table>
@@ -740,9 +768,13 @@ layer — <code>PROTOCOL.md</code>, a Knowledge page, or a repo <code>CLAUDE.md<
 one project, so the next rediscovers it the hard way; <strong>too wide</strong> promotes a
 quirk into <code>global-memory/</code>, where it loads into unrelated sessions as a rule
 that isn't true there. When unsure, file narrow — promotion is cheap, demotion isn't.</p>
+<p><strong><code>/gt:gt-route</code> applies this table for you</strong>, against the material
+actually in hand, without your having to hold the table in your head mid-session. Reach for it
+when the answer is not obvious — including when the honest answer is that the fact belongs to a
+project other than the one loaded.</p>
 <hr />
 <h2 id="script-reference">Script reference</h2>
-<pre><code class="language-bash">SCRIPTS=~/.claude/plugins/cache/golden-thread-plugin/gt/0.9.6/scripts
+<pre><code class="language-bash">SCRIPTS=~/.claude/plugins/cache/golden-thread-plugin/gt/0.9.12/scripts
 
 python3 $SCRIPTS/vault_init.py fresh --vault ~/my-vault --domain &quot;My Team&quot;
 
