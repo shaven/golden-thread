@@ -59,8 +59,29 @@ DOCS = [
 # HTML with no markdown source. Never rebuilt -- there is nothing to rebuild from.
 HTML_ONLY = ["golden-thread-developer-guide.html"]
 
-# MANUAL.html's <h1> is hand-shortened to "User Manual" against the markdown's
-# "Golden Thread - User Manual". Known and deliberate; not drift.
+# Deliberate post-render overrides: things the markdown cannot express because they
+# exist to cooperate with a specific stylesheet. Applied by --build, and exempted
+# from the drift check so they are never "corrected" back into a bug.
+#
+# Each entry MUST carry the reason. An unexplained override is indistinguishable
+# from a mistake, and the next person will helpfully undo it -- which is exactly
+# what happened here on 2026-09-09.
+POST_BUILD = {
+    "MANUAL.html": [
+        # MANUAL.html's stylesheet injects a kicker: h1::before { content: "GOLDEN
+        # THREAD" }. Leaving the markdown's full title in the <h1> renders as
+        # "GOLDEN THREAD / Golden Thread - User Manual" -- the title twice. Commit
+        # 4ed67fd shortened the h1 to "User Manual" for exactly this reason, and a
+        # naive regeneration from markdown puts the duplication straight back.
+        (
+            r"(<h1[^>]*>)Golden Thread\s*[-—]\s*User Manual(</h1>)",
+            r"\1User Manual\2",
+        ),
+    ],
+}
+
+# Headings whose absence from the .html is expected, because a POST_BUILD override
+# above deliberately changed them. Derived from POST_BUILD so the two cannot drift.
 KNOWN_DIVERGENCES = {"MANUAL.html": ["Golden Thread"]}
 
 
@@ -196,9 +217,19 @@ def build_one(md, htm):
         read(md),
         extensions=["tables", "fenced_code", "sane_lists", "attr_list", "toc"],
     )
+    out = head + body + "\n</body>\n</html>\n"
+
+    applied = 0
+    for pattern, repl in POST_BUILD.get(htm, []):
+        out, n = re.subn(pattern, repl, out)
+        applied += n
+        if n == 0:
+            print(f"    WARNING {htm}: override matched nothing -- {pattern[:52]}")
+
     with open(os.path.join(REPO, htm), "w", encoding="utf-8") as f:
-        f.write(head + body + "\n</body>\n</html>\n")
-    return f"rebuilt {htm} from {md}"
+        f.write(out)
+    extra = f", {applied} override(s) applied" if applied else ""
+    return f"rebuilt {htm} from {md}{extra}"
 
 
 PDF_HELP = """\
@@ -224,6 +255,15 @@ grep returns a false clean; a scan once passed six files while two contained a
 leaked string. Use pypdf (strader81 has 6.14.2, the only one on the fleet) and
 always assert a control string that must be present. If the control comes back
 zero the check is blind, not clean.
+
+  Leak strings to assert absent:  /Users  work-laptop  CloudOps  Clops
+  Control string to assert present:  Golden Thread
+
+CHECK FOR THE SECTION, NOT THE STRING. This stylesheet uppercases headings unless
+text-transform is pinned off, and commands are case-sensitive. A search for
+"gt-farm" once came back empty against a PDF that contained it as /GT:GT-FARM,
+which read as two dropped sections rather than the styling bug it was. A
+case-sensitive absence is not evidence of missing content.
 """
 
 

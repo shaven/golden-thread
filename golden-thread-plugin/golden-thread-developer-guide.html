@@ -162,6 +162,7 @@
         <a href="#sec-daily">Daily workflow</a>
         <ul class="toc-sub">
           <li>/gt:gt-open — start a session</li>
+          <li>/gt:gt-route — the middle of a session</li>
           <li>/gt:gt-work — end a session</li>
           <li>/gt:gt-query — ask the vault a question</li>
         </ul>
@@ -302,7 +303,7 @@
   .claude-plugin/   <span class="comment">← plugin metadata</span>
   hooks/            <span class="comment">← enforcement hook scripts</span>
   scripts/          <span class="comment">← vault_init.py, gt_lint.py, gt_settings.py, …</span>
-  skills/           <span class="comment">← /gt:* skill definitions (14 skills)</span>
+  skills/           <span class="comment">← /gt:* skill definitions (15 skills)</span>
   templates/        <span class="comment">← vault scaffold templates</span></code></pre>
 
   <h2>Updating</h2>
@@ -449,6 +450,8 @@
 
 <span class="comment"># ... work happens ...</span>
 
+<span class="cmd">/gt:gt-route</span>             <span class="comment"># drifted? where does this belong, and am I in the right place?</span>
+
 <span class="cmd">/gt:gt-work</span>              <span class="comment"># write back findings before closing</span></code></pre>
 
   <h2><span class="skill">/gt:gt-open &lt;slug&gt;</span> — Start a session</h2>
@@ -462,6 +465,26 @@
     loads targeted sections. Announces the review-queue item count if non-zero.
     Summarises stage, topology, hosts, next action, blockers, and which memory
     files exist but are unloaded.
+  </p>
+
+  <h2><span class="skill">/gt:gt-route</span> — The middle of a session</h2>
+  <p>
+    <code>gt-open</code> runs before the session knows what it is; <code>gt-work</code> runs
+    after it is over. Between them sits the part where the work actually changes shape, and
+    nothing served it.
+  </p>
+  <p>
+    It reads only the conversation already in context — never project files, because reading
+    <code>research.md</code> to decide where a note goes costs more than the note — and answers
+    four things: what this has become (naming the drift explicitly), where the output belongs,
+    whether the project, harness and model are right, and one next action. It writes nothing
+    except a single <code>INBOX.md</code> line.
+  </p>
+  <p>
+    <strong>"Nothing, keep going" is a designed-for answer.</strong> A check that always finds
+    work is a check nobody runs twice. Reach for it when a session opened as one thing and
+    became another, when a finding may belong to a project other than the one loaded, or when
+    you cannot name what you are doing. Being wrong costs one re-run.
   </p>
 
   <h2><span class="skill">/gt:gt-work</span> — End a session</h2>
