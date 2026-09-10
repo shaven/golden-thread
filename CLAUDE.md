@@ -39,6 +39,12 @@ three. Otherwise installed caches keep serving the old content.
 **Do not pipe `install.sh` to `head`.** `set -o pipefail` aborts it partway, leaving
 the cache updated and registration not done.
 
+**The core-rule TEMPLATES are de-identified; a live vault's copies are not.** `templates/core-rules/*`
+ships to strangers, so it names no host, no project and no path from this environment — a live vault's
+`core-rules/` may and does. The two therefore differ by design, in wikilinks *and* in identifying
+detail; do not "resync" by copying a vault copy over a template. Checked 2026-09-10: the templates
+scan clean for host names, the vault copies keep the incident detail that makes the rules persuasive.
+
 **Templates and the vault drift.** `templates/core-rules/*` is meant to stay
 byte-identical to a live vault's `core-rules/`. Diff them before assuming either is
 current.
