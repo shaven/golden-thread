@@ -12,7 +12,7 @@ it at startup, look things up while working, and write back what they learn.
 Its distinguishing idea is the second problem, the one most memory systems never
 address: **writing a rule down does not mean it gets followed.**
 
-Plugin **v0.9.11**. Seven Core rules currently enforced, three of them *validated* — a
+Plugin **v0.9.13**. Seven Core rules currently enforced, three of them *validated* — a
 `Stop` hook inspects the finished reply and blocks it if the rule was broken.
 
 ## Who this is for
@@ -96,7 +96,7 @@ alongside the code they describe. Start with Getting Started; the Manual is the 
 | [Install Guide](golden-thread-plugin/INSTALL.md) | Installing both plugins, wiring the hooks, adopting an existing vault |
 | [Obsidian & Daily Workflow](golden-thread-plugin/OBSIDIAN-WORKFLOW.md) · [PDF](golden-thread-plugin/OBSIDIAN-WORKFLOW.pdf) | Living in the vault day to day — daily notes, properties, Dataview |
 | [Developer Guide](golden-thread-plugin/golden-thread-developer-guide.html) · [PDF](golden-thread-plugin/golden-thread-developer-guide.pdf) | Internals: hooks, scripts, the component manifest, extending the plugin |
-| [Plugin Documentation](golden-thread-plugin/golden-thread-docs.md) · [HTML](golden-thread-plugin/golden-thread-docs.html) · [PDF](golden-thread-plugin/golden-thread-docs.pdf) | A snapshot of **gt 0.6.0**, kept for reference — three releases behind. The Manual above supersedes it; its HTML and PDF were re-rendered later, so their dates look current while the content is not |
+| [Plugin Documentation](golden-thread-plugin/golden-thread-docs.md) · [HTML](golden-thread-plugin/golden-thread-docs.html) · [PDF](golden-thread-plugin/golden-thread-docs.pdf) | The combined document — overview, Core rules, every skill, install and operation, in one file. Refreshed to current on 2026-09-09 (it had been frozen at gt 0.6.0 for six releases); now tracks the shipped release and is checked for drift by `build-docs.py` |
 | [`docs/workflow.html`](docs/workflow.html) · [`docs/ingesting.html`](docs/ingesting.html) | Standalone diagrams of the work and ingest loops |
 | `golden-thread.pdf` | The earliest write-up here (2026-08-10); predates the current plugin layout, kept for reference |
 

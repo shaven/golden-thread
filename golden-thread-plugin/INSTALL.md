@@ -78,14 +78,35 @@ rather than leaving them beside the new one.
 hooks and the first `TASKS.md`. If a vault is already configured when `install.sh`
 runs, it refreshes that vault's tools to the installed templates.
 
+`install.sh` registers the six hooks it owns in `~/.claude/settings.json` and then
+verifies them, printing either `Verified hook wiring → every hook this installer owns
+is connected` or a list of what will never run. Read that line: **a file being
+installed and a file being wired are different things**, and until 0.9.13 nothing
+reported the difference.
+
 After installing, **restart Claude Code** — plugins and hooks load at session start.
 Then confirm enforcement is actually live, because a rule that is not wired is not a rule:
 
 ```bash
+# Are the Core rules being asserted? (the UserPromptSubmit hook)
 echo '{}' | ~/.claude/golden-thread/hooks/inject_core_rules.sh
+
+# Are ALL NINE declared hooks wired? (0.9.13+)
+python3 ~/.claude/golden-thread/hooks/gt_components.py wiring \
+  "<plugin-repo>/golden-thread/<version>"
 ```
 
 The Core rules should print. Silence or an error means they are not being asserted.
+
+The second command should print `all 9 declared hooks are wired`. It is the broader
+check of the two: the first proves one hook answers, while this one compares live
+settings against the list of every hook the release declares — so it can report the
+case the first cannot, which is a hook that was never registered at all. Anything it
+lists as `unwired` never runs, and `badpath` means it is registered against a path that
+does not exist on this machine (a version directory removed by a later bump, most often).
+
+Both are worth running on a **second machine** in particular. Files sync; a
+`settings.json` on another box does not.
 
 ---
 
