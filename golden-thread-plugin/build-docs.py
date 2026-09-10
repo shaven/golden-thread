@@ -28,8 +28,8 @@ by different tools -- MANUAL.html is bespoke, golden-thread-docs.html carries
 broken every run. A check that cries wolf is a check people stop running.
 
 Check mode uses **only the standard library**, so it runs on any machine. Only
---build needs `markdown` (3.4.4 on the Mac; absent on strader81, localshares and
-shadminpc, as is pandoc).
+--build needs `markdown` (3.4.4 when this was written). Do not assume a remote host
+has it, or pandoc: on the fleet this was built against, none of them did.
 
 WHAT IT WILL NOT TOUCH
 ----------------------
@@ -237,10 +237,15 @@ PDF rendering is not automated here on purpose: one pipeline needs a host this
 script cannot assume it can reach, and getting the flags wrong leaks a path into
 a shipped file. Run these by hand, then audit.
 
-  MANUAL.pdf  --  WeasyPrint 69.0, strader81 (the only box with it; NOT on $PATH)
-    scp MANUAL.html strader81:/tmp/
-    ssh strader81 '~/.local/bin/weasyprint /tmp/MANUAL.html /tmp/MANUAL.pdf'
-    scp strader81:/tmp/MANUAL.pdf .
+Set WEASY_HOST to whichever machine has WeasyPrint installed; the commands below
+use it. Mind that a non-interactive SSH `command -v` can report weasyprint and
+pypdf missing on the very box that has them, when they sit outside that PATH --
+call them by absolute path rather than trusting the probe.
+
+  MANUAL.pdf  --  WeasyPrint (69.0 when this was written), on $WEASY_HOST
+    scp MANUAL.html "$WEASY_HOST":/tmp/
+    ssh "$WEASY_HOST" '~/.local/bin/weasyprint /tmp/MANUAL.html /tmp/MANUAL.pdf'
+    scp "$WEASY_HOST":/tmp/MANUAL.pdf .
 
   the rest  --  Chrome headless, locally
     "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome" \\
@@ -248,15 +253,18 @@ a shipped file. Run these by hand, then audit.
       --print-to-pdf="$PWD/NAME.pdf" "file://$PWD/NAME.html"
 
   --no-pdf-header-footer is not optional. Chrome's default footer embeds the
-  source file:// URL, which once put /Users/shaven inside three shipped PDFs.
+  source file:// URL, which once put an author's home directory path inside
+  three shipped PDFs.
 
 AUDIT AFTERWARDS -- grep cannot read a PDF. The text is font-subset encoded and
 grep returns a false clean; a scan once passed six files while two contained a
-leaked string. Use pypdf (strader81 has 6.14.2, the only one on the fleet) and
-always assert a control string that must be present. If the control comes back
+leaked string. Use pypdf (wherever it is installed -- $WEASY_HOST is a good bet)
+and always assert a control string that must be present. If the control comes back
 zero the check is blind, not clean.
 
-  Leak strings to assert absent:  /Users  work-laptop  CloudOps  Clops
+  Leak strings to assert absent -- set LEAK_STRINGS to your own list. The classes
+  that have actually leaked from this pipeline are: a home directory path
+  (/Users, /home), a machine name, an employer or client name, and file:///
   Control string to assert present:  Golden Thread
 
 CHECK FOR THE SECTION, NOT THE STRING. This stylesheet uppercases headings unless
