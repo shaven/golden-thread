@@ -9,7 +9,7 @@ metadata:
   promoted: 2026-09-07
   designated_by: user
   companion: core_no_secrets_in_transcript
-imperative: "A secret's value rests only in the secrets store (shadminpc, sops+age) or a mode-600 file the store wrote — never in source, a vault file, a repo, a log, or a session; if you find one anywhere else, file it, rotate it, and move it."
+imperative: "A secret's value rests only in the secrets store (sops + age on a dedicated host) or a mode-600 file the store wrote — never in source, a vault file, a repo, a log, or a session; if you find one anywhere else, file it, rotate it, and move it."
 ---
 
 **A secret's value rests only in the secrets store, or in a mode-600 file the store
@@ -18,7 +18,7 @@ log, never in a session.** If you meet one anywhere else, treat it as disclosed:
 it against `Projects/secrets-management/`, rotate it through the store, and move the consumer
 to a file the store writes.
 
-The store is defined by `Projects/secrets-management/` ADR-1: sops + age on shadminpc, every
+The store is defined by `Projects/secrets-management/` ADR-1: sops + age on a dedicated secrets host, every
 file encrypted to two recipients, mirrored as ciphertext to a private git repo and to
 claudebox. Until a given secret has been seeded there, the interim home is the mode-600
 file its rotation script writes, and the value is still never inline.
@@ -28,8 +28,9 @@ file its rotation script writes, and the value is still never inline.
 `core_no_secrets_in_transcript.md` governs the *session*: a value must not pass through
 a conversation. This rule governs *rest*: where a value is allowed to exist at all. The
 week of 2026-09-01 showed that the session rule alone is not enough. Values sat inline
-in `trade_handler.js`, in three shquote cron scripts, in eight quote_engine files, in
-two vault memory files pushed to GitHub, and in a repo mirror awaiting `git init`.
+in a relay daemon's source, in three cron scripts on a second host, in eight files that
+shared one credential, in two vault memory notes pushed to GitHub, and in a repo mirror
+awaiting `git init`.
 Every one of those was a future transcript leak waiting for a grep, and two of them
 became one.
 
@@ -69,7 +70,7 @@ together.
 - **Placeholders in examples**: `<client-secret>`, `$VAR`, `change-me`. The bad-password
   sentinel in a "must be refused" check is allowed and should be a dictionary phrase
   such as `definitely-wrong`, so a scanner can be told about it by hash.
-- **The two identities** (shadminpc's everyday age key and the recovery key) are
+- **The two identities** (the secrets host's everyday age key and the recovery key) are
   themselves secrets under this rule: never in git, never in a session. The
   passphrase-encrypted QR blob is the one artefact that may be copied freely.
 

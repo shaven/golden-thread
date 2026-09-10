@@ -14,7 +14,7 @@ that must hold everywhere. Owned by the golden-thread project.
 | `core_global_memory_scope.md` | Core/Reminder — global-memory holds only all-project facts. |
 | `core_memory_load_policy.md` | Core/Reminder — load the memory index only on request or `/gt:*`. |
 | `core_no_secrets_in_transcript.md` | Core/Validated — never put a secret's value into the session. |
-| `core_secrets_live_in_the_store.md` | Core/Reminder — a secret's value rests only in the secrets store (shadminpc, sops+age) or a mode-600 file it wrote; never in source, a vault file, a repo, a log, or a session. Designated by the user 2026-09-07. |
+| `core_secrets_live_in_the_store.md` | Core/Reminder — a secret's value rests only in the secrets store (sops + age on a dedicated host) or a mode-600 file it wrote; never in source, a vault file, a repo, a log, or a session. Designated by the user 2026-09-07. |
 | `core_verification_state.md` | Core/Reminder — label every derived figure with its verification state. |
 | `enforcement.md` | **How the rules are made real** — the hook wiring spec. |
 

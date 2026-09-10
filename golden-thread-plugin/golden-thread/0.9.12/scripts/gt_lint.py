@@ -139,7 +139,7 @@ def link_targets(vault: Path) -> dict:
         # 2026-09-08: Obsidian also resolves path-form links -- `[[chrome-extension/decisions]]`,
         # `[[historical-minute-backfill/design]]`, `[[chrome-extension/CLAUDE]]` -- by matching a
         # trailing run of path segments. Keying on the stem alone flagged 21 valid links as broken
-        # in the markethaven vault. Register every trailing suffix of the vault-relative path
+        # in the reference vault. Register every trailing suffix of the vault-relative path
         # (without .md), so `parent/child/decisions`, `child/decisions` and `decisions` all resolve.
         parts = p.relative_to(vault).with_suffix("").parts
         if parts and parts[0] == "Projects":

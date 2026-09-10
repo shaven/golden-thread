@@ -29,8 +29,8 @@
    "sha256": "a728c8b60714bfe670cdb9d3056c94968c4b8aa7790d751b9aba6ef753267a45"
   },
   "scripts/gt_lint.py": {
-   "bytes": 33058,
-   "sha256": "704a8ef08a89b1d476a570d6c03a6480b31caa61525ab09c7855caf6513fea48"
+   "bytes": 33056,
+   "sha256": "b0f3b95654d6d3e468566bf1d840d7c6bf4c6328e45780fb6e0385897d0b5b29"
   },
   "scripts/gt_lint_weekly.py": {
    "bytes": 4990,
@@ -89,8 +89,8 @@
    "sha256": "2ffc70c79da74743c6045883eb6629c8d13e24a1f701b866c334cb5ba1fe1888"
   },
   "templates/core-rules/README.md": {
-   "bytes": 3443,
-   "sha256": "f5d8df8fb5c7243f76bca8bb4f8634caf9e9f947e82024760b0c0eb875de71e3"
+   "bytes": 3454,
+   "sha256": "603a29442bb1e525b1b0dd791d47a5da20801a577a46dad501bfbc7979263691"
   },
   "templates/core-rules/core_concurrent_session_claim.md": {
    "bytes": 4867,
@@ -113,8 +113,8 @@
    "sha256": "527e17002a294457a8ec95bebe6547b473a892fa8fa0221f4d31479b7242f0b8"
   },
   "templates/core-rules/core_secrets_live_in_the_store.md": {
-   "bytes": 4918,
-   "sha256": "f1b136a1170aea4f79a284258656ade07c25b97286c189ce5f2172a7cc86db56"
+   "bytes": 4979,
+   "sha256": "75b1111c51201d13ad1b14d5dd811c975206233939b851803cfdef8830511706"
   },
   "templates/core-rules/core_timestamp_every_message.md": {
    "bytes": 6323,
@@ -181,6 +181,6 @@
    "sha256": "383c0e4b30c8c9c9447c4798f37debf1f4a0402b1e3ee068e7629e9d1ab21859"
   }
  },
- "generated": "2026-09-09T17:12:56",
+ "generated": "2026-09-10T10:10:39",
  "version": "0.9.12"
 }
