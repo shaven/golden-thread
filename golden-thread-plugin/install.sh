@@ -264,34 +264,6 @@ save(settings, d)
 print("Registered in settings.json  (backups in %s)" % BACKUPS)
 EOF
 
-echo ""
-echo "Golden Thread $VERSION installed."
-echo ""
-echo "gt skills:"
-echo "  /gt:gt-init          set up the vault, wire a project, write vault-config.json"
-echo "  /gt:gt-open          load a project — source.md first, memory index only"
-echo "  /gt:gt-create        scaffold a project and freeze its idea.md"
-echo "  /gt:gt-ingest        import an existing project's notes (copies, never moves)"
-echo "  /gt:gt-route         mid-session: what is this now, where does it go, right place?"
-echo "  /gt:gt-work          write the session back to research/decisions/design"
-echo "  /gt:gt-promote       graduate a fact up a level, or out to a repo CLAUDE.md"
-echo "  /gt:gt-validate      re-derive a claim with a fresh-context validator"
-echo "  /gt:gt-query         look a topic up across Knowledge and project memory"
-echo "  /gt:gt-review        sweep daily notes for uncaptured tasks and ideas"
-echo "  /gt:gt-farm          hand bulk or mechanical work to an external AI as a packet"
-echo "  /gt:gt-refresh       check Sources/ for upstream changes and supersede"
-echo "  /gt:gt-lint          14 health checks, including core-unenforced"
-echo "  /gt:gt-settings      inspect or switch off anything this plugin does on its own"
-echo "  /gt:gt-runbook-lint  find facts duplicated across runbooks"
-echo ""
-echo "gt-wiki skills:"
-echo "  /gt-wiki:gt-wiki-init     set up a new wiki vault"
-echo "  /gt-wiki:gt-wiki          query the wiki"
-echo "  /gt-wiki:gt-wiki-ingest   add a source to the wiki"
-echo "  /gt-wiki:gt-wiki-lint     health-check the wiki"
-echo "  /gt-wiki:gt-wiki-refresh  check sources for upstream changes"
-echo ""
-echo "Restart Claude Code to load the plugins."
 
 # 6. Register the SessionStart / PreCompact / SessionEnd hooks.
 #
@@ -306,56 +278,33 @@ echo "Restart Claude Code to load the plugins."
 #                  the context it needs to be written.
 # SessionEnd    -> gt_report_card.py        : backstop for sessions that never compact.
 python3 - "$SRC" "$SCRIPT_DIR" <<'EOF'
-import json, os, sys, tempfile
+import json, os, subprocess, sys, tempfile
 src, script_dir = sys.argv[1:3]
 p = os.path.expanduser('~/.claude/settings.json')
 d = json.load(open(p)) if os.path.exists(p) else {}
 hooks = d.setdefault('hooks', {})
-gt = os.path.expanduser('~/.claude/golden-thread/hooks')
-# Every command carries --hook: it is the flag, not a tty test, that tells the
-# script to wrap its report as hook JSON. See gt_settings.hook_args.
-# (event, script filename, command). The script is named EXPLICITLY rather than
-# parsed back out of the command: the previous version derived it with
-# cmd.split('/')[-1], which returns the last segment of the whole string -- for any
-# command ending in a quoted path argument that is the ARGUMENT, not the script.
-# gt_components resolved to '0.9.4' and gt_version_check to 'golden-thread-plugin',
-# a substring of the gt_components command, so registering one would have deleted
-# the other from the same loop that had just added it.
+
+# The list of what to register is NOT written here. It lives in
+# gt_components.HOOK_REGISTRATIONS, which is also what gets baked into
+# MANIFEST.json and what the session-start wiring check compares against. A copy
+# in shell would be a copy that drifts -- and a drift between "what the installer
+# wires" and "what the checker expects wired" would make the checker cry wolf on
+# every start, or worse, stay silent about the entry it forgot.
 #
-# Paths are QUOTED: the plugin source lives under "Golden Thread", and an unquoted
-# path split on that space so the checker was handed "Golden" and reported a bogus
-# no-manifest drift on every session start.
-#
-# Four independent SessionStart concerns, deliberately separate commands: a failure
-# in one must not suppress the others.
-want = [
-    ('SessionStart', 'gt_components.py',
-     'python3 "%s/gt_components.py" check "%s" --hook' % (gt, src)),
-    ('SessionStart', 'gt_workers.py',
-     'python3 "%s/gt_workers.py" check --hook' % gt),
-    # Handed the SOURCE ROOT, not a version dir -- deliberately. gt_components is
-    # pinned to the version it was installed against, which is exactly what makes it
-    # blind to a newer release sitting beside it; passing the root keeps this hook
-    # correct without being rewritten on every version bump.
-    ('SessionStart', 'gt_version_check.py',
-     'python3 "%s/gt_version_check.py" check "%s" --hook' % (gt, script_dir)),
-    # Takes no path: it reads vault-config.json itself, the same way the vault's own
-    # tooling does. Distribution is a fourth axis -- gt_components asks whether the
-    # installed files are right, gt_version whether the right version is installed,
-    # gt_workers whether anything was left running; this asks whether what this
-    # machine produced can ever be seen anywhere else. On 2026-09-02 the vault was 16
-    # commits ahead of origin, the oldest weeks old, with every session having
-    # committed correctly and none having pushed.
-    ('SessionStart', 'gt_push_check.py',
-     'python3 "%s/gt_push_check.py" check --hook' % gt),
-    ('PreCompact', 'gt_report_card.py', 'python3 "%s/gt_report_card.py"' % gt),
-    ('SessionEnd', 'gt_report_card.py', 'python3 "%s/gt_report_card.py"' % gt),
-]
+# Only install.sh's OWN entries are wired here. The three enforcement hooks are
+# declared in the same list but owned by vault_init.py install-core-rules, which
+# runs against a vault -- this script may be run before one exists.
+regs = json.loads(subprocess.check_output(
+    ['python3', os.path.join(src, 'scripts', 'gt_components.py'),
+     'hook-registrations', src, script_dir], text=True))
+want = [(r['event'], r['script'], r['command'])
+        for r in regs if r.get('owner') == 'install.sh']
+
 changed = []
 for event, script, cmd in want:
     arr = hooks.setdefault(event, [])
     # Replace the entry for THIS script only, not every golden-thread entry for the
-    # event -- SessionStart now has four, and wiping by event would delete the
+    # event -- SessionStart has four, and wiping by event would delete the
     # siblings registered moments earlier in this same loop.
     arr[:] = [e for e in arr
               if not any(script in (h.get('command') or '')
@@ -368,8 +317,43 @@ with os.fdopen(fd, 'w') as fh:
     fh.flush()
     os.fsync(fh.fileno())
 os.replace(tmp, p)
-print('Registered hooks: ' + ', '.join(sorted(changed)))
+
+# Say what was wired, by event and by count. The old message printed a bare list
+# after the "Restart Claude Code" line, where it read as trailing noise past the
+# end of the output -- so an install that wired nothing looked no different from
+# one that wired everything.
+by_event = {}
+for c in changed:
+    ev, sc = c.split('/', 1)
+    by_event.setdefault(ev, []).append(sc)
+print('Registered %d hooks in ~/.claude/settings.json:' % len(changed))
+for ev in sorted(by_event):
+    print('  %-16s %s' % (ev, ', '.join(sorted(by_event[ev]))))
 EOF
+
+# Verify the wiring took, rather than trusting that it did. This is the one place
+# the check can run from OUTSIDE the hooks it is checking: at session start the
+# SessionStart entries verify themselves, which cannot report the case where there
+# are none. Found on 2026-09-10 -- a machine with every file installed, the
+# manifest clean, and no SessionStart entries at all.
+#
+# Scoped to --owner install.sh: the three ENFORCEMENT hooks are declared in the
+# same list but wired by vault_init.py against a vault, which may not exist yet
+# when this runs. Asserting all nine here would warn on every first install and
+# train the reader to ignore the one warning that matters.
+#
+# `|| true` is not laziness: this whole script runs under `set -e`, and the
+# reporting branch ends in a pipeline that exits non-zero BY DESIGN. Without it a
+# wiring problem would abort the install at the last step -- turning a warning
+# about hooks into a failure to install them.
+if [ -f "$SRC/scripts/gt_components.py" ]; then
+  if python3 "$SRC/scripts/gt_components.py" wiring "$SRC" --owner install.sh >/dev/null 2>&1; then
+    echo "Verified hook wiring → every hook this installer owns is connected"
+  else
+    echo "⚠ Hook wiring INCOMPLETE after install — these will NEVER RUN:"
+    python3 "$SRC/scripts/gt_components.py" wiring "$SRC" --owner install.sh 2>&1 | sed 's/^/    /' || true
+  fi
+fi
 
 # 7. Wire the VAULT's git repo for per-edit attribution, if it is one.
 #
@@ -441,3 +425,39 @@ EOF
   git -C "$VAULT_PATH" config core.hooksPath .githooks 2>/dev/null \
     && echo "Wired vault git attribution → $VAULT_PATH (.githooks)"
 fi
+
+# ── Summary ────────────────────────────────────────────────────────────────
+#
+# LAST, deliberately. This block used to sit before steps 6 and 7, so hook
+# registration and vault-tool seeding printed BELOW "Restart Claude Code to load
+# the plugins." -- past what reads as the end of the output. The line that tells
+# you whether the hooks were wired is the line most worth seeing, and it was the
+# one printed after the goodbye.
+echo ""
+echo "Golden Thread $VERSION installed."
+echo ""
+echo "gt skills:"
+echo "  /gt:gt-init          set up the vault, wire a project, write vault-config.json"
+echo "  /gt:gt-open          load a project — source.md first, memory index only"
+echo "  /gt:gt-create        scaffold a project and freeze its idea.md"
+echo "  /gt:gt-ingest        import an existing project's notes (copies, never moves)"
+echo "  /gt:gt-route         mid-session: what is this now, where does it go, right place?"
+echo "  /gt:gt-work          write the session back to research/decisions/design"
+echo "  /gt:gt-promote       graduate a fact up a level, or out to a repo CLAUDE.md"
+echo "  /gt:gt-validate      re-derive a claim with a fresh-context validator"
+echo "  /gt:gt-query         look a topic up across Knowledge and project memory"
+echo "  /gt:gt-review        sweep daily notes for uncaptured tasks and ideas"
+echo "  /gt:gt-farm          hand bulk or mechanical work to an external AI as a packet"
+echo "  /gt:gt-refresh       check Sources/ for upstream changes and supersede"
+echo "  /gt:gt-lint          14 health checks, including core-unenforced"
+echo "  /gt:gt-settings      inspect or switch off anything this plugin does on its own"
+echo "  /gt:gt-runbook-lint  find facts duplicated across runbooks"
+echo ""
+echo "gt-wiki skills:"
+echo "  /gt-wiki:gt-wiki-init     set up a new wiki vault"
+echo "  /gt-wiki:gt-wiki          query the wiki"
+echo "  /gt-wiki:gt-wiki-ingest   add a source to the wiki"
+echo "  /gt-wiki:gt-wiki-lint     health-check the wiki"
+echo "  /gt-wiki:gt-wiki-refresh  check sources for upstream changes"
+echo ""
+echo "Restart Claude Code to load the plugins."

@@ -54,6 +54,19 @@ sys.exit(0 if open(p, "rb").read() == b"x\r\ny\n" else 1)
 PY
 
 echo '{}' | "$HOOKS/inject_core_rules.sh" 2>/dev/null | grep -q 'CORE RULES' && ok "UserPromptSubmit hook injects the Core rules" || bad "inject_core_rules.sh gave no rules"
+
+# Assert the hooks are WIRED before asserting they answer.
+#
+# The loop below walks whatever SessionStart entries settings.json happens to hold
+# and checks each one responds -- but a `while read` over an empty list runs zero
+# times and reports zero failures. On 2026-09-10 that was the live failure on a
+# second machine: no SessionStart entries, so nothing was checked and everything
+# "passed". Asking the DECLARATION what should be there is the only form of this
+# question that can fail when the answer is nothing.
+python3 "$HOOKS/gt_components.py" wiring "$HERE/golden-thread/$VER" >"$TMP/wiring.log" 2>&1 \
+  && ok "all declared hooks wired in settings.json" \
+  || { bad "declared hooks not wired"; sed 's/^/      /' "$TMP/wiring.log"; }
+
 python3 - <<'PY' | while IFS= read -r cmd; do
 import json, os
 d = json.load(open(os.path.expanduser("~/.claude/settings.json")))

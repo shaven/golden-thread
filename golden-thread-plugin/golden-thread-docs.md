@@ -1,9 +1,9 @@
 # Golden Thread Plugin — Documentation
-## Version gt 0.9.12 / gt-wiki 0.1.1
+## Version gt 0.9.13 / gt-wiki 0.1.1
 
 ---
 
-Golden Thread turns an Obsidian vault into the single source of truth for all AI memory across every project and every session. The tiered rule model introduced in v0.6.0 now carries **seven hook-backed Core rules** enforced at three points in the turn, and 0.9.12 adds `gt-route` for the middle of a session. gt-wiki 0.1.1 provides an LLM-powered knowledge base with immutable sources and interlinked pages.
+Golden Thread turns an Obsidian vault into the single source of truth for all AI memory across every project and every session. The tiered rule model introduced in v0.6.0 now carries **seven hook-backed Core rules** enforced at three points in the turn, 0.9.12 added `gt-route` for the middle of a session, and 0.9.13 makes the session-start component check verify that the hooks are **wired**, not merely installed. gt-wiki 0.1.1 provides an LLM-powered knowledge base with immutable sources and interlinked pages.
 
 ---
 
@@ -27,10 +27,10 @@ Facts move up the hierarchy as they prove themselves general. They never move ba
 
 ---
 
-## Core Rules (gt 0.9.12)
+## Core Rules (gt 0.9.13)
 
 Golden Thread defines a tiered rule model that separates rules by scope and enforcement strength.
-**Seven Core rules ship as of 0.9.12**, up from one at 0.6.0:
+**Seven Core rules ship as of 0.9.13**, up from one at 0.6.0:
 
 | # | Rule |
 |---|---|
@@ -113,6 +113,22 @@ The canonical rule definitions live in `Projects/golden-thread/core-rules/` insi
 | `/gt:gt-lint` | Audit the vault for structural problems: 14 checks covering broken wikilinks, orphaned pages, missing index entries, unlisted memory files, Knowledge pages citing superseded sources, stale pages, and `core-unenforced` — a Core rule that is stored but wired to no hook. |
 | `/gt:gt-runbook-lint` | Scan all project `runbook.md` files for content that has drifted into multiple runbooks. Routes duplicated content to the right shared layer via `gt-promote`. |
 | `/gt:gt-settings` | View and change what Golden Thread does on its own: component drift checking at session start, and the session report card at compact. Every automatic behaviour can be switched off. |
+
+### Installed, and actually wired (0.9.13)
+
+The session-start component check answers two questions, not one:
+
+| Question | How |
+|---|---|
+| Are the right files here, unmodified? | every shipped file is hashed into `MANIFEST.json` at install time and compared |
+| Is any of it connected to anything? | `MANIFEST.json` also declares the nine hook entries the plugin expects in `settings.json`, and the check compares those too |
+
+Before 0.9.13 only the first question was asked, so a machine with every file installed and an empty `settings.json` reported **components: clean** while nothing ran. The clean line now reads *"installed matches <version>, all 9 hooks wired"* — the second clause is the part that was missing.
+
+Two states are reported: `unwired` (no entry for that event names the script — it never runs) and `badpath` (wired, but the command names a path that does not exist on this machine, which is what a deleted version directory or an unquoted path containing a space produces).
+
+The declaration lives in `gt_components.HOOK_REGISTRATIONS` and is what `install.sh` registers *from*, so the installer and the checker cannot disagree about what "wired" means. `install.sh` verifies its own six entries immediately after writing them; the three enforcement hooks are owned by `vault_init.py install-core-rules`, which needs a vault. `selftest.sh` asserts all nine from outside — the only vantage point that still works when nothing is wired at all.
+
 
 ---
 
@@ -233,7 +249,7 @@ bash install.sh
 # Restart Claude Code
 ```
 
-Installs both `gt` (v0.9.12) and `gt-wiki` (v0.1.1) as separate plugins under the `golden-thread-plugin` marketplace. Requires Python 3.8+.
+Installs both `gt` (v0.9.13) and `gt-wiki` (v0.1.1) as separate plugins under the `golden-thread-plugin` marketplace. Requires Python 3.8+.
 
 `install.sh` installs the **newest version directory** present, not a hardcoded constant — pass an argument only to roll back deliberately (`./install.sh 0.9.3`). Never pipe it to `head`: `set -o pipefail` turns the closed pipe into an abort partway through, leaving the cache updated and registration undone.
 
