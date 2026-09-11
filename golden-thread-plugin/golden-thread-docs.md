@@ -1,9 +1,9 @@
 # Golden Thread Plugin — Documentation
-## Version gt 0.10.0 / gt-wiki 0.1.2
+## Version gt 0.11.0 / gt-wiki 0.1.2
 
 ---
 
-Golden Thread turns an Obsidian vault into the single source of truth for all AI memory across every project and every session. The tiered rule model introduced in v0.6.0 now carries **seven hook-backed Core rules** enforced at three points in the turn, 0.9.12 added `gt-route` for the middle of a session, and 0.9.13 makes the session-start component check verify that the hooks are **wired**, not merely installed. gt-wiki 0.1.1 provides an LLM-powered knowledge base with immutable sources and interlinked pages.
+Golden Thread turns an Obsidian vault into the single source of truth for all AI memory across every project and every session. The tiered rule model introduced in v0.6.0 now carries **seven hook-backed Core rules** enforced at three points in the turn, 0.9.12 added `gt-route` for the middle of a session, and 0.9.13 makes the session-start component check verify that the hooks are **wired**, not merely installed, and 0.11.0 makes `log.md` and `decisions.md` generated files so concurrent sessions cannot overwrite one another. gt-wiki 0.1.1 provides an LLM-powered knowledge base with immutable sources and interlinked pages.
 
 ---
 
@@ -27,10 +27,10 @@ Facts move up the hierarchy as they prove themselves general. They never move ba
 
 ---
 
-## Core Rules (gt 0.10.0)
+## Core Rules (gt 0.11.0)
 
 Golden Thread defines a tiered rule model that separates rules by scope and enforcement strength.
-**Seven Core rules ship as of 0.10.0**, up from one at 0.6.0:
+**Seven Core rules ship as of 0.11.0**, up from one at 0.6.0:
 
 | # | Rule |
 |---|---|
@@ -125,6 +125,39 @@ The canonical rule definitions live in `Projects/golden-thread/core-rules/` insi
 | Command | What it does |
 |---|---|
 | `/gt:gt-demo` | An eleven-act guided tour on the fictional PizzaBot 3000 project, run in its own throwaway vault — `start` builds it, `tour` runs the acts one click at a time (Core rules, open, task rollup, capture, wiki, route, validate, lint, promote, watch, inbox and close), `end` shows the receipt, `clean` rebuilds, `remove` switches it off. Skipped at install when `install_demo` is `no`. |
+
+### Concurrent sessions stop colliding (0.11.0)
+
+`log.md` and `decisions.md` are the two files every session appends and none owns. In one
+working tree there are no branches to collide and no merge to resolve — just
+last-writer-wins, invisible when it happens.
+
+Both are now **generated**, joining `TASKS.md`:
+
+| File | Written by | Rendered by |
+|---|---|---|
+| `log.md` | `gt_log.py add` — one spool file per session | `gt_log.py merge` |
+| `decisions.md` | `gt_adr.py allocate <project>` — one file per ADR | `gt_adr.py merge <project>` |
+
+No session writes a shared file, so there is nothing to claim and nothing to guard, and
+`git add` scopes to your own work by construction rather than by discipline.
+
+ADR numbers are the harder half, because a number is a scarce identity — two sessions may
+both write a log line in the same instant, but they cannot both be ADR-6. A counter that is
+read and then written back does not fix that: read-then-write is two operations, so both
+sessions read 5, both write 6, and both use ADR-6. `gt_adr.py allocate` instead creates the
+slot with a single atomic exclusive create, so the filesystem decides the winner. Verified
+under contention: 100 racing process pairs, 200 allocations, no duplicates.
+
+Migration (`gt_log.py migrate`, `gt_adr.py migrate <project>`) freezes the existing file as
+a baseline that sorts first — no history is rewritten and nothing is renumbered — and
+refuses unless the merge reproduces the original byte for byte. It also refuses on a
+project whose ADR numbers already collide, because renumbering would invalidate inbound
+references; `gt-lint`'s `adr-collision` check reports those for an owner to resolve.
+
+**One limit, stated plainly:** an exclusive create is atomic on one filesystem. Two machines
+writing one project through a synced folder can both take a slot, and the sync resolves it
+as a conflicted copy. The lint check is what catches that; this is not distributed consensus.
 
 ### Installed, and actually wired (0.9.13)
 
@@ -261,7 +294,7 @@ bash install.sh
 # Restart Claude Code
 ```
 
-Installs both `gt` (v0.10.0) and `gt-wiki` (v0.1.2) as separate plugins under the `golden-thread-plugin` marketplace. Requires Python 3.8+.
+Installs both `gt` (v0.11.0) and `gt-wiki` (v0.1.2) as separate plugins under the `golden-thread-plugin` marketplace. Requires Python 3.8+.
 
 `install.sh` installs the **newest version directory** present, not a hardcoded constant — pass an argument only to roll back deliberately (`./install.sh 0.9.3`). Never pipe it to `head`: `set -o pipefail` turns the closed pipe into an abort partway through, leaving the cache updated and registration undone.
 
