@@ -72,7 +72,6 @@ class SettingsCli(Sandbox):
         self.config(vault_path=str(self.tmp), install_demo="yes")
         self.assertEqual(self.get("install_demo"), "yes")
 
-    @unittest.expectedFailure  # defect: 2026-09-11-settings-non-string-values
     def test_non_string_value_does_not_crash(self):
         # A hand-edited `"install_demo": true` / `"report_card": 1` is the obvious way
         # to write a yes/no flag in JSON. It is not a registered value, so the default

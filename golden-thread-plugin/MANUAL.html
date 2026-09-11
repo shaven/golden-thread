@@ -114,7 +114,7 @@ pre, table { break-inside: avoid; font-size: 9px; }
 table { width:100%; border-collapse: collapse; }
 th, td { border:1px solid #ddd; padding:3px 5px; text-align:left; vertical-align:top; }
 </style></head><body><h1 id="golden-thread-user-manual">User Manual</h1>
-<p>Complete reference for all fifteen skills. Written against <strong>gt v0.9.13</strong>.</p>
+<p>Complete reference for all sixteen skills. Written against <strong>gt v0.9.14</strong>.</p>
 <hr />
 <h2 id="the-model">The model</h2>
 <p>Claude forgets everything between sessions. The vault doesn't. Golden Thread's
@@ -767,22 +767,32 @@ enforcement on every session start.</p>
 layer — <code>PROTOCOL.md</code>, a Knowledge page, or a repo <code>CLAUDE.md</code>.</p>
 <hr />
 <h3 id="gtgt-demo"><code>/gt:gt-demo</code></h3>
-<p>Run a repeatable live demo of the Golden Thread workflow using the PizzaBot 3000
-demo project — a fictional pizza ordering service.</p>
-<pre><code>/gt:gt-demo start    — arm the demo (set up PizzaBot project from template)
-/gt:gt-demo end      — show what the demo produced (commits, files created)
-/gt:gt-demo clean    — restore PizzaBot from template, re-arm for next run
-/gt:gt-demo remove   — permanently remove all demo infrastructure
+<p>A ten-act guided tour of Golden Thread on PizzaBot 3000, a fictional pizza-ordering
+project. It runs in its <strong>own throwaway vault</strong>, so nothing it does can reach yours.</p>
+<pre><code>/gt:gt-demo start    — build the demo vault and print the command that opens it
+/gt:gt-demo tour     — (in the demo session) run the tour; you only click Next
+/gt:gt-demo end      — every commit and file the tour produced
+/gt:gt-demo clean    — delete the demo vault and build a fresh one
+/gt:gt-demo remove   — delete the demo and switch it off (install_demo = no)
+/gt:gt-demo status   — is there a demo vault, and how old is it
 </code></pre>
-<p><strong>Demo flow:</strong> <code>start</code> → <code>/gt:gt-open demo-pizzabot</code> → <code>/gt-wiki:gt-wiki-ingest</code> the
-architecture source → <code>/gt-wiki:gt-wiki</code> query → <code>end</code> to show results → <code>clean</code> to repeat.</p>
-<p>The demo runs in your real vault. <code>start</code> records the vault's current commit;
-<code>clean</code> resets the vault to it and restores PizzaBot from the plugin template, so the
-demo repeats as often as you like. Because that reset undoes <strong>every</strong> commit made
-since <code>start</code>, from any session, <code>clean</code> dry-runs first and lists them, and refuses
-outright if any is already pushed or if uncommitted work outside the demo would be
-lost. <code>remove</code> deletes the demo's files, commits only those paths, and sets
-<code>install_demo</code> to <code>no</code> so a reinstall does not bring the demo back.</p>
+<p><strong>Running it:</strong> <code>start</code> builds the vault at <code>~/.claude/golden-thread/demo-vault</code> and prints
+<code>cd &lt;demo vault&gt; &amp;&amp; GT_VAULT=&lt;demo vault&gt; claude</code>. Run that in a new terminal and type
+<code>/gt:gt-demo tour</code>. For each act Claude says one line to the audience, does the work with
+the real skill, says what just happened, and offers buttons — <strong>Next</strong>, <strong>Repeat this
+act</strong>, <strong>Skip ahead</strong>, <strong>End tour</strong>.</p>
+<p><strong>The acts:</strong> Core rules enforced (a prepared reply carrying a key is blocked) · open a
+project · "what's next?" from the task rollup · capture a finding and an ADR mid-session ·
+ingest a source and query the wiki · route a stray idea · validate a wrong claim ·
+lint finds a planted broken link · promote a finding to a Knowledge page (which fixes the
+link) · file the inbox, close the session, and show the receipt. The acts are plain text
+in <code>templates/demo-pizzabot/tour.md</code> — reorder or reword them there.</p>
+<p><strong>Why its own vault:</strong> a fuller tour writes to shared files (<code>INBOX.md</code>, <code>TASKS.md</code>,
+<code>log.md</code>, <code>Knowledge/</code>) that other sessions also write. Undoing that in a real vault
+means rewinding history everyone shares. In a throwaway vault, <code>clean</code> just rebuilds it.
+The demo never writes your <code>vault-config.json</code>: the demo session is pinned with
+<code>GT_VAULT</code>, which every skill and hook honors. <code>clean</code> and <code>remove</code> delete a directory
+only if it carries the demo's marker file.</p>
 <hr />
 <h2 id="where-does-this-fact-go">Where does this fact go?</h2>
 <table>
@@ -845,7 +855,7 @@ answer is not obvious — including when the honest answer is that the fact belo
 project other than the one loaded.</p>
 <hr />
 <h2 id="script-reference">Script reference</h2>
-<pre><code class="language-bash">SCRIPTS=~/.claude/plugins/cache/golden-thread-plugin/gt/0.9.13/scripts
+<pre><code class="language-bash">SCRIPTS=~/.claude/plugins/cache/golden-thread-plugin/gt/0.9.14/scripts
 
 python3 $SCRIPTS/vault_init.py fresh --vault ~/my-vault --domain &quot;My Team&quot;
 

@@ -104,7 +104,10 @@ class BuildDocsTest(Sandbox):
 
     def test_each_kind_of_drift(self):
         self.synthetic()
+        # Both mentions change: with v-prefixed versions now visible (defect 2026-09-11-
+        # build-docs-blind-spots), leaving "gt v0.9.13" behind would keep 0.9.13 in the html.
         self.edit("ONBOARDING.html", "release 0.9.13", "release 0.9.6")            # stale version
+        self.edit("ONBOARDING.html", "gt v0.9.13", "gt v0.9.6")
         self.edit("OBSIDIAN-WORKFLOW.html", "then gt-open.", "then gt-open and gt-extra.")
         self.edit("golden-thread-docs.html", 'href="#getting-started"', 'href="#nowhere"')
         p = self.check()
@@ -117,7 +120,6 @@ class BuildDocsTest(Sandbox):
         self.assertIn("dead internal link: #nowhere has no matching id", out)
         self.assertIn("3 document(s) drifted", out)
 
-    @unittest.expectedFailure  # defect: 2026-09-11-build-docs-blind-spots
     def test_v_prefixed_version_drift_is_detected(self):
         # The docstring's founding case: "html at v0.9.6, md at v0.9.12". Docs write
         # versions as `v0.9.13`; `\b\d+` finds no word boundary between "v" and "0".
@@ -144,7 +146,6 @@ class BuildDocsTest(Sandbox):
         self.assertIn("--no-pdf-header-footer", p.stdout)
         self.assertEqual(self.tree(), before)
 
-    @unittest.expectedFailure  # defect: 2026-09-11-build-docs-blind-spots
     def test_manual_h1_shortening_is_a_known_divergence(self):
         # --build rewrites MANUAL's h1 "Golden Thread — User Manual" to "User Manual"
         # (POST_BUILD) and KNOWN_DIVERGENCES is meant to exempt exactly that. The
@@ -157,7 +158,6 @@ class BuildDocsTest(Sandbox):
         self.assertOk(p, "the POST_BUILD h1 override is reported as drift: KNOWN_DIVERGENCES "
                          "lists 'Golden Thread' but the heading is compared by exact match")
 
-    @unittest.expectedFailure  # defect: 2026-09-11-build-docs-blind-spots
     def test_emphasis_in_a_heading_is_not_drift(self):
         # "compares content, not markup": a heading written `## Why *not* X` renders
         # as "Why not X". Backticks are already stripped; emphasis is markup too.

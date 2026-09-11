@@ -1,320 +1,175 @@
-"""gt_demo.sh: start / end / clean [--dry-run] / remove, run from a fake INSTALLED
-plugin copy under the sandbox HOME against a sandbox git vault with a bare upstream.
+"""gt_demo.sh + the demo tour — the demo runs in its own vault and never touches the real one.
 
-The safety contract under test:
-  * clean never resets past commits that are already on a remote
-  * clean never destroys uncommitted work outside Projects/demo-pizzabot and the
-    demo source
-  * remove commits ONLY the demo's own paths and records install_demo=no
+Rewritten for 0.9.14 (request 2026-09-11-demo-full-tour-own-vault). The previous design
+ran in the user's real vault and rewound its git history on `clean`; its tests pinned the
+guards around that reset. The reset no longer exists, so neither do those tests: what is
+pinned now is that nothing outside the demo vault changes, whatever the demo does.
 """
+import hashlib
 import json
+import re
 import shutil
 import unittest
+from pathlib import Path
 
-from _harness import Sandbox, GT
+from _harness import Sandbox, GT, PYTHON
 
-DEMO_REL = "Projects/demo-pizzabot"
+ACTS = 10
 
 
-class DemoBase(Sandbox):
+def tree_digest(root: Path):
+    h = hashlib.sha256()
+    for p in sorted(root.rglob("*")):
+        if p.is_file() and ".git" not in p.parts:
+            h.update(str(p.relative_to(root)).encode())
+            h.update(p.read_bytes())
+    return h.hexdigest()
+
+
+class DemoTest(Sandbox):
     def setUp(self):
         super().setUp()
         if not shutil.which("git"):
-            self.skipTest("git not installed")
-        # fake installed plugin
-        self.install = (self.home / ".claude" / "plugins" / "cache" / "golden-thread-plugin"
-                        / "gt" / GT.name)
-        for sub in ("scripts", "templates", "skills"):
-            shutil.copytree(GT / sub, self.install / sub)
-        self.script = self.install / "scripts" / "gt_demo.sh"
-        src = sorted((GT / "templates" / "demo-pizzabot" / "sources").glob("*.md"))
-        self.source_rel = f"Sources/{src[0].name}"
-        self.template_readme = (GT / "templates/demo-pizzabot/project/README.md").read_text()
-        # vault with history and a bare upstream
-        self.v = self.tmp / "vault"
-        self.v.mkdir()
-        (self.v / "notes.md").write_text("user notes\n")
-        (self.v / "Projects").mkdir()
-        (self.v / "Projects" / "README.md").write_text("# Projects\n")
-        (self.v / "Sources").mkdir()
-        (self.v / "Sources" / "keep.md").write_text("keep\n")
-        self.git_init(self.v)
-        (self.v / "notes.md").write_text("user notes v2\n")
-        self.git("commit", "-qam", "second")
-        self.upstream = self.tmp / "upstream.git"
-        self.run_cmd(["git", "init", "-q", "--bare", self.upstream])
-        self.git("remote", "add", "origin", str(self.upstream))
-        self.assertOk(self.git("push", "-q", "-u", "origin", "main"))
-        self.config(vault_path=str(self.v))
-        self.snapshot_file = self.home / ".claude" / "gt-demo-snapshot"
+            self.skipTest("git required")
+        # A fake install, laid out like the plugin cache, run from under ~/.claude.
+        self.plugin = self.home / ".claude" / "plugins" / "cache" / "golden-thread-plugin" / "gt" / GT.name
+        self.plugin.mkdir(parents=True)
+        for d in ("scripts", "templates", "skills", "hooks"):
+            shutil.copytree(GT / d, self.plugin / d)
+        hooks = self.home / ".claude" / "golden-thread" / "hooks"
+        shutil.copytree(GT / "hooks", hooks)
+        # The user's REAL vault and config — the demo must leave both byte-identical.
+        self.real = self.make_vault("real")
+        self.cfg = self.home / ".claude" / "vault-config.json"
+        self.settings = self.home / ".claude" / "settings.json"
+        self.settings.write_text("{}\n")
+        self.demo = self.home / ".claude" / "golden-thread" / "demo-vault"
+        self.script = self.plugin / "scripts" / "gt_demo.sh"
 
-    # -- helpers ---------------------------------------------------------------
-    def git(self, *args):
-        return self.run_cmd(["git", "-C", self.v, *args])
+    def demo_cmd(self, *args, **kw):
+        return self.sh(self.script, *args, **kw)
 
-    def head(self):
-        return self.git("rev-parse", "HEAD").stdout.strip()
+    def snapshot(self):
+        return (tree_digest(self.real), self.cfg.read_bytes(), self.settings.read_bytes(),
+                (self.home / ".claude" / "CLAUDE.md").read_bytes() if (self.home / ".claude" / "CLAUDE.md").exists() else b"")
 
-    def demo(self, *args, script=None):
-        return self.sh(script or self.script, *args, cwd=self.tmp)
+    # -- start ---------------------------------------------------------------------------
+    def test_start_builds_a_seeded_demo_vault(self):
+        self.assertOk(self.demo_cmd("start"))
+        self.assertTrue((self.demo / ".demo" / "DEMO_VAULT").is_file())
+        self.assertTrue((self.demo / "Projects" / "demo-pizzabot" / "README.md").is_file())
+        self.assertTrue(any((self.demo / "Sources").glob("*PizzaBot*.md")))
+        self.assertIn("oven timer", (self.demo / "INBOX.md").read_text())
+        log = self.run_cmd(["git", "-C", self.demo, "log", "--oneline"]).stdout
+        self.assertIn("PizzaBot 3000 seeded", log)
+        readme = (self.demo / "Projects" / "demo-pizzabot" / "README.md").read_text()
+        self.assertNotIn("{{TODAY}}", readme, "task dates must be filled in at start")
 
-    def start(self):
-        proc = self.demo("start")
-        self.assertOk(proc, "demo start")
-        return proc
+    def test_real_vault_config_and_settings_untouched_by_every_command(self):
+        before = self.snapshot()
+        for cmd in ("start", "end", "status", "clean", "end"):
+            self.demo_cmd(cmd)
+        self.assertEqual(self.snapshot(), before,
+                         "the demo changed the real vault, vault-config.json, settings.json or CLAUDE.md")
 
-    def commit_demo(self, msg="demo work"):
-        self.assertOk(self.git("add", "--", DEMO_REL, self.source_rel))
-        self.assertOk(self.git("commit", "-qm", msg))
+    def test_start_prints_the_pinned_launch_command(self):
+        out = self.demo_cmd("start").stdout
+        self.assertIn(f'GT_VAULT="{self.demo}" claude', out)
+        self.assertIn("/gt:gt-demo tour", out)
 
-    def status(self):
-        return self.git("status", "--porcelain").stdout
+    def test_start_twice_refuses(self):
+        self.assertOk(self.demo_cmd("start"))
+        self.assertNotEqual(self.demo_cmd("start").returncode, 0)
 
+    # -- what the tour relies on -------------------------------------------------------------
+    def test_demo_vault_lints_with_only_the_planted_broken_link(self):
+        self.assertOk(self.demo_cmd("start"))
+        out = self.py(self.plugin / "scripts" / "gt_lint.py", self.demo).stdout
+        found = [l for l in re.findall(r"^\[([a-z-]+)\] (.+)$", out, re.M) if l[0] != "core-unenforced"]
+        self.assertEqual(found, [("broken-link", "Projects/demo-pizzabot/README.md")], out)
 
-class StartEndTest(DemoBase):
-    def test_start_snapshots_and_installs(self):
-        sha = self.head()
-        proc = self.start()
-        self.assertIn("status=ready", proc.stdout)
-        self.assertEqual(self.snapshot_file.read_text().strip(), sha)
-        self.assertEqual((self.v / DEMO_REL / "README.md").read_text(), self.template_readme)
-        self.assertTrue((self.v / self.source_rel).is_file())
-        self.assertEqual(self.head(), sha, "start must not commit")
-        again = self.demo("start")
-        self.assertEqual(again.returncode, 1)
-        self.assertIn("already started", again.stdout)
+    def test_due_today_task_ranks_first(self):
+        self.assertOk(self.demo_cmd("start"))
+        tool = self.demo / "Projects" / "golden-thread" / "tools" / "gt_tasks.py"
+        self.assertOk(self.py(tool, "--vault", self.demo))
+        rows = re.findall(r"^\| `PP\d+-P\d+` \| (.+?) \|", (self.demo / "TASKS.md").read_text(), re.M)
+        self.assertTrue(rows, "no ranked tasks in TASKS.md")
+        self.assertIn("/order", rows[0])
 
-    def test_end_reports_commits_and_uncommitted(self):
-        self.start()
-        self.commit_demo("pizza commit")
-        (self.v / "notes.md").write_text("edited\n")
-        proc = self.demo("end")
-        self.assertOk(proc)
-        self.assertIn("pizza commit", proc.stdout)
-        self.assertIn(f"{DEMO_REL}/README.md", proc.stdout)
-        self.assertIn("Uncommitted changes:", proc.stdout)
-        self.assertIn("notes.md", proc.stdout)
+    def test_act_one_transcript_is_blocked_by_the_stop_hook(self):
+        self.assertOk(self.demo_cmd("start"))
+        payload = (self.demo / ".demo" / "secret-transcript.json").read_text()
+        proc = self.run_cmd(["bash", self.home / ".claude" / "golden-thread" / "hooks" / "validate_response.sh"], input=payload)
+        self.assertEqual(json.loads(proc.stdout)["decision"], "block")
+        self.assertIn(".demo/", (self.demo / ".gitignore").read_text(), "the transcript must never be committed")
 
-    def test_end_and_clean_without_start(self):
-        for cmd in ("end", "clean"):
-            proc = self.demo(cmd)
-            self.assertEqual(proc.returncode, 1, cmd)
+    def test_no_key_shaped_literal_in_the_shipped_plugin(self):
+        pat = re.compile(r"AKIA[0-9A-Z]{16}")
+        for p in list((GT / "scripts").iterdir()) + list((GT / "templates" / "demo-pizzabot").rglob("*")):
+            if p.is_file():
+                self.assertIsNone(pat.search(p.read_text(errors="replace")), f"key-shaped literal in {p}")
 
-    def test_usage_and_preconditions(self):
-        self.assertEqual(self.demo("bogus").returncode, 1)
-        (self.home / ".claude" / "vault-config.json").unlink()
-        proc = self.demo("start")
-        self.assertEqual(proc.returncode, 1)
-        self.assertIn("could not read a vault_path", proc.stdout)
-        plain = self.tmp / "not-git"
-        plain.mkdir()
-        self.config(vault_path=str(plain))
-        proc = self.demo("start")
-        self.assertEqual(proc.returncode, 1)
-        self.assertIn("not a git repo", proc.stdout)
-        self.assertFalse(self.snapshot_file.exists())
+    def test_tour_has_ten_complete_acts_naming_real_skills(self):
+        tour = (GT / "templates" / "demo-pizzabot" / "tour.md").read_text()
+        acts = re.split(r"^## Act \d+ — ", tour, flags=re.M)[1:]
+        self.assertEqual(len(acts), ACTS)
+        skills = {p.name for p in (GT / "skills").iterdir()} | {"gt-wiki-ingest"}
+        for body in acts:
+            for key in ("narration:", "do:", "point:"):
+                self.assertIn(key, body, body[:60])
+            for s in re.findall(r"\bthe (gt-[a-z-]+) skill\b", body):
+                self.assertIn(s, skills, f"tour names a skill that does not ship: {s}")
 
+    # -- end, clean, remove ------------------------------------------------------------------
+    def test_end_lists_what_the_tour_produced(self):
+        self.assertOk(self.demo_cmd("start"))
+        (self.demo / "Knowledge" / "Topping Conflict Matrix.md").write_text("# TCM\n")
+        self.run_cmd(["git", "-C", self.demo, "add", "-A"])
+        self.run_cmd(["git", "-C", self.demo, "commit", "-qm", "promote"])
+        out = self.demo_cmd("end").stdout
+        self.assertIn("promote", out)
+        self.assertIn("Topping Conflict Matrix.md", out)
 
-class CleanTest(DemoBase):
-    def test_dry_run_changes_nothing(self):
-        sha = self.head()
-        self.start()
-        self.commit_demo("pizza commit")
-        after = self.head()
-        (self.v / DEMO_REL / "README.md").write_text("scribbled\n")
-        proc = self.demo("clean", "--dry-run")
-        self.assertOk(proc)
-        self.assertIn("dry run", proc.stdout)
-        self.assertIn("pizza commit", proc.stdout)
-        self.assertIn("status=clean-possible", proc.stdout)
-        self.assertEqual(self.head(), after)
-        self.assertEqual(self.snapshot_file.read_text().strip(), sha)
-        self.assertEqual((self.v / DEMO_REL / "README.md").read_text(), "scribbled\n")
+    def test_clean_rebuilds_without_any_git_reset(self):
+        self.assertOk(self.demo_cmd("start"))
+        (self.demo / "leftover.md").write_text("from the last run\n")
+        self.assertOk(self.demo_cmd("clean"))
+        self.assertFalse((self.demo / "leftover.md").exists())
+        self.assertTrue((self.demo / ".demo" / "DEMO_VAULT").is_file())
+        self.assertNotIn("git reset", self.script.read_text())
 
-    def test_clean_resets_unpushed_demo_commits_and_rearms(self):
-        sha = self.head()
-        self.start()
-        self.commit_demo()
-        (self.v / DEMO_REL / "README.md").write_text("demo edited this\n")
-        self.git("commit", "-qam", "more demo")
-        (self.v / "scratch.txt").write_text("untracked user file\n")
-        proc = self.demo("clean")
-        self.assertOk(proc)
-        self.assertIn("status=clean", proc.stdout)
-        self.assertEqual(self.head(), sha)
-        self.assertEqual((self.v / DEMO_REL / "README.md").read_text(), self.template_readme)
-        self.assertFalse(self.snapshot_file.exists())
-        self.assertEqual((self.v / "scratch.txt").read_text(), "untracked user file\n")
-        self.assertEqual((self.v / "notes.md").read_text(), "user notes v2\n")
+    def test_clean_and_remove_refuse_a_directory_without_the_marker(self):
+        other = self.tmp / "not-a-demo"
+        other.mkdir()
+        (other / "precious.md").write_text("keep me\n")
+        for cmd in ("clean", "remove"):
+            proc = self.demo_cmd(cmd, env={"GT_DEMO_VAULT": str(other)})
+            self.assertNotEqual(proc.returncode, 0)
+            self.assertTrue((other / "precious.md").exists(), f"{cmd} deleted a non-demo directory")
 
-    def test_clean_with_no_commits_just_reinstalls(self):
-        sha = self.head()
-        self.start()
-        (self.v / DEMO_REL / "README.md").write_text("scribbled\n")
-        proc = self.demo("clean")
-        self.assertOk(proc)
-        self.assertIn("No commits to undo", proc.stdout)
-        self.assertEqual(self.head(), sha)
-        self.assertEqual((self.v / DEMO_REL / "README.md").read_text(), self.template_readme)
+    def test_remove_deletes_demo_and_switches_it_off(self):
+        self.assertOk(self.demo_cmd("start"))
+        self.assertOk(self.demo_cmd("remove"))
+        self.assertFalse(self.demo.exists())
+        self.assertEqual(json.loads(self.cfg.read_text()).get("install_demo"), "no")
+        self.assertFalse((self.plugin / "skills" / "gt-demo").exists())
+        self.assertTrue(self.real.exists())
 
-    def test_clean_refuses_to_reset_past_pushed_commits(self):
-        self.start()
-        self.commit_demo("pushed demo commit")
-        self.assertOk(self.git("push", "-q"))
-        pushed = self.head()
-        proc = self.demo("clean")
-        self.assertEqual(proc.returncode, 2, proc.stdout)
-        self.assertIn("REFUSED", proc.stdout)
-        self.assertIn("already on the remote", proc.stdout)
-        self.assertEqual(self.head(), pushed)
-        self.assertTrue(self.snapshot_file.exists(), "snapshot must survive a refusal")
-        dry = self.demo("clean", "--dry-run")
-        self.assertEqual(dry.returncode, 2, "dry run must report the same refusal")
+    def test_remove_never_touches_a_source_checkout(self):
+        src = self.tmp / "checkout"
+        shutil.copytree(GT / "scripts", src / "scripts")
+        shutil.copytree(GT / "templates", src / "templates")
+        shutil.copytree(GT / "skills", src / "skills")
+        self.sh(src / "scripts" / "gt_demo.sh", "remove")
+        self.assertTrue((src / "skills" / "gt-demo" / "SKILL.md").exists())
+        self.assertTrue((src / "scripts" / "gt_demo.sh").exists())
 
-    @unittest.expectedFailure  # defect: 2026-09-11-demo-clean-guard-holes
-    def test_clean_refuses_commits_pushed_to_a_remote_without_upstream_tracking(self):
-        """The pushed-commit guard only consults @{upstream}. A commit pushed with a
-        plain `git push origin main` (no -u) is on the remote all the same, but with
-        no upstream configured the guard is skipped and the reset goes through."""
-        self.git("branch", "--unset-upstream")
-        self.start()
-        self.commit_demo("pushed demo commit")
-        self.assertOk(self.git("push", "-q", "origin", "main"))
-        pushed = self.head()
-        proc = self.demo("clean")
-        self.assertEqual(self.head(), pushed,
-                         "clean reset past a commit that is on origin/main:\n" + proc.stdout)
-        self.assertEqual(proc.returncode, 2)
-
-    def test_clean_refuses_foreign_uncommitted_changes(self):
-        self.start()
-        self.commit_demo()
-        after = self.head()
-        (self.v / "notes.md").write_text("unsaved user work\n")
-        (self.v / "Sources" / "new.md").write_text("staged user work\n")
-        self.git("add", "Sources/new.md")
-        proc = self.demo("clean")
-        self.assertEqual(proc.returncode, 2, proc.stdout)
-        self.assertIn("uncommitted changes outside the demo", proc.stdout)
-        self.assertIn("notes.md", proc.stdout)
-        self.assertIn("Sources/new.md", proc.stdout)
-        self.assertEqual(self.head(), after)
-        self.assertEqual((self.v / "notes.md").read_text(), "unsaved user work\n")
-        self.assertEqual((self.v / "Sources" / "new.md").read_text(), "staged user work\n")
-        self.assertTrue(self.snapshot_file.exists())
-
-    def test_clean_allows_uncommitted_changes_inside_demo_project(self):
-        sha = self.head()
-        self.start()
-        self.commit_demo()
-        (self.v / DEMO_REL / "README.md").write_text("mid-demo edit\n")
-        proc = self.demo("clean")
-        self.assertOk(proc)
-        self.assertEqual(self.head(), sha)
-
-    @unittest.expectedFailure  # defect: 2026-09-11-demo-clean-guard-holes
-    def test_clean_allows_uncommitted_change_to_demo_source(self):
-        """The demo source is one of the demo's own paths. Its name contains spaces,
-        so `git status --porcelain` prints it quoted and the exact comparison in
-        foreign_changes() never matches: the demo's own file is treated as foreign
-        and clean refuses."""
-        sha = self.head()
-        self.start()
-        self.commit_demo()
-        with open(self.v / self.source_rel, "a") as fh:
-            fh.write("\nannotated during the demo\n")
-        proc = self.demo("clean")
-        self.assertEqual(proc.returncode, 0,
-                         "clean refused over the demo's own source file:\n" + proc.stdout)
-        self.assertEqual(self.head(), sha)
-
-    def test_clean_refuses_when_history_was_rewritten(self):
-        self.start()
-        self.commit_demo()
-        # rewrite: move HEAD to a commit that does not descend from the snapshot
-        self.git("reset", "-q", "--hard", "HEAD~2")
-        (self.v / "other.md").write_text("x\n")
-        self.git("add", "other.md")
-        self.git("commit", "-qm", "diverged")
-        diverged = self.head()
-        proc = self.demo("clean")
-        self.assertEqual(proc.returncode, 2, proc.stdout)
-        self.assertIn("not a descendant of the snapshot", proc.stdout)
-        self.assertEqual(self.head(), diverged)
-
-    @unittest.expectedFailure  # defect: 2026-09-11-demo-clean-guard-holes
-    def test_clean_never_overwrites_an_untracked_user_file(self):
-        """foreign_changes() skips untracked files on the claim that 'untracked files
-        survive a reset'. They do not when the snapshot tracks the same path: here a
-        commit during the demo deleted notes.md, the user then wrote a new untracked
-        notes.md, and `git reset --hard` silently replaces it with the old one."""
-        self.start()
-        self.git("rm", "-q", "notes.md")
-        self.git("commit", "-qm", "drop notes during demo")
-        (self.v / "notes.md").write_text("precious new user notes\n")
-        proc = self.demo("clean")
-        self.assertEqual((self.v / "notes.md").read_text(), "precious new user notes\n",
-                         "clean destroyed an untracked user file outside the demo paths "
-                         f"(exit {proc.returncode}):\n{proc.stdout}")
-
-
-class RemoveTest(DemoBase):
-    def installed_demo_bits(self, base):
-        return [p for p in (base / "skills" / "gt-demo", base / "templates" / "demo-pizzabot",
-                            base / "scripts" / "gt_demo.sh") if p.exists()]
-
-    def test_remove_commits_only_demo_paths(self):
-        self.start()
-        self.commit_demo()
-        before = self.head()
-        (self.v / "notes.md").write_text("unsaved user work\n")
-        (self.v / "Sources" / "staged.md").write_text("staged user work\n")
-        self.git("add", "Sources/staged.md")
-        proc = self.demo("remove")
-        self.assertOk(proc)
-        self.assertIn("status=removed", proc.stdout)
-        self.assertNotEqual(self.head(), before, "removal was not committed")
-        files = self.git("show", "--name-only", "--format=", "HEAD").stdout.split("\n")
-        files = [f for f in files if f]
-        self.assertTrue(files)
-        stray = [f for f in files if not (f.startswith(DEMO_REL + "/") or f == self.source_rel)]
-        self.assertEqual(stray, [], "remove committed paths that are not the demo's")
-        self.assertIn(self.source_rel, files)
-        # the user's work is untouched and still uncommitted / still staged
-        self.assertEqual((self.v / "notes.md").read_text(), "unsaved user work\n")
-        st = self.status()
-        self.assertIn(" M notes.md", st)
-        self.assertIn("A  Sources/staged.md", st)
-        # demo gone from the vault
-        self.assertFalse((self.v / DEMO_REL).exists())
-        self.assertFalse((self.v / self.source_rel).exists())
-        self.assertFalse(self.snapshot_file.exists())
-        # recorded choice, and stripped from the installed copy
-        cfg = json.loads((self.home / ".claude" / "vault-config.json").read_text())
-        self.assertEqual(cfg.get("install_demo"), "no")
-        self.assertEqual(cfg.get("vault_path"), str(self.v))
-        self.assertEqual(self.installed_demo_bits(self.install), [])
-        self.assertTrue((self.install / "scripts" / "vault_init.py").is_file(),
-                        "remove deleted more than the demo from the install")
-
-    def test_remove_with_untracked_demo_makes_no_commit(self):
-        self.start()
-        before = self.head()
-        proc = self.demo("remove")
-        self.assertOk(proc)
-        self.assertEqual(self.head(), before)
-        self.assertFalse((self.v / DEMO_REL).exists())
-        self.assertEqual(self.status(), "")
-
-    def test_remove_from_a_source_checkout_keeps_the_checkout(self):
-        checkout = self.tmp / "checkout" / GT.name       # outside HOME/.claude
-        for sub in ("scripts", "templates", "skills"):
-            shutil.copytree(GT / sub, checkout / sub)
-        self.start()
-        proc = self.demo("remove", script=checkout / "scripts" / "gt_demo.sh")
-        self.assertOk(proc)
-        self.assertEqual(len(self.installed_demo_bits(checkout)), 3,
-                         "remove stripped the demo out of a source checkout")
+    # -- every skill can be pinned to the demo vault ---------------------------------------
+    def test_every_skill_that_locates_the_vault_honors_gt_vault(self):
+        for p in (GT / "skills").glob("*/SKILL.md"):
+            t = p.read_text()
+            if "vault-config" in t:
+                self.assertIn("GT_VAULT", t, f"{p.parent.name} reads vault-config.json but ignores $GT_VAULT")
 
 
 if __name__ == "__main__":

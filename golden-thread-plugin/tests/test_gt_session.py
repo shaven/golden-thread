@@ -141,7 +141,6 @@ class GtSessionTest(Sandbox):
         self.assertEqual(fa.read_text().count("- `x.md`"), 1, "re-claiming duplicated the line")
         self.assertNotIn("x.md", fb.read_text())
 
-    @unittest.expectedFailure  # defect: 2026-09-11-session-claim-placeholder
     def test_first_claim_replaces_the_nothing_claimed_placeholder(self):
         # cmd_claim means to drop the placeholder on the first claim, but compares the
         # WHOLE body to it; register always writes a heading above it, so the

@@ -1,5 +1,5 @@
 # Golden Thread Plugin — Documentation
-## Version gt 0.9.13 / gt-wiki 0.1.1
+## Version gt 0.9.14 / gt-wiki 0.1.2
 
 ---
 
@@ -27,10 +27,10 @@ Facts move up the hierarchy as they prove themselves general. They never move ba
 
 ---
 
-## Core Rules (gt 0.9.13)
+## Core Rules (gt 0.9.14)
 
 Golden Thread defines a tiered rule model that separates rules by scope and enforcement strength.
-**Seven Core rules ship as of 0.9.13**, up from one at 0.6.0:
+**Seven Core rules ship as of 0.9.14**, up from one at 0.6.0:
 
 | # | Rule |
 |---|---|
@@ -118,7 +118,7 @@ The canonical rule definitions live in `Projects/golden-thread/core-rules/` insi
 
 | Command | What it does |
 |---|---|
-| `/gt:gt-demo` | Run a repeatable live demo in your vault with the fictional PizzaBot 3000 project: `start` snapshots the vault and sets the project up, `end` shows what the demo produced, `clean` dry-runs then resets to the snapshot, `remove` tears the demo out. Skipped at install when `install_demo` is `no`. |
+| `/gt:gt-demo` | A ten-act guided tour on the fictional PizzaBot 3000 project, run in its own throwaway vault — `start` builds it, `tour` runs the acts one click at a time (Core rules, open, task rollup, capture, wiki, route, validate, lint, promote, inbox and close), `end` shows the receipt, `clean` rebuilds, `remove` switches it off. Skipped at install when `install_demo` is `no`. |
 
 ### Installed, and actually wired (0.9.13)
 
@@ -255,7 +255,7 @@ bash install.sh
 # Restart Claude Code
 ```
 
-Installs both `gt` (v0.9.13) and `gt-wiki` (v0.1.1) as separate plugins under the `golden-thread-plugin` marketplace. Requires Python 3.8+.
+Installs both `gt` (v0.9.14) and `gt-wiki` (v0.1.2) as separate plugins under the `golden-thread-plugin` marketplace. Requires Python 3.8+.
 
 `install.sh` installs the **newest version directory** present, not a hardcoded constant — pass an argument only to roll back deliberately (`./install.sh 0.9.3`). Never pipe it to `head`: `set -o pipefail` turns the closed pipe into an abort partway through, leaving the cache updated and registration undone.
 

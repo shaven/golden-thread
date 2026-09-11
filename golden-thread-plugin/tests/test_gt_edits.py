@@ -138,7 +138,6 @@ class GtEditsTest(Sandbox):
         self.assertEqual(sorted(r["session"] for r in self.rows() if r["path"] == "b.md"), ["s", "t"])
         self.assertFalse([r for r in self.rows() if r["path"] == "a.md"])
 
-    @unittest.expectedFailure  # defect: 2026-09-11-edit-attribution-lost
     def test_cli_clear_keeps_entries_for_files_not_in_this_commit(self):
         # main() `clear` promises "Keep anything not in this commit", but passes
         # keep_unstaged=None when something is staged and set() otherwise; both

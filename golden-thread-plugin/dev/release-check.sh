@@ -100,11 +100,33 @@ PY
 [ -z "$MISSING" ] && ok "every skill in README, MANUAL, golden-thread-docs; every setting in MANUAL" || { echo "$MISSING"; bad "docs do not cover the release"; }
 STALE=$(for f in README.md MANUAL.md golden-thread-docs.md ONBOARDING.md; do grep -q "$GTV" "$f" || echo "$f never names $GTV"; done)
 [ -z "$STALE" ] && ok "docs name the current version $GTV" || { echo "$STALE"; bad "docs a version behind"; }
+STALEPDF=""
 for pdf in *.pdf; do
   base=${pdf%.pdf}
-  src="$base.md"; [ -f "$src" ] || src="$base.html"
-  [ "$pdf" -nt "$src" ] || echo "  note: $pdf is older than $src — re-render (./build-docs.py --pdf)"
+  for src in "$base.md" "$base.html"; do
+    [ -f "$src" ] && [ "$src" -nt "$pdf" ] && STALEPDF="$STALEPDF $pdf(<$src)"
+  done
 done
+[ -z "$STALEPDF" ] && ok "every PDF is newer than its sources" || { echo "  stale:$STALEPDF"; bad "PDFs a render behind — run dev/render-pdfs.sh"; }
+REFS=$(python3 - "$GT" "$WIKI" <<'PY2'
+import sys, re, pathlib
+out = []
+for root in map(pathlib.Path, sys.argv[1:]):
+    for sk in root.glob("skills/*/SKILL.md"):
+        for ref in sorted(set(re.findall(r"\b((?:scripts|templates|hooks)/[\w./-]+\.(?:py|sh|md|json))\b", sk.read_text(encoding="utf-8")))):
+            if not (root / ref).exists():
+                out.append(f"{sk.parent.name} names {ref}, which is not in {root}")
+    # Any script a skill names, by filename, wherever it says it lives: on 2026-09-11 a
+    # skill ran <vault>/Projects/golden-thread/gt-demo.sh, which shipped nowhere.
+    have = {p.name for p in root.rglob("*") if p.is_file()} | {p.name for p in pathlib.Path(".").iterdir() if p.is_file()}
+    for sk in root.glob("skills/*/SKILL.md"):
+        for name in sorted(set(re.findall(r"\b([\w.-]+\.(?:py|sh))\b", sk.read_text(encoding="utf-8")))):
+            if name not in have:
+                out.append(f"{sk.parent.name} names {name}, which ships nowhere in {root}")
+print("\n".join(out))
+PY2
+)
+[ -z "$REFS" ] && ok "every script/template a skill names exists in the release" || { echo "$REFS"; bad "skills reference files that do not ship"; }
 
 step "scrub (employer and machine names)"
 OUT=$("${GT_PYTHON:-python3}" dev/scrub_check.py "$GT" "$WIKI" dev tests *.md *.html *.pdf *.sh *.py 2>&1); rc=$?

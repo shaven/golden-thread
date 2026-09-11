@@ -2,7 +2,7 @@
 # sync-gt-src.sh — publish the current release to the shared working copy (gt-src).
 #
 #   dev/sync-gt-src.sh --dry-run    # show what would change, touch nothing
-#   dev/sync-gt-src.sh              # publish
+#   dev/sync-gt-src.sh              # publish, then verify what landed
 #
 # gt-src is what the other machine copies into its own repo and commits, so it must
 # hold exactly the files that should be checked in — nothing more:
@@ -23,7 +23,14 @@ set -euo pipefail
 cd "$(dirname "$0")/.."
 PLUGIN="$PWD"
 DEST="${GT_SRC:-$HOME/Library/CloudStorage/OneDrive-Personal/Projects2/gt-src}"
-DRY=no; [ "${1:-}" = "--dry-run" ] && DRY=yes
+DRY=no; VERIFY=yes
+for a in "$@"; do
+  case "$a" in
+    --dry-run) DRY=yes ;;
+    --no-verify) VERIFY=no ;;      # test fixtures only: a toy tree cannot pass selftest
+    *) echo "usage: sync-gt-src.sh [--dry-run] [--no-verify]"; exit 2 ;;
+  esac
+done
 PY="${GT_PYTHON:-python3}"
 
 newest() {
@@ -42,7 +49,7 @@ fi
 COMMIT=$(git rev-parse HEAD)
 PREFIX=$(git rev-parse --show-prefix)       # e.g. golden-thread-plugin/
 
-STAGE=$(mktemp -d); trap 'rm -rf "$STAGE"' EXIT
+STAGE=$(mktemp -d); VCOPY=""; trap 'rm -rf "$STAGE" "$VCOPY"' EXIT
 git ls-files -z -- . | while IFS= read -r -d '' f; do
   case "$f" in
     golden-thread/"$GTV"/*|golden-thread-wiki/"$WV"/*) ;;
@@ -86,3 +93,29 @@ if [ -n "$(ls -A "$DEST" 2>/dev/null)" ]; then
 fi
 rsync -a --delete --checksum --exclude '.DS_Store' "$STAGE/" "$DEST/"
 echo "published $N files (gt $GTV, gt-wiki $WV) from $COMMIT → $DEST"
+
+# Prove what landed is complete and works — not merely that a copy ran. On
+# 2026-09-11 the other machine received a gt-src with no hooks, no scripts and no
+# plugin.json, and a skill that called a script that shipped nowhere; both would
+# have failed here. The selftest runs on a throwaway COPY, because install.sh
+# regenerates MANIFEST.json in whatever tree it installs from.
+[ "$VERIFY" = no ] && { echo "(verification skipped — --no-verify)"; exit 0; }
+echo "== verify $DEST"
+VFAIL=0
+vok()  { printf 'ok    %s\n' "$1"; }
+vbad() { printf 'FAIL  %s\n' "$1"; VFAIL=$((VFAIL+1)); }
+GOT=$(find "$DEST" -type f ! -name .DS_Store ! -name SOURCE.json | wc -l | tr -d ' ')
+[ "$GOT" = "$N" ] && vok "$GOT files, matching the commit" || vbad "gt-src holds $GOT files, the commit $N"
+for f in install.sh selftest.sh build-docs.py README.md MANUAL.md INSTALL.md tests/run.sh dev/release-check.sh \
+         "golden-thread/$GTV/.claude-plugin/plugin.json" "golden-thread/$GTV/MANIFEST.json" \
+         "golden-thread-wiki/$WV/.claude-plugin/plugin.json"; do
+  [ -f "$DEST/$f" ] || vbad "missing $f"
+done
+for d in hooks scripts skills templates; do
+  [ -n "$(ls -A "$DEST/golden-thread/$GTV/$d" 2>/dev/null)" ] || vbad "golden-thread/$GTV/$d is empty"
+done
+while IFS= read -r f; do bash -n "$f" 2>/dev/null || vbad "bash -n $f"; done < <(find "$DEST" -name '*.sh')
+VCOPY=$(mktemp -d); cp -Rp "$DEST/." "$VCOPY/"
+if OUT=$(cd "$VCOPY" && ./selftest.sh 2>&1); then vok "$(echo "$OUT" | tail -1) — run from a copy of gt-src"; else echo "$OUT" | grep FAIL | head || true; vbad "selftest.sh from gt-src"; fi
+rm -rf "$VCOPY"
+[ $VFAIL -eq 0 ] && echo "gt-src VERIFIED" || { echo "gt-src FAILED verification ($VFAIL) — do not let the other machine copy it"; exit 3; }

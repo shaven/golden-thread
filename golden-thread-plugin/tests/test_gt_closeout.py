@@ -82,7 +82,6 @@ class GtCloseoutTest(Sandbox):
                  "%s [work] dormant — wrote 2 finding(s)" % self.day(-1))
         self.assertNotIn("dormant", self.candidates())
 
-    @unittest.expectedFailure  # defect: 2026-09-11-closeout-slug-and-log-format
     def test_r3_last_work_is_not_credited_from_a_longer_slug(self):
         # `\[work\] alpha\b` also matches "[work] alpha-beta": work on a sibling
         # whose slug merely starts with this one keeps this one looking active.
@@ -94,6 +93,31 @@ class GtCloseoutTest(Sandbox):
         self.assertIn("alpha", c, "work logged for `alpha-beta` was credited to `alpha`, "
                                   "so the quiet project was not flagged")
         self.assertEqual(c["alpha"]["last_work"], 30)
+
+    def test_log_lines_with_time_and_zone_are_read(self):
+        # The vault's real lines carry time and zone and may name several projects:
+        # `2026-09-10 19:43 CDT [work] a, b — ...`. Each named slug is credited.
+        old = "- [ ] old idea [since:: %s]" % self.day(-40)
+        for slug in ("solo", "pair-a", "pair-b", "plain-a", "plain-b"):
+            self.project(slug, [old])
+        self.log("%s 19:43 CDT [work] solo — wrote 1 finding(s)" % self.day(-30),
+                 "%s 19:47 CDT [work] pair-a, pair-b — fixed across both" % self.day(-25),
+                 "%s [work] plain-a, plain-b — no time or zone" % self.day(-22),
+                 "%s 08:05 CDT [work] golden-thread — unrelated" % self.day(0))
+        c = self.candidates()
+        for slug, days in (("solo", 30), ("pair-a", 25), ("pair-b", 25),
+                           ("plain-a", 22), ("plain-b", 22)):
+            with self.subTest(slug=slug):
+                self.assertIn(slug, c, "a log line naming %s was not read" % slug)
+                self.assertEqual(c[slug]["last_work"], days)
+                self.assertIn("R3", c[slug]["rules"])
+
+        # recent work in the timed format suppresses R3 for every slug it names
+        self.log("%s 09:00 CDT [work] solo, pair-b — back on it" % self.day(-1))
+        c = self.candidates()
+        self.assertNotIn("solo", c)
+        self.assertNotIn("pair-b", c)
+        self.assertIn("pair-a", c)
 
     def test_r4_everything_checked(self):
         self.project("done", ["- [x] a", "- [X] b"])

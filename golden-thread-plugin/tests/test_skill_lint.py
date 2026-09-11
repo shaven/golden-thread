@@ -80,7 +80,6 @@ class SkillLintTest(Sandbox):
         proc = self.lint(GT, WIKI)
         self.assertEqual(proc.returncode, 0, proc.stdout)
 
-    @unittest.expectedFailure  # defect: 2026-09-11-skill-lint-unquoted-description
     def test_unquoted_description_is_still_audited(self):
         """`description: text` (plain YAML scalar) is as valid as a quoted one and is
         the common form in Claude Code skills. The regex accepts only double-quoted

@@ -163,7 +163,6 @@ class WikiLintTest(Sandbox):
         self.assertIn("## unlinked-mention (0)", p.stdout)
         self.assertEqual(self.py(LINT).returncode, 2)
 
-    @unittest.expectedFailure  # defect: 2026-09-11-wiki-lint-template-page
     def test_fresh_wiki_vault_lints_clean(self):
         v = self.tmp / "fresh"
         self.assertOk(self.py(INIT, "wiki", "--vault", v, "--domain", "D",

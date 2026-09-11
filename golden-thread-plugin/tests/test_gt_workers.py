@@ -167,7 +167,6 @@ class WorkersInProcess(Sandbox):
         self.assertEqual(c("01:02:03"), 3723)
         self.assertEqual(c("junk"), 0.0)
 
-    @unittest.expectedFailure  # defect: 2026-09-11-workers-cpu-days-parse
     def test_cpu_time_with_days_is_parsed(self):
         # procps (Linux) prints TIME as [DD-]HH:MM:SS. A worker past 24h of CPU
         # parses to 0.0, classifies as STALLED, and `reap` kills live work.

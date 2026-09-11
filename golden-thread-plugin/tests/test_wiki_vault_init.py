@@ -43,7 +43,6 @@ class WikiVaultInitTest(Sandbox):
         cfg = json.loads(self.cfg_path().read_text(encoding="utf-8"))
         self.assertEqual(cfg["vault_path"], os.path.abspath(str(v)))
 
-    @unittest.expectedFailure  # defect: 2026-09-11-wiki-vault-init-config-handling
     def test_without_domain_the_placeholder_stays_and_is_reported(self):
         v = self.tmp / "wiki"
         p = self.init(v)
@@ -97,7 +96,6 @@ class WikiVaultInitTest(Sandbox):
         self.assertOk(self.init(v))
         self.assertEqual(self.cfg_path().read_bytes(), before, "matching config was rewritten")
 
-    @unittest.expectedFailure  # defect: 2026-09-11-wiki-vault-init-config-handling
     def test_config_holding_only_other_settings_is_not_a_vault_conflict(self):
         # install.sh documents install_demo=no in vault-config.json, which a user can
         # set before any vault exists. A config naming NO vault is not a second vault.
@@ -110,7 +108,6 @@ class WikiVaultInitTest(Sandbox):
         self.assertEqual(cfg.get("vault_path"), os.path.abspath(str(v)))
         self.assertEqual(cfg.get("install_demo"), "no", "existing setting was dropped")
 
-    @unittest.expectedFailure  # defect: 2026-09-11-wiki-vault-init-config-handling
     def test_same_vault_through_a_symlink_is_not_a_conflict_with_gt_init(self):
         # gt's vault_init.py records the RESOLVED path; a wiki init of the same vault
         # reached through a symlink (a ~/Dropbox link, macOS /var -> /private/var)

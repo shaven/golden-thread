@@ -44,7 +44,10 @@ def latest_version_dir(root: Path) -> Path:
     return max(cands, key=lambda d: _version_key(d.name))
 
 
-GT = latest_version_dir(REPO / "golden-thread")
+# GT_TEST_VERSION pins the gt release under test (e.g. a release being built beside the
+# current one); otherwise the newest installable directory is tested, as install.sh picks it.
+GT = (REPO / "golden-thread" / os.environ["GT_TEST_VERSION"]) if os.environ.get("GT_TEST_VERSION") \
+    else latest_version_dir(REPO / "golden-thread")
 WIKI = latest_version_dir(REPO / "golden-thread-wiki")
 SCRIPTS = GT / "scripts"
 HOOKS = GT / "hooks"

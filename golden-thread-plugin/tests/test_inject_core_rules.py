@@ -172,7 +172,6 @@ class InjectDegradedTest(InjectTestBase):
         self.assertDegraded(ctx)
         self.assertIn("Reason: ModuleNotFoundError", ctx)
 
-    @unittest.expectedFailure  # defect: 2026-09-11-core-hook-fallback-json
     def test_python_unavailable_still_emits_valid_json_with_timestamp(self):
         # The bash fallback (printf) is the last line of defence when python3 cannot
         # run at all. Its output must still be the JSON the hook contract promises.

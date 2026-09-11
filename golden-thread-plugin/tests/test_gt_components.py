@@ -357,7 +357,6 @@ class Wiring(ComponentsBase):
         p = self.wiring(self.vdir)
         self.assertEqual(p.stdout.count("unwired"), 9)
 
-    @unittest.expectedFailure  # defect: 2026-09-11-components-owner-flag-order
     def test_owner_flag_before_dir(self):
         # main() says flags are skipped when locating the version dir "or
         # `wiring --owner X <dir>` would take '--owner' as the directory". It skips

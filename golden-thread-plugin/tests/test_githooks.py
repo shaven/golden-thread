@@ -100,7 +100,6 @@ class GitHooksTest(Sandbox):
         self.assertIn(self.trailer("tracked.md"), self.last_message())
         self.assertEqual(self.ledger_paths(), [])
 
-    @unittest.expectedFailure  # defect: 2026-09-11-edit-attribution-lost
     def test_new_file_left_out_of_the_commit_keeps_its_attribution(self):
         # commit-clear retains only paths in `git diff --name-only`, which lists
         # TRACKED modifications. A brand-new file written through safe_write but not
@@ -116,7 +115,6 @@ class GitHooksTest(Sandbox):
         self.git("commit", "-q", "-m", "later")
         self.assertIn(self.trailer("later.md"), self.last_message())
 
-    @unittest.expectedFailure  # defect: 2026-09-11-edit-attribution-lost
     def test_empty_commit_claims_no_pending_edits(self):
         # With nothing staged, apply-msg passes `_staged(g) or None`, i.e. NO
         # restriction, so every pending edit is claimed by a commit that has none of
@@ -145,7 +143,6 @@ class GitHooksTest(Sandbox):
         self.assertNotEqual(proc.returncode, 0, "the empty-message commit was not aborted")
         self.assertEqual(self.ledger_paths(), ["a.md"], "an aborted commit drained the ledger")
 
-    @unittest.expectedFailure  # defect: 2026-09-11-edit-attribution-lost
     def test_verbose_editor_commit_keeps_the_trailer(self):
         # With commit.verbose (or `git commit -v`) the message file ends with a
         # "# ----- >8 -----" scissors line and the diff; git discards EVERYTHING

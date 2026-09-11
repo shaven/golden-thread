@@ -138,7 +138,6 @@ class ConnectTest(VaultInitBase):
         self.assertEqual(proc.returncode, 1)
         self.assertFalse((self.home / ".claude" / "vault-config.json").exists())
 
-    @unittest.expectedFailure  # defect: 2026-09-11-vault-init-connect-and-subproject-row
     def test_connect_switches_to_a_different_vault(self):
         """The conflict message (and gt-init's SKILL.md) says: run 'connect' mode to
         switch. connect must therefore succeed when the config points elsewhere."""
@@ -299,7 +298,6 @@ class CreateProjectTest(VaultInitBase):
         self.assertFalse((v / "Projects" / "beta").exists())
         self.assertIn("(beta/)", (v / "Projects" / "alpha" / "README.md").read_text())
 
-    @unittest.expectedFailure  # defect: 2026-09-11-vault-init-connect-and-subproject-row
     def test_parent_row_lands_in_parents_status_table(self):
         """register_in_master_index promises the row lands in the list 'instead of after
         whatever section happens to be last'. For --parent the list is the parent's
@@ -406,7 +404,6 @@ class MergeTest(VaultInitBase):
         self.assertIn("Name clash: `shared.md`", rq)
         self.assertIn("Reconcile `alpha/design.md`", rq)
 
-    @unittest.expectedFailure  # defect: 2026-09-11-merge-project-loses-content
     def test_merge_loses_nothing(self):
         """Docstring: 'Nothing is deleted'. Open tasks in the source README and files
         merge does not know about must survive somewhere in the vault."""

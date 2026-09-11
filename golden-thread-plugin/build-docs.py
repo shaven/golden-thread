@@ -80,9 +80,18 @@ POST_BUILD = {
     ],
 }
 
-# Headings whose absence from the .html is expected, because a POST_BUILD override
-# above deliberately changed them. Derived from POST_BUILD so the two cannot drift.
-KNOWN_DIVERGENCES = {"MANUAL.html": ["Golden Thread"]}
+
+def expected_heading(htm, level, h):
+    """The heading text --build leaves in htm: h after any POST_BUILD override.
+
+    Derived from POST_BUILD so the two cannot drift. A hand-kept list of exempt
+    headings (the old KNOWN_DIVERGENCES) never matched: it held "Golden Thread"
+    while the heading compared was the full "Golden Thread — User Manual".
+    """
+    tag = f"<h{level}>{h}</h{level}>"
+    for pattern, repl in POST_BUILD.get(htm, []):
+        tag = re.sub(pattern, repl, tag)
+    return re.sub(r"<[^>]+>", "", tag)
 
 
 class TextExtractor(HTMLParser):
@@ -143,7 +152,9 @@ def read(path):
         return f.read()
 
 
-VERSION_RE = re.compile(r"\b\d+\.\d+\.\d+\b")
+# The docs write "v0.9.13": there is no word boundary between "v" and "0", so a
+# leading \b never matched a v-prefixed version -- the founding drift went unseen.
+VERSION_RE = re.compile(r"(?<![\w.])[vV]?(\d+\.\d+\.\d+)\b")
 SKILL_RE = re.compile(r"gt-[a-z][a-z-]+")
 
 
@@ -151,7 +162,6 @@ def check_one(md, htm):
     """Return a list of human-readable drift findings."""
     findings = []
     mt, ht = md_text(md), html_text(htm)
-    allowed = KNOWN_DIVERGENCES.get(htm, [])
 
     # 1. Version strings the markdown claims but the HTML never mentions.
     #    This is the failure that started it: html at v0.9.6, md at v0.9.12.
@@ -170,12 +180,17 @@ def check_one(md, htm):
         findings.append(f"{s} in .html, missing from .md")
 
     # 3. Headings present in the markdown but nowhere in the rendered text.
-    #    Backticks are stripped from the heading first: the markdown writes
-    #    `/gt:gt-init` and the rendered text carries /gt:gt-init without them.
+    #    Inline markup is stripped from the heading first: the markdown writes
+    #    `/gt:gt-init` or *not* and the rendered text carries neither the backticks
+    #    nor the emphasis markers.
     for line in read(md).splitlines():
         if line.startswith("#"):
-            h = " ".join(line.lstrip("#").replace("`", "").split())
-            if len(h) > 6 and h not in ht and h not in allowed:
+            h = line.lstrip("#")
+            level = len(line) - len(h)
+            h = h.replace("`", "").replace("*", "")
+            h = re.sub(r"(?<!\w)_+|_+(?!\w)", "", h)  # emphasis, keeps snake_case
+            h = " ".join(h.split())
+            if len(h) > 6 and h not in ht and expected_heading(htm, level, h) not in ht:
                 findings.append(f'heading absent from .html: "{h[:58]}"')
 
     # 4. Internal links that point at no anchor. WeasyPrint fails the PDF render

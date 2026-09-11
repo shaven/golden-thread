@@ -210,7 +210,6 @@ class GuardTest(GuardTestBase):
         self.assertAllow(self.guard(self.target, env={"PATH": f"{stub}:/usr/bin:/bin"}))
 
     # -- heartbeats written in another time zone -----------------------------------------
-    @unittest.expectedFailure  # defect: 2026-09-11-claim-heartbeat-time-zones
     def test_fresh_heartbeat_from_another_time_zone_still_denies(self):
         # A session on another host is judged by its heartbeat alone. The heartbeat is
         # written as local time with a zone NAME (gt_session.py TS_FMT '%Z'). A fresh

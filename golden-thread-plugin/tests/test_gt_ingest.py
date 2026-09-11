@@ -22,7 +22,6 @@ class ClassifierTest(Sandbox):
         os.environ["HOME"] = str(self.home)
         self.m = load_module(INGEST, "gt_ingest_under_test")
 
-    @unittest.expectedFailure  # defect: 2026-09-11-ingest-memory-dir-and-keywords
     def test_memory_generic_knowledge_keywords(self):
         """Every keyword in the knowledge list must be reachable. 'infrastructure'
         contains 'structure', which the design rule tests first, so an
@@ -31,6 +30,15 @@ class ClassifierTest(Sandbox):
             with self.subTest(kw=kw):
                 self.assertEqual(self.m.classify_memory_file(f"{kw}_notes.md", "plain"), "knowledge",
                                  f"'{kw}' in a memory filename did not classify as knowledge")
+
+    def test_author_files_are_not_knowledge(self):
+        """Keywords match whole words: 'auth' is a knowledge keyword, but AUTHORS.md
+        and an authors_notes.md memory file are about people, not authentication."""
+        from pathlib import Path
+        self.assertNotEqual(self.m.classify_doc_file(Path("AUTHORS.md"), ""), "knowledge")
+        self.assertNotEqual(self.m.classify_memory_file("authors_notes.md", "plain"), "knowledge")
+        self.assertEqual(self.m.classify_doc_file(Path("auth-flow.md"), ""), "knowledge")
+        self.assertEqual(self.m.classify_memory_file("auth_tokens.md", "plain"), "knowledge")
 
     def test_memory_precedence(self):
         c = self.m.classify_memory_file
@@ -150,7 +158,6 @@ class CliTest(Sandbox):
         self.assertIn("=== DESIGN (1 items) ===", proc.stdout)
         self.assertIn("[low] ARCHITECTURE.md", proc.stdout)
 
-    @unittest.expectedFailure  # defect: 2026-09-11-ingest-memory-dir-and-keywords
     def test_finds_claude_code_memory_dir(self):
         """Claude Code stores a project's memory at ~/.claude/projects/<encoded>/memory,
         where <encoded> is the absolute path with '/' replaced by '-' -- INCLUDING the

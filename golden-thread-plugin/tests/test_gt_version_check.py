@@ -110,7 +110,6 @@ class VersionCheck(Sandbox):
         out = self.check(root=self.tmp / "not-synced")
         self.assertIn("plugin source not readable", out)
 
-    @unittest.expectedFailure  # defect: 2026-09-11-version-check-false-all-clear
     def test_unreadable_install_record_is_not_reported_as_current(self):
         # With no installed_plugins.json (or an unparseable one) the check cannot
         # know what is installed. Printing "newest release installed" then is the

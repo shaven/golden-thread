@@ -110,7 +110,7 @@
 
 <!-- COVER -->
 <div class="cover">
-  <div class="kicker">Developer Guide · v0.9.13</div>
+  <div class="kicker">Developer Guide · v0.9.14</div>
   <h1>Golden Thread</h1>
   <div class="subtitle">
     Persistent memory across Claude Code sessions —<br>
@@ -188,7 +188,7 @@
           <li>/gt:gt-lint — health checks</li>
           <li>/gt:gt-settings — automatic behaviour</li>
           <li>/gt:gt-runbook-lint and /gt:gt-review</li>
-          <li>/gt:gt-demo — repeatable live demo</li>
+          <li>/gt:gt-demo — guided tour</li>
         </ul>
       </li>
       <li>
@@ -300,7 +300,7 @@
     <li><strong><code>gt</code></strong> — memory, projects, session workflow, enforcement hooks</li>
     <li><strong><code>gt-wiki</code></strong> — knowledge base with immutable sources</li>
   </ul>
-  <pre><code>~/.claude/plugins/cache/golden-thread-plugin/gt/0.9.13/
+  <pre><code>~/.claude/plugins/cache/golden-thread-plugin/gt/0.9.14/
   .claude-plugin/   <span class="comment">← plugin metadata</span>
   hooks/            <span class="comment">← enforcement hook scripts</span>
   scripts/          <span class="comment">← vault_init.py, gt_lint.py, gt_settings.py, …</span>
@@ -710,19 +710,21 @@ python3 $SCRIPTS/gt_settings.py set &lt;name&gt; &lt;value&gt;</code></pre>
     ideas, then promotes selected ones into tracked projects.
   </p>
 
-  <h2><span class="skill">/gt:gt-demo</span> — Repeatable live demo</h2>
+  <h2><span class="skill">/gt:gt-demo</span> — Guided tour</h2>
   <p>
-    Demonstrates the workflow with PizzaBot 3000, a fictional project shipped as a
-    template. <code>start</code> records the vault's current commit and sets the project
-    up; <code>end</code> lists what the demo produced; <code>clean</code> resets the vault
-    to the recorded commit and restores the template; <code>remove</code> deletes the demo
-    and sets <code>install_demo</code> to <code>no</code>.
+    A ten-act tour on PizzaBot 3000, a fictional project, run in its own throwaway vault
+    at <code>~/.claude/golden-thread/demo-vault</code>. <code>start</code> builds it and prints
+    the pinned launch command (<code>GT_VAULT=&lt;demo vault&gt; claude</code>); in that session
+    <code>tour</code> performs each act with the real skill and waits on a Next button;
+    <code>end</code> lists what the tour produced; <code>clean</code> rebuilds the vault;
+    <code>remove</code> deletes it and sets <code>install_demo</code> to <code>no</code>.
   </p>
   <p>
-    The demo runs in the real vault, so the one history-rewriting step is guarded:
-    <code>clean</code> dry-runs first and lists every commit it would undo, from any
-    session, and refuses if any is already pushed or if uncommitted work outside the demo
-    would be lost. <code>remove</code> commits only the demo's own paths.
+    The acts live in <code>templates/demo-pizzabot/tour.md</code>, one section each with
+    <code>narration:</code>, <code>do:</code> and <code>point:</code> lines. The demo never
+    writes <code>vault-config.json</code> — every skill and hook honors <code>$GT_VAULT</code> —
+    and <code>clean</code>/<code>remove</code> delete only a directory carrying the demo's
+    marker file.
   </p>
 </div>
 
@@ -790,7 +792,7 @@ python3 $SCRIPTS/gt_settings.py set &lt;name&gt; &lt;value&gt;</code></pre>
   <h1 class="section-title" id="sec-scripts">10. Script reference</h1>
   <hr class="section-rule">
 
-  <pre><code>SCRIPTS=~/.claude/plugins/cache/golden-thread-plugin/gt/0.9.13/scripts</code></pre>
+  <pre><code>SCRIPTS=~/.claude/plugins/cache/golden-thread-plugin/gt/0.9.14/scripts</code></pre>
 
   <h2>vault_init.py</h2>
   <pre><code><span class="comment"># Fresh vault</span>
@@ -851,8 +853,8 @@ python3 $SCRIPTS/gt_settings.py set report_card off</code></pre>
   </table>
 
   <div style="margin-top:40px; padding-top:28px; border-top:1px solid #e8e8ed; font-size:12px; color:#888;">
-    Golden Thread v0.9.13 &nbsp;·&nbsp; September 2026 &nbsp;·&nbsp;
-    Plugin cache: <code>~/.claude/plugins/cache/golden-thread-plugin/gt/0.9.13/</code>
+    Golden Thread v0.9.14 &nbsp;·&nbsp; September 2026 &nbsp;·&nbsp;
+    Plugin cache: <code>~/.claude/plugins/cache/golden-thread-plugin/gt/0.9.14/</code>
   </div>
 </div>
 

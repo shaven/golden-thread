@@ -109,7 +109,6 @@ class KnowledgeChecksTest(LintBase):
         self.assertFinding(f, "orphan", "Knowledge/Lonely.md")
         self.assertFinding(f, "index-gap", "Knowledge/Lonely.md")
 
-    @unittest.expectedFailure  # defect: 2026-09-11-gt-lint-false-links-and-orphans
     def test_orphan_is_not_hidden_by_a_longer_title_in_the_index(self):
         """check_index_gap was fixed so 'Quote API' does not count as indexed because
         'Schwab Quote API' is listed. check_orphans still does a bare substring test,
@@ -142,7 +141,6 @@ class KnowledgeChecksTest(LintBase):
         self.assertNoFinding(f, "broken-link")
         self.assertEqual(proc.returncode, 0, proc.stdout)
 
-    @unittest.expectedFailure  # defect: 2026-09-11-gt-lint-false-links-and-orphans
     def test_embedded_attachment_is_not_a_broken_link(self):
         """Obsidian vaults embed attachments with ![[file.png]]. The file exists, so
         the link resolves -- but link_targets() registers only .md files."""
@@ -152,7 +150,6 @@ class KnowledgeChecksTest(LintBase):
         proc, f = self.lint()
         self.assertNoFinding(f, "broken-link", "Knowledge/Diagrams.md")
 
-    @unittest.expectedFailure  # defect: 2026-09-11-gt-lint-false-links-and-orphans
     def test_escaped_pipe_alias_in_a_table_is_not_a_broken_link(self):
         """Inside a Markdown table Obsidian requires the alias pipe escaped:
         [[Target Page\\|alias]]. The regex keeps the backslash in the target."""

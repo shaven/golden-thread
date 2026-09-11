@@ -181,7 +181,6 @@ class WikiRefreshTest(Sandbox):
         self.assertNotIn("old-a.md", r, "superseded source was checked")
         self.assertIn("new-a.md", r)
 
-    @unittest.expectedFailure  # defect: 2026-09-11-wiki-refresh-exit-codes-and-paths
     def test_scalar_supersedes_also_skips_the_old_source(self):
         # `supersedes: Sources/old-a.md` (one value, not a list) is how a single
         # supersession is naturally written, and wiki_lint accepts it.
@@ -217,7 +216,6 @@ class WikiRefreshTest(Sandbox):
         self.assertEqual((rc, r["gone.md"]["state"]), (0, "missing-on-disk"))
 
     # -- exit codes -----------------------------------------------------------------
-    @unittest.expectedFailure  # defect: 2026-09-11-wiki-refresh-exit-codes-and-paths
     def test_usage_errors_exit_2(self):
         self.kpage("Real Page")
         for args in ((), ("--page", "No Such Page")):
@@ -228,7 +226,6 @@ class WikiRefreshTest(Sandbox):
                                  "reserves for 'changes found' (sys.exit(<message>) exits 1)")
         self.assertEqual(self.refresh("--all", "--page", "x").returncode, 2)  # argparse
 
-    @unittest.expectedFailure  # defect: 2026-09-11-wiki-refresh-exit-codes-and-paths
     def test_a_source_that_could_not_be_checked_is_not_a_clean_exit(self):
         norigin = self.git_init(self.root / "no-origin")  # a repo with no remote at all
         (norigin / "f.md").write_text("f\n")
@@ -238,7 +235,6 @@ class WikiRefreshTest(Sandbox):
         self.assertEqual(r["state"], "error")
         self.assertEqual(p.returncode, 2, "a source whose check FAILED exits 0 = 'nothing changed'")
 
-    @unittest.expectedFailure  # defect: 2026-09-11-wiki-refresh-exit-codes-and-paths
     def test_local_path_through_a_symlink(self):
         link = self.root / "link"
         link.symlink_to(self.clone, target_is_directory=True)

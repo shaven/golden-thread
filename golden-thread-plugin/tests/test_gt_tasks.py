@@ -122,7 +122,6 @@ class GtTasksTest(Sandbox):
         self.assertIn("`finished`", sec)
         self.assertIn("empty: every task is checked off", sec)
 
-    @unittest.expectedFailure  # defect: 2026-09-11-task-rollup-due-today-and-bad-priority
     def test_one_malformed_priority_does_not_sink_the_whole_rollup(self):
         # gt_closeout._tasks treats `[p:: high]` as p 3; gt_tasks.parse_tasks calls
         # int() unguarded, so one typo in one README kills TASKS.md for every project.
@@ -170,7 +169,6 @@ class EscalationTest(Sandbox):
             with self.subTest(due_in_days=off):
                 self.assertEqual(self.eff(3, [self.task(due=self.d(off))]), want)
 
-    @unittest.expectedFailure  # defect: 2026-09-11-task-rollup-due-today-and-bad-priority
     def test_task_due_today_escalates(self):
         # days_since(due) is 0 on the due date; `0 or -99` turns it into -99, so the
         # one day a deadline matters most is the one day it does not escalate.

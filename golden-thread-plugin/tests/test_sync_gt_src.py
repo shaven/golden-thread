@@ -40,7 +40,8 @@ class SyncGtSrcTest(Sandbox):
         self.git_init(self.tmp / "repo")
         self.dest = self.tmp / "gt-src"
 
-    def sync(self, *args):
+    def sync(self, *args, verify=False):
+        args = args if verify else (*args, "--no-verify")
         return self.sh(self.repo / "dev" / "sync-gt-src.sh", *args,
                        env={"GT_SRC": str(self.dest), "GT_SCRUB_TERMS": str(self.terms)})
 
@@ -75,6 +76,14 @@ class SyncGtSrcTest(Sandbox):
     def test_dry_run_writes_nothing(self):
         self.assertOk(self.sync("--dry-run"))
         self.assertEqual(self.files(), [])
+
+    def test_verification_rejects_an_incomplete_tree(self):
+        # The toy repo has no selftest.sh, hooks/ or scripts/ — the shape of the
+        # half-populated gt-src found on 2026-09-11. Publishing it must not report success.
+        proc = self.sync(verify=True)
+        self.assertEqual(proc.returncode, 3, proc.stdout)
+        self.assertIn("missing selftest.sh", proc.stdout)
+        self.assertIn("is empty", proc.stdout)
 
     def test_backs_up_and_deletes_stray_files(self):
         self.dest.mkdir()

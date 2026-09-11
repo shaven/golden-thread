@@ -146,7 +146,6 @@ class WikiLogTest(Sandbox):
         self.assertNotEqual(p.returncode, 0, "'Tool' matched the '## Tools' heading")
         self.assertEqual(self.index.read_bytes(), before)
 
-    @unittest.expectedFailure  # defect: 2026-09-11-wiki-log-backslash
     def test_replacing_an_entry_keeps_backslashes_in_the_summary_literal(self):
         # A summary is free text: a Windows path or a regex in it is ordinary content.
         summary = r"matches \d+ in C:\temp\new"
