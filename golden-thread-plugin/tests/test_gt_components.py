@@ -22,7 +22,7 @@ TOOL = SCRIPTS / "gt_components.py"
 HOOK_FILES = ("inject_core_rules.sh", "validate_response.sh", "guard_session_claims.sh",
               "alpha.sh")
 HOOKDIR_SCRIPTS = ("gt_components.py", "gt_workers.py", "gt_version_check.py",
-                   "gt_push_check.py", "gt_report_card.py")
+                   "gt_push_check.py", "gt_watch.py", "gt_report_card.py")
 
 
 class ComponentsBase(Sandbox):
@@ -112,7 +112,7 @@ class Manifest(ComponentsBase):
         want = [{"event": r["event"], "script": r["script"], "args": list(r["args"]),
                  "owner": r["owner"]} for r in m.HOOK_REGISTRATIONS]
         self.assertEqual(man["hooks"], want)
-        self.assertEqual(len(want), 9)
+        self.assertEqual(len(want), 10)
         owners = {r["owner"] for r in want}
         self.assertEqual(owners, {"install.sh", "vault_init.py install-core-rules"})
         # templates, not resolved paths: nothing machine-specific in the manifest
@@ -129,14 +129,14 @@ class Manifest(ComponentsBase):
         self.assertOk(p)
         names = p.stdout.split()
         for n in ("gt_settings.py", "gt_components.py", "gt_workers.py",
-                  "gt_version_check.py", "gt_push_check.py", "gt_report_card.py"):
+                  "gt_version_check.py", "gt_push_check.py", "gt_watch.py", "gt_report_card.py"):
             self.assertIn(n, names)
 
 
 class HookRegistrations(ComponentsBase):
     def test_commands_resolve_and_survive_a_space_in_the_path(self):
         regs = self.registrations()
-        self.assertEqual(len(regs), 9)
+        self.assertEqual(len(regs), 10)
         by = {(r["event"], r["script"]): r for r in regs}
         argv = shlex.split(by[("SessionStart", "gt_components.py")]["command"])
         self.assertEqual(argv, ["python3", str(self.installed / "gt_components.py"),
@@ -163,7 +163,7 @@ class Check(ComponentsBase):
         out = self.check()
         self.assertIn("components: clean", out)
         self.assertIn("installed matches 1.2.3", out)
-        self.assertIn("all 9 hooks wired", out)
+        self.assertIn("all 10 hooks wired", out)
 
     def test_hook_flag_emits_json_for_user_and_model(self):
         self.full_setup()
@@ -305,20 +305,20 @@ class Wiring(ComponentsBase):
         self.manifest()
         p = self.wiring(self.vdir)
         self.assertEqual(p.returncode, 1)
-        self.assertEqual(p.stdout.count("unwired"), 9, p.stdout)
+        self.assertEqual(p.stdout.count("unwired"), 10, p.stdout)
 
     def test_empty_settings_file(self):
         self.manifest()
         self.settings.write_text("")
         p = self.wiring(self.vdir)
         self.assertEqual(p.returncode, 1)
-        self.assertEqual(p.stdout.count("unwired"), 9)
+        self.assertEqual(p.stdout.count("unwired"), 10)
 
     def test_all_wired(self):
         self.full_setup()
         p = self.wiring(self.vdir)
         self.assertOk(p, "wiring")
-        self.assertIn("all 9 declared hooks are wired", p.stdout)
+        self.assertIn("all 10 declared hooks are wired", p.stdout)
 
     def test_owner_filter_after_dir(self):
         # install.sh's form: before a vault exists the enforcement hooks are
@@ -329,7 +329,7 @@ class Wiring(ComponentsBase):
                         "guard_session_claims.sh"))
         p = self.wiring(self.vdir, "--owner", "install.sh")
         self.assertOk(p, "install.sh-owned hooks are all wired")
-        self.assertIn("all 6 declared hooks are wired (install.sh)", p.stdout)
+        self.assertIn("all 7 declared hooks are wired (install.sh)", p.stdout)
         p = self.wiring(self.vdir)
         self.assertEqual(p.returncode, 1)
         self.assertEqual(p.stdout.count("unwired"), 3)
@@ -355,7 +355,7 @@ class Wiring(ComponentsBase):
         man_p.write_text(json.dumps(man))
         self.settings.write_text("{}")
         p = self.wiring(self.vdir)
-        self.assertEqual(p.stdout.count("unwired"), 9)
+        self.assertEqual(p.stdout.count("unwired"), 10)
 
     def test_owner_flag_before_dir(self):
         # main() says flags are skipped when locating the version dir "or

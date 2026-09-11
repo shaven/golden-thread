@@ -2,7 +2,7 @@
 
 A guided walkthrough for your first session. Six steps, ~15 minutes.
 
-**Requirements:** Python 3.8+, Claude Code installed. Written against **gt v0.9.14**.
+**Requirements:** Python 3.8+, Claude Code installed. Written against **gt v0.10.0**.
 
 ---
 
@@ -175,7 +175,8 @@ they just stop outranking live work.
 /gt:gt-settings            ← view and toggle what Golden Thread does automatically
 /gt:gt-farm                ← route bulk or mechanical tasks to an external AI service as a work packet
 /gt:gt-validate            ← independently verify a claim before recording it as fact
-/gt:gt-demo                ← guided ten-act tour in a throwaway demo vault: start / tour / end / clean / remove
+/gt:gt-watch               ← watch a git repo you depend on; a security fix upstream opens your next session as a P0
+/gt:gt-demo                ← guided eleven-act tour in a throwaway demo vault: start / tour / end / clean / remove
 ```
 
 ---

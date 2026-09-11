@@ -74,6 +74,11 @@ for e in d.get("hooks", {}).get("SessionStart", []):
     for h in e.get("hooks", []): print(h["command"])
 PY
   name=$(printf '%s' "$cmd" | grep -oE 'gt_[a-z_]+\.py'); out=$(echo '{}' | bash -c "$cmd" 2>/dev/null)
+  if [ "$name" = "gt_watch.py" ]; then
+    # gt-watch is off by default and must then say nothing at all (0.10.0).
+    [ -z "$out" ] && ok "SessionStart $name silent while watch=off" || bad "SessionStart $name spoke while off: $out"
+    continue
+  fi
   printf '%s' "$out" | grep -q '"systemMessage"' && ok "SessionStart $name emits systemMessage" || bad "SessionStart $name: $out"
 done
 python3 "$HOOKS/gt_report_card.py" </dev/null >/dev/null 2>&1 && ok "report card runs" || bad "report card failed"

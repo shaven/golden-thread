@@ -1,6 +1,6 @@
 # Golden Thread — User Manual
 
-Complete reference for all sixteen skills. Written against **gt v0.9.14**.
+Complete reference for all seventeen skills. Written against **gt v0.10.0**.
 
 ---
 
@@ -606,6 +606,7 @@ is registered here and can be switched off.
 | `orphan_check` | `off` · `report` · `reap` | `report` | At session start, looks for abandoned background Claude workers; `reap` stops them |
 | `push_check` | `off` · `report` | `report` | At session start, reports vault commits not yet pushed |
 | `report_card` | `off` · `minimal` · `full` | `minimal` | At `/compact`, summarises session hygiene |
+| `watch` | `off` · `report` | `off` | `/gt:gt-watch`: the hourly fetch and the session-start report of repo changes |
 | `install_demo` | `yes` · `no` | `yes` | Whether `install.sh` installs `/gt:gt-demo`, its script and the PizzaBot template |
 
 ```bash
@@ -626,9 +627,46 @@ layer — `PROTOCOL.md`, a Knowledge page, or a repo `CLAUDE.md`.
 
 ---
 
+### `/gt:gt-watch`
+
+Watch any git repo you depend on, and hear about it when it changes in a way you said
+you care about — raised as a **P0** when it ships a security fix.
+
+```
+/gt:gt-watch add <git-url>   — create a watch (any git URL: GitHub, GitLab, self-hosted, file://)
+/gt:gt-watch list            — every watch and its last change
+/gt:gt-watch check           — fetch now instead of waiting for cron
+/gt:gt-watch show <slug>     — Claude reads the new commits and explains them
+/gt:gt-watch ack [<slug>]    — mark changes seen
+/gt:gt-watch remove <slug>   — stop watching
+```
+
+**A watch is a note** — `Projects/golden-thread/watches/<slug>.md`, editable in Obsidian's
+Properties panel. Its frontmatter says what to watch: `url`, `track` (commits, tags,
+releases), `branch`, `watch_paths`, `current_version`, your own `p0_when` patterns, and
+`starred`.
+
+**How it runs.** A cron job (`gt_watch.py install-cron --every 1h`) fetches every watch
+without Claude, classifies each change, and queues it. At session start a hook reads the
+queue — P0s first, spelled out; review items one line each; routine changes as a count. It
+never fetches. Machine state lives in `~/.claude/golden-thread/watch/`, outside the vault.
+
+**When it is a P0** — decided by rules, never by a model reading commit prose: a new
+security advisory for the repo; a new tag or release naming a CVE or GHSA id, or saying
+"security fix/release/update" or "vulnerability"; a commit message carrying a CVE or GHSA
+id; a change to `SECURITY.md` or your `watch_paths` that says the same; or anything
+matching your own `p0_when`. A new release, a major-version jump, a change under
+`watch_paths`, or "BREAKING CHANGE" is a **review** item. Ordinary words like "auth" or
+"security" in a commit message are not enough — a P0 that cries wolf stops being read.
+
+Off until you switch it on: setting `watch` (`off` · `report`). `add` offers to switch it
+on and install the cron entry.
+
+---
+
 ### `/gt:gt-demo`
 
-A ten-act guided tour of Golden Thread on PizzaBot 3000, a fictional pizza-ordering
+An eleven-act guided tour of Golden Thread on PizzaBot 3000, a fictional pizza-ordering
 project. It runs in its **own throwaway vault**, so nothing it does can reach yours.
 
 ```
@@ -641,7 +679,9 @@ project. It runs in its **own throwaway vault**, so nothing it does can reach yo
 ```
 
 **Running it:** `start` builds the vault at `~/.claude/golden-thread/demo-vault` and prints
-`cd <demo vault> && GT_VAULT=<demo vault> claude`. Run that in a new terminal and type
+`cd <demo vault> && GT_VAULT=<demo vault> GT_WATCH=report GT_WATCH_STATE=<demo vault>/.demo/watch claude`
+— the extra variables let the watch act run without touching this machine's watch
+settings or state. Run that in a new terminal and type
 `/gt:gt-demo tour`. For each act Claude says one line to the audience, does the work with
 the real skill, says what just happened, and offers buttons — **Next**, **Repeat this
 act**, **Skip ahead**, **End tour**.
@@ -650,7 +690,7 @@ act**, **Skip ahead**, **End tour**.
 project · "what's next?" from the task rollup · capture a finding and an ADR mid-session ·
 ingest a source and query the wiki · route a stray idea · validate a wrong claim ·
 lint finds a planted broken link · promote a finding to a Knowledge page (which fixes the
-link) · file the inbox, close the session, and show the receipt. The acts are plain text
+link) · watch an upstream library and see its security release open as a P0 · file the inbox, close the session, and show the receipt. The acts are plain text
 in `templates/demo-pizzabot/tour.md` — reorder or reword them there.
 
 **Why its own vault:** a fuller tour writes to shared files (`INBOX.md`, `TASKS.md`,
@@ -692,7 +732,7 @@ project other than the one loaded.
 ## Script reference
 
 ```bash
-SCRIPTS=~/.claude/plugins/cache/golden-thread-plugin/gt/0.9.14/scripts
+SCRIPTS=~/.claude/plugins/cache/golden-thread-plugin/gt/0.10.0/scripts
 
 python3 $SCRIPTS/vault_init.py fresh --vault ~/my-vault --domain "My Team"
 

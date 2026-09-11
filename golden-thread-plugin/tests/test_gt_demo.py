@@ -14,7 +14,7 @@ from pathlib import Path
 
 from _harness import Sandbox, GT, PYTHON
 
-ACTS = 10
+ACTS = 11
 
 
 def tree_digest(root: Path):
@@ -74,8 +74,32 @@ class DemoTest(Sandbox):
 
     def test_start_prints_the_pinned_launch_command(self):
         out = self.demo_cmd("start").stdout
-        self.assertIn(f'GT_VAULT="{self.demo}" claude', out)
+        self.assertIn(f'cd "{self.demo}" && GT_VAULT="{self.demo}" GT_WATCH=report '
+                      f'GT_WATCH_STATE="{self.demo}/.demo/watch" claude', out)
         self.assertIn("/gt:gt-demo tour", out)
+
+    def test_watch_act_reports_the_upstream_cve_as_p0(self):
+        # The gt-watch act (0.10.0), offline: add -> upstream-release -> fetch -> --hook.
+        self.assertOk(self.demo_cmd("start"))
+        bare = self.demo / ".demo" / "upstream" / "widget-lib.git"
+        tags = self.run_cmd(["git", "-C", bare, "tag"]).stdout.split()
+        self.assertEqual(tags, ["v1.0.0"], "start seeds the upstream with v1.0.0 only")
+        env = {"GT_VAULT": str(self.demo), "GT_WATCH": "report",
+               "GT_WATCH_STATE": str(self.demo / ".demo" / "watch")}
+        watch = self.plugin / "scripts" / "gt_watch.py"
+        self.assertOk(self.py(watch, "add", "file://%s" % bare, "--label", "Widget library", env=env))
+        self.assertOk(self.demo_cmd("upstream-release"))
+        self.assertNotEqual(self.demo_cmd("upstream-release").returncode, 0, "a second release refuses")
+        self.assertOk(self.py(watch, "fetch", env=env))
+        p = self.py(watch, "--hook", env=env)
+        self.assertOk(p)
+        msg = json.loads(p.stdout)["systemMessage"]
+        p0 = [l for l in msg.splitlines() if l.strip().startswith("P0")]
+        self.assertTrue(p0, msg)
+        self.assertIn("widget-lib", p0[0])
+        self.assertIn("CVE-2026-12345", p0[0])
+        # machine state stayed in the ignored .demo/ folder
+        self.assertIn(".demo/", (self.demo / ".gitignore").read_text())
 
     def test_start_twice_refuses(self):
         self.assertOk(self.demo_cmd("start"))
@@ -109,7 +133,7 @@ class DemoTest(Sandbox):
             if p.is_file():
                 self.assertIsNone(pat.search(p.read_text(errors="replace")), f"key-shaped literal in {p}")
 
-    def test_tour_has_ten_complete_acts_naming_real_skills(self):
+    def test_tour_has_eleven_complete_acts_naming_real_skills(self):
         tour = (GT / "templates" / "demo-pizzabot" / "tour.md").read_text()
         acts = re.split(r"^## Act \d+ — ", tour, flags=re.M)[1:]
         self.assertEqual(len(acts), ACTS)

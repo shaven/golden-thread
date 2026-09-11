@@ -24,6 +24,7 @@ EXPECTED = {
     "version_check": ("report", ["off", "report"]),
     "orphan_check": ("report", ["off", "report", "reap"]),
     "push_check": ("report", ["off", "report"]),
+    "watch": ("off", ["off", "report"]),
     "closeout_check": ("ask", ["off", "ask"]),
     "report_card": ("minimal", ["off", "minimal", "full"]),
     "install_demo": ("yes", ["yes", "no"]),

@@ -1,5 +1,5 @@
 # Golden Thread Plugin — Documentation
-## Version gt 0.9.14 / gt-wiki 0.1.2
+## Version gt 0.10.0 / gt-wiki 0.1.2
 
 ---
 
@@ -27,10 +27,10 @@ Facts move up the hierarchy as they prove themselves general. They never move ba
 
 ---
 
-## Core Rules (gt 0.9.14)
+## Core Rules (gt 0.10.0)
 
 Golden Thread defines a tiered rule model that separates rules by scope and enforcement strength.
-**Seven Core rules ship as of 0.9.14**, up from one at 0.6.0:
+**Seven Core rules ship as of 0.10.0**, up from one at 0.6.0:
 
 | # | Rule |
 |---|---|
@@ -72,7 +72,7 @@ The canonical rule definitions live in `Projects/golden-thread/core-rules/` insi
 
 ---
 
-## gt Skills (16)
+## gt Skills (17)
 
 ### Setup
 
@@ -114,11 +114,17 @@ The canonical rule definitions live in `Projects/golden-thread/core-rules/` insi
 | `/gt:gt-runbook-lint` | Scan all project `runbook.md` files for content that has drifted into multiple runbooks. Routes duplicated content to the right shared layer via `gt-promote`. |
 | `/gt:gt-settings` | View and change what Golden Thread does on its own: component drift checking at session start, and the session report card at compact. Every automatic behaviour can be switched off. |
 
+### Watching upstream
+
+| Command | What it does |
+|---|---|
+| `/gt:gt-watch` | Watch any git repo. `add <url>` writes a watch note; a cron fetch (`gt_watch.py fetch`) classifies every change by rules — P0 for security advisories, CVE/GHSA ids or security releases; review for new releases, major bumps, changes under `watch_paths`; routine otherwise — and a SessionStart hook reports unacknowledged changes, P0 first. `show` explains a change, `ack` marks it seen. Setting `watch`, default `off`. |
+
 ### Demo
 
 | Command | What it does |
 |---|---|
-| `/gt:gt-demo` | A ten-act guided tour on the fictional PizzaBot 3000 project, run in its own throwaway vault — `start` builds it, `tour` runs the acts one click at a time (Core rules, open, task rollup, capture, wiki, route, validate, lint, promote, inbox and close), `end` shows the receipt, `clean` rebuilds, `remove` switches it off. Skipped at install when `install_demo` is `no`. |
+| `/gt:gt-demo` | An eleven-act guided tour on the fictional PizzaBot 3000 project, run in its own throwaway vault — `start` builds it, `tour` runs the acts one click at a time (Core rules, open, task rollup, capture, wiki, route, validate, lint, promote, watch, inbox and close), `end` shows the receipt, `clean` rebuilds, `remove` switches it off. Skipped at install when `install_demo` is `no`. |
 
 ### Installed, and actually wired (0.9.13)
 
@@ -255,7 +261,7 @@ bash install.sh
 # Restart Claude Code
 ```
 
-Installs both `gt` (v0.9.14) and `gt-wiki` (v0.1.2) as separate plugins under the `golden-thread-plugin` marketplace. Requires Python 3.8+.
+Installs both `gt` (v0.10.0) and `gt-wiki` (v0.1.2) as separate plugins under the `golden-thread-plugin` marketplace. Requires Python 3.8+.
 
 `install.sh` installs the **newest version directory** present, not a hardcoded constant — pass an argument only to roll back deliberately (`./install.sh 0.9.3`). Never pipe it to `head`: `set -o pipefail` turns the closed pipe into an abort partway through, leaving the cache updated and registration undone.
 

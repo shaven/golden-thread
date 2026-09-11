@@ -113,7 +113,9 @@ import sys, re, pathlib
 out = []
 for root in map(pathlib.Path, sys.argv[1:]):
     for sk in root.glob("skills/*/SKILL.md"):
-        for ref in sorted(set(re.findall(r"\b((?:scripts|templates|hooks)/[\w./-]+\.(?:py|sh|md|json))\b", sk.read_text(encoding="utf-8")))):
+        # Release-relative paths only; an installed path (~/.claude/golden-thread/hooks/x.py)
+        # is checked by filename below, since install.sh copies scripts there.
+        for ref in sorted(set(re.findall(r"(?<![\w/.-])((?:scripts|templates|hooks)/[\w./-]+\.(?:py|sh|md|json))\b", sk.read_text(encoding="utf-8")))):
             if not (root / ref).exists():
                 out.append(f"{sk.parent.name} names {ref}, which is not in {root}")
     # Any script a skill names, by filename, wherever it says it lives: on 2026-09-11 a

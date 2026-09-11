@@ -114,7 +114,7 @@ pre, table { break-inside: avoid; font-size: 9px; }
 table { width:100%; border-collapse: collapse; }
 th, td { border:1px solid #ddd; padding:3px 5px; text-align:left; vertical-align:top; }
 </style></head><body><h1 id="golden-thread-user-manual">User Manual</h1>
-<p>Complete reference for all sixteen skills. Written against <strong>gt v0.9.14</strong>.</p>
+<p>Complete reference for all seventeen skills. Written against <strong>gt v0.10.0</strong>.</p>
 <hr />
 <h2 id="the-model">The model</h2>
 <p>Claude forgets everything between sessions. The vault doesn't. Golden Thread's
@@ -747,6 +747,12 @@ is registered here and can be switched off.</p>
 <td>At <code>/compact</code>, summarises session hygiene</td>
 </tr>
 <tr>
+<td><code>watch</code></td>
+<td><code>off</code> · <code>report</code></td>
+<td><code>off</code></td>
+<td><code>/gt:gt-watch</code>: the hourly fetch and the session-start report of repo changes</td>
+</tr>
+<tr>
 <td><code>install_demo</code></td>
 <td><code>yes</code> · <code>no</code></td>
 <td><code>yes</code></td>
@@ -766,8 +772,36 @@ enforcement on every session start.</p>
 <p>Finds procedures duplicated across runbooks and routes them to the right shared
 layer — <code>PROTOCOL.md</code>, a Knowledge page, or a repo <code>CLAUDE.md</code>.</p>
 <hr />
+<h3 id="gtgt-watch"><code>/gt:gt-watch</code></h3>
+<p>Watch any git repo you depend on, and hear about it when it changes in a way you said
+you care about — raised as a <strong>P0</strong> when it ships a security fix.</p>
+<pre><code>/gt:gt-watch add &lt;git-url&gt;   — create a watch (any git URL: GitHub, GitLab, self-hosted, file://)
+/gt:gt-watch list            — every watch and its last change
+/gt:gt-watch check           — fetch now instead of waiting for cron
+/gt:gt-watch show &lt;slug&gt;     — Claude reads the new commits and explains them
+/gt:gt-watch ack [&lt;slug&gt;]    — mark changes seen
+/gt:gt-watch remove &lt;slug&gt;   — stop watching
+</code></pre>
+<p><strong>A watch is a note</strong> — <code>Projects/golden-thread/watches/&lt;slug&gt;.md</code>, editable in Obsidian's
+Properties panel. Its frontmatter says what to watch: <code>url</code>, <code>track</code> (commits, tags,
+releases), <code>branch</code>, <code>watch_paths</code>, <code>current_version</code>, your own <code>p0_when</code> patterns, and
+<code>starred</code>.</p>
+<p><strong>How it runs.</strong> A cron job (<code>gt_watch.py install-cron --every 1h</code>) fetches every watch
+without Claude, classifies each change, and queues it. At session start a hook reads the
+queue — P0s first, spelled out; review items one line each; routine changes as a count. It
+never fetches. Machine state lives in <code>~/.claude/golden-thread/watch/</code>, outside the vault.</p>
+<p><strong>When it is a P0</strong> — decided by rules, never by a model reading commit prose: a new
+security advisory for the repo; a new tag or release naming a CVE or GHSA id, or saying
+"security fix/release/update" or "vulnerability"; a commit message carrying a CVE or GHSA
+id; a change to <code>SECURITY.md</code> or your <code>watch_paths</code> that says the same; or anything
+matching your own <code>p0_when</code>. A new release, a major-version jump, a change under
+<code>watch_paths</code>, or "BREAKING CHANGE" is a <strong>review</strong> item. Ordinary words like "auth" or
+"security" in a commit message are not enough — a P0 that cries wolf stops being read.</p>
+<p>Off until you switch it on: setting <code>watch</code> (<code>off</code> · <code>report</code>). <code>add</code> offers to switch it
+on and install the cron entry.</p>
+<hr />
 <h3 id="gtgt-demo"><code>/gt:gt-demo</code></h3>
-<p>A ten-act guided tour of Golden Thread on PizzaBot 3000, a fictional pizza-ordering
+<p>An eleven-act guided tour of Golden Thread on PizzaBot 3000, a fictional pizza-ordering
 project. It runs in its <strong>own throwaway vault</strong>, so nothing it does can reach yours.</p>
 <pre><code>/gt:gt-demo start    — build the demo vault and print the command that opens it
 /gt:gt-demo tour     — (in the demo session) run the tour; you only click Next
@@ -777,7 +811,9 @@ project. It runs in its <strong>own throwaway vault</strong>, so nothing it does
 /gt:gt-demo status   — is there a demo vault, and how old is it
 </code></pre>
 <p><strong>Running it:</strong> <code>start</code> builds the vault at <code>~/.claude/golden-thread/demo-vault</code> and prints
-<code>cd &lt;demo vault&gt; &amp;&amp; GT_VAULT=&lt;demo vault&gt; claude</code>. Run that in a new terminal and type
+<code>cd &lt;demo vault&gt; &amp;&amp; GT_VAULT=&lt;demo vault&gt; GT_WATCH=report GT_WATCH_STATE=&lt;demo vault&gt;/.demo/watch claude</code>
+— the extra variables let the watch act run without touching this machine's watch
+settings or state. Run that in a new terminal and type
 <code>/gt:gt-demo tour</code>. For each act Claude says one line to the audience, does the work with
 the real skill, says what just happened, and offers buttons — <strong>Next</strong>, <strong>Repeat this
 act</strong>, <strong>Skip ahead</strong>, <strong>End tour</strong>.</p>
@@ -785,7 +821,7 @@ act</strong>, <strong>Skip ahead</strong>, <strong>End tour</strong>.</p>
 project · "what's next?" from the task rollup · capture a finding and an ADR mid-session ·
 ingest a source and query the wiki · route a stray idea · validate a wrong claim ·
 lint finds a planted broken link · promote a finding to a Knowledge page (which fixes the
-link) · file the inbox, close the session, and show the receipt. The acts are plain text
+link) · watch an upstream library and see its security release open as a P0 · file the inbox, close the session, and show the receipt. The acts are plain text
 in <code>templates/demo-pizzabot/tour.md</code> — reorder or reword them there.</p>
 <p><strong>Why its own vault:</strong> a fuller tour writes to shared files (<code>INBOX.md</code>, <code>TASKS.md</code>,
 <code>log.md</code>, <code>Knowledge/</code>) that other sessions also write. Undoing that in a real vault
@@ -855,7 +891,7 @@ answer is not obvious — including when the honest answer is that the fact belo
 project other than the one loaded.</p>
 <hr />
 <h2 id="script-reference">Script reference</h2>
-<pre><code class="language-bash">SCRIPTS=~/.claude/plugins/cache/golden-thread-plugin/gt/0.9.14/scripts
+<pre><code class="language-bash">SCRIPTS=~/.claude/plugins/cache/golden-thread-plugin/gt/0.10.0/scripts
 
 python3 $SCRIPTS/vault_init.py fresh --vault ~/my-vault --domain &quot;My Team&quot;
 

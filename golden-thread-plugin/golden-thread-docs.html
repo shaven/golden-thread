@@ -113,7 +113,7 @@
 <h1 class="title">Golden Thread Plugin</h1>
 </header>
 <h1 id="golden-thread-plugin-documentation">Golden Thread Plugin — Documentation</h1>
-<h2 id="version-gt-0914-gt-wiki-012">Version gt 0.9.14 / gt-wiki 0.1.2</h2>
+<h2 id="version-gt-0100-gt-wiki-012">Version gt 0.10.0 / gt-wiki 0.1.2</h2>
 <hr />
 <p>Golden Thread turns an Obsidian vault into the single source of truth for all AI memory across every project and every session. The tiered rule model introduced in v0.6.0 now carries <strong>seven hook-backed Core rules</strong> enforced at three points in the turn, 0.9.12 added <code>gt-route</code> for the middle of a session, and 0.9.13 makes the session-start component check verify that the hooks are <strong>wired</strong>, not merely installed. gt-wiki 0.1.1 provides an LLM-powered knowledge base with immutable sources and interlinked pages.</p>
 <hr />
@@ -131,9 +131,9 @@ global-memory/  (loaded in every session, all projects)
 </code></pre>
 <p>Facts move up the hierarchy as they prove themselves general. They never move back down and are never silently deleted.</p>
 <hr />
-<h2 id="core-rules-gt-0914">Core Rules (gt 0.9.14)</h2>
+<h2 id="core-rules-gt-0100">Core Rules (gt 0.10.0)</h2>
 <p>Golden Thread defines a tiered rule model that separates rules by scope and enforcement strength.
-<strong>Seven Core rules ship as of 0.9.14</strong>, up from one at 0.6.0:</p>
+<strong>Seven Core rules ship as of 0.10.0</strong>, up from one at 0.6.0:</p>
 <table>
 <thead>
 <tr>
@@ -223,7 +223,7 @@ often it would train the guard to be ignored.</p>
 <p>The canonical rule definitions live in <code>Projects/golden-thread/core-rules/</code> inside the vault. Editing a rule file there changes what the hook injects — the rule text is never duplicated into the script.</p>
 <p><strong>The canary:</strong> <code>core_timestamp_every_message.md</code> is designated Core/Validated not because a missing timestamp causes real harm, but because it is trivially observable at the top of every reply. When the timestamp disappears, enforcement has broken.</p>
 <hr />
-<h2 id="gt-skills-16">gt Skills (16)</h2>
+<h2 id="gt-skills-17">gt Skills (17)</h2>
 <h3 id="setup">Setup</h3>
 <table>
 <thead>
@@ -339,6 +339,21 @@ often it would train the guard to be ignored.</p>
 </tr>
 </tbody>
 </table>
+<h3 id="watching-upstream">Watching upstream</h3>
+<table>
+<thead>
+<tr>
+<th>Command</th>
+<th>What it does</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>/gt:gt-watch</code></td>
+<td>Watch any git repo. <code>add &lt;url&gt;</code> writes a watch note; a cron fetch (<code>gt_watch.py fetch</code>) classifies every change by rules — P0 for security advisories, CVE/GHSA ids or security releases; review for new releases, major bumps, changes under <code>watch_paths</code>; routine otherwise — and a SessionStart hook reports unacknowledged changes, P0 first. <code>show</code> explains a change, <code>ack</code> marks it seen. Setting <code>watch</code>, default <code>off</code>.</td>
+</tr>
+</tbody>
+</table>
 <h3 id="demo">Demo</h3>
 <table>
 <thead>
@@ -350,7 +365,7 @@ often it would train the guard to be ignored.</p>
 <tbody>
 <tr>
 <td><code>/gt:gt-demo</code></td>
-<td>A ten-act guided tour on the fictional PizzaBot 3000 project, run in its own throwaway vault — <code>start</code> builds it, <code>tour</code> runs the acts one click at a time (Core rules, open, task rollup, capture, wiki, route, validate, lint, promote, inbox and close), <code>end</code> shows the receipt, <code>clean</code> rebuilds, <code>remove</code> switches it off. Skipped at install when <code>install_demo</code> is <code>no</code>.</td>
+<td>An eleven-act guided tour on the fictional PizzaBot 3000 project, run in its own throwaway vault — <code>start</code> builds it, <code>tour</code> runs the acts one click at a time (Core rules, open, task rollup, capture, wiki, route, validate, lint, promote, watch, inbox and close), <code>end</code> shows the receipt, <code>clean</code> rebuilds, <code>remove</code> switches it off. Skipped at install when <code>install_demo</code> is <code>no</code>.</td>
 </tr>
 </tbody>
 </table>
@@ -592,7 +607,7 @@ cd golden-thread-plugin
 bash install.sh
 # Restart Claude Code
 </code></pre>
-<p>Installs both <code>gt</code> (v0.9.14) and <code>gt-wiki</code> (v0.1.2) as separate plugins under the <code>golden-thread-plugin</code> marketplace. Requires Python 3.8+.</p>
+<p>Installs both <code>gt</code> (v0.10.0) and <code>gt-wiki</code> (v0.1.2) as separate plugins under the <code>golden-thread-plugin</code> marketplace. Requires Python 3.8+.</p>
 <p><code>install.sh</code> installs the <strong>newest version directory</strong> present, not a hardcoded constant — pass an argument only to roll back deliberately (<code>./install.sh 0.9.3</code>). Never pipe it to <code>head</code>: <code>set -o pipefail</code> turns the closed pipe into an abort partway through, leaving the cache updated and registration undone.</p>
 <hr />
 <h2 id="typical-session-pattern">Typical Session Pattern</h2>
