@@ -723,6 +723,24 @@ is registered here and can be switched off.</p>
 <td>At session start, compares installed hooks/scripts against plugin source and reports drift</td>
 </tr>
 <tr>
+<td><code>version_check</code></td>
+<td><code>off</code> · <code>report</code></td>
+<td><code>report</code></td>
+<td>At session start, reports when a newer plugin version is checked in than the one installed</td>
+</tr>
+<tr>
+<td><code>orphan_check</code></td>
+<td><code>off</code> · <code>report</code> · <code>reap</code></td>
+<td><code>report</code></td>
+<td>At session start, looks for abandoned background Claude workers; <code>reap</code> stops them</td>
+</tr>
+<tr>
+<td><code>push_check</code></td>
+<td><code>off</code> · <code>report</code></td>
+<td><code>report</code></td>
+<td>At session start, reports vault commits not yet pushed</td>
+</tr>
+<tr>
 <td><code>report_card</code></td>
 <td><code>off</code> · <code>minimal</code> · <code>full</code></td>
 <td><code>minimal</code></td>

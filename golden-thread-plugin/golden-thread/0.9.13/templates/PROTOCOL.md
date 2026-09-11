@@ -359,7 +359,7 @@ produces, since resuming reuses the session id.
 
 ```
 session <id> is ALREADY OPEN in another live process
-  pid  : 4171 on shmacbook (running)
+  pid  : 4171 on my-laptop (running)
   --resume   take over that registration
   --new      register a second entry for this id, on purpose
 ```

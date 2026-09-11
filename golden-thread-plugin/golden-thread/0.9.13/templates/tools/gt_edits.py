@@ -48,7 +48,7 @@ _TRAILER = "Session-Edit"
 
 
 def host():
-    """Short machine name, e.g. 'SHMacBook-Pro-M4-Max'.
+    """Short machine name, e.g. 'Janes-MacBook-Pro-M4-Max'.
 
     The hostname already carries the hardware designation on these machines
     (M4-Max vs M1), which is what makes two of the user's laptops tellable apart,

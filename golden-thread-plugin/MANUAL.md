@@ -602,6 +602,9 @@ is registered here and can be switched off.
 | Setting | Values | Default | What it does |
 |---|---|---|---|
 | `component_updates` | `off` · `report` · `confirm` · `auto` | `report` | At session start, compares installed hooks/scripts against plugin source and reports drift |
+| `version_check` | `off` · `report` | `report` | At session start, reports when a newer plugin version is checked in than the one installed |
+| `orphan_check` | `off` · `report` · `reap` | `report` | At session start, looks for abandoned background Claude workers; `reap` stops them |
+| `push_check` | `off` · `report` | `report` | At session start, reports vault commits not yet pushed |
 | `report_card` | `off` · `minimal` · `full` | `minimal` | At `/compact`, summarises session hygiene |
 | `install_demo` | `yes` · `no` | `yes` | Whether `install.sh` installs `/gt:gt-demo`, its script and the PizzaBot template |
 

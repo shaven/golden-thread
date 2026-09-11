@@ -90,7 +90,7 @@
   },
   "templates/PROTOCOL.md": {
    "bytes": 21872,
-   "sha256": "2ffc70c79da74743c6045883eb6629c8d13e24a1f701b866c334cb5ba1fe1888"
+   "sha256": "3cf4be8fe382780f35af1f2e589b14ed8b47b2df87dcf18a9db8c2b6f22f8f09"
   },
   "templates/core-rules/README.md": {
    "bytes": 3454,
@@ -197,8 +197,8 @@
    "sha256": "a2acca2d1c789f6d0aaaefee904a6927f6467643ae2d19af32c1ad966291131f"
   },
   "templates/tools/gt_edits.py": {
-   "bytes": 11374,
-   "sha256": "8e4f8860ce77ab7a178840f6537d86e3416872da8aa5c6c25944d0f46e5779b0"
+   "bytes": 11378,
+   "sha256": "6ace69ed95c409a50d0dcb7121976787b48ae557bee6d8985b8630d08807f8fb"
   },
   "templates/tools/gt_session.py": {
    "bytes": 14314,
@@ -217,7 +217,7 @@
    "sha256": "383c0e4b30c8c9c9447c4798f37debf1f4a0402b1e3ee068e7629e9d1ab21859"
   }
  },
- "generated": "2026-09-11T08:02:16",
+ "generated": "2026-09-11T11:52:36",
  "hooks": [
   {
    "args": [
