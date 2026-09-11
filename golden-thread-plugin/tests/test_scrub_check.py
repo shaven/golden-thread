@@ -72,3 +72,43 @@ class ScrubCheckTest(Sandbox):
 
 if __name__ == "__main__":
     unittest.main()
+
+class ScrubRemotePdf(Sandbox):
+    """PDF text needs a real reader; this machine need not be the one that has it.
+
+    No network in tests: these pin the DECISION logic (does it look for a host, does
+    it say so when it cannot) rather than a real remote scan.
+    """
+
+    def setUp(self):
+        super().setUp()
+        self.terms = self.tmp / "terms.txt"
+        self.terms.write_text("\\bzorblax\\b\n", encoding="utf-8")
+
+    def scrub(self, *args, **kw):
+        env = {"GT_SCRUB_TERMS": str(self.terms)}
+        env.update(kw.pop("env", {}))
+        return self.py(REPO / "dev" / "scrub_check.py", *args, env=env, **kw)
+
+    def _pdf(self):
+        p = self.tmp / "x.pdf"
+        p.write_bytes(b"%PDF-1.4\n% not a real pdf\n")
+        return p
+
+    def test_unscanned_names_the_remedy(self):
+        """An UNSCANNED file is not a clean file -- say how to fix it."""
+        out = self.scrub(self._pdf()).stdout
+        if "pypdf not importable" not in out:
+            self.skipTest("pypdf is importable here; the fallback path is not exercised")
+        self.assertIn("GT_PDF_HOST", out)
+        self.assertIn("pdf_host", out)
+
+    def test_unreachable_host_reports_rather_than_passing(self):
+        """A host that cannot be reached must not read as a clean scan."""
+        r = self.scrub(self._pdf(), env={"GT_PDF_HOST": "gt-invalid.invalid"})
+        out = r.stdout + r.stderr
+        if "pypdf not importable" in out:
+            self.skipTest("pypdf is importable here")
+        self.assertNotEqual(r.returncode, 0,
+                            "an unreachable PDF host must not exit clean")
+        self.assertIn("UNSCANNED", out, f"no UNSCANNED line; got: {out!r}")

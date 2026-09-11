@@ -18,7 +18,10 @@ One regular expression per line, matched case-insensitively; a line starting wit
 It scans text files, the members of .zip archives (deflated, so grep cannot see in),
 and the extracted text of PDFs (font-subset encoded, so grep returns a false clean).
 PDF text needs `pypdf`; when it is not importable, PDFs are reported UNSCANNED and the
-exit is 2 — a check that could not look is not a clean result. Pass --no-pdf to skip
+exit is 2 — a check that could not look is not a clean result. When `$GT_PDF_HOST` (or
+`pdf_host` in ~/.claude/vault-config.json) names a host that HAS pypdf, the text is
+extracted there instead, so the machine that builds releases never needs it installed.
+Pass --no-pdf to skip
 them knowingly.
 
 A missing or empty terms file is also exit 2, never "clean": with nothing to look for,
@@ -27,6 +30,7 @@ every tree passes, which is the failure this script exists to prevent.
 import argparse
 import json
 import os
+import shlex
 import re
 import sys
 import zipfile
@@ -69,6 +73,72 @@ def _hits(text, pats):
     return out
 
 
+def pdf_host():
+    """Host to extract PDF text on when pypdf is not importable here.
+
+    `$GT_PDF_HOST`, else `pdf_host` in ~/.claude/vault-config.json. Opt-in by
+    design: this copies the file to another machine, which must be a deliberate
+    choice rather than something a scrubber does on its own initiative.
+    """
+    h = os.environ.get("GT_PDF_HOST")
+    if h:
+        return h.strip()
+    try:
+        import json
+        cfg = os.path.expanduser("~/.claude/vault-config.json")
+        with open(cfg) as fh:
+            return (json.load(fh).get("pdf_host") or "").strip() or None
+    except Exception:
+        return None
+
+
+def _remote_pdf_text(path, host):
+    """Extract a PDF's text on `host`, which has pypdf. -> (text, error).
+
+    Why this exists: PDF text is font-subset encoded, so grep returns a FALSE CLEAN
+    on it -- a scan of these files once passed six while two carried a leaked string.
+    The check therefore needs a real PDF reader, and the one machine here that has
+    one is not the machine that builds releases. Without this, every release scrub
+    reported five files UNSCANNED, and an unscanned file is not a clean file.
+
+    Call pypdf by absolute interpreter and let ssh fail loudly rather than probing
+    with `command -v` first: on this host a non-interactive `command -v` has reported
+    tools missing that were present, so the probe is less reliable than the attempt.
+    """
+    import shutil
+    import subprocess
+    import uuid
+    if not shutil.which("scp") or not shutil.which("ssh"):
+        return None, "ssh/scp not available for remote PDF scan"
+    remote = "/tmp/gt-scrub-%s.pdf" % uuid.uuid4().hex[:12]
+    try:
+        r = subprocess.run(["scp", "-q", "-o", "ConnectTimeout=10", str(path),
+                            "%s:%s" % (host, remote)],
+                           capture_output=True, text=True, timeout=120)
+        if r.returncode != 0:
+            return None, "scp to %s failed: %s" % (host, (r.stderr or "").strip()[:120])
+        prog = ("import sys\n"
+                "from pypdf import PdfReader\n"
+                "print('\\n'.join((p.extract_text() or '') for p in "
+                "PdfReader(sys.argv[1]).pages))")
+        r = subprocess.run(["ssh", "-o", "ConnectTimeout=10", host,
+                            "python3 -c %s %s" % (shlex.quote(prog), shlex.quote(remote))],
+                           capture_output=True, text=True, timeout=300)
+        if r.returncode != 0:
+            return None, "pypdf on %s failed: %s" % (host, (r.stderr or "").strip()[:120])
+        return r.stdout, None
+    except subprocess.TimeoutExpired:
+        return None, "remote PDF scan timed out"
+    except Exception as exc:
+        return None, "remote PDF scan error: %s" % exc
+    finally:
+        try:
+            subprocess.run(["ssh", "-o", "ConnectTimeout=10", host, "rm", "-f", remote],
+                           capture_output=True, timeout=60)
+        except Exception:
+            pass
+
+
 def scan_file(path, pats, pdf=True):
     """-> (list of (location, line, pattern), unscanned_reason or None)."""
     found = []
@@ -88,7 +158,17 @@ def scan_file(path, pats, pdf=True):
             try:
                 from pypdf import PdfReader
             except ImportError:
-                return [], "pypdf not importable"
+                # Not importable here. Fall back to a host that has it, when one is
+                # configured -- reporting UNSCANNED is correct but useless on a
+                # machine that will never have pypdf installed.
+                host = pdf_host()
+                if not host:
+                    return [], ("pypdf not importable (set GT_PDF_HOST, or pdf_host "
+                                "in ~/.claude/vault-config.json, to scan remotely)")
+                text, err = _remote_pdf_text(path, host)
+                if err:
+                    return [], err
+                return [(str(path), ln, p) for ln, p in _hits(text, pats)], None
             text = "\n".join((pg.extract_text() or "") for pg in PdfReader(str(path)).pages)
             return [(str(path), ln, p) for ln, p in _hits(text, pats)], None
         raw = path.read_bytes()
