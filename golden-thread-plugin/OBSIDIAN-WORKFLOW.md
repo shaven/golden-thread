@@ -154,7 +154,7 @@ Reads `index.md`, follows wikilinks, falls back to grep. Use this for platform b
 /gt:gt-wiki-ingest <url or file path>
 ```
 
-Stores the source immutably, discusses what pages it should generate, then waits for your approval before writing anything.
+Stores the source immutably, discusses what pages it should generate, then waits for your approval before writing anything. The `index.md` and `log.md` entries are written by a script (`wiki_log.py`), so they always have the same shape.
 
 **Making a decision mid-session**
 
@@ -217,7 +217,7 @@ Use when a fact has proven true across more than one project. Promotes it from p
 /gt:gt-wiki-refresh
 ```
 
-Checks sources with `remote:` or `url:` fields for upstream changes. Supersedes changed ones with new immutable files — never edits the old source.
+Checks sources with `local:` or `url:` fields for upstream changes. For sources from a local git repo, `wiki_refresh.py` asks git directly — `git fetch`, then `git diff` from the commit recorded in the source's `upstream_sha:` — so detection needs no LLM judgement. Web-only sources are fetched and compared by Claude. Changed sources are superseded with new immutable files — the old source is never edited.
 
 **Lint the vault**
 

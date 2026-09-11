@@ -247,7 +247,10 @@ they just stop outranking live work.</p>
 <p>Query it:</p>
 <pre><code>/gt:gt-wiki
 </code></pre>
-<p>The wiki uses immutable sources — every ingested document is stored verbatim and never modified. Knowledge pages are synthesized summaries that link to the originals.</p>
+<p>Check its sources for upstream changes:</p>
+<pre><code>/gt:gt-wiki-refresh
+</code></pre>
+<p>The wiki uses immutable sources — every ingested document is stored verbatim and never modified. Knowledge pages are synthesized summaries that link to the originals. When a source changes upstream, refresh adds a new source that supersedes the old one; for sources in a local git repo the change is detected by <code>git diff</code>, not by eye.</p>
 <hr />
 <h2 id="key-concepts-in-one-paragraph">Key concepts in one paragraph</h2>
 <p>The vault is organized by <strong>how widely a fact applies</strong>. Session findings go in <code>memory/</code>. Settled discoveries go in <code>research.md</code>. Choices that shaped the architecture go in <code>decisions.md</code>. Facts true across multiple projects go in <code>Knowledge/</code>. Facts needed in every session everywhere go in <code>global-memory/</code>. Above all of these sits the <strong>Core-rule tier</strong>: rules enforced via hooks wired into <code>~/.claude/settings.json</code>, not merely stored as files. <code>gt-init</code> installs these hooks automatically. Promote a fact when a second project proves it general — not before. When unsure, file it narrow; promotion is cheap, demotion isn't. One more principle: <strong>claims should be verified by re-deriving them, not by reviewing the reasoning that produced them</strong> — a reviewer who sees your reasoning inherits your blind spot. Use <code>/gt:gt-validate</code> before recording any finding that matters.</p>

@@ -10,6 +10,46 @@
 
 ---
 
+## Update, 2026-09-10 evening — the second working tree merged in
+
+The second working tree (`OneDrive/Projects2/golden-thread`) had moved past this one. Its
+changes were copied in **by file, never by git** — the two repos still share no history.
+
+**Came across:**
+
+- `gt-wiki` 0.1.1 gains `scripts/wiki_log.py` (deterministic `log.md` / `index.md` writes)
+  and `scripts/wiki_refresh.py` (git-diff change detection for local sources). The
+  `gt-wiki-ingest` and `gt-wiki-refresh` skills now call them. Both smoke-tested against a
+  scratch vault — `self-verified`.
+- `gt_ingest.py` keyword lists and the `CONVENTIONS.md` example filename were
+  **scrubbed of employer-specific platform names** — in **every** release directory, not only
+  0.9.13, since the older ones ship too. Each touched release's `MANIFEST.json` had those two
+  hashes updated; 0.9.13's was regenerated and its `files` map matches the other tree exactly.
+- README acknowledgments now credit Jonathan Tucci's llm-wiki and project-flow plugins as the
+  origin of the wiki pattern and of the two scripts. Wording is neutral: this repo is public,
+  and **nothing employer-identifying is committed here**.
+
+**Fixed here, and should be carried back to the other tree:**
+
+- `gt-wiki-refresh` selected candidates by `remote:`/`url:`, but `wiki_refresh.py` keys on
+  `local:` — a source with only `remote:` is reported `no-locator`. The skill now says
+  `local:`/`url:`, sets `upstream_sha:` on the superseding source, and logs through
+  `wiki_log.py`.
+- `gt-wiki-ingest` and `templates/wiki-CLAUDE.md` now record `upstream_sha:` for sources
+  inside a git repo, so the first refresh has an exact baseline.
+- ONBOARDING, OBSIDIAN-WORKFLOW, golden-thread-docs and the developer guide now describe the
+  two scripts; `.html` rebuilt with `build-docs.py`, four PDFs re-rendered (MANUAL unchanged)
+  and audited with pypdf — control string present in all seven tracked PDFs, zero leak hits.
+- `docs/workflow.html`: an example naming a specific service mesh became a generic proxy.
+
+**Not done:** employer-specific strings remain in **git history** of this public repo (every
+release's `gt_ingest.py` before this commit). Removing them means a history rewrite and a force
+push — the owner's call, not a sync step.
+
+`selftest.sh` passed after the merge.
+
+---
+
 ## What you are syncing, in one line
 
 Until 0.9.13, `GOLDEN THREAD components: clean` meant *the files are present*. It did not
@@ -147,7 +187,7 @@ present in all five, zero leaks.
 
 | | Committed | Pushed |
 |---|---|---|
-| Plugin (`OneDrive/Projects/Golden Thread`) | yes — `52030e5`, `f807662`, `189c9d8` | **no** |
+| Plugin (`OneDrive/Projects/Golden Thread`) | yes — `52030e5`, `f807662`, `189c9d8` | yes, through `e2c755a` (the evening merge above is committed on top, not pushed) |
 | Vault (`Dropbox/Projects/Obsidian`) | yes — `2c92878`, `f16a1b3` | **no** |
 
 OneDrive is the channel the other machine reads, so a push is not required for this sync.

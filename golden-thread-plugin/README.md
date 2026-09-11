@@ -327,7 +327,23 @@ is in [OBSIDIAN-WORKFLOW.md](OBSIDIAN-WORKFLOW.md#plugins). One caution: never r
 
 ## Acknowledgments
 
-Special thanks to **Jonathan Tucci**, a developer who provided invaluable feedback that significantly shaped this system. Jonathan identified key drawbacks in the original design — particularly around lazy loading and the promotion discipline — and his insights directly informed the fixes that made Golden Thread practical to use at scale.
+Golden Thread builds on **Jonathan Tucci**'s llm-wiki and project-flow Claude Code
+plugins. The core wiki pattern — immutable `Sources/`, synthesized `Knowledge/`,
+wikilink-hop navigation — originates with Jonathan's design. Golden Thread extends it
+with a hook architecture, Core-rule enforcement, a session report card, a separate
+`gt-wiki` plugin, and a deeper project-memory hierarchy. Jonathan also identified key
+drawbacks in Golden Thread's own original design — particularly around lazy loading and
+the promotion discipline — and his insights directly informed the fixes that made it
+practical to use at scale.
+
+Two scripts in `golden-thread-wiki` come directly from Jonathan's work:
+
+- **`scripts/wiki_log.py`** — deterministic writes to `log.md` and `index.md`, with a
+  closed vocabulary of operations (ingest, query, lint, refresh, graduate, retire,
+  relocate).
+- **`scripts/wiki_refresh.py`** — git-native change detection for local sources:
+  `git fetch` + `git diff base..head`, with `upstream_sha:` frontmatter for a precise
+  diff baseline; web-only sources are flagged for the LLM to compare.
 
 ## License
 

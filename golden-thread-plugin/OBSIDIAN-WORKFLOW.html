@@ -353,7 +353,7 @@ folder first: two sync engines on one folder is a conflict source, and neither k
 <p><strong>Adding a source to the wiki</strong></p>
 <pre><code>/gt:gt-wiki-ingest &lt;url or file path&gt;
 </code></pre>
-<p>Stores the source immutably, discusses what pages it should generate, then waits for your approval before writing anything.</p>
+<p>Stores the source immutably, discusses what pages it should generate, then waits for your approval before writing anything. The <code>index.md</code> and <code>log.md</code> entries are written by a script (<code>wiki_log.py</code>), so they always have the same shape.</p>
 <p><strong>Making a decision mid-session</strong></p>
 <p>Don't wait until <code>gt-work</code> for architectural decisions. Capture them immediately:</p>
 <blockquote>
@@ -393,7 +393,7 @@ folder first: two sync engines on one folder is a conflict source, and neither k
 <p><strong>Check sources for changes</strong></p>
 <pre><code>/gt:gt-wiki-refresh
 </code></pre>
-<p>Checks sources with <code>remote:</code> or <code>url:</code> fields for upstream changes. Supersedes changed ones with new immutable files — never edits the old source.</p>
+<p>Checks sources with <code>local:</code> or <code>url:</code> fields for upstream changes. For sources from a local git repo, <code>wiki_refresh.py</code> asks git directly — <code>git fetch</code>, then <code>git diff</code> from the commit recorded in the source's <code>upstream_sha:</code> — so detection needs no LLM judgement. Web-only sources are fetched and compared by Claude. Changed sources are superseded with new immutable files — the old source is never edited.</p>
 <p><strong>Lint the vault</strong></p>
 <pre><code>/gt:gt-lint
 </code></pre>

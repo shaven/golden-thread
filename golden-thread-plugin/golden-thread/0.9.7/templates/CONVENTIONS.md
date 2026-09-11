@@ -128,7 +128,7 @@ New memory files start from `templates/memory-file.md`, which carries `level` an
 
 - Project slugs: kebab-case (`my-project`, not `MyProject` or `my_project`)
 - Memory files: kebab-case (`feedback.md`, `project-state.md`)
-- Knowledge pages: descriptive title case (`Hyperspace LLM Connectivity.md`)
+- Knowledge pages: descriptive title case (`LLM API Connectivity.md`)
 
 ## What Goes Where
 

@@ -25,8 +25,8 @@
    "sha256": "e3175e88b7c57ed8b0f617c4dce9798744dc464df48ce95533598280826123c3"
   },
   "scripts/gt_ingest.py": {
-   "bytes": 9101,
-   "sha256": "a728c8b60714bfe670cdb9d3056c94968c4b8aa7790d751b9aba6ef753267a45"
+   "bytes": 9145,
+   "sha256": "910c35bef98138b6e92e2a45f23f999d72292e1d2e0995c170d365b29ac541cd"
   },
   "scripts/gt_lint.py": {
    "bytes": 32303,
@@ -61,8 +61,8 @@
    "sha256": "7c1db250629df1681d0145447aabb8acc789c5e5ca6737778424900cada1fafb"
   },
   "templates/CONVENTIONS.md": {
-   "bytes": 6372,
-   "sha256": "f07fcb9d4b8e9aabf67a88489e8937fe5d6d957be498d0f10e8df52db8bfc615"
+   "bytes": 6365,
+   "sha256": "b07de66c649d80f4d22f5e93962b491d3a02c22feb597fd01988bfdb97b1b234"
   },
   "templates/INFRASTRUCTURE.md": {
    "bytes": 1484,

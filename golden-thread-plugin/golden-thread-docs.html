@@ -384,7 +384,7 @@ often it would train the guard to be ignored.</p>
 </tr>
 <tr>
 <td><code>/gt:gt-wiki-ingest</code></td>
-<td>Add a source: fetch or paste, store immutably in <code>Sources/</code>, discuss with user, write Knowledge pages per <code>_template.md</code>, cross-link bidirectionally, update index and log.</td>
+<td>Add a source: fetch or paste, store immutably in <code>Sources/</code>, discuss with user, write Knowledge pages per <code>_template.md</code>, cross-link bidirectionally, then update <code>index.md</code> and <code>log.md</code> through <code>wiki_log.py</code> so every entry has the same shape. Records <code>upstream_sha:</code> for sources inside a git repo.</td>
 </tr>
 <tr>
 <td><code>/gt:gt-wiki-lint</code></td>
@@ -392,7 +392,7 @@ often it would train the guard to be ignored.</p>
 </tr>
 <tr>
 <td><code>/gt:gt-wiki-refresh</code></td>
-<td>Check selected sources for upstream changes. Supersedes changed ones with new immutable source files. Updates citing Knowledge pages.</td>
+<td>Check selected sources for upstream changes. <code>wiki_refresh.py</code> detects changes deterministically for local sources (<code>git fetch</code> + <code>git diff</code> from the source's <code>upstream_sha:</code>, or its <code>ingested:</code> date) and flags web-only sources for the LLM to fetch and compare. Supersedes changed ones with new immutable source files. Updates citing Knowledge pages.</td>
 </tr>
 </tbody>
 </table>

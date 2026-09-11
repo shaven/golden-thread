@@ -36,7 +36,7 @@ def classify_memory_file(filename: str, content: str) -> str:
         return "decisions"
     if any(kw in name for kw in ("architecture", "design", "structure", "schema")):
         return "design"
-    if any(kw in name for kw in ("hyperspace", "platform", "istio", "xsuaa", "kyma", "btp")):
+    if any(kw in name for kw in ("auth", "platform", "networking", "identity", "orchestration", "infrastructure")):
         return "knowledge"
     if "golden-thread" in name or "golden_thread" in name:
         return "global_memory"
@@ -56,7 +56,7 @@ def classify_doc_file(path: Path, content: str) -> str:
     name = path.name.lower()
     if any(kw in name for kw in ("arch", "design", "schema", "system", "overview")):
         return "design"
-    if any(kw in name for kw in ("hyperspace", "platform", "istio", "xsuaa", "kyma", "btp", "knowledge")):
+    if any(kw in name for kw in ("auth", "platform", "networking", "identity", "orchestration", "infrastructure", "knowledge")):
         return "knowledge"
     if any(kw in name for kw in ("backlog", "todo", "ideas", "future")):
         return "ideas"

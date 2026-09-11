@@ -199,7 +199,13 @@ Query it:
 /gt:gt-wiki
 ```
 
-The wiki uses immutable sources — every ingested document is stored verbatim and never modified. Knowledge pages are synthesized summaries that link to the originals.
+Check its sources for upstream changes:
+
+```
+/gt:gt-wiki-refresh
+```
+
+The wiki uses immutable sources — every ingested document is stored verbatim and never modified. Knowledge pages are synthesized summaries that link to the originals. When a source changes upstream, refresh adds a new source that supersedes the old one; for sources in a local git repo the change is detected by `git diff`, not by eye.
 
 ---
 

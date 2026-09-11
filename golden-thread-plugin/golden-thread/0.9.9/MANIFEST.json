@@ -25,8 +25,8 @@
    "sha256": "51dbb4cf933ec1a0f0373166f40aa8eb79e8721dc79b167c0c62caf229b76249"
   },
   "scripts/gt_ingest.py": {
-   "bytes": 9101,
-   "sha256": "a728c8b60714bfe670cdb9d3056c94968c4b8aa7790d751b9aba6ef753267a45"
+   "bytes": 9145,
+   "sha256": "910c35bef98138b6e92e2a45f23f999d72292e1d2e0995c170d365b29ac541cd"
   },
   "scripts/gt_lint.py": {
    "bytes": 32301,
@@ -65,8 +65,8 @@
    "sha256": "087c2ca77d8afe096f743a7d2f57623ef236f1e6dbad813996c4408b38ddd219"
   },
   "templates/CONVENTIONS.md": {
-   "bytes": 19163,
-   "sha256": "dc317a899460781b3fca4870618003807d0aacedf6044b75f4876cdaf0d138f1"
+   "bytes": 19156,
+   "sha256": "6f9f4e7fbf0305d62312db8f0168939d90ac68beed7db02205aa0e75a76eb200"
   },
   "templates/INBOX.md": {
    "bytes": 817,

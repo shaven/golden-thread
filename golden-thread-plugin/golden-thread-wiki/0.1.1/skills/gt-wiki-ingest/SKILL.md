@@ -30,8 +30,10 @@ values, and conventions.
 
 3. **Store** — save raw content to `Sources/YYYY-MM-DD <source-title>.md`.
    Frontmatter fields per the vault's `CLAUDE.md` (distinguishes repo-file
-   sources from web-only sources). Never modify a file in `Sources/` after
-   creation.
+   sources from web-only sources). For a file inside a git repo, also record
+   `upstream_sha:` — the output of `git -C <dir> log -1 --format=%H -- <file>`
+   — so `/gt:gt-wiki-refresh` can later diff from exactly this point. Never
+   modify a file in `Sources/` after creation.
 
 4. **Read current state** — read `index.md` to know what already exists.
 
@@ -51,8 +53,16 @@ values, and conventions.
    mentally: from the index, is every piece of surrounding context reachable
    in 1-2 hops?
 
-9. **Update navigation** — update `index.md`; append an `ingest` entry to
-   `log.md`.
+9. **Update navigation** — call `wiki_log.py` twice:
+   ```
+   python3 <plugin>/scripts/wiki_log.py <vault> log ingest "<Page Title>" \
+     --line "created: <Page Title>" --line "source: <Sources/file.md>"
+   python3 <plugin>/scripts/wiki_log.py <vault> index "<Page Title>" \
+     "<one-line summary>" [--section "<Section Name>"]
+   ```
+   `<plugin>` is the `Base directory for this skill:` path two levels up
+   (`../../`). If the page already exists in `index.md` the `index` command
+   replaces its entry in place.
 
 10. **Summarize** — report what was created, updated, and cross-linked.
 

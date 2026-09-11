@@ -9,7 +9,9 @@ about <YOUR DOMAIN HERE>.
 - **Sources/** — immutable raw material. Never modify after creation. Every
   source file needs frontmatter with `title`, `local` (absolute path),
   `remote` (repo URL), and `ingested` (date). For web-only sources, use
-  `url` instead of `local`/`remote`. A source that replaces an earlier one
+  `url` instead of `local`/`remote`. A repo-file source may also carry
+  `upstream_sha` — the commit its content was taken from — which gives
+  `/gt:gt-wiki-refresh` an exact diff baseline. A source that replaces an earlier one
   carries `supersedes:` listing the old source file(s); the old file is
   never touched.
 - **Knowledge/** — LLM-generated wiki pages. Flat directory, no subdirectories.

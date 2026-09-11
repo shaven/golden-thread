@@ -728,6 +728,25 @@ python3 $SCRIPTS/gt_settings.py set &lt;name&gt; &lt;value&gt;</code></pre>
 <span class="cmd">/gt:gt-wiki-lint</span>                          <span class="comment"># health check</span>
 <span class="cmd">/gt:gt-wiki-refresh</span>                       <span class="comment"># check sources for upstream changes</span></code></pre>
 
+  <h2>Deterministic helpers</h2>
+  <p>
+    Two stdlib scripts in <code>golden-thread-wiki/&lt;ver&gt;/scripts/</code> take the
+    mechanical parts out of the LLM's hands:
+  </p>
+  <ul>
+    <li><strong><code>wiki_log.py</code></strong> — the only writer of <code>log.md</code>
+      and <code>index.md</code> entries. <code>log</code> appends
+      <code>## [YYYY-MM-DD] &lt;op&gt; | &lt;title&gt;</code> from a closed vocabulary
+      (ingest, query, lint, refresh, graduate, retire, relocate); <code>index</code> adds
+      a page entry under a section, or replaces an existing one in place.</li>
+    <li><strong><code>wiki_refresh.py</code></strong> — report-only change detection.
+      For a source with <code>local:</code> it runs <code>git fetch</code> and
+      <code>git diff base..head</code>, where <em>base</em> is the source's
+      <code>upstream_sha:</code> or the last commit on or before its
+      <code>ingested:</code> date. Web-only sources are listed as
+      <code>fetch-needed</code>. Exit 0 = nothing changed, 1 = changes found, 2 = error.</li>
+  </ul>
+
   <h2>Page format</h2>
   <pre><code><span class="comment">---</span>
 <span class="kw">title</span>: Page Title
