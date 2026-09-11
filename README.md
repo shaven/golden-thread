@@ -12,7 +12,7 @@ it at startup, look things up while working, and write back what they learn.
 Its distinguishing idea is the second problem, the one most memory systems never
 address: **writing a rule down does not mean it gets followed.**
 
-Plugin **v0.10.0**. Seven Core rules currently enforced, three of them *validated* — a
+Plugin **v0.11.0**. Seven Core rules currently enforced, three of them *validated* — a
 `Stop` hook inspects the finished reply and blocks it if the rule was broken.
 
 ## Who this is for
@@ -128,7 +128,7 @@ cannot be reached and the rules are not loaded — the banner names the cause.
 
 ## The skills
 
-Fourteen skills. Each composes through files rather than through other skills, so
+Seventeen skills. Each composes through files rather than through other skills, so
 removing any one leaves the rest working.
 
 | Skill | What it does |
@@ -143,10 +143,33 @@ removing any one leaves the rest working.
 | `gt-ingest` | Imports an existing project's notes. Copies, never moves or deletes. Stores external sources immutably in `Sources/` before synthesising them, so the raw input survives whatever you later conclude from it. |
 | `gt-review` | Empties the inbox: routes each captured-but-unfiled line (INBOX.md, plus daily notes if you keep them) into a tracked project. |
 | `gt-refresh` | Checks `Sources/` for upstream changes. Supersedes with a *new* immutable file carrying `supersedes:` rather than editing the old one, so the record of what you believed and when stays intact. |
-| `gt-lint` | Runs 14 deterministic health checks — broken links, orphans, index gaps, scope leaks, staleness, superseded sources — plus `core-unenforced`, which catches a rule that is stored but never re-asserted. |
+| `gt-lint` | Runs 18 deterministic health checks — broken links, orphans, index gaps, scope leaks, staleness, superseded sources — plus `core-unenforced`, which catches a rule that is stored but never re-asserted. |
 | `gt-farm` | Hands bulk or mechanical work to an external AI service as a self-contained packet with a strict return contract — bulk fetching, freshness sweeps, or a genuinely non-Claude second opinion. The packet is identical whether you paste it into a web UI or send it to an API. |
 | `gt-settings` | Shows and changes everything the plugin does on its own — component drift checking, the version check, orphaned-worker detection, the unpushed-commit check, and the session report card. Every automatic behaviour is registered here and every one can be switched off. |
+| `gt-route` | Mid-session: names what the session has actually become, says where its output belongs, and checks you are in the right project. For when a session has drifted from what it opened with, or you cannot name what you are doing. |
+| `gt-watch` | Watches any git repo and opens your next session with a P0 when it ships something you need to know about — a security fix, a breaking change. |
+| `gt-demo` | A guided tour of the whole system against a throwaway vault, so nothing you try touches your own. |
 | `gt-runbook-lint` | Finds procedures duplicated across project runbooks and routes them to the right shared layer: `PROTOCOL.md`, a `Knowledge/` page, or a repo `CLAUDE.md`. Duplication across two runbooks is the signal a fact belongs one layer out. |
+
+## The commands
+
+The skills are how you talk to Golden Thread in a session. These are the tools it
+installs **into your vault**, at `Projects/golden-thread/tools/`, which you or a skill
+run directly. They exist because some things must not depend on a model remembering to
+do them.
+
+| Command | What it does |
+|---|---|
+| `gt_log.py add "<line>"` | Records a log entry. Writes only **your session's** spool file, so two sessions can never overwrite one another. `log.md` is rendered from those spools, never written directly. |
+| `gt_adr.py allocate <project>` | Reserves the next ADR number and prints it. The number is taken with a single atomic operation, so two sessions cannot both take ADR-6 — which has happened. Write the decision into the file it names. |
+| `gt_log.py merge` · `gt_adr.py merge <project>` | Regenerate `log.md` / `decisions.md` from the spools. Idempotent: running twice changes nothing. |
+| `gt_tasks.py` | Regenerates `TASKS.md`, the cross-project task rollup, ranked and computed against the clock rather than stored. |
+| `gt_session.py` | Registers a session, claims the files it is about to write, and reports which other sessions are live. Liveness is checked against the OS, not guessed from a timestamp. |
+| `gt_closeout.py` | Names projects whose signals say they may be finished, with the reasons. Closure is asked for, never assumed. |
+| `gt_edits.py` | Per-edit attribution, so a line in a shared file can be traced to the session that wrote it. |
+
+`log.md`, `decisions.md` and `TASKS.md` are **generated**. Hand-editing them is not a
+style violation — your change is simply lost at the next merge, and `gt-lint` reports it.
 
 ## Typical use
 
@@ -182,10 +205,11 @@ level; audience decides whether it should also leave.
 ## Maintenance is code, not judgement
 
 The dangerous failure is not the fact you never captured — it is the fact you captured,
-kept, and still serve after reality moved on. `gt_lint.py` runs 14 deterministic checks
-(broken links, orphans, index gaps, scope leaks, 90-day staleness, superseded sources)
-and `core-unenforced`, which catches a rule that is **stored but never re-asserted** —
-the exact failure this system exists to close.
+kept, and still serve after reality moved on. `gt_lint.py` runs 18 deterministic checks
+(broken links, orphans, index gaps, scope leaks, 90-day staleness, superseded sources),
+`core-unenforced`, which catches a rule that is **stored but never re-asserted** — the
+exact failure this system exists to close — and `adr-collision`, which catches two
+decisions that ended up sharing one number.
 
 `skill_lint.py` enforces that no two skills can fire on the same intent — a rule most
 systems state and check by hand. Adopting it found a live collision: two skills sharing

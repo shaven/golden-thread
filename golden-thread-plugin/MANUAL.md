@@ -320,6 +320,52 @@ actually said. `idea.md` is immutable afterwards — it is the traceable "why".
 
 ---
 
+## Writing to the shared files
+
+`log.md`, `decisions.md` and `TASKS.md` are **generated**. They are the files every
+session writes and none owns, and in one working tree that means last-writer-wins with
+no conflict marker to warn you. So none of them is written directly.
+
+```bash
+T=<vault>/Projects/golden-thread/tools
+
+# A log entry. Writes only this session's spool file, then re-renders log.md.
+python3 $T/gt_log.py add "2026-01-01 10:00 CST [work] my-project — what happened"
+
+# An ADR. Reserve the number FIRST -- two sessions that both read "the highest is 5"
+# will both write ADR-6. This takes the number in a single atomic step and prints it.
+python3 $T/gt_adr.py allocate my-project --title "The choice"
+#   -> 7        (and creates the file that holds ADR-7; write the body into it)
+python3 $T/gt_adr.py merge my-project
+
+# Who has spooled what, and any allocation left unfinished
+python3 $T/gt_log.py status
+python3 $T/gt_adr.py status my-project
+```
+
+Adopting this in an existing vault is one command per file. It freezes what is there as
+a baseline that sorts first, so no history is rewritten and no ADR is renumbered, and it
+refuses unless the merge reproduces the original byte for byte:
+
+```bash
+python3 $T/gt_log.py migrate
+python3 $T/gt_adr.py migrate my-project
+```
+
+`migrate` refuses on a project whose ADR numbers already collide, because renumbering
+would invalidate every existing reference to them. `gt-lint`'s `adr-collision` reports
+those so you can decide. A deliberate `## ADR-6 amendment:` is not a collision and is
+left alone.
+
+**Hand-editing a generated file is not a style violation** — the change is lost at the
+next merge. `gt-lint` reports it as `generated-hand-edited`.
+
+Both commands sit on one shared primitive, `gt_spool.py`: per-session spool files plus a
+merge whose ordering uses nothing machine-specific, so two machines rendering the same
+spools produce byte-identical output. You do not call it directly; it is documented here
+because a merge that ordered by mtime or directory order would make the *generated* file
+conflict in git, which is worse than the problem being solved.
+
 ## Daily work
 
 ### `/gt:gt-open <slug>`

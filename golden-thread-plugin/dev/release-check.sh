@@ -83,12 +83,28 @@ OUT=$(python3 build-docs.py 2>&1); rc=$?
 MISSING=$(python3 - "$GT" <<'PY'
 import sys, pathlib, re, importlib.util
 gt = pathlib.Path(sys.argv[1])
-docs = {n: pathlib.Path(n).read_text(encoding="utf-8") for n in ("README.md", "MANUAL.md", "golden-thread-docs.md")}
+# The REPO-ROOT README is the page GitHub shows, and it sat outside this check
+# because release-check runs from the plugin directory -- so "README.md" meant the
+# plugin's. It was three skills behind when that was noticed (2026-09-11). The page
+# most people see was the one nothing verified.
+names = ["README.md", "MANUAL.md", "golden-thread-docs.md"]
+root_readme = pathlib.Path("..") / "README.md"
+docs = {n: pathlib.Path(n).read_text(encoding="utf-8") for n in names}
+if root_readme.is_file():
+    docs["../README.md (repo root)"] = root_readme.read_text(encoding="utf-8")
 out = []
 for s in sorted(p.name for p in (gt / "skills").iterdir() if (p / "SKILL.md").is_file()):
     for n, t in docs.items():
         if s not in t:
             out.append(f"skill {s} not mentioned in {n}")
+
+# Vault tools are COMMANDS a user runs, not skills, so nothing covered them. gt_log
+# and gt_adr are the two you must use rather than writing a shared file by hand, so
+# a release that ships them undocumented is a release nobody can adopt.
+for tool in sorted(t.name for t in (gt / "templates" / "tools").glob("gt_*.py")):
+    stem = tool[:-3]
+    if not any(stem in t for t in docs.values()):
+        out.append(f"vault tool {tool} documented nowhere (README/MANUAL/docs)")
 spec = importlib.util.spec_from_file_location("s", str(gt / "scripts" / "gt_settings.py")); m = importlib.util.module_from_spec(spec); spec.loader.exec_module(m)
 manual = docs["MANUAL.md"]
 for k in m.SETTINGS:
@@ -98,7 +114,10 @@ print("\n".join(out))
 PY
 )
 [ -z "$MISSING" ] && ok "every skill in README, MANUAL, golden-thread-docs; every setting in MANUAL" || { echo "$MISSING"; bad "docs do not cover the release"; }
-STALE=$(for f in README.md MANUAL.md golden-thread-docs.md ONBOARDING.md; do grep -q "$GTV" "$f" || echo "$f never names $GTV"; done)
+STALE=$(for f in README.md MANUAL.md golden-thread-docs.md ONBOARDING.md ../README.md; do
+  [ -f "$f" ] || continue
+  grep -q "$GTV" "$f" || echo "$f never names $GTV"
+done)
 [ -z "$STALE" ] && ok "docs name the current version $GTV" || { echo "$STALE"; bad "docs a version behind"; }
 STALEPDF=""
 for pdf in *.pdf; do

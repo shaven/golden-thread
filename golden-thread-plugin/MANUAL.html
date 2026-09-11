@@ -368,6 +368,42 @@ apply until you restart — that looks like the rule being ignored.</p>
 runbook, and <strong>topology</strong>; runs the script; then fills <code>idea.md</code> from what you
 actually said. <code>idea.md</code> is immutable afterwards — it is the traceable "why".</p>
 <hr />
+<h2 id="writing-to-the-shared-files">Writing to the shared files</h2>
+<p><code>log.md</code>, <code>decisions.md</code> and <code>TASKS.md</code> are <strong>generated</strong>. They are the files every
+session writes and none owns, and in one working tree that means last-writer-wins with
+no conflict marker to warn you. So none of them is written directly.</p>
+<pre><code class="language-bash">T=&lt;vault&gt;/Projects/golden-thread/tools
+
+# A log entry. Writes only this session's spool file, then re-renders log.md.
+python3 $T/gt_log.py add &quot;2026-01-01 10:00 CST [work] my-project — what happened&quot;
+
+# An ADR. Reserve the number FIRST -- two sessions that both read &quot;the highest is 5&quot;
+# will both write ADR-6. This takes the number in a single atomic step and prints it.
+python3 $T/gt_adr.py allocate my-project --title &quot;The choice&quot;
+#   -&gt; 7        (and creates the file that holds ADR-7; write the body into it)
+python3 $T/gt_adr.py merge my-project
+
+# Who has spooled what, and any allocation left unfinished
+python3 $T/gt_log.py status
+python3 $T/gt_adr.py status my-project
+</code></pre>
+<p>Adopting this in an existing vault is one command per file. It freezes what is there as
+a baseline that sorts first, so no history is rewritten and no ADR is renumbered, and it
+refuses unless the merge reproduces the original byte for byte:</p>
+<pre><code class="language-bash">python3 $T/gt_log.py migrate
+python3 $T/gt_adr.py migrate my-project
+</code></pre>
+<p><code>migrate</code> refuses on a project whose ADR numbers already collide, because renumbering
+would invalidate every existing reference to them. <code>gt-lint</code>'s <code>adr-collision</code> reports
+those so you can decide. A deliberate <code>## ADR-6 amendment:</code> is not a collision and is
+left alone.</p>
+<p><strong>Hand-editing a generated file is not a style violation</strong> — the change is lost at the
+next merge. <code>gt-lint</code> reports it as <code>generated-hand-edited</code>.</p>
+<p>Both commands sit on one shared primitive, <code>gt_spool.py</code>: per-session spool files plus a
+merge whose ordering uses nothing machine-specific, so two machines rendering the same
+spools produce byte-identical output. You do not call it directly; it is documented here
+because a merge that ordered by mtime or directory order would make the <em>generated</em> file
+conflict in git, which is worse than the problem being solved.</p>
 <h2 id="daily-work">Daily work</h2>
 <h3 id="gtgt-open-slug"><code>/gt:gt-open &lt;slug&gt;</code></h3>
 <p>Loads a project and stops. It is <strong>read-only</strong> — nothing is written during loading.</p>

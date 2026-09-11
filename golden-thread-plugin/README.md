@@ -22,7 +22,7 @@ Facts move up the hierarchy as they prove themselves general. They never move ba
 
 ---
 
-## Fourteen Skills
+## Seventeen Skills
 
 ### Setup
 
@@ -225,6 +225,10 @@ python3 <scripts>/vault_init.py install-core-rules --vault <vault>
 # End of session
 /gt:gt-work                   ← writes findings, ADRs, updates design, creates spec if ready
 
+# Writing to the shared files — always through the tool, never by hand
+tools/gt_log.py add "<line>"            ← your session's spool; log.md is generated
+tools/gt_adr.py allocate <project>      ← reserves the next ADR number atomically
+
 # Periodically
 /gt:gt-lint                   ← catch structural drift
 /gt:gt-refresh                ← check if any source docs changed upstream
@@ -237,6 +241,25 @@ python3 <scripts>/vault_init.py install-core-rules --vault <vault>
 ---
 
 ## Script Reference
+
+Two of these you will run by hand often. `log.md` and `decisions.md` are **generated**
+from per-session spool files, so nothing writes them directly:
+
+```bash
+# Record a log entry -- writes only YOUR session's spool file
+python3 <vault>/Projects/golden-thread/tools/gt_log.py add "2026-01-01 10:00 CST [work] my-project — what happened"
+
+# Reserve the next ADR number before writing the decision
+python3 <vault>/Projects/golden-thread/tools/gt_adr.py allocate my-project --title "The choice"
+
+# Regenerate either file (idempotent)
+python3 <vault>/Projects/golden-thread/tools/gt_log.py merge
+python3 <vault>/Projects/golden-thread/tools/gt_adr.py merge my-project
+
+# One-time, per vault and per project
+python3 <vault>/Projects/golden-thread/tools/gt_log.py migrate
+python3 <vault>/Projects/golden-thread/tools/gt_adr.py migrate my-project
+```
 
 Python scripts can also be run directly from the command line:
 
