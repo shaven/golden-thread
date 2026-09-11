@@ -728,6 +728,12 @@ is registered here and can be switched off.</p>
 <td><code>minimal</code></td>
 <td>At <code>/compact</code>, summarises session hygiene</td>
 </tr>
+<tr>
+<td><code>install_demo</code></td>
+<td><code>yes</code> · <code>no</code></td>
+<td><code>yes</code></td>
+<td>Whether <code>install.sh</code> installs <code>/gt:gt-demo</code>, its script and the PizzaBot template</td>
+</tr>
 </tbody>
 </table>
 <pre><code class="language-bash">python3 $SCRIPTS/gt_settings.py show            # current state of all settings
@@ -741,6 +747,24 @@ enforcement on every session start.</p>
 <h3 id="gtgt-runbook-lint"><code>/gt:gt-runbook-lint</code></h3>
 <p>Finds procedures duplicated across runbooks and routes them to the right shared
 layer — <code>PROTOCOL.md</code>, a Knowledge page, or a repo <code>CLAUDE.md</code>.</p>
+<hr />
+<h3 id="gtgt-demo"><code>/gt:gt-demo</code></h3>
+<p>Run a repeatable live demo of the Golden Thread workflow using the PizzaBot 3000
+demo project — a fictional pizza ordering service.</p>
+<pre><code>/gt:gt-demo start    — arm the demo (set up PizzaBot project from template)
+/gt:gt-demo end      — show what the demo produced (commits, files created)
+/gt:gt-demo clean    — restore PizzaBot from template, re-arm for next run
+/gt:gt-demo remove   — permanently remove all demo infrastructure
+</code></pre>
+<p><strong>Demo flow:</strong> <code>start</code> → <code>/gt:gt-open demo-pizzabot</code> → <code>/gt-wiki:gt-wiki-ingest</code> the
+architecture source → <code>/gt-wiki:gt-wiki</code> query → <code>end</code> to show results → <code>clean</code> to repeat.</p>
+<p>The demo runs in your real vault. <code>start</code> records the vault's current commit;
+<code>clean</code> resets the vault to it and restores PizzaBot from the plugin template, so the
+demo repeats as often as you like. Because that reset undoes <strong>every</strong> commit made
+since <code>start</code>, from any session, <code>clean</code> dry-runs first and lists them, and refuses
+outright if any is already pushed or if uncommitted work outside the demo would be
+lost. <code>remove</code> deletes the demo's files, commits only those paths, and sets
+<code>install_demo</code> to <code>no</code> so a reinstall does not bring the demo back.</p>
 <hr />
 <h2 id="where-does-this-fact-go">Where does this fact go?</h2>
 <table>

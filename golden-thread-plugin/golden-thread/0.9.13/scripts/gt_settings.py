@@ -140,6 +140,21 @@ SETTINGS = {
             "Fires on PreCompact so it is produced while there is still context to write\n"
             "it in, rather than competing for the last of it at session end."),
     },
+    "install_demo": {
+        "default": "yes",
+        "values": ["yes", "no"],
+        "summary": "Install the /gt:gt-demo skill and PizzaBot 3000 demo templates.",
+        "detail": (
+            "yes  install the demo skill, gt_demo.sh script, and demo-pizzabot  (default)\n"
+            "no   skip all demo material -- skill, script, and templates are not installed\n"
+            "\n"
+            "The demo exists for live demonstrations of the Golden Thread workflow. It\n"
+            "adds one skill (/gt:gt-demo), one script (gt_demo.sh), and a small template\n"
+            "tree (demo-pizzabot). None of these are needed for daily use.\n"
+            "\n"
+            "Set to 'no' before running install.sh and the demo material is never written\n"
+            "to disk. Set back to 'yes' and re-run install.sh to add it later."),
+    },
 }
 
 

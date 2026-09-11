@@ -175,6 +175,7 @@ they just stop outranking live work.
 /gt:gt-settings            ← view and toggle what Golden Thread does automatically
 /gt:gt-farm                ← route bulk or mechanical tasks to an external AI service as a work packet
 /gt:gt-validate            ← independently verify a claim before recording it as fact
+/gt:gt-demo                ← repeatable live demo (PizzaBot 3000): start / end / clean / remove
 ```
 
 ---

@@ -24,6 +24,10 @@
    "bytes": 26217,
    "sha256": "02f51a573eb8844474c8cb42be6c601abae04ba4c6e283c0b037f1539f223210"
   },
+  "scripts/gt_demo.sh": {
+   "bytes": 9203,
+   "sha256": "c28d7fdb46c35a71be9e1cf632d83d380579cf9b5043909f6f47c94a7c82e9f8"
+  },
   "scripts/gt_ingest.py": {
    "bytes": 9145,
    "sha256": "910c35bef98138b6e92e2a45f23f999d72292e1d2e0995c170d365b29ac541cd"
@@ -49,8 +53,8 @@
    "sha256": "7ca5c2ef87e45de93c20008883717502bdf8f91028ea16f919431819c7218770"
   },
   "scripts/gt_settings.py": {
-   "bytes": 14094,
-   "sha256": "f0847987e05030338f5f5d62f04960187016efaea8449b886e017aed441aadd1"
+   "bytes": 14944,
+   "sha256": "77dfbc8075c7918126a73ef1a24f13ca38c2c689cdd9738852259b9fce38c149"
   },
   "scripts/gt_version_check.py": {
    "bytes": 7991,
@@ -128,6 +132,38 @@
    "bytes": 3650,
    "sha256": "0e8e3423cab683fa70c229a55ec049324fcfbb5778e9e4b884210c036a4ee05b"
   },
+  "templates/demo-pizzabot/project/README.md": {
+   "bytes": 1131,
+   "sha256": "91dbddc40f35becf23370fa396d2dbfa6b99fee2b590d00400df8d1052930ed8"
+  },
+  "templates/demo-pizzabot/project/decisions.md": {
+   "bytes": 1170,
+   "sha256": "1c1c539d2defee16fa23ecf4cf9872e9a01bab084efd910ea41aeb27ee009a96"
+  },
+  "templates/demo-pizzabot/project/idea.md": {
+   "bytes": 1301,
+   "sha256": "343098945c7339117d9c630a86fe949085e7bfb566bd8939628092f3e260ba66"
+  },
+  "templates/demo-pizzabot/project/memory/MEMORY.md": {
+   "bytes": 202,
+   "sha256": "3f9861a6dd8221af66c6bf4adf5c5db4ab69e68e5473b1be2a459e32db34e841"
+  },
+  "templates/demo-pizzabot/project/memory/project-context.md": {
+   "bytes": 615,
+   "sha256": "09f5584ef7504ffce68ca0172bb75f9acd87f3155e2f870470956022432b6d99"
+  },
+  "templates/demo-pizzabot/project/research.md": {
+   "bytes": 1566,
+   "sha256": "10970f6333e5c482ae62d2a9db07bc097e2db8e9041172c49b50d506a60e5cbb"
+  },
+  "templates/demo-pizzabot/project/source.md": {
+   "bytes": 841,
+   "sha256": "b01cb8be80959c6716ac4be7fcd07f1d917b64d087792cbc5f1bff26f3a8b70c"
+  },
+  "templates/demo-pizzabot/sources/2024-01-01 Conversation - PizzaBot Architecture.md": {
+   "bytes": 2105,
+   "sha256": "65d0f2293033c1318e783150c0f3afa382bb1e88c06636c92cbdf1aa648c930b"
+  },
   "templates/githooks/post-commit": {
    "bytes": 979,
    "sha256": "875f2d3fae03e7bc8253b6bfd30fbc79114979b9f2f6f50fab12e9fd047c31f1"
@@ -181,7 +217,7 @@
    "sha256": "383c0e4b30c8c9c9447c4798f37debf1f4a0402b1e3ee068e7629e9d1ab21859"
   }
  },
- "generated": "2026-09-10T19:12:18",
+ "generated": "2026-09-11T08:02:16",
  "hooks": [
   {
    "args": [

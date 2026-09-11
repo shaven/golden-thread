@@ -223,7 +223,7 @@ often it would train the guard to be ignored.</p>
 <p>The canonical rule definitions live in <code>Projects/golden-thread/core-rules/</code> inside the vault. Editing a rule file there changes what the hook injects — the rule text is never duplicated into the script.</p>
 <p><strong>The canary:</strong> <code>core_timestamp_every_message.md</code> is designated Core/Validated not because a missing timestamp causes real harm, but because it is trivially observable at the top of every reply. When the timestamp disappears, enforcement has broken.</p>
 <hr />
-<h2 id="gt-skills-15">gt Skills (15)</h2>
+<h2 id="gt-skills-16">gt Skills (16)</h2>
 <h3 id="setup">Setup</h3>
 <table>
 <thead>
@@ -336,6 +336,21 @@ often it would train the guard to be ignored.</p>
 <tr>
 <td><code>/gt:gt-settings</code></td>
 <td>View and change what Golden Thread does on its own: component drift checking at session start, and the session report card at compact. Every automatic behaviour can be switched off.</td>
+</tr>
+</tbody>
+</table>
+<h3 id="demo">Demo</h3>
+<table>
+<thead>
+<tr>
+<th>Command</th>
+<th>What it does</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>/gt:gt-demo</code></td>
+<td>Run a repeatable live demo in your vault with the fictional PizzaBot 3000 project: <code>start</code> snapshots the vault and sets the project up, <code>end</code> shows what the demo produced, <code>clean</code> dry-runs then resets to the snapshot, <code>remove</code> tears the demo out. Skipped at install when <code>install_demo</code> is <code>no</code>.</td>
 </tr>
 </tbody>
 </table>

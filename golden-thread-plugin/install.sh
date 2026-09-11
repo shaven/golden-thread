@@ -105,11 +105,29 @@ for old in "$HOME/.claude/plugins/cache/golden-thread-plugin/gt"/*; do
   fi
 done
 
+# Read install_demo setting (default: yes). A user who has set install_demo=no
+# in vault-config.json gets the plugin without the demo skill, script, and templates.
+VAULT_CONFIG="$HOME/.claude/vault-config.json"
+INSTALL_DEMO="yes"
+if [ -f "$VAULT_CONFIG" ]; then
+  _val=$(python3 -c "import json,sys; d=json.load(open(sys.argv[1])); print(str(d.get('install_demo') or 'yes').strip().lower())" \
+    "$VAULT_CONFIG" 2>/dev/null || echo "yes")
+  [ "$_val" = "no" ] && INSTALL_DEMO="no"
+fi
+if [ "$INSTALL_DEMO" = "no" ]; then
+  echo "install_demo=no — skipping demo skill, script, and templates"
+fi
+
 # 1. Install plugin files into cache
 mkdir -p "$CACHE"
 for dir in .claude-plugin skills scripts templates commands hooks; do
   [ -d "$SRC/$dir" ] && cp -r "$SRC/$dir" "$CACHE/"
 done
+# The demo is removed AFTER the copy rather than filtered during it: a filter has to
+# know every file type it lets through, and one that copied only *.md and *.json
+# silently dropped the rest. Removing afterwards also clears a demo left behind by an
+# earlier install_demo=yes run.
+[ "$INSTALL_DEMO" = "no" ] && rm -rf "$CACHE/skills/gt-demo" "$CACHE/scripts/gt_demo.sh" "$CACHE/templates/demo-pizzabot"
 echo "Installed gt plugin files → $CACHE"
 
 # 1b. Install the Core-rule hooks to a STABLE location outside the vault.
@@ -192,6 +210,8 @@ for dir in skills scripts templates commands hooks; do
   rm -rf "$MARKETPLACE/plugins/gt-wiki/$dir"
   [ -d "$WIKI_SRC/$dir" ] && cp -r "$WIKI_SRC/$dir" "$MARKETPLACE/plugins/gt-wiki/$dir"
 done
+[ "$INSTALL_DEMO" = "no" ] && rm -rf "$MARKETPLACE/plugins/gt/skills/gt-demo" \
+  "$MARKETPLACE/plugins/gt/scripts/gt_demo.sh" "$MARKETPLACE/plugins/gt/templates/demo-pizzabot"
 echo "Populated marketplace plugin directories with skills/scripts/templates"
 
 echo "Created marketplace entries → $MARKETPLACE"
@@ -452,6 +472,9 @@ echo "  /gt:gt-refresh       check Sources/ for upstream changes and supersede"
 echo "  /gt:gt-lint          14 health checks, including core-unenforced"
 echo "  /gt:gt-settings      inspect or switch off anything this plugin does on its own"
 echo "  /gt:gt-runbook-lint  find facts duplicated across runbooks"
+if [ "$INSTALL_DEMO" = "yes" ]; then
+echo "  /gt:gt-demo          manage a repeatable live demo session (PizzaBot 3000)"
+fi
 echo ""
 echo "gt-wiki skills:"
 echo "  /gt-wiki:gt-wiki-init     set up a new wiki vault"
@@ -460,4 +483,9 @@ echo "  /gt-wiki:gt-wiki-ingest   add a source to the wiki"
 echo "  /gt-wiki:gt-wiki-lint     health-check the wiki"
 echo "  /gt-wiki:gt-wiki-refresh  check sources for upstream changes"
 echo ""
+if [ "$INSTALL_DEMO" = "no" ]; then
+echo "Demo not installed (install_demo=no in vault-config.json)."
+echo "Set install_demo=yes and re-run install.sh to add /gt:gt-demo."
+echo ""
+fi
 echo "Restart Claude Code to load the plugins."

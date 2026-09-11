@@ -72,7 +72,7 @@ The canonical rule definitions live in `Projects/golden-thread/core-rules/` insi
 
 ---
 
-## gt Skills (15)
+## gt Skills (16)
 
 ### Setup
 
@@ -113,6 +113,12 @@ The canonical rule definitions live in `Projects/golden-thread/core-rules/` insi
 | `/gt:gt-lint` | Audit the vault for structural problems: 14 checks covering broken wikilinks, orphaned pages, missing index entries, unlisted memory files, Knowledge pages citing superseded sources, stale pages, and `core-unenforced` — a Core rule that is stored but wired to no hook. |
 | `/gt:gt-runbook-lint` | Scan all project `runbook.md` files for content that has drifted into multiple runbooks. Routes duplicated content to the right shared layer via `gt-promote`. |
 | `/gt:gt-settings` | View and change what Golden Thread does on its own: component drift checking at session start, and the session report card at compact. Every automatic behaviour can be switched off. |
+
+### Demo
+
+| Command | What it does |
+|---|---|
+| `/gt:gt-demo` | Run a repeatable live demo in your vault with the fictional PizzaBot 3000 project: `start` snapshots the vault and sets the project up, `end` shows what the demo produced, `clean` dry-runs then resets to the snapshot, `remove` tears the demo out. Skipped at install when `install_demo` is `no`. |
 
 ### Installed, and actually wired (0.9.13)
 

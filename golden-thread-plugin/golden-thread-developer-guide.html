@@ -188,6 +188,7 @@
           <li>/gt:gt-lint — health checks</li>
           <li>/gt:gt-settings — automatic behaviour</li>
           <li>/gt:gt-runbook-lint and /gt:gt-review</li>
+          <li>/gt:gt-demo — repeatable live demo</li>
         </ul>
       </li>
       <li>
@@ -691,6 +692,7 @@
     <tbody>
       <tr><td><code>component_updates</code></td><td><code>off</code> · <code>report</code> · <code>confirm</code> · <code>auto</code></td><td><code>report</code></td><td>At session start, compares installed hooks/scripts against plugin source and reports drift</td></tr>
       <tr><td><code>report_card</code></td><td><code>off</code> · <code>minimal</code> · <code>full</code></td><td><code>minimal</code></td><td>At <code>/compact</code>, summarises session hygiene</td></tr>
+      <tr><td><code>install_demo</code></td><td><code>yes</code> · <code>no</code></td><td><code>yes</code></td><td>Whether <code>install.sh</code> installs <code>/gt:gt-demo</code>, its script and the PizzaBot template</td></tr>
     </tbody>
   </table>
   <pre><code>python3 $SCRIPTS/gt_settings.py show            <span class="comment"># current state</span>
@@ -706,6 +708,21 @@ python3 $SCRIPTS/gt_settings.py set &lt;name&gt; &lt;value&gt;</code></pre>
   <p>
     <strong>gt-review</strong> scans Obsidian daily notes for uncaptured tasks and
     ideas, then promotes selected ones into tracked projects.
+  </p>
+
+  <h2><span class="skill">/gt:gt-demo</span> — Repeatable live demo</h2>
+  <p>
+    Demonstrates the workflow with PizzaBot 3000, a fictional project shipped as a
+    template. <code>start</code> records the vault's current commit and sets the project
+    up; <code>end</code> lists what the demo produced; <code>clean</code> resets the vault
+    to the recorded commit and restores the template; <code>remove</code> deletes the demo
+    and sets <code>install_demo</code> to <code>no</code>.
+  </p>
+  <p>
+    The demo runs in the real vault, so the one history-rewriting step is guarded:
+    <code>clean</code> dry-runs first and lists every commit it would undo, from any
+    session, and refuses if any is already pushed or if uncommitted work outside the demo
+    would be lost. <code>remove</code> commits only the demo's own paths.
   </p>
 </div>
 

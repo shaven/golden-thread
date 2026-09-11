@@ -603,6 +603,7 @@ is registered here and can be switched off.
 |---|---|---|---|
 | `component_updates` | `off` · `report` · `confirm` · `auto` | `report` | At session start, compares installed hooks/scripts against plugin source and reports drift |
 | `report_card` | `off` · `minimal` · `full` | `minimal` | At `/compact`, summarises session hygiene |
+| `install_demo` | `yes` · `no` | `yes` | Whether `install.sh` installs `/gt:gt-demo`, its script and the PizzaBot template |
 
 ```bash
 python3 $SCRIPTS/gt_settings.py show            # current state of all settings
@@ -619,6 +620,31 @@ enforcement on every session start.
 
 Finds procedures duplicated across runbooks and routes them to the right shared
 layer — `PROTOCOL.md`, a Knowledge page, or a repo `CLAUDE.md`.
+
+---
+
+### `/gt:gt-demo`
+
+Run a repeatable live demo of the Golden Thread workflow using the PizzaBot 3000
+demo project — a fictional pizza ordering service.
+
+```
+/gt:gt-demo start    — arm the demo (set up PizzaBot project from template)
+/gt:gt-demo end      — show what the demo produced (commits, files created)
+/gt:gt-demo clean    — restore PizzaBot from template, re-arm for next run
+/gt:gt-demo remove   — permanently remove all demo infrastructure
+```
+
+**Demo flow:** `start` → `/gt:gt-open demo-pizzabot` → `/gt-wiki:gt-wiki-ingest` the
+architecture source → `/gt-wiki:gt-wiki` query → `end` to show results → `clean` to repeat.
+
+The demo runs in your real vault. `start` records the vault's current commit;
+`clean` resets the vault to it and restores PizzaBot from the plugin template, so the
+demo repeats as often as you like. Because that reset undoes **every** commit made
+since `start`, from any session, `clean` dry-runs first and lists them, and refuses
+outright if any is already pushed or if uncommitted work outside the demo would be
+lost. `remove` deletes the demo's files, commits only those paths, and sets
+`install_demo` to `no` so a reinstall does not bring the demo back.
 
 ---
 

@@ -10,6 +10,42 @@
 
 ---
 
+## Update, 2026-09-11 morning — gt-demo, merged in and made safe
+
+The second tree added `/gt:gt-demo` (PizzaBot 3000 template, `scripts/gt_demo.sh`, and an
+`install_demo` setting), briefly wired the enforcement hooks from `install.sh`, then backed
+that out. Merged here by three-way file merge against the tree's 09-10 state. Every fix below
+was also copied back into the second tree, so **do not re-copy the older versions over them**:
+
+- **`install.sh` did not parse.** `for f in … 2>/dev/null; do` puts a redirect in a `for`
+  word list; `bash -n` rejects it, and because it sat inside step 1's loop every install
+  would have died before copying anything. The demo is now removed *after* a normal copy
+  when `install_demo=no` — which also stops the filter dropping template files that were
+  neither `.md` nor `.json`, and clears a demo left by an earlier install. Tested in two
+  throwaway homes: both settings install exactly the expected file set — `self-verified`.
+- **`gt_demo.sh` rewound or swept the whole real vault.** `clean` ran `git reset --hard`
+  unconditionally (every session's commits and uncommitted work since `start`), and
+  `remove` ran `git add -A` (another session's half-written files into a commit). Now:
+  `clean --dry-run` lists what would be undone; `clean` refuses if any of it is pushed, or
+  if uncommitted tracked work outside the demo would be lost; `remove` commits only the
+  demo's own paths, sets `install_demo=no`, and never deletes from a source checkout.
+  Every guard exercised against a scratch vault with a bare remote — `self-verified`.
+- The stub-vault approach to auto-wiring (since removed there) broke `vault_init.py fresh`
+  with `conflict` on every new machine; `selftest.sh` caught it. The docs that commit
+  touched still claimed "install.sh now calls install-core-rules automatically" — reverted.
+- gt-demo's skill named `/wiki-ingest` and `/wiki` (now `/gt-wiki:gt-wiki-ingest`,
+  `/gt-wiki:gt-wiki`), claimed the demo runs "without touching git history" (it resets it),
+  and had no trigger phrases.
+- Docs: gt-demo in MANUAL, ONBOARDING, README, golden-thread-docs (skills now 16) and the
+  developer guide; `install_demo` in both settings tables.
+
+**MANUAL.pdf was not re-rendered.** Its WeasyPrint host's root filesystem was 100% full
+(0 bytes free), and WeasyPrint 69 does not install locally. It lacks only the gt-demo
+section and the `install_demo` row; re-render when the host has space. The other four
+re-rendered PDFs were audited with pypdf — control string present, zero leaks.
+
+---
+
 ## Update, 2026-09-10 evening — the second working tree merged in
 
 The second working tree (`OneDrive/Projects2/golden-thread`) had moved past this one. Its

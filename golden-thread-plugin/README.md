@@ -63,6 +63,7 @@ Facts move up the hierarchy as they prove themselves general. They never move ba
 | `/gt:gt-lint` | Audit the vault for structural problems: broken wikilinks, orphaned pages, missing index entries, unlisted memory files, Knowledge pages citing superseded sources, stale pages, and Core rules that are stored but not enforced. Applies fixes with your approval. |
 | `/gt:gt-runbook-lint` | Scan all project `runbook.md` files for content that has drifted into multiple runbooks. Classifies duplicated content by type and routes it to the right shared layer (PROTOCOL.md, Knowledge page, or repo CLAUDE.md) via `gt-promote`. |
 | `/gt:gt-settings` | View and change what Golden Thread does automatically: component drift checking at session start, and the session report card at compact. Every automatic behaviour can be switched off. |
+| `/gt:gt-demo` | Run a repeatable live demo using the PizzaBot 3000 demo project. Commands: `start` (arm the demo), `end` (show what was produced), `clean` (restore for next run), `remove` (tear down all demo infrastructure). |
 
 ---
 
