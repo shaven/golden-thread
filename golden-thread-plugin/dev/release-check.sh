@@ -131,6 +131,24 @@ for tool in sorted(t.name for t in (gt / "templates" / "tools").glob("gt_*.py"))
     stem = tool[:-3]
     if not any(stem in t for t in docs.values()):
         out.append(f"vault tool {tool} documented nowhere (README/MANUAL/docs)")
+
+# The release MACHINERY needs documenting too, for the same reason the tools do: on
+# 2026-09-12 three new gates and a parallel test runner shipped, and the only place any
+# of them was mentioned was a changelog entry. dev/README.md is where they belong, and
+# the test runner lives beside them.
+dev = pathlib.Path("dev")
+devdocs = {}
+for n in ("dev/README.md", "CLAUDE.md"):
+    f = pathlib.Path(n)
+    if f.is_file():
+        devdocs[n] = f.read_text(encoding="utf-8")
+for f in sorted(list(dev.glob("*.py")) + list(dev.glob("*.sh"))):
+    if not any(f.name in t for t in devdocs.values()):
+        out.append(f"dev/{f.name} is documented nowhere (dev/README.md)")
+for runner in ("tests/run.sh", "tests/prun.py"):
+    name = pathlib.Path(runner).name
+    if not any(name in t for t in devdocs.values()):
+        out.append(f"{runner} is documented nowhere (dev/README.md)")
 spec = importlib.util.spec_from_file_location("s", str(gt / "scripts" / "gt_settings.py")); m = importlib.util.module_from_spec(spec); spec.loader.exec_module(m)
 manual = docs["MANUAL.md"]
 for k in m.SETTINGS:

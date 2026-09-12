@@ -1,0 +1,79 @@
+# `dev/` — the release machinery
+
+Nothing here is installed or shipped to a user. These are the checks a change passes
+before it becomes a release, and the tools that publish one.
+
+**If you cloned this repo to use the plugin, you never need anything in this
+directory.** `install.sh` is at the repo root and is the only thing you run.
+
+## The gate
+
+`dev/release-check.sh` is the whole gate; every check below is a step in it.
+
+```bash
+dev/release-check.sh           # everything
+dev/release-check.sh --quick   # skip the test harness and selftest
+```
+
+The exit code is the number of failed steps. Each step exists because something once
+shipped broken while everything looked fine.
+
+| Step | Script | What it refuses to let through |
+|---|---|---|
+| syntax | *(inline)* | a shell script that does not parse, a Python file that does not compile |
+| versions | *(inline)* | a version directory whose `plugin.json` disagrees with its name |
+| manifest | `gt_components.py` | a `MANIFEST.json` that no longer matches the tree |
+| skills | `skill_lint.py` | two skills sharing a trigger phrase |
+| cli contract | `check_cli_contract.py` | a vault tool that writes without accepting `--vault` and `--dry-run` |
+| installer version | `check_installer_version.py` | `install.sh` or `selftest.sh` changed since the newest release was cut |
+| wiring coverage | `check_wiring_coverage.py` | a shipped hook, script, skill, tool or Core rule that does not reach its destination in a real install |
+| docs | *(inline)* + `build-docs.py` | a skill, vault tool, setting or `dev/` script documented nowhere; HTML drifted from its `.md`; a PDF older than its source; docs that never name the current version |
+| scrub | `scrub_check.py` | an employer or machine-specific string in anything shipped |
+| tests | `../tests/run.sh` | a failing test |
+| selftest | `../selftest.sh` | an install that does not work from cold |
+
+### The three newest gates, and the bug each one is for
+
+- **`check_cli_contract.py`** — a rehearsal migrated the *live* vault because
+  `gt_adr.py migrate` took no `--vault`. A Core rule telling callers to name the vault
+  is unfollowable if the tool offers no way to name it, so this asserts the flags exist
+  — by RUNNING `--help`, since a flag can exist in source and still not parse after the
+  subcommand.
+- **`check_wiring_coverage.py`** — `guard_vault_writes.sh` shipped inert through three
+  releases: copied, in the manifest, verified by the component check, and registered in
+  `settings.json` by nothing. This installs into a throwaway home — including the
+  *upgrade* path, where a vault already exists — and asks every shipped item where it
+  ended up. Nothing is hand-listed; each set is read from the release.
+- **`check_installer_version.py`** — that fix was then committed with no version bump,
+  so two published states both called themselves 0.12.2, one wiring the hooks and one
+  not. `MANIFEST.json` covers only what lives inside a version directory, and
+  `install.sh` sits at the root. This makes changing it require a bump.
+
+## Publishing
+
+| Script | What it does |
+|---|---|
+| `sync-gt-src.sh` | publishes the newest release to the shared working copy (`gt-src`) from a **committed** tree, scrubbed and verified. `--dry-run` shows what would change |
+| `foreign_files.py` | lists files in the publish destination that the publisher did not write, so a second writer is named before `rsync --delete` removes it |
+| `render-pdfs.sh` | re-renders the PDFs after a docs change |
+| `feature_requests.py` | validates the cross-machine feature-request queue |
+| `scrub_check.py` | scans for employer and machine-specific strings; exit 1 = hits, other = could not scan (also a failure — an unscanned file is not a clean file) |
+
+## Tests
+
+```bash
+tests/run.sh                    # every test, in parallel (one process per TestCase class)
+tests/run.sh test_gt_lint       # one module, still parallel
+tests/run.sh -j 4               # cap the workers
+GT_TEST_SERIAL=1 tests/run.sh   # plain unittest, one process
+```
+
+`tests/prun.py` is the parallel runner. The suite is I/O-bound almost end to end — each
+test shells out to `install.sh`, `vault_init` or a hook and waits — so the cores sat idle
+while the wall clock ran: 509s serial against 109s parallel, same tests.
+
+Keep `GT_TEST_SERIAL=1` in mind when a failure looks strange. **If a test fails in
+parallel and passes serially, that difference is the finding**, not an excuse to re-run.
+
+`GT_TEST_VERSION=<version>` pins the release under test, so a release being built can be
+tested beside the current one.
