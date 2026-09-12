@@ -12,8 +12,34 @@ it at startup, look things up while working, and write back what they learn.
 Its distinguishing idea is the second problem, the one most memory systems never
 address: **writing a rule down does not mean it gets followed.**
 
-Plugin **v0.12.3**. Seven Core rules currently enforced, three of them *validated* — a
-`Stop` hook inspects the finished reply and blocks it if the rule was broken.
+Plugin **v0.12.4**. Nine Core rules currently enforced, four of them *validated* — a
+hook inspects the finished reply (`Stop`) or the tool call about to run (`PreToolUse`)
+and blocks it if the rule was broken.
+
+
+> [!IMPORTANT]
+> **0.12.4 runs work in parallel by default, and you will notice it.** A Core rule now
+> asks for divisible work to be split across your processors instead of crawling through
+> one core, and the tools here honour it: `tests/run.sh` and `dev/render-pdfs.sh` fan out,
+> and so will anything Claude writes while the rule is active. **The first sign is
+> usually your fans** — a suite that used to hold one core at 100% now holds sixteen at
+> 400%+, and Activity Monitor fills with `python3` or `Google Chrome` processes that all
+> disappear when the run ends. That is the feature working, not a runaway job. The
+> measurement behind it: the test suite went from 509s to 108s, 4.7x.
+>
+> **You are in charge of how much of your machine it may use.**
+>
+> ```bash
+> gt_settings.py set parallel_max 4      # never more than 4 workers, whatever the work
+> gt_settings.py set parallel_work off   # serial, and the Core rule stops being injected
+> gt_settings.py show                    # what is currently allowed
+> ```
+>
+> `parallel_max` defaults to `auto` — as many workers as the machine allows, and never
+> more than there are units of work. Cap it before a long run if you need the machine to
+> stay responsive for something else, if you are on battery, or if a remote end is
+> rate-limited. `off` is the full stop: nothing runs in parallel and the rule is not
+> asserted at all.
 
 ## Who this is for
 
@@ -64,6 +90,9 @@ The Core tier is deliberately small; every addition dilutes the reliability of t
 | `core_global_memory_scope` | reminder | `global-memory/` holds only facts needed in *every* project |
 | `core_memory_load_policy` | reminder | Do not auto-load the full memory index |
 | `core_verification_state` | reminder | Label every derived figure with `unverified`, `self-verified` or `independently verified` |
+| `core_explicit_vault_target` | **validated** | Name the vault on every mutating tool run — `--vault` or `--dry-run` |
+| `core_secrets_live_in_the_store` | reminder | A secret's value rests only in the secrets store, never in source, a repo, a log or a session |
+| `core_parallel_when_beneficial` | reminder | Parallelise divisible work in every project, up to the `parallel_max` budget; serial must be justified |
 
 Two ways in: the user **designates** a rule, or an existing fact is **promoted** and
 must answer three questions — would its absence cause incorrect code, cause rework, or

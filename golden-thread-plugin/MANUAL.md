@@ -1,6 +1,6 @@
 # Golden Thread — User Manual
 
-Complete reference for all seventeen skills. Written against **gt v0.12.3**.
+Complete reference for all seventeen skills. Written against **gt v0.12.4**.
 
 ---
 
@@ -655,7 +655,28 @@ is registered here and can be switched off.
 | `push_check` | `off` · `report` | `report` | At session start, reports vault commits not yet pushed |
 | `report_card` | `off` · `minimal` · `full` | `minimal` | At `/compact`, summarises session hygiene |
 | `watch` | `off` · `report` | `off` | `/gt:gt-watch`: the hourly fetch and the session-start report of repo changes |
+| `parallel_work` | `off` · `on` | `on` | Whether divisible work runs in parallel at all; `off` also stops the Core rule being injected |
+| `parallel_max` | `auto` · a positive integer | `auto` | Ceiling on concurrent workers. `auto` = as many as the machine allows |
 | `install_demo` | `yes` · `no` | `yes` | Whether `install.sh` installs `/gt:gt-demo`, its script and the PizzaBot template |
+
+
+> **Heads-up:** `parallel_work` is `on` and `parallel_max` is `auto` out of the box, so
+> after upgrading to 0.12.4 a long run will use as much of your machine as it can — many
+> processes at once, CPU well above 100%, and the fans to match. That is intended. Cap it
+> with `set parallel_max <N>` or switch it off with `set parallel_work off`; nothing else
+> about the plugin changes.
+
+**The budget as a number.** Any script, in any project, can ask what the settings allow
+instead of inventing a worker count:
+
+```bash
+JOBS=$(python3 .../scripts/gt_settings.py jobs 42 --io-bound)   # 42 units of I/O-bound work
+JOBS=$(python3 .../scripts/gt_settings.py jobs 8)               # 8 units, CPU-bound
+```
+
+It returns 1 when `parallel_work=off`, never more than `parallel_max`, and never more
+workers than there are units of work. `gt_settings.parallel_jobs()` is the same answer
+from Python.
 
 ```bash
 python3 $SCRIPTS/gt_settings.py show            # current state of all settings
@@ -780,7 +801,7 @@ project other than the one loaded.
 ## Script reference
 
 ```bash
-SCRIPTS=~/.claude/plugins/cache/golden-thread-plugin/gt/0.12.3/scripts
+SCRIPTS=~/.claude/plugins/cache/golden-thread-plugin/gt/0.12.4/scripts
 
 python3 $SCRIPTS/vault_init.py fresh --vault ~/my-vault --domain "My Team"
 

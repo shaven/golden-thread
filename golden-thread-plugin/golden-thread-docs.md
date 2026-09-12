@@ -1,9 +1,9 @@
 # Golden Thread Plugin — Documentation
-## Version gt 0.12.3 / gt-wiki 0.1.2
+## Version gt 0.12.4 / gt-wiki 0.1.2
 
 ---
 
-Golden Thread turns an Obsidian vault into the single source of truth for all AI memory across every project and every session. The tiered rule model introduced in v0.6.0 now carries **seven hook-backed Core rules** enforced at three points in the turn, 0.9.12 added `gt-route` for the middle of a session, and 0.9.13 makes the session-start component check verify that the hooks are **wired**, not merely installed, 0.11.0 makes `log.md` and `decisions.md` generated files so concurrent sessions cannot overwrite one another, and 0.12.3 stops a vault tool running against a vault it was never told to touch. gt-wiki 0.1.2 provides an LLM-powered knowledge base with immutable sources and interlinked pages.
+Golden Thread turns an Obsidian vault into the single source of truth for all AI memory across every project and every session. The tiered rule model introduced in v0.6.0 now carries **seven hook-backed Core rules** enforced at three points in the turn, 0.9.12 added `gt-route` for the middle of a session, and 0.9.13 makes the session-start component check verify that the hooks are **wired**, not merely installed, 0.11.0 makes `log.md` and `decisions.md` generated files so concurrent sessions cannot overwrite one another, 0.12.3 stops a vault tool running against a vault it was never told to touch, and 0.12.4 makes parallel execution the default for divisible work in every project. gt-wiki 0.1.2 provides an LLM-powered knowledge base with immutable sources and interlinked pages.
 
 ---
 
@@ -27,20 +27,22 @@ Facts move up the hierarchy as they prove themselves general. They never move ba
 
 ---
 
-## Core Rules (gt 0.12.3)
+## Core Rules (gt 0.12.4)
 
 Golden Thread defines a tiered rule model that separates rules by scope and enforcement strength.
-**Seven Core rules ship as of 0.12.3**, up from one at 0.6.0:
+**Nine Core rules ship as of 0.12.4**, up from one at 0.6.0 (the count read "seven" from 0.9.10 through 0.12.3, one behind the files):
 
 | # | Rule |
 |---|---|
 | 1 | Register your session and claim a vault file before writing it; never write a file another live session has claimed. |
-| 2 | Never put a secret's value into the session — not to inspect it, not to redact it, not to check it. |
-| 3 | Begin every response with the current wall-clock timestamp — before any other text you emit. |
-| 4 | `global-memory/` contains only facts needed in EVERY project. |
-| 5 | Do not auto-load the full memory index. |
-| 6 | A secret's value rests only in the secrets store or a mode-600 file the store wrote — never in source, a vault file, a repo, a log, or a session. |
-| 7 | Label every derived figure you present as fact with its verification state — `unverified`, `self-verified`, or `independently verified`. |
+| 2 | Name the vault on every mutating tool run — `--vault` or `--dry-run` — never let the target be inferred. |
+| 3 | Never put a secret's value into the session — not to inspect it, not to redact it, not to check it. |
+| 4 | Begin every response with the current wall-clock timestamp — before any other text you emit. |
+| 5 | `global-memory/` contains only facts needed in EVERY project. |
+| 6 | Do not auto-load the full memory index. |
+| 7 | Parallelise any work that can be parallelised, in every project — independent units run concurrently up to the configured budget, and serial execution must be justified, not assumed. |
+| 8 | A secret's value rests only in the secrets store or a mode-600 file the store wrote — never in source, a vault file, a repo, a log, or a session. |
+| 9 | Label every derived figure you present as fact with its verification state — `unverified`, `self-verified`, or `independently verified`. |
 
 Verify the set at any time with `echo '{}' | ~/.claude/golden-thread/hooks/inject_core_rules.sh`.
 
@@ -305,7 +307,7 @@ bash install.sh
 # Restart Claude Code
 ```
 
-Installs both `gt` (v0.12.3) and `gt-wiki` (v0.1.2) as separate plugins under the `golden-thread-plugin` marketplace. Requires Python 3.8+.
+Installs both `gt` (v0.12.4) and `gt-wiki` (v0.1.2) as separate plugins under the `golden-thread-plugin` marketplace. Requires Python 3.8+.
 
 `install.sh` installs the **newest version directory** present, not a hardcoded constant — pass an argument only to roll back deliberately (`./install.sh 0.9.3`). Never pipe it to `head`: `set -o pipefail` turns the closed pipe into an abort partway through, leaving the cache updated and registration undone.
 

@@ -55,7 +55,7 @@ shipped broken while everything looked fine.
 |---|---|
 | `sync-gt-src.sh` | publishes the newest release to the shared working copy (`gt-src`) from a **committed** tree, scrubbed and verified. `--dry-run` shows what would change |
 | `foreign_files.py` | lists files in the publish destination that the publisher did not write, so a second writer is named before `rsync --delete` removes it |
-| `render-pdfs.sh` | re-renders the PDFs after a docs change |
+| `render-pdfs.sh` | re-renders the PDFs after a docs change, in parallel — one Chrome per document, each with its own `--user-data-dir`; workers from `gt_settings.py jobs`, `GT_RENDER_JOBS=1` for serial |
 | `feature_requests.py` | validates the cross-machine feature-request queue |
 | `scrub_check.py` | scans for employer and machine-specific strings; exit 1 = hits, other = could not scan (also a failure — an unscanned file is not a clean file) |
 

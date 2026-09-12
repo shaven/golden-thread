@@ -28,6 +28,9 @@ EXPECTED = {
     "closeout_check": ("ask", ["off", "ask"]),
     "report_card": ("minimal", ["off", "minimal", "full"]),
     "install_demo": ("yes", ["yes", "no"]),
+    "parallel_work": ("on", ["off", "on"]),
+    # values None == free-form; `validate` carries the shape instead of a closed list.
+    "parallel_max": ("auto", None),
 }
 
 
@@ -39,6 +42,25 @@ class SettingsCli(Sandbox):
 
     def cfg_path(self):
         return self.home / ".claude" / "vault-config.json"
+
+    def test_set_rejects_a_bad_ceiling_and_accepts_a_good_one(self):
+        self.config(vault_path=str(self.tmp))
+        p = self.py(TOOL, "set", "parallel_max", "six")
+        self.assertNotEqual(p.returncode, 0, "a non-numeric ceiling must be refused")
+        self.assertIn("positive integer", p.stdout + p.stderr)
+        self.assertEqual(self.get("parallel_max"), "auto", "a refused set writes nothing")
+        self.assertOk(self.py(TOOL, "set", "parallel_max", "6"))
+        self.assertEqual(self.get("parallel_max"), "6")
+        self.assertOk(self.py(TOOL, "set", "parallel_max", "auto"))
+        self.assertEqual(self.get("parallel_max"), "auto")
+
+    def test_show_renders_a_freeform_setting(self):
+        self.config(vault_path=str(self.tmp))
+        p = self.py(TOOL, "show")
+        self.assertOk(p)
+        self.assertIn("parallel_max", p.stdout)
+        self.assertIn("positive integer", p.stdout,
+                      "a free-form setting must still print what it accepts")
 
     # -- reading -------------------------------------------------------------------
     def test_defaults_apply_with_no_config_file(self):
@@ -172,9 +194,49 @@ class SettingsInProcess(Sandbox):
     def test_registry_is_self_consistent(self):
         self.assertEqual(set(self.m.SETTINGS), set(EXPECTED))
         for name, spec in self.m.SETTINGS.items():
-            self.assertIn(spec["default"], spec["values"], name)
+            if spec["values"] is None:
+                # A free-form setting must still say what it accepts, and its own
+                # default must pass its own validator -- a default the reader rejects
+                # would make every unset value fall back to something invalid.
+                self.assertTrue(spec.get("validate", "").strip(), name)
+                self.assertTrue(self.m._freeform_ok(name, spec["default"]), name)
+            else:
+                self.assertIn(spec["default"], spec["values"], name)
             self.assertEqual((spec["default"], spec["values"]), EXPECTED[name], name)
             self.assertTrue(spec["summary"].strip() and spec["detail"].strip(), name)
+
+    # -- the parallel budget ---------------------------------------------------------
+    def test_parallel_max_accepts_auto_and_integers(self):
+        for good in ("auto", "1", "4", "64"):
+            self.assertTrue(self.m._freeform_ok("parallel_max", good), good)
+        for bad in ("", "0", "-2", "many", "4.5", "as many as possible"):
+            self.assertFalse(self.m._freeform_ok("parallel_max", bad), bad)
+
+    def test_parallel_jobs_caps_at_the_setting(self):
+        cores = os.cpu_count() or 4
+        self.config(vault_path=str(self.tmp))
+        # auto: never more workers than there is work, never more than the machine.
+        self.assertEqual(self.m.parallel_jobs(3), 3)
+        self.assertEqual(self.m.parallel_jobs(10 ** 6), cores)
+        # I/O-bound work is allowed above core count -- that is what `auto` means here.
+        self.assertGreater(self.m.parallel_jobs(10 ** 6, io_bound=True), cores - 1)
+        self.assertLessEqual(self.m.parallel_jobs(10 ** 6, io_bound=True), 20)
+
+    def test_parallel_jobs_honours_a_ceiling_and_off(self):
+        self.config(vault_path=str(self.tmp), parallel_max="2")
+        self.assertEqual(self.m.parallel_jobs(10 ** 6), 2)
+        self.assertEqual(self.m.parallel_jobs(10 ** 6, io_bound=True), 2)
+        self.config(vault_path=str(self.tmp), parallel_work="off", parallel_max="8")
+        self.assertEqual(self.m.parallel_jobs(10 ** 6), 1,
+                         "parallel_work=off means serial whatever the ceiling says")
+
+    def test_parallel_jobs_never_returns_zero(self):
+        self.config(vault_path=str(self.tmp), parallel_max="4")
+        self.assertEqual(self.m.parallel_jobs(0), 1)
+        # A nonsense ceiling falls back to the default rather than serialising silently.
+        self.config(vault_path=str(self.tmp), parallel_max="lots")
+        self.assertEqual(self.m.get("parallel_max"), "auto")
+        self.assertGreaterEqual(self.m.parallel_jobs(8), 1)
 
     def test_hook_args(self):
         argv, is_hook = self.m.hook_args(["check", "--hook", "/x"])

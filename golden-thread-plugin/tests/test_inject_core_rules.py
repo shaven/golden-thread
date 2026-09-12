@@ -19,7 +19,7 @@ import re
 import shutil
 import unittest
 
-from _harness import Sandbox, HOOKS, TEMPLATES
+from _harness import Sandbox, HOOKS, SCRIPTS, TEMPLATES, load_module
 
 STAMP_RE = r"\d{4}-\d{2}-\d{2} \d{2}:\d{2} \S+"
 CORE = "Projects/golden-thread/core-rules"
@@ -50,6 +50,17 @@ class InjectTestBase(Sandbox):
         for f in HOOKS.iterdir():
             if f.is_file():
                 shutil.copy2(f, self.hooks / f.name)
+        # install.sh also copies gt_paths.py and gt_components.HOOK_DIR_SCRIPTS from
+        # scripts/ into this directory, and the injector imports two of them at run
+        # time (gt_paths for the rules, gt_settings for the rules' gating). A sandbox
+        # holding only hooks/ is not the shape a real install has: the import fails,
+        # the injector falls back to "inject as written", and a gating test passes or
+        # fails for the wrong reason. Read the list rather than naming the files.
+        comp = load_module(SCRIPTS / "gt_components.py", "gt_components_for_inject_test")
+        for name in ("gt_paths.py",) + tuple(comp.HOOK_DIR_SCRIPTS):
+            src = SCRIPTS / name
+            if src.is_file():
+                shutil.copy2(src, self.hooks / name)
         self.env["PYTHONDONTWRITEBYTECODE"] = "1"
 
     def inject(self, stdin=PAYLOAD, env=None):
@@ -102,6 +113,56 @@ class InjectHealthyTest(InjectTestBase):
                                          "timestamp") for l in lines))
         self.assertFalse(any("Rule Priority Model" in l or "which rules survive" in l
                              for l in lines), "the priority-model file is not a per-turn rule")
+
+    # -- settings-governed rules -----------------------------------------------------
+    #
+    # A rule may name the setting that governs it (`gated_by`) and one whose value is
+    # appended to its line (`budget_from`). Both are read from the RULE FILE, so these
+    # tests must not hardcode which rule uses them -- they find it the same way the
+    # hook does.
+    def gated_rule(self, key="gated_by"):
+        for f in sorted((TEMPLATES / "core-rules").glob("core_*.md")):
+            text = f.read_text(encoding="utf-8")
+            for line in text.splitlines():
+                if line.startswith(key + ":"):
+                    imp = next(l.split(":", 1)[1].strip().strip('"').strip("'")
+                               for l in text.splitlines() if l.startswith("imperative:"))
+                    return f.name, line.split(":", 1)[1].strip(), imp
+        self.skipTest("no shipped rule declares %s" % key)
+
+    def test_a_gated_rule_is_injected_when_its_setting_is_on(self):
+        name, setting, imp = self.gated_rule()
+        self.config(vault_path=str(self.vault), **{setting: "on"})
+        lines = self.rule_lines(self.inject())
+        self.assertIn(imp, lines, "%s must be injected while %s is on" % (name, setting))
+
+    def test_a_gated_rule_disappears_when_its_setting_is_off(self):
+        name, setting, imp = self.gated_rule()
+        self.config(vault_path=str(self.vault), **{setting: "off"})
+        ctx = self.inject()
+        lines = self.rule_lines(ctx)
+        self.assertNotIn(imp, lines,
+                         "%s must stop being asserted once %s is off" % (name, setting))
+        self.assertNotIn("DEGRADED", ctx, "switching one rule off is not degradation")
+        self.assertTrue(lines, "the other rules must still be injected")
+        # And the numbering stays contiguous: a gap would read as a missing rule.
+        import re as _re
+        self.assertEqual([int(n) for n in _re.findall(r"^(\d+)\. ", ctx, flags=_re.M)],
+                         list(range(1, len(lines) + 1)))
+
+    def test_a_budget_rule_carries_its_current_ceiling(self):
+        name, setting, imp = self.gated_rule("budget_from")
+        self.config(vault_path=str(self.vault), **{setting: "auto"})
+        ctx = self.inject()
+        self.assertIn("(%s: as many as the machine allows)" % setting, ctx)
+        self.config(vault_path=str(self.vault), **{setting: "3"})
+        ctx = self.inject()
+        self.assertIn("(%s: at most 3)" % setting, ctx,
+                      "the budget the model is given must be the configured one")
+        # The budget line belongs directly under its own rule, not at the end.
+        body = ctx.splitlines()
+        idx = next(i for i, l in enumerate(body) if imp in l)
+        self.assertIn("(%s: at most 3)" % setting, body[idx + 1])
 
     def test_validated_rules_come_first(self):
         ctx = self.inject()

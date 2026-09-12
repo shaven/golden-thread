@@ -114,7 +114,7 @@ pre, table { break-inside: avoid; font-size: 9px; }
 table { width:100%; border-collapse: collapse; }
 th, td { border:1px solid #ddd; padding:3px 5px; text-align:left; vertical-align:top; }
 </style></head><body><h1 id="golden-thread-user-manual">User Manual</h1>
-<p>Complete reference for all seventeen skills. Written against <strong>gt v0.12.3</strong>.</p>
+<p>Complete reference for all seventeen skills. Written against <strong>gt v0.12.4</strong>.</p>
 <hr />
 <h2 id="the-model">The model</h2>
 <p>Claude forgets everything between sessions. The vault doesn't. Golden Thread's
@@ -791,6 +791,18 @@ is registered here and can be switched off.</p>
 <td><code>/gt:gt-watch</code>: the hourly fetch and the session-start report of repo changes</td>
 </tr>
 <tr>
+<td><code>parallel_work</code></td>
+<td><code>off</code> · <code>on</code></td>
+<td><code>on</code></td>
+<td>Whether divisible work runs in parallel at all; <code>off</code> also stops the Core rule being injected</td>
+</tr>
+<tr>
+<td><code>parallel_max</code></td>
+<td><code>auto</code> · a positive integer</td>
+<td><code>auto</code></td>
+<td>Ceiling on concurrent workers. <code>auto</code> = as many as the machine allows</td>
+</tr>
+<tr>
 <td><code>install_demo</code></td>
 <td><code>yes</code> · <code>no</code></td>
 <td><code>yes</code></td>
@@ -798,6 +810,21 @@ is registered here and can be switched off.</p>
 </tr>
 </tbody>
 </table>
+<blockquote>
+<p><strong>Heads-up:</strong> <code>parallel_work</code> is <code>on</code> and <code>parallel_max</code> is <code>auto</code> out of the box, so
+after upgrading to 0.12.4 a long run will use as much of your machine as it can — many
+processes at once, CPU well above 100%, and the fans to match. That is intended. Cap it
+with <code>set parallel_max &lt;N&gt;</code> or switch it off with <code>set parallel_work off</code>; nothing else
+about the plugin changes.</p>
+</blockquote>
+<p><strong>The budget as a number.</strong> Any script, in any project, can ask what the settings allow
+instead of inventing a worker count:</p>
+<pre><code class="language-bash">JOBS=$(python3 .../scripts/gt_settings.py jobs 42 --io-bound)   # 42 units of I/O-bound work
+JOBS=$(python3 .../scripts/gt_settings.py jobs 8)               # 8 units, CPU-bound
+</code></pre>
+<p>It returns 1 when <code>parallel_work=off</code>, never more than <code>parallel_max</code>, and never more
+workers than there are units of work. <code>gt_settings.parallel_jobs()</code> is the same answer
+from Python.</p>
 <pre><code class="language-bash">python3 $SCRIPTS/gt_settings.py show            # current state of all settings
 python3 $SCRIPTS/gt_settings.py explain &lt;name&gt;  # reasoning behind the default
 python3 $SCRIPTS/gt_settings.py set &lt;name&gt; &lt;value&gt;
@@ -929,7 +956,7 @@ answer is not obvious — including when the honest answer is that the fact belo
 project other than the one loaded.</p>
 <hr />
 <h2 id="script-reference">Script reference</h2>
-<pre><code class="language-bash">SCRIPTS=~/.claude/plugins/cache/golden-thread-plugin/gt/0.12.3/scripts
+<pre><code class="language-bash">SCRIPTS=~/.claude/plugins/cache/golden-thread-plugin/gt/0.12.4/scripts
 
 python3 $SCRIPTS/vault_init.py fresh --vault ~/my-vault --domain &quot;My Team&quot;
 

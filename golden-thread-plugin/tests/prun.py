@@ -87,15 +87,52 @@ def run_unit(unit):
             "secs": time.time() - started}
 
 
+def _settings_jobs(want):
+    """Worker count from the registered settings, falling back to the old default.
+
+    `parallel_work` / `parallel_max` are the machine-wide budget (see the Core rule
+    core_parallel_when_beneficial), so the test runner honours the same numbers as
+    everything else rather than keeping a private policy. Precedence: `-j` beats
+    GT_TEST_JOBS beats the settings beats the fallback.
+
+    The fallback matters: these tests run from a clone that may have no vault and no
+    ~/.claude at all, and a runner that refuses to run because a settings file is
+    missing would be worse than one that guesses well.
+    """
+    import importlib.util
+    io_default = min((os.cpu_count() or 4) + 4, 20)
+    rel = os.environ.get("GT_TEST_VERSION") or _newest_release()
+    if not rel:
+        return io_default
+    src = HERE.parent / "golden-thread" / rel / "scripts" / "gt_settings.py"
+    if not src.is_file():
+        return io_default
+    try:
+        spec = importlib.util.spec_from_file_location("gt_settings_for_prun", str(src))
+        m = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(m)
+        return m.parallel_jobs(want, io_bound=True)
+    except Exception:
+        return io_default
+
+
+def _newest_release():
+    d = HERE.parent / "golden-thread"
+    vs = [p.name for p in d.glob("*/") if re.fullmatch(r"\d+\.\d+\.\d+", p.name)
+          and (p / ".claude-plugin" / "plugin.json").is_file()] if d.is_dir() else []
+    return max(vs, key=lambda v: [int(x) for x in v.split(".")]) if vs else None
+
+
 def main(argv=None):
     ap = argparse.ArgumentParser(description="run the test suite in parallel")
     ap.add_argument("selectors", nargs="*", help="module or module.Class")
     ap.add_argument("-j", "--jobs", type=int,
                     default=int(os.environ.get("GT_TEST_JOBS") or 0),
-                    help="worker processes (default: cores + 4, I/O-bound)")
+                    help="worker processes (default: the parallel_max setting; "
+                         "auto = cores + 4, I/O-bound)")
     a = ap.parse_args(argv)
 
-    jobs = a.jobs or min((os.cpu_count() or 4) + 4, 20)
+    jobs = a.jobs or _settings_jobs(len(units(a.selectors)))
     todo = units(a.selectors)
     if not todo:
         print("no tests selected")

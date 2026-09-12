@@ -11,6 +11,57 @@ release's own summary line, kept short rather than reconstructed after the fact.
 
 ---
 
+## gt 0.12.4 — 2026-09-12
+
+**A ninth Core rule: parallel execution is the default for divisible work, in every
+project — and a setting that caps it.**
+
+The serial default was never a decision. A loop, a sweep over 43 projects, a backtest and
+a test suite all run on one core unless someone says otherwise, and nothing reports the
+waste: the work completes, correctly, slowly, and its output is identical to the fast
+version. Measured here on the `gt` suite itself — **509s serial against 108s parallel,
+4.7x, CPU from roughly one core to 404%**, the same 672 tests passing both ways
+(`self-verified`). That speedup had been available on every previous run.
+
+- **`core_parallel_when_beneficial`** (Core/Reminder, designated by the repo owner) —
+  work that splits into independent units runs concurrently, up to the configured
+  budget; serial execution must be justified rather than assumed. It governs both halves
+  of the job: what gets **run** (builds, suites, sweeps, migrations, host fan-out, in any
+  language on any host) and what gets **written** — a tool authored for divisible work
+  gets a `--jobs` flag defaulting to the budget, because a script that can only run
+  serially makes the mistake permanent for everyone who runs it later. Repetition is the
+  strongest trigger: the cost is paid on every iteration, and each run still looks fine.
+  It also names where parallelism is *forbidden* — shared-file writes, order-dependent
+  steps, rate-limited remotes, production changes, and any job whose partial failure
+  leaves a state nobody can reason about.
+- **Two settings, `parallel_work` and `parallel_max`.** `parallel_work=off` runs
+  everything serially *and stops the rule being injected* — a rule the user has switched
+  off must stop being asserted, or the registry is decoration. `parallel_max` is `auto`
+  (as many as the machine allows) or a worker ceiling; `auto` is deliberately not a
+  number, since a stored count is wrong on the next machine and this config syncs
+  between them. `gt_settings.parallel_jobs()` is the single place the two turn into a
+  worker count, so no caller invents its own policy.
+- **The mechanism is generic, not hardcoded.** A rule file may now declare `gated_by:`
+  (the setting that can switch it off) and `budget_from:` (the setting whose value is
+  appended to the injected line). `inject_core_rules.sh` reads both from the rule, so the
+  hook never learns a rule's name — the same reason rule *text* has never lived in a
+  script. The injected line carries the current ceiling, because a budget the model
+  cannot see is a budget it cannot honour.
+- `tests/prun.py` now takes its default worker count from those settings instead of
+  keeping a private policy, with `-j` still winning, then `GT_TEST_JOBS`, then the
+  settings, then the old I/O-bound fallback for a clone with no `~/.claude` at all.
+
+**What you will notice after upgrading.** Runs that used to occupy one core now occupy
+all of them: many processes at once, CPU above 100%, audible fans. Nothing is runaway —
+the processes end when the run does. If you would rather it stayed modest,
+`gt_settings.py set parallel_max 4` caps it and `set parallel_work off` turns it off
+entirely, rule included.
+
+**Two stale counts fixed on the way past.** The docs had said "seven Core rules" since
+0.9.10 while eight shipped — `core_explicit_vault_target` was added in 0.12.0 and no
+count moved — and the repo-root README's own table listed six of them. Both now state
+nine, four validated, counted from the rule files.
+
 ## gt 0.12.3 — 2026-09-12
 
 **A name for the installer fix, and a gate so the next one cannot go unnamed.**
