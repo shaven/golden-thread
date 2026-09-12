@@ -68,6 +68,10 @@
    "bytes": 16467,
    "sha256": "f70fee366ff2d6fdfa79293fc3fc85eda08f216ac33bb3a181574799621c2747"
   },
+  "scripts/gt_upgrade.py": {
+   "bytes": 18286,
+   "sha256": "449a8668f88bccee16da046cb31731ac15ae766f9e4d01ab9463ba0d312df524"
+  },
   "scripts/gt_version_check.py": {
    "bytes": 8956,
    "sha256": "7d23ae988bfc1ceaf52a8e30a65285e6933d69e0843673df1e4e40bb6cd33423"
@@ -85,8 +89,8 @@
    "sha256": "d56bbd01ce9ba0e74b36ea2bf15fcfccd5d2d4a1ef8fdbdd33d02ae8c36fb7a0"
   },
   "scripts/vault_init.py": {
-   "bytes": 49809,
-   "sha256": "7b18a9c59de7f9db037dc80fec94cc5c65d43c392ca8d20026dfe8d9ddf8f82c"
+   "bytes": 51104,
+   "sha256": "608e451176f38d776e68818fe2def3b9b466df8c0684fccfa1b2dfc88eb8ecd9"
   },
   "templates/CONVENTIONS.md": {
    "bytes": 19546,
@@ -257,7 +261,7 @@
    "sha256": "383c0e4b30c8c9c9447c4798f37debf1f4a0402b1e3ee068e7629e9d1ab21859"
   }
  },
- "generated": "2026-09-12T06:42:49",
+ "generated": "2026-09-12T06:55:59",
  "hooks": [
   {
    "args": [

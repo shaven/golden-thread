@@ -334,6 +334,10 @@ often it would train the guard to be ignored.</p>
 </thead>
 <tbody>
 <tr>
+<td><code>/gt:gt-upgrade</code></td>
+<td>Bring an existing vault up to the installed release: run the migrations it has not had, take the release's changes into <code>PROTOCOL.md</code> and <code>CONVENTIONS.md</code> without losing local edits, add newly shipped Core rules, stamp the vault. Rehearse with <code>--dry-run</code>; it refuses a dirty tree and backs up before applying.</td>
+</tr>
+<tr>
 <td><code>/gt:gt-doctor</code></td>
 <td>One report for the whole install: plugin version, component drift, hook wiring, pending vault migrations, stray workers, unpushed commits, publish-destination drift and a lint summary. Exit 2 means a check <em>could not run</em>, which is deliberately distinct from clean.</td>
 </tr>

@@ -764,6 +764,29 @@ def seed_vault_workspace(vault: Path):
     if inbox.exists():
         ensure_file(vault / "INBOX.md", inbox.read_text(encoding="utf-8"))
 
+    # The merge BASE for the documents an owner edits, and the version stamp that says
+    # which release they came from. Without these, gt_upgrade.py has no way to take a
+    # release's changes into an edited PROTOCOL.md without either overwriting the
+    # owner's work or ignoring the update -- it is the difference between a merge and a
+    # guess. The base lives in the vault because old release directories are pruned.
+    base_dir = vault / "Projects" / "golden-thread" / ".templates"
+    for name in ("PROTOCOL.md", "CONVENTIONS.md"):
+        src = TEMPLATES_DIR / name
+        if src.is_file():
+            ensure_file(base_dir / name, src.read_text(encoding="utf-8"))
+    stamp = vault / "Projects" / "golden-thread" / ".vault-version.json"
+    if not stamp.exists():
+        try:
+            version = json.loads((SCRIPT_DIR.parent / ".claude-plugin" / "plugin.json")
+                                 .read_text(encoding="utf-8"))["version"]
+        except Exception:
+            version = SCRIPT_DIR.parent.name
+        ensure_file(stamp, json.dumps(
+            {"gt": version,
+             "updated": __import__("datetime").datetime.now().astimezone().isoformat(),
+             "history": [{"to": version, "at": "seeded", "applied": ["fresh"]}]},
+            indent=2) + "\n")
+
     # The vault is a git repo so its truth survives one disk; per-edit attribution
     # rides on git hooks that only work once core.hooksPath points at .githooks.
     if shutil.which("git"):

@@ -34,6 +34,26 @@ what happened.
 - The end-of-install skill summary is derived from what was actually installed. It had been a
   hardcoded list, and told new users that a shipped skill did not exist.
 
+**Two new commands, and thirteen fewer release directories.**
+
+- `/gt:gt-upgrade` updates the VAULT after `install.sh` updates the plugin — the step that did
+  not exist, which is why adopting 0.11.0 meant reading source for the migrations and running
+  them by hand across 43 projects. It records a version stamp, keeps the merge base for
+  `PROTOCOL.md` and `CONVENTIONS.md` inside the vault, rehearses with `--dry-run`, refuses a
+  dirty tree, backs up before applying, and reports the steps that need a person (a duplicate
+  ADR number, a document conflict) rather than guessing at them.
+- `/gt:gt-doctor` answers "is this install healthy?" in one command: version, component drift,
+  hook wiring, pending migrations, stray workers, unpushed commits, publish-destination drift,
+  lint. Exit 2 means a check *could not run*, which is deliberately not the same as clean.
+- `sync-gt-src.sh` names the files in the publish destination that it did not write, before
+  the backup and the delete. A flat 0.9.13-era `scripts/` and `templates/` had appeared there
+  and were removed inside forty lines of rsync output where nobody could see it.
+- The migration round-trip gate compared both sides with `rstrip`, so a trailing blank line
+  could be dropped while the tool reported a byte-identical round trip. It now compares
+  exactly and says so when the rendering differs.
+- Only the current and previous releases stay on disk. Earlier ones are in git; `install.sh`
+  documents the two-step rollback.
+
 ## gt 0.11.0 — 2026-09-11
 
 **`log.md` and `decisions.md` become generated files, so concurrent sessions stop colliding.**
