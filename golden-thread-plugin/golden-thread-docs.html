@@ -113,9 +113,9 @@
 <h1 class="title">Golden Thread Plugin</h1>
 </header>
 <h1 id="golden-thread-plugin-documentation">Golden Thread Plugin — Documentation</h1>
-<h2 id="version-gt-0120-gt-wiki-012">Version gt 0.12.0 / gt-wiki 0.1.2</h2>
+<h2 id="version-gt-0121-gt-wiki-012">Version gt 0.12.1 / gt-wiki 0.1.2</h2>
 <hr />
-<p>Golden Thread turns an Obsidian vault into the single source of truth for all AI memory across every project and every session. The tiered rule model introduced in v0.6.0 now carries <strong>seven hook-backed Core rules</strong> enforced at three points in the turn, 0.9.12 added <code>gt-route</code> for the middle of a session, and 0.9.13 makes the session-start component check verify that the hooks are <strong>wired</strong>, not merely installed, 0.11.0 makes <code>log.md</code> and <code>decisions.md</code> generated files so concurrent sessions cannot overwrite one another, and 0.12.0 stops a vault tool running against a vault it was never told to touch. gt-wiki 0.1.2 provides an LLM-powered knowledge base with immutable sources and interlinked pages.</p>
+<p>Golden Thread turns an Obsidian vault into the single source of truth for all AI memory across every project and every session. The tiered rule model introduced in v0.6.0 now carries <strong>seven hook-backed Core rules</strong> enforced at three points in the turn, 0.9.12 added <code>gt-route</code> for the middle of a session, and 0.9.13 makes the session-start component check verify that the hooks are <strong>wired</strong>, not merely installed, 0.11.0 makes <code>log.md</code> and <code>decisions.md</code> generated files so concurrent sessions cannot overwrite one another, and 0.12.1 stops a vault tool running against a vault it was never told to touch. gt-wiki 0.1.2 provides an LLM-powered knowledge base with immutable sources and interlinked pages.</p>
 <hr />
 <h2 id="what-it-does">What It Does</h2>
 <p>Instead of scattered <code>.claude/memory/</code> files and CLAUDE.md snippets that live and die per session, Golden Thread gives every fact a permanent home in a structured vault. Knowledge flows up a hierarchy from session notes into the vault, and the right facts are always in scope when you need them.</p>
@@ -131,9 +131,9 @@ global-memory/  (loaded in every session, all projects)
 </code></pre>
 <p>Facts move up the hierarchy as they prove themselves general. They never move back down and are never silently deleted.</p>
 <hr />
-<h2 id="core-rules-gt-0120">Core Rules (gt 0.12.0)</h2>
+<h2 id="core-rules-gt-0121">Core Rules (gt 0.12.1)</h2>
 <p>Golden Thread defines a tiered rule model that separates rules by scope and enforcement strength.
-<strong>Seven Core rules ship as of 0.12.0</strong>, up from one at 0.6.0:</p>
+<strong>Seven Core rules ship as of 0.12.1</strong>, up from one at 0.6.0:</p>
 <table>
 <thead>
 <tr>
@@ -215,7 +215,7 @@ global-memory/  (loaded in every session, all projects)
 </tr>
 </tbody>
 </table>
-<p>Since 0.12.0 a <strong>second <code>PreToolUse</code> guard</strong> (<code>guard_vault_writes.sh</code>) denies a vault-mutating
+<p>Since 0.12.1 a <strong>second <code>PreToolUse</code> guard</strong> (<code>guard_vault_writes.sh</code>) denies a vault-mutating
 tool run that does not say <em>which</em> vault it means — no <code>--vault</code>, no <code>--dry-run</code>, no
 <code>GT_VAULT</code>. It exists because a session rehearsing the 0.11.0 migration in a scratch copy
 had one tool that took <code>--vault</code> and one that did not, so the same loop migrated all 42
@@ -385,7 +385,7 @@ often it would train the guard to be ignored.</p>
 </tr>
 </tbody>
 </table>
-<h3 id="concurrent-sessions-stop-colliding-0120">Concurrent sessions stop colliding (0.12.0)</h3>
+<h3 id="concurrent-sessions-stop-colliding-0121">Concurrent sessions stop colliding (0.12.1)</h3>
 <p><code>log.md</code> and <code>decisions.md</code> are the two files every session appends and none owns. In one
 working tree there are no branches to collide and no merge to resolve — just
 last-writer-wins, invisible when it happens.</p>
@@ -665,7 +665,7 @@ cd golden-thread-plugin
 bash install.sh
 # Restart Claude Code
 </code></pre>
-<p>Installs both <code>gt</code> (v0.12.0) and <code>gt-wiki</code> (v0.1.2) as separate plugins under the <code>golden-thread-plugin</code> marketplace. Requires Python 3.8+.</p>
+<p>Installs both <code>gt</code> (v0.12.1) and <code>gt-wiki</code> (v0.1.2) as separate plugins under the <code>golden-thread-plugin</code> marketplace. Requires Python 3.8+.</p>
 <p><code>install.sh</code> installs the <strong>newest version directory</strong> present, not a hardcoded constant — pass an argument only to roll back deliberately (<code>./install.sh 0.9.3</code>). Never pipe it to <code>head</code>: <code>set -o pipefail</code> turns the closed pipe into an abort partway through, leaving the cache updated and registration undone.</p>
 <hr />
 <h2 id="typical-session-pattern">Typical Session Pattern</h2>

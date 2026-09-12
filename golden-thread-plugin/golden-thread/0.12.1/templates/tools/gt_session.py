@@ -52,8 +52,28 @@ import sys
 import time
 
 STALE_AFTER_MIN = 30
-VAULT = pathlib.Path(__file__).resolve().parents[3]
+# Where this copy of the tool was installed (<vault>/Projects/golden-thread/tools/),
+# overridable by $GT_VAULT and then by --vault. Until 0.12.0 this was a hardcoded
+# parents[3] with no way to point the tool anywhere else, so a session could not
+# rehearse against a copy -- see core_explicit_vault_target.
+VAULT = pathlib.Path(os.environ.get("GT_VAULT")
+                     or pathlib.Path(__file__).resolve().parents[3])
 SESSIONS = VAULT / "Projects" / "golden-thread" / "sessions"
+DRY_RUN = False
+
+
+def use_vault(path):
+    """Repoint the tool at another vault. Called once, from main()."""
+    global VAULT, SESSIONS
+    VAULT = pathlib.Path(path)
+    SESSIONS = VAULT / "Projects" / "golden-thread" / "sessions"
+
+
+def dry(action):
+    """True if this write should be described instead of performed."""
+    if DRY_RUN:
+        print("dry run: would %s" % action)
+    return DRY_RUN
 # A numeric offset, not a zone name: strptime discards %Z, so a heartbeat written
 # in another zone was misread by hours and a live claim looked dead.
 TS_FMT = "%Y-%m-%d %H:%M:%S %z"
@@ -188,6 +208,8 @@ def cmd_register(args):
     sid = session_id(args.id)
     if not sid:
         sys.exit("cannot resolve session id -- pass --id")
+    if dry("register %s in %s" % (sid, SESSIONS)):
+        return 0
     SESSIONS.mkdir(parents=True, exist_ok=True)
     now = _now()
 
@@ -284,6 +306,8 @@ def cmd_claim(args):
         body = re.sub(r"^_nothing claimed yet_\n?", "", body, flags=re.M)
     body = body.rstrip("\n") + "\n" + "".join(f"- `{f}`\n" for f in new)
     fm["last_execution"] = _stamp()
+    if dry("claim %d file(s) for %s" % (len(new), sid)):
+        return 0
     p.write_text(_render(fm, body))
     print(f"claimed {len(new)} file(s) for {sid}")
     return 0
@@ -351,19 +375,30 @@ def cmd_release(args):
     if not p or not p.exists():
         print("nothing to release")
         return 0
+    if dry("delete %s" % p):
+        return 0
     p.unlink()
     print(f"released {sid} -- writing finished, claims cleared")
     return 0
 
 
 def main():
-    ap = argparse.ArgumentParser(description=__doc__.split("\n")[0])
+    # Shared flags declared once and attached to the top level AND every subcommand,
+    # so they parse on either side of the verb. default=SUPPRESS keeps a subparser
+    # from resetting a value given before the verb.
+    common = argparse.ArgumentParser(add_help=False)
+    common.add_argument("--vault", default=argparse.SUPPRESS,
+                        help="the vault to act on (default: $GT_VAULT, else this "
+                             "tool's own vault)")
+    common.add_argument("--dry-run", "-n", action="store_true", default=argparse.SUPPRESS,
+                        help="say what would change; write nothing")
+    ap = argparse.ArgumentParser(description=__doc__.split("\n")[0], parents=[common])
     ap.add_argument("--id", help="session id (default: $CLAUDE_SESSION_ID, then $TMPDIR)")
     ap.add_argument("--stale-after", type=float, default=STALE_AFTER_MIN,
                     help=f"minutes before a heartbeat is stale (default {STALE_AFTER_MIN})")
     sub = ap.add_subparsers(dest="cmd", required=True)
 
-    r = sub.add_parser("register", help="announce this session")
+    r = sub.add_parser("register", help="announce this session", parents=[common])
     r.add_argument("--task", help="one line: what this session is doing")
     r.add_argument("--agent", default="Claude Code")
     r.add_argument("--files", nargs="*", default=[])
@@ -373,25 +408,29 @@ def main():
                    help="register a second entry for this id on purpose")
     r.set_defaults(fn=cmd_register)
 
-    b = sub.add_parser("beat", help="refresh last_execution")
+    b = sub.add_parser("beat", help="refresh last_execution", parents=[common])
     b.set_defaults(fn=cmd_beat)
 
-    c = sub.add_parser("claim", help="add files to this session's claim")
+    c = sub.add_parser("claim", help="add files to this session's claim", parents=[common])
     c.add_argument("files", nargs="+")
     c.add_argument("--force", action="store_true", help="claim even if another live session holds it")
     c.set_defaults(fn=cmd_claim)
 
-    k = sub.add_parser("check", help="who holds this file?")
+    k = sub.add_parser("check", help="who holds this file?", parents=[common])
     k.add_argument("file")
     k.set_defaults(fn=cmd_check)
 
-    l = sub.add_parser("list", help="every live session")
+    l = sub.add_parser("list", help="every live session", parents=[common])
     l.set_defaults(fn=cmd_list)
 
-    x = sub.add_parser("release", help="delete this session's file -- done writing")
+    x = sub.add_parser("release", help="delete this session's file -- done writing", parents=[common])
     x.set_defaults(fn=cmd_release)
 
     args = ap.parse_args()
+    global DRY_RUN
+    DRY_RUN = getattr(args, "dry_run", False)
+    if getattr(args, "vault", None):
+        use_vault(args.vault)
     sys.exit(args.fn(args))
 
 

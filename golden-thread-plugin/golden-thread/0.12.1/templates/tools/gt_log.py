@@ -44,9 +44,14 @@ def render(vault):
 
 def cmd_add(a):
     v = S.vault_root(a.vault)
+    if a.dry_run:
+        print("dry run: would append to %s and regenerate log.md\n  %s"
+              % ((S.spool_dir(v, KIND) / ("%s.md" % S.session_id(a.id))).relative_to(v),
+                 a.text))
+        return 0
     p = S.append(v, KIND, a.text, sid=a.id)
     if not a.no_merge:
-        cmd_merge(argparse.Namespace(vault=str(v), quiet=True))
+        cmd_merge(argparse.Namespace(vault=str(v), quiet=True, dry_run=False))
     print("spooled -> %s" % p.relative_to(v))
     return 0
 
@@ -61,6 +66,12 @@ def cmd_merge(a):
         print("REFUSED: %s is not generated and no baseline exists — run `migrate` first"
               % t.name, file=sys.stderr)
         return 2
+    if getattr(a, "dry_run", False):
+        produced = render(v)
+        current = t.read_text(encoding="utf-8", errors="replace") if t.exists() else ""
+        print("dry run: log.md would be %s"
+              % ("unchanged" if produced == current else "rewritten from the spool"))
+        return 0
     changed = S.write_if_changed(t, render(v))
     if not getattr(a, "quiet", False):
         print("log.md %s" % ("updated" if changed else "unchanged (idempotent)"))
@@ -113,27 +124,49 @@ def cmd_migrate(a):
     base.write_text(original, encoding="utf-8")
     produced = render(v)
     # Compare the CONTENT, ignoring the banner we are adding on purpose.
-    if produced[len(S.BANNER) + 2:].rstrip("\n") != original.rstrip("\n"):
+    note = S.roundtrip_note(produced[len(S.BANNER) + 2:], original)
+    if note is None:
         base.unlink()
         print("REFUSED: merge would not reproduce log.md byte-for-byte; nothing changed",
               file=sys.stderr)
         return 3
+    if a.dry_run:
+        base.unlink()
+        print("dry run: would freeze %d line(s) as %s and generate log.md%s"
+              % (len(original.splitlines()), base.name, note))
+        return 0
     S.write_if_changed(t, produced)
-    print("migrated: %d line(s) frozen as %s; log.md is now generated"
-          % (len(original.splitlines()), base.name))
+    print("migrated: %d line(s) frozen as %s; log.md is now generated%s"
+          % (len(original.splitlines()), base.name, note))
     return 0
 
 
 def main(argv=None):
-    p = argparse.ArgumentParser(description="log.md spool and merge")
-    p.add_argument("--vault")
-    p.add_argument("--id", help="session id override (testing)")
+    # Declared once, attached to the top level AND to every subcommand, so --vault and
+    # --dry-run work on either side of the verb. A flag that parses only before the
+    # subcommand is one people will believe they passed -- the exact failure
+    # core_explicit_vault_target exists to prevent.
+    common = argparse.ArgumentParser(add_help=False)
+    # default=SUPPRESS matters: without it, a subparser built from `parents` RESETS
+    # these to their defaults when the flag appears before the verb, so
+    # `--id alpha status` silently became id=None. Found by test_gt_log 2026-09-11.
+    common.add_argument("--vault", default=argparse.SUPPRESS)
+    common.add_argument("--id", default=argparse.SUPPRESS,
+                        help="session id override (testing)")
+    common.add_argument("--dry-run", "-n", action="store_true",
+                        default=argparse.SUPPRESS,
+                        help="say what would change; write nothing")
+    p = argparse.ArgumentParser(description="log.md spool and merge", parents=[common])
     sub = p.add_subparsers(dest="cmd", required=True)
-    a = sub.add_parser("add"); a.add_argument("text"); a.add_argument("--no-merge", action="store_true")
-    sub.add_parser("merge")
-    sub.add_parser("status")
-    sub.add_parser("migrate")
+    a = sub.add_parser("add", parents=[common])
+    a.add_argument("text"); a.add_argument("--no-merge", action="store_true")
+    sub.add_parser("merge", parents=[common])
+    sub.add_parser("status", parents=[common])
+    sub.add_parser("migrate", parents=[common])
     args = p.parse_args(argv)
+    for key, default in (("vault", None), ("id", None), ("dry_run", False)):
+        if not hasattr(args, key):
+            setattr(args, key, default)
     return {"add": cmd_add, "merge": cmd_merge, "status": cmd_status,
             "migrate": cmd_migrate}[args.cmd](args)
 

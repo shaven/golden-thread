@@ -42,12 +42,59 @@ def record(action, path, note=""):
     RESULTS.append({"action": action, "path": str(path), "note": note})
 
 
+# ---- the dry-run boundary ---------------------------------------------------
+#
+# Every write in this file goes through one of these three. That is the whole
+# mechanism: a `--dry-run` that misses one write site is worse than none, because
+# it is believed. Adding a new write means calling one of these, not Path.write_text
+# -- dev/check_cli_contract.py fails the build if the flag disappears, and
+# test_vault_init proves the flag writes nothing.
+DRY_RUN = False
+
+
+def dry(action, path, note=""):
+    """True if this write is only to be described. Records it either way."""
+    if DRY_RUN:
+        record("would-" + action, path, note)
+        return True
+    return False
+
+
+def w_write(path: Path, text: str, action="created", note="", **kw):
+    """Write a file unless rehearsing. **kw swallows the encoding= the call sites
+    pass; the text is always written as UTF-8."""
+    path = Path(path)
+    if dry(action, path, note):
+        return False
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(text, encoding="utf-8")
+    return True
+
+
+def w_mkdir(path: Path, note="", **kw):
+    path = Path(path)
+    if dry("create-dir", path, note):
+        return False
+    kw.setdefault("parents", True)
+    kw.setdefault("exist_ok", True)
+    path.mkdir(**kw)
+    return True
+
+
+def w_unlink(path: Path, note=""):
+    path = Path(path)
+    if dry("delete", path, note):
+        return False
+    path.unlink()
+    return True
+
+
 def ensure_dir(path: Path):
     path = Path(path)
     if path.exists():
         record("skipped", path, "directory already exists")
     else:
-        path.mkdir(parents=True, exist_ok=True)
+        w_mkdir(path, parents=True, exist_ok=True)
         record("created", path)
 
 
@@ -56,8 +103,8 @@ def ensure_file(path: Path, content: str):
     if path.exists():
         record("skipped", path, "file already exists")
     else:
-        path.parent.mkdir(parents=True, exist_ok=True)
-        path.write_text(content, encoding="utf-8")
+        w_mkdir(path.parent, parents=True, exist_ok=True)
+        w_write(path, content, encoding="utf-8")
         record("created", path)
 
 
@@ -89,7 +136,7 @@ def write_config(vault_path: Path, switch: bool = False):
             old = existing.get("vault_path")
             existing.pop("core_rules_path", None)
             existing["vault_path"] = vault_str
-            config_path.write_text(json.dumps(existing, indent=2) + "\n", encoding="utf-8")
+            w_write(config_path, json.dumps(existing, indent=2) + "\n", encoding="utf-8")
             record("updated", config_path, f"switched from '{old}'")
             return
         else:
@@ -97,8 +144,8 @@ def write_config(vault_path: Path, switch: bool = False):
                    f"already points to '{existing.get('vault_path')}' — run with 'connect' mode to switch")
             print(json.dumps(RESULTS, indent=2))
             sys.exit(3)
-    config_path.parent.mkdir(parents=True, exist_ok=True)
-    config_path.write_text(json.dumps({"vault_path": vault_str}, indent=2), encoding="utf-8")
+    w_mkdir(config_path.parent, parents=True, exist_ok=True)
+    w_write(config_path, json.dumps({"vault_path": vault_str}, indent=2), encoding="utf-8")
     record("created", config_path)
 
 
@@ -115,11 +162,11 @@ def update_claude_md(claude_md_path: Path, section_content: str, section_marker:
             updated = existing.replace("## See Also", section_content + "\n\n## See Also")
         else:
             updated = existing.rstrip() + "\n\n" + section_content + "\n"
-        claude_md_path.write_text(updated, encoding="utf-8")
+        w_write(claude_md_path, updated, encoding="utf-8")
         record("updated", claude_md_path, "appended Golden Thread memory section")
     else:
-        claude_md_path.parent.mkdir(parents=True, exist_ok=True)
-        claude_md_path.write_text(section_content + "\n", encoding="utf-8")
+        w_mkdir(claude_md_path.parent, parents=True, exist_ok=True)
+        w_write(claude_md_path, section_content + "\n", encoding="utf-8")
         record("created", claude_md_path)
 
 
@@ -133,8 +180,8 @@ def register_in_master_index(index_path: Path, slug: str, title: str, tags: list
     row = f"| [{title}]({slug}/) | `{slug}` | {domain or 'TODO'} | {stage} | <!-- one-line description --> |"
 
     if not index_path.exists():
-        index_path.parent.mkdir(parents=True, exist_ok=True)
-        index_path.write_text(
+        w_mkdir(index_path.parent, parents=True, exist_ok=True)
+        w_write(index_path, 
             "# Projects\n\n## All projects\n\n"
             "| Project | Slug | Domain | Stage | What it is |\n|---|---|---|---|---|\n"
             f"{row}\n", encoding="utf-8")
@@ -167,7 +214,7 @@ def register_in_master_index(index_path: Path, slug: str, title: str, tags: list
         while end < len(lines) and lines[end].startswith("|"):
             end += 1
         lines.insert(end, row)
-    index_path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+    w_write(index_path, "\n".join(lines) + "\n", encoding="utf-8")
     record("updated", index_path, f"registered {slug}")
 
 
@@ -205,7 +252,7 @@ def _ensure_enforcement_check(vault: Path):
     # Insert before the first H2 so it is read early; otherwise append.
     idx = next((i for i, l in enumerate(lines) if l.startswith("## ")), len(lines))
     lines[idx:idx] = section.rstrip("\n").split("\n") + [""]
-    claude.write_text("\n".join(lines), encoding="utf-8")
+    w_write(claude, "\n".join(lines), encoding="utf-8")
     record("updated", claude, "added the enforcement-active check")
 
 
@@ -246,8 +293,8 @@ def install_core_rules(vault: Path, wire_hooks: bool = True, settings_path: Path
         if cfg.get("core_rules_path") != rel:
             cfg["core_rules_path"] = rel
             cfg.setdefault("vault_path", str(vault))
-            cfg_path.parent.mkdir(parents=True, exist_ok=True)
-            cfg_path.write_text(json.dumps(cfg, indent=2) + "\n", encoding="utf-8")
+            w_mkdir(cfg_path.parent, parents=True, exist_ok=True)
+            w_write(cfg_path, json.dumps(cfg, indent=2) + "\n", encoding="utf-8")
             record("updated", cfg_path, f"core_rules_path = {rel}")
     except Exception as exc:
         record("error", "vault-config.json", f"could not record core_rules_path: {exc}")
@@ -261,12 +308,17 @@ def install_core_rules(vault: Path, wire_hooks: bool = True, settings_path: Path
     # wired reads as installed and does nothing -- the same "present but not applied"
     # failure the Core tier exists to close, one level down. 0.9.4 shipped
     # guard_session_claims.sh with no PreToolUse entry and nothing reported it.
-    wanted = {
-        "UserPromptSubmit": hooks_dir / "inject_core_rules.sh",
-        "Stop": hooks_dir / "validate_response.sh",
-        "PreToolUse": hooks_dir / "guard_session_claims.sh",
-    }
-    missing = [str(v) for v in wanted.values() if not v.is_file()]
+    # A LIST of pairs, not a dict keyed by event: PreToolUse now carries two hooks
+    # (one inspects Write/Edit targets, one Bash command lines), and a dict would
+    # have silently kept only the last of them — wiring one rule and dropping the
+    # other while reporting success.
+    wanted = [
+        ("UserPromptSubmit", hooks_dir / "inject_core_rules.sh"),
+        ("Stop", hooks_dir / "validate_response.sh"),
+        ("PreToolUse", hooks_dir / "guard_session_claims.sh"),
+        ("PreToolUse", hooks_dir / "guard_vault_writes.sh"),
+    ]
+    missing = [str(v) for _, v in wanted if not v.is_file()]
     if missing:
         record("error", hooks_dir,
                "hook scripts not installed — run install.sh (they ship with the plugin)")
@@ -281,7 +333,7 @@ def install_core_rules(vault: Path, wire_hooks: bool = True, settings_path: Path
 
     data.setdefault("hooks", {})
     changed = False
-    for event, script in wanted.items():
+    for event, script in wanted:
         blocks = data["hooks"].setdefault(event, [])
         # Drop any previous entry that pointed at a vault-internal copy of this hook.
         for b in blocks:
@@ -298,8 +350,8 @@ def install_core_rules(vault: Path, wire_hooks: bool = True, settings_path: Path
         changed = True
 
     if changed:
-        settings.parent.mkdir(parents=True, exist_ok=True)
-        settings.write_text(json.dumps(data, indent=2) + "\n", encoding="utf-8")
+        w_mkdir(settings.parent, parents=True, exist_ok=True)
+        w_write(settings, json.dumps(data, indent=2) + "\n", encoding="utf-8")
         record("updated", settings, "wired Core-rule hooks at the stable path")
 
 
@@ -355,7 +407,7 @@ def cmd_rename_project(vault: Path, old: str, new: str):
         # longer exists, so any Dataview grouping by parent quietly drops them.
         text = re.sub(rf"^(\s*parent:\s*){re.escape(old)}\s*$", rf"\g<1>{new}", text, flags=re.M)
         if text != original:
-            md.write_text(text, encoding="utf-8")
+            w_write(md, text, encoding="utf-8")
             touched += 1
     record("updated", vault, f"{touched} files re-pointed")
 
@@ -368,7 +420,7 @@ def cmd_rename_project(vault: Path, old: str, new: str):
             rel = str(core.relative_to(vault))
             if cfg.get("core_rules_path") != rel:
                 cfg["core_rules_path"] = rel
-                cfg_path.write_text(json.dumps(cfg, indent=2) + "\n", encoding="utf-8")
+                w_write(cfg_path, json.dumps(cfg, indent=2) + "\n", encoding="utf-8")
                 record("updated", cfg_path, f"core_rules_path = {rel}")
         except Exception:
             pass
@@ -392,7 +444,7 @@ def _frontmatter_set(path: Path, **kv):
     m = re.match(r"^---\s*\n(.*?)\n---\s*\n", text, re.S)
     if not m:
         fm = "\n".join(f"{k}: {v}" for k, v in kv.items())
-        path.write_text(f"---\n{fm}\n---\n\n" + text, encoding="utf-8")
+        w_write(path, f"---\n{fm}\n---\n\n" + text, encoding="utf-8")
         return
     body, fm = text[m.end():], m.group(1)
     for k, v in kv.items():
@@ -402,12 +454,12 @@ def _frontmatter_set(path: Path, **kv):
             fm += f"\n{k}: {v}"
     if not body.startswith("\n"):
         body = "\n" + body
-    path.write_text(f"---\n{fm}\n---\n" + body, encoding="utf-8")
+    w_write(path, f"---\n{fm}\n---\n" + body, encoding="utf-8")
 
 
 def _append(path: Path, text: str):
     prior = path.read_text(encoding="utf-8").rstrip() + "\n" if path.exists() else ""
-    path.write_text(prior + text, encoding="utf-8")
+    w_write(path, prior + text, encoding="utf-8")
 
 
 def _section(text: str, heading: str) -> list:
@@ -431,7 +483,7 @@ def _add_tasks(readme: Path, tasks: list):
     end = m.end() + nxt.start() if nxt else len(text)
     head = text[:end].rstrip("\n")
     tail = text[end:]
-    readme.write_text(head + "\n" + "\n".join(tasks) + "\n" + ("\n" + tail if tail else ""),
+    w_write(readme, head + "\n" + "\n".join(tasks) + "\n" + ("\n" + tail if tail else ""),
                       encoding="utf-8")
 
 
@@ -472,7 +524,7 @@ def cmd_merge_project(vault: Path, src_slug: str, dst_slug: str, today: str):
     src_mem, dst_mem = src / "memory", dst / "memory"
     moved = 0
     if src_mem.exists():
-        dst_mem.mkdir(parents=True, exist_ok=True)
+        w_mkdir(dst_mem, parents=True, exist_ok=True)
         for f in sorted(src_mem.glob("*.md")):
             if f.name == "MEMORY.md":
                 continue
@@ -494,13 +546,13 @@ def cmd_merge_project(vault: Path, src_slug: str, dst_slug: str, today: str):
     # idea.md is IMMUTABLE — preserved whole, never concatenated
     src_idea = src / "idea.md"
     if src_idea.exists():
-        dst_mem.mkdir(parents=True, exist_ok=True)
+        w_mkdir(dst_mem, parents=True, exist_ok=True)
         keep = dst_mem / f"idea_{src_slug.replace('-', '_')}.md"
-        keep.write_text(
+        w_write(keep, 
             f"> Origin story of `{src_slug}`, merged into `{dst_slug}` on {today}.\n"
             f"> Preserved verbatim — idea.md is immutable.\n\n"
             + src_idea.read_text(encoding="utf-8"), encoding="utf-8")
-        src_idea.unlink()
+        w_unlink(src_idea, )
         _append(dst_mem / "MEMORY.md",
                 f"- [{keep.stem}]({keep.name}) — original brain dump of the merged {src_slug} project\n")
         record("updated", keep, "source idea.md preserved verbatim")
@@ -587,7 +639,7 @@ def cmd_merge_project(vault: Path, src_slug: str, dst_slug: str, today: str):
         while archive.exists():
             n += 1
             archive = dst / f"merged-{src_slug}-{n}"
-        archive.mkdir()
+        w_mkdir(archive, )
         for item in leftovers:
             # README.md renamed so the archive is not read as a second live project
             # by gt_tasks, gt_lint and the Dataview views.
@@ -612,7 +664,7 @@ def cmd_merge_project(vault: Path, src_slug: str, dst_slug: str, today: str):
     if idx.exists():
         lines = [l for l in idx.read_text(encoding="utf-8").splitlines()
                  if not re.search(rf"\|\s*`{re.escape(src_slug)}`\s*\|", l)]
-        idx.write_text("\n".join(lines) + "\n", encoding="utf-8")
+        w_write(idx, "\n".join(lines) + "\n", encoding="utf-8")
         record("updated", idx, f"{src_slug} row removed")
 
     review += [
@@ -630,7 +682,7 @@ def cmd_merge_project(vault: Path, src_slug: str, dst_slug: str, today: str):
             rel = str(core.relative_to(vault))
             if cfg.get("core_rules_path") != rel:
                 cfg["core_rules_path"] = rel
-                cfg_path.write_text(json.dumps(cfg, indent=2) + "\n", encoding="utf-8")
+                w_write(cfg_path, json.dumps(cfg, indent=2) + "\n", encoding="utf-8")
                 record("updated", cfg_path, f"core_rules_path = {rel}")
         except Exception:
             pass
@@ -661,9 +713,9 @@ def cmd_archive_project(vault: Path, slug: str, reason: str, today: str):
                 head, body = m.group(1), m.group(2)
                 bm = re.match(r"^(\s*#[^\n]*\n)(.*)$", body, re.S)
                 body = (bm.group(1) + banner + bm.group(2)) if bm else banner + body
-                readme.write_text(head + body, encoding="utf-8")
+                w_write(readme, head + body, encoding="utf-8")
             else:
-                readme.write_text(banner + text, encoding="utf-8")
+                w_write(readme, banner + text, encoding="utf-8")
         record("updated", readme, f"archived: {reason}")
 
     idx = vault / "Projects" / "README.md"
@@ -675,7 +727,7 @@ def cmd_archive_project(vault: Path, slug: str, reason: str, today: str):
                 if len(parts) >= 5:
                     parts[4] = " archived "
                     lines[i] = "|".join(parts)
-        idx.write_text("\n".join(lines) + "\n", encoding="utf-8")
+        w_write(idx, "\n".join(lines) + "\n", encoding="utf-8")
         record("updated", idx, f"{slug} marked archived")
 
 
@@ -711,6 +763,29 @@ def seed_vault_workspace(vault: Path):
     inbox = TEMPLATES_DIR / "INBOX.md"
     if inbox.exists():
         ensure_file(vault / "INBOX.md", inbox.read_text(encoding="utf-8"))
+
+    # The merge BASE for the documents an owner edits, and the version stamp that says
+    # which release they came from. Without these, gt_upgrade.py has no way to take a
+    # release's changes into an edited PROTOCOL.md without either overwriting the
+    # owner's work or ignoring the update -- it is the difference between a merge and a
+    # guess. The base lives in the vault because old release directories are pruned.
+    base_dir = vault / "Projects" / "golden-thread" / ".templates"
+    for name in ("PROTOCOL.md", "CONVENTIONS.md"):
+        src = TEMPLATES_DIR / name
+        if src.is_file():
+            ensure_file(base_dir / name, src.read_text(encoding="utf-8"))
+    stamp = vault / "Projects" / "golden-thread" / ".vault-version.json"
+    if not stamp.exists():
+        try:
+            version = json.loads((SCRIPT_DIR.parent / ".claude-plugin" / "plugin.json")
+                                 .read_text(encoding="utf-8"))["version"]
+        except Exception:
+            version = SCRIPT_DIR.parent.name
+        ensure_file(stamp, json.dumps(
+            {"gt": version,
+             "updated": __import__("datetime").datetime.now().astimezone().isoformat(),
+             "history": [{"to": version, "at": "seeded", "applied": ["fresh"]}]},
+            indent=2) + "\n")
 
     # The vault is a git repo so its truth survives one disk; per-edit attribution
     # rides on git hooks that only work once core.hooksPath points at .githooks.
@@ -941,17 +1016,24 @@ def cmd_connect(vault: Path):
 
 
 def main():
-    parser = argparse.ArgumentParser(description="Golden Thread vault initializer")
+    # Rehearsable on every mode -- core_explicit_vault_target. On a parent parser so
+    # it parses AFTER the verb, which is where it gets typed; SUPPRESS so a subparser
+    # cannot reset a value given before it.
+    common = argparse.ArgumentParser(add_help=False)
+    common.add_argument("--dry-run", "-n", action="store_true", default=argparse.SUPPRESS,
+                        help="report every action as would-* and write nothing")
+    parser = argparse.ArgumentParser(description="Golden Thread vault initializer",
+                                     parents=[common])
     sub = parser.add_subparsers(dest="mode", required=True)
 
-    p_fresh = sub.add_parser("fresh", help="Create a new vault scaffold")
+    p_fresh = sub.add_parser("fresh", parents=[common], help="Create a new vault scaffold")
     p_fresh.add_argument("--vault", required=True, type=Path)
     p_fresh.add_argument("--domain", required=True)
     p_fresh.add_argument("--no-config", action="store_true",
                          help="Build the vault without touching vault-config.json, settings.json "
                               "or ~/.claude/CLAUDE.md (used for the throwaway demo vault)")
 
-    p_proj = sub.add_parser("create-project", help="Scaffold a new project in an existing vault")
+    p_proj = sub.add_parser("create-project", parents=[common], help="Scaffold a new project in an existing vault")
     p_proj.add_argument("--vault", required=True, type=Path)
     p_proj.add_argument("--name", required=True)
     p_proj.add_argument("--title", default=None, help="Human-readable project title")
@@ -969,28 +1051,28 @@ def main():
                         help="Page name of the shared fleet definition (default: INFRASTRUCTURE "
                              "for bastion topologies)")
 
-    p_conn = sub.add_parser("connect", help="Point vault-config.json at an existing vault")
+    p_conn = sub.add_parser("connect", parents=[common], help="Point vault-config.json at an existing vault")
     p_conn.add_argument("--vault", required=True, type=Path)
 
-    p_ren = sub.add_parser("rename-project", help="Rename a project and update every reference")
+    p_ren = sub.add_parser("rename-project", parents=[common], help="Rename a project and update every reference")
     p_ren.add_argument("--vault", required=True, type=Path)
     p_ren.add_argument("--from", dest="old", required=True)
     p_ren.add_argument("--to", dest="new", required=True)
 
-    p_mrg = sub.add_parser("merge-project", help="Fold one project into another (nothing deleted)")
+    p_mrg = sub.add_parser("merge-project", parents=[common], help="Fold one project into another (nothing deleted)")
     p_mrg.add_argument("--vault", required=True, type=Path)
     p_mrg.add_argument("--from", dest="src", required=True)
     p_mrg.add_argument("--into", dest="dst", required=True)
     p_mrg.add_argument("--date", default=None, help="YYYY-MM-DD (default: today)")
 
-    p_ret = sub.add_parser("archive-project",
+    p_ret = sub.add_parser("archive-project", parents=[common],
                        help="Archive a project (stage: archived). Nothing is deleted.")
     p_ret.add_argument("--vault", required=True, type=Path)
     p_ret.add_argument("--slug", required=True)
     p_ret.add_argument("--reason", default="Superseded.")
     p_ret.add_argument("--date", default=None)
 
-    p_core = sub.add_parser("install-core-rules",
+    p_core = sub.add_parser("install-core-rules", parents=[common],
                             help="Establish the Core-rule tier in an existing vault and wire the hooks")
     p_core.add_argument("--vault", required=True, type=Path)
     p_core.add_argument("--no-hooks", action="store_true",
@@ -999,6 +1081,8 @@ def main():
                         help="Settings file to wire (default: ~/.claude/settings.json)")
 
     args = parser.parse_args()
+    global DRY_RUN
+    DRY_RUN = getattr(args, "dry_run", False)
 
     if args.mode == "fresh":
         cmd_fresh(args.vault, args.domain, no_config=args.no_config)

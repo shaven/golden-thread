@@ -310,5 +310,79 @@ class InstallTest(Sandbox):
         self.assertFalse(self.plugins.exists())
 
 
+class EnforcementHooksOnUpgrade(Sandbox):
+    """install.sh must wire the ENFORCEMENT hooks when a vault is already configured.
+
+    Until 0.12.1 it wired only its own seven. vault_init wired the other four, but only
+    when a vault was CREATED — so an upgrade copied a newly shipped hook and never
+    registered it. 0.12.0 shipped guard_vault_writes.sh and every existing machine
+    reported it unwired at session start. A hook that ships inert is the failure the
+    Core tier exists to close, and the component check calling that install "clean"
+    made it worse.
+    """
+
+    def setUp(self):
+        super().setUp()
+        self.repo = self.tmp / "src" / "golden-thread-plugin"
+        self.repo.mkdir(parents=True)
+        shutil.copy2(INSTALL, self.repo / "install.sh")
+        shutil.copytree(GT, self.repo / "golden-thread" / GT.name, ignore=IGNORE)
+        shutil.copytree(WIKI, self.repo / "golden-thread-wiki" / WIKI.name, ignore=IGNORE)
+
+    def wired(self, event):
+        s = json.loads((self.home / ".claude" / "settings.json").read_text())
+        return [h.get("command", "") for b in s.get("hooks", {}).get(event, [])
+                for h in b.get("hooks", [])]
+
+    def enforcement_hooks(self):
+        from _harness import ENFORCEMENT_HOOKS
+        return ENFORCEMENT_HOOKS
+
+    def test_an_upgrade_wires_a_newly_shipped_enforcement_hook(self):
+        v = self.make_vault()                      # a vault that exists BEFORE the install
+        # The state an upgrade starts from: the new hook is in no settings.json entry.
+        settings = self.home / ".claude" / "settings.json"
+        data = json.loads(settings.read_text()) if settings.exists() else {}
+        pre = data.get("hooks", {}).get("PreToolUse", [])
+        data.setdefault("hooks", {})["PreToolUse"] = [
+            b for b in pre
+            if not any("guard_vault_writes" in (h.get("command") or "")
+                       for h in b.get("hooks", []))]
+        settings.write_text(json.dumps(data, indent=2))
+        self.assertFalse([c for c in self.wired("PreToolUse") if "guard_vault_writes" in c],
+                         "fixture failed to remove the entry")
+
+        p = self.sh(self.repo / "install.sh", timeout=300)
+        self.assertEqual(p.returncode, 0, p.stdout + p.stderr)
+
+        cmds = self.wired("PreToolUse")
+        self.assertTrue([c for c in cmds if "guard_vault_writes.sh" in c],
+                        "install.sh left a shipped enforcement hook unwired:\n"
+                        + "\n".join(cmds) + "\n" + p.stdout[-600:])
+
+    def test_every_declared_hook_is_wired_after_installing_over_a_vault(self):
+        self.make_vault()
+        p = self.sh(self.repo / "install.sh", timeout=300)
+        self.assertEqual(p.returncode, 0, p.stdout + p.stderr)
+        for name in self.enforcement_hooks():
+            found = any(name in c for ev in ("UserPromptSubmit", "Stop", "PreToolUse")
+                        for c in self.wired(ev))
+            self.assertTrue(found, f"{name} is declared but wired nowhere")
+
+    def test_install_without_a_vault_still_succeeds(self):
+        """No vault yet: the enforcement hooks cannot be wired, and that is not an error."""
+        p = self.sh(self.repo / "install.sh", timeout=300)
+        self.assertEqual(p.returncode, 0, p.stdout + p.stderr)
+        self.assertIn("installed", p.stdout)
+
+    def test_a_second_install_reports_already_wired(self):
+        self.make_vault()
+        self.sh(self.repo / "install.sh", timeout=300)
+        p = self.sh(self.repo / "install.sh", timeout=300)
+        self.assertEqual(p.returncode, 0)
+        self.assertIn("already wired", p.stdout,
+                      "a repeat install should say it changed nothing, not re-report a fix")
+
+
 if __name__ == "__main__":
     unittest.main()

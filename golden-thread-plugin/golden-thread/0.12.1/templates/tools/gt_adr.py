@@ -158,6 +158,13 @@ def target(vault, project):
 
 def cmd_allocate(a):
     v = S.vault_root(a.vault)
+    if a.dry_run:
+        # Deliberately does NOT reserve: a dry run that consumed a number would
+        # leave a hole every time someone rehearsed.
+        used = sorted(set(slots(v, a.project)) | baseline_numbers(v, a.project))
+        print("dry run: would reserve ADR-%d for %s (nothing written)"
+              % ((used[-1] + 1) if used else 1, a.project), file=sys.stderr)
+        return 0
     n, p = allocate(v, a.project, a.title, a.id)
     # The number on stdout ALONE, so a caller can use it directly; everything else
     # goes to stderr. A session that has to parse prose to learn its number will
@@ -175,7 +182,13 @@ def cmd_merge(a):
         print("REFUSED: %s is not generated and no baseline exists — run `migrate` first"
               % t, file=sys.stderr)
         return 2
-    changed = S.write_if_changed(t, render(v, a.project))
+    produced = render(v, a.project)
+    if getattr(a, "dry_run", False):
+        current = t.read_text(encoding="utf-8", errors="replace") if t.exists() else ""
+        print("dry run: %s/decisions.md would be %s"
+              % (a.project, "unchanged" if produced == current else "rewritten from the spool"))
+        return 0
+    changed = S.write_if_changed(t, produced)
     print("%s/decisions.md %s" % (a.project, "updated" if changed else "unchanged (idempotent)"))
     return 0
 
@@ -225,25 +238,48 @@ def cmd_migrate(a):
     base.parent.mkdir(parents=True, exist_ok=True)
     base.write_text(original, encoding="utf-8")
     produced = render(v, a.project)
-    if produced[len(S.BANNER) + 2:].rstrip("\n") != original.rstrip("\n"):
+    note = S.roundtrip_note(produced[len(S.BANNER) + 2:], original)
+    if note is None:
         base.unlink()
         print("REFUSED: merge would not reproduce decisions.md byte-for-byte; nothing changed",
               file=sys.stderr)
         return 3
+    if a.dry_run:
+        base.unlink()
+        print("dry run: would freeze %d ADR(s) of %s as baseline and generate decisions.md%s"
+              % (len(nums), a.project, note))
+        return 0
     S.write_if_changed(t, produced)
-    print("migrated %s: %d ADR(s) frozen as baseline" % (a.project, len(nums)))
+    print("migrated %s: %d ADR(s) frozen as baseline%s" % (a.project, len(nums), note))
     return 0
 
 
 def main(argv=None):
-    p = argparse.ArgumentParser(description="atomic ADR numbers; decisions.md merge")
-    p.add_argument("--vault")
-    p.add_argument("--id", help="session id override (testing)")
+    # The shared flags are declared ONCE and attached to the top level and to every
+    # subcommand, so `--vault` and `--dry-run` work on either side of the verb. A flag
+    # that only parses before the subcommand is a flag people will believe they passed
+    # -- which is the exact failure core_explicit_vault_target exists to prevent.
+    common = argparse.ArgumentParser(add_help=False)
+    # default=SUPPRESS matters: without it, a subparser built from `parents` RESETS
+    # these to their defaults when the flag appears before the verb, so
+    # `--id alpha status` silently became id=None. Found by test_gt_log 2026-09-11.
+    common.add_argument("--vault", default=argparse.SUPPRESS)
+    common.add_argument("--id", default=argparse.SUPPRESS,
+                        help="session id override (testing)")
+    common.add_argument("--dry-run", "-n", action="store_true",
+                        default=argparse.SUPPRESS,
+                        help="say what would change; write nothing")
+    p = argparse.ArgumentParser(description="atomic ADR numbers; decisions.md merge",
+                                parents=[common])
     sub = p.add_subparsers(dest="cmd", required=True)
-    al = sub.add_parser("allocate"); al.add_argument("project"); al.add_argument("--title", default="")
+    al = sub.add_parser("allocate", parents=[common])
+    al.add_argument("project"); al.add_argument("--title", default="")
     for c in ("merge", "status", "migrate"):
-        sp = sub.add_parser(c); sp.add_argument("project")
+        sp = sub.add_parser(c, parents=[common]); sp.add_argument("project")
     args = p.parse_args(argv)
+    for key, default in (("vault", None), ("id", None), ("dry_run", False)):
+        if not hasattr(args, key):
+            setattr(args, key, default)
     return {"allocate": cmd_allocate, "merge": cmd_merge, "status": cmd_status,
             "migrate": cmd_migrate}[args.cmd](args)
 

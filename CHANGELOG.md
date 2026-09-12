@@ -11,6 +11,24 @@ release's own summary line, kept short rather than reconstructed after the fact.
 
 ---
 
+## gt 0.12.1 — 2026-09-12
+
+**A hook that ships inert is worse than one that does not ship.**
+
+0.12.0 added a fourth enforcement hook. `install.sh` wires only the seven hooks it owns;
+the enforcement hooks belong to `vault_init.py`, which ran them only when a vault was
+*created*. So every machine that already had a vault installed the new hook and never
+registered it, and reported it unwired at session start with no instruction that would
+fix it — while the component check called the install clean.
+
+- `install.sh` now wires the enforcement hooks whenever a vault is already configured,
+  so an upgrade registers a newly shipped hook instead of copying it and stopping. The
+  call is idempotent; a second install says "already wired".
+- The vault-write guard no longer inspects heredoc bodies. It denied a command that was
+  *writing* a script containing a tool call — a guard that fires on a quoted mention is
+  one people switch off, and then it guards nothing.
+- Only the current and previous releases stay on disk, so 0.11.0 is now in git only.
+
 ## gt 0.12.0 — 2026-09-11
 
 **A vault tool must be told which vault it means.**

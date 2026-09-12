@@ -12,6 +12,14 @@
    "bytes": 1177,
    "sha256": "c0902228daf1bea0a1060f7b5ea43fe14d720b17781b7a57f9b8a727015768b9"
   },
+  "hooks/guard_vault_writes.py": {
+   "bytes": 6587,
+   "sha256": "7e49689ee57337992379be68448277d45dc0123adb5b394b01cf46dc3cb48468"
+  },
+  "hooks/guard_vault_writes.sh": {
+   "bytes": 1218,
+   "sha256": "837037f83d5d6d5d51b57d9461671e6f53b127b8fa2c40bd01b893459c76f9ae"
+  },
   "hooks/inject_core_rules.sh": {
    "bytes": 4432,
    "sha256": "07f6a2227ff2691a8b14250e03f8bdedefc06ce1c0b47f9bff337425efbb6102"
@@ -21,12 +29,16 @@
    "sha256": "e306a150da44292d39124476f5404358cfcc2f1318fb329702a47f138106c05d"
   },
   "scripts/gt_components.py": {
-   "bytes": 26630,
-   "sha256": "2619762c117acc512c96e788cf8c2cdf0b87d6135122dd307adcce9daa26d382"
+   "bytes": 27102,
+   "sha256": "3fa546168ea90896a5b9aa2448a53ca8cc625dcb7cd2767fb859f50845ab69a1"
   },
   "scripts/gt_demo.sh": {
    "bytes": 8658,
    "sha256": "e402c83f9f959da253d6dd0e095f40c216afc27c695c37aeb6c2b87a4ee91847"
+  },
+  "scripts/gt_doctor.py": {
+   "bytes": 16659,
+   "sha256": "912fae6f90a7fec08347b79f532a6bf92a9899c92b8e67566fb9a3aea217a4f4"
   },
   "scripts/gt_ingest.py": {
    "bytes": 9740,
@@ -56,6 +68,10 @@
    "bytes": 16467,
    "sha256": "f70fee366ff2d6fdfa79293fc3fc85eda08f216ac33bb3a181574799621c2747"
   },
+  "scripts/gt_upgrade.py": {
+   "bytes": 18286,
+   "sha256": "449a8668f88bccee16da046cb31731ac15ae766f9e4d01ab9463ba0d312df524"
+  },
   "scripts/gt_version_check.py": {
    "bytes": 8956,
    "sha256": "7d23ae988bfc1ceaf52a8e30a65285e6933d69e0843673df1e4e40bb6cd33423"
@@ -73,8 +89,8 @@
    "sha256": "d56bbd01ce9ba0e74b36ea2bf15fcfccd5d2d4a1ef8fdbdd33d02ae8c36fb7a0"
   },
   "scripts/vault_init.py": {
-   "bytes": 47347,
-   "sha256": "d40a88f9ccabe9817adc8acaa1f42deb1962fa2e569da60feb0d0d84c891d676"
+   "bytes": 51104,
+   "sha256": "608e451176f38d776e68818fe2def3b9b466df8c0684fccfa1b2dfc88eb8ecd9"
   },
   "templates/CONVENTIONS.md": {
    "bytes": 19546,
@@ -103,6 +119,10 @@
   "templates/core-rules/core_concurrent_session_claim.md": {
    "bytes": 4867,
    "sha256": "bdb5b107e9bcce4b61a07dfc934b64688cb4852620bbcc2dd896f0264b2a0c7d"
+  },
+  "templates/core-rules/core_explicit_vault_target.md": {
+   "bytes": 3356,
+   "sha256": "d856a54dcccc49f3ad2b228d12ea82b9e68d12664bd2fc636cb051b97614113a"
   },
   "templates/core-rules/core_global_memory_scope.md": {
    "bytes": 1364,
@@ -201,8 +221,8 @@
    "sha256": "6fb7d890a68046b3671c8e29ed6982c3ad5c5b9256e44ed7ceecb8fc79838acc"
   },
   "templates/tools/gt_adr.py": {
-   "bytes": 10659,
-   "sha256": "5a57da7aea4cff9f00d06f5a881b11b5952580bd038e9fb573d5310a9f310404"
+   "bytes": 12737,
+   "sha256": "94f70b2da76ddaf9cd4c5c7fcfae0c5086acc714536c78f1ea9484bd533761f1"
   },
   "templates/tools/gt_closeout.py": {
    "bytes": 11712,
@@ -213,20 +233,20 @@
    "sha256": "478e0e629b2c3f0531e04b4154bb95e1a5eb4f1eb8c26b139c5c876199a25296"
   },
   "templates/tools/gt_log.py": {
-   "bytes": 5458,
-   "sha256": "31a1bbf3bef680c671a203555b3f3fefad71cb3b1212ad8488f9cfbf7e73a46c"
+   "bytes": 7325,
+   "sha256": "953434b11f90306631226012585411f922e56e7823fb4b5d06f726cb4b3abc47"
   },
   "templates/tools/gt_session.py": {
-   "bytes": 15339,
-   "sha256": "ab072b365c5ec583f2cc3ab28f87c188524c69c93091311c4492c60d359afa90"
+   "bytes": 17189,
+   "sha256": "2bb16ecd73e0e0ccec69ca2ec4448abbca6de80bae3bdc25b9d3ff6febbb6933"
   },
   "templates/tools/gt_spool.py": {
-   "bytes": 7676,
-   "sha256": "2459deb99c4897d1e3f13c428ce54ccc0cac27992a6fd98bae7c9ae166117709"
+   "bytes": 8847,
+   "sha256": "6ab668ca716cd7d338cafdcd16cc70ed351af5992592beadc52749d76e0ff272"
   },
   "templates/tools/gt_tasks.py": {
-   "bytes": 15466,
-   "sha256": "38b0ce5cb59bccbb7fe089c81e1362aab61d5654335dd051093305cb89492775"
+   "bytes": 16168,
+   "sha256": "d724181ae65a750a92e88ce9e010504b59d95d7878f28b513d54373dfd69f76b"
   },
   "templates/tools/safe_write.py": {
    "bytes": 12889,
@@ -241,7 +261,7 @@
    "sha256": "383c0e4b30c8c9c9447c4798f37debf1f4a0402b1e3ee068e7629e9d1ab21859"
   }
  },
- "generated": "2026-09-11T15:34:01",
+ "generated": "2026-09-12T08:02:17",
  "hooks": [
   {
    "args": [
@@ -318,7 +338,13 @@
    "event": "PreToolUse",
    "owner": "vault_init.py install-core-rules",
    "script": "guard_session_claims.sh"
+  },
+  {
+   "args": [],
+   "event": "PreToolUse",
+   "owner": "vault_init.py install-core-rules",
+   "script": "guard_vault_writes.sh"
   }
  ],
- "version": "0.11.0"
+ "version": "0.12.1"
 }

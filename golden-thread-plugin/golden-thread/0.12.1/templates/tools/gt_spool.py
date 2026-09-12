@@ -130,6 +130,31 @@ def append(vault, kind, text, project=None, sid=None):
     return p
 
 
+def roundtrip_note(produced_body, original):
+    """Is the rendered body faithful to the original? -> "" identical, str note, None no.
+
+    The migration gate claims a byte-identical round trip. Until 0.12.0 both sides
+    were compared with `rstrip("\\n")`, so a file ending in a blank line passed the
+    gate and was then written WITHOUT that line: on 2026-09-11 migrating 42 projects
+    silently dropped one from `homekit-bridge/decisions.md`. A gate that normalises
+    the thing it is checking is not a gate.
+
+    Trailing blank lines are still not worth refusing a migration over -- so the
+    difference is ANNOUNCED and the caller prints it, rather than tolerated in
+    silence. Any other difference still refuses.
+    """
+    if produced_body == original:
+        return ""
+    if produced_body.rstrip("\n") != original.rstrip("\n"):
+        return None
+    lost = len(original) - len(original.rstrip("\n"))
+    kept = len(produced_body) - len(produced_body.rstrip("\n"))
+    delta = lost - kept
+    if delta > 0:
+        return " (dropped %d trailing blank line(s) the original ended with)" % delta
+    return " (added %d trailing blank line(s))" % -delta
+
+
 def _sort_key(fname, index, line):
     """Baseline first, then (timestamp, session id, index within that file).
 

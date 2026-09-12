@@ -18,7 +18,7 @@ import unittest
 from _harness import Sandbox, HOOKS
 
 
-class GuardVaultWrites(Sandbox):
+class GuardBase(Sandbox):
     def setUp(self):
         super().setUp()
         self.hooks = self.home / ".claude" / "golden-thread" / "hooks"
@@ -55,6 +55,8 @@ class GuardVaultWrites(Sandbox):
         self.assertEqual(hso["permissionDecision"], "allow", msg)
         return hso
 
+
+class GuardVaultWrites(GuardBase):
     # ---- the incident this hook exists for -------------------------------------
 
     def test_the_2026_09_11_command_is_denied(self):
@@ -159,6 +161,44 @@ class GuardVaultWrites(Sandbox):
     def test_vault_init_destructive_mode_denied(self):
         self.assertDenied("python3 scripts/vault_init.py merge-project a b",
                           "merge-project moves files; it must say which vault")
+
+
+class HeredocsAreDataNotCommands(GuardBase):
+    """2026-09-12: the guard denied a command that was WRITING a script containing the
+    text of a vault-tool call. A guard that fires on a quoted mention is one people
+    switch off, and then it guards nothing."""
+
+    def test_a_tool_named_inside_a_heredoc_is_not_a_command(self):
+        cmd = ("cat > patch.sh <<'EOF'\n"
+               "python3 scripts/vault_init.py install-core-rules \\\n"
+               "  --vault \"$VAULT_PATH\"\n"
+               "EOF")
+        self.assertAllowed(cmd, "text being written is not a command being run")
+
+    def test_a_real_command_after_a_heredoc_is_still_inspected(self):
+        cmd = ("cat > notes.txt <<'EOF'\n"
+               "just some notes\n"
+               "EOF\n"
+               "python3 tools/gt_adr.py migrate proj")
+        self.assertDenied(cmd, "the guard stopped looking after the heredoc ended")
+
+    def test_a_real_command_before_a_heredoc_is_still_inspected(self):
+        cmd = ("python3 tools/gt_tasks.py\n"
+               "cat > notes.txt <<'EOF'\n"
+               "text\n"
+               "EOF")
+        self.assertDenied(cmd, "a command before the heredoc was skipped")
+
+    def test_unterminated_heredoc_fails_open(self):
+        cmd = ("cat > f <<'EOF'\n"
+               "python3 tools/gt_adr.py migrate proj\n")
+        self.assertAllowed(cmd, "an unterminated heredoc must not deny; it allows")
+
+    def test_unquoted_heredoc_delimiter_is_handled(self):
+        cmd = ("cat > f <<EOF\n"
+               "python3 tools/gt_log.py migrate\n"
+               "EOF")
+        self.assertAllowed(cmd, "<<EOF without quotes is still a heredoc body")
 
 
 if __name__ == "__main__":

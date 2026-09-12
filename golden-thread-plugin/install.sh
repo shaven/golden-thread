@@ -342,9 +342,10 @@ hooks = d.setdefault('hooks', {})
 # wires" and "what the checker expects wired" would make the checker cry wolf on
 # every start, or worse, stay silent about the entry it forgot.
 #
-# Only install.sh's OWN entries are wired here. The three enforcement hooks are
-# declared in the same list but owned by vault_init.py install-core-rules, which
-# runs against a vault -- this script may be run before one exists.
+# Only install.sh's OWN entries are wired here. The four enforcement hooks are
+# declared in the same list but owned by vault_init.py, which needs a vault --
+# this script may run before one exists. Step 7 wires them once the vault path is
+# known, so an UPGRADE registers a newly shipped hook instead of leaving it inert.
 regs = json.loads(subprocess.check_output(
     ['python3', os.path.join(src, 'scripts', 'gt_components.py'),
      'hook-registrations', src, script_dir], text=True))
@@ -388,9 +389,9 @@ EOF
 # are none. Found on 2026-09-10 -- a machine with every file installed, the
 # manifest clean, and no SessionStart entries at all.
 #
-# Scoped to --owner install.sh: the three ENFORCEMENT hooks are declared in the
-# same list but wired by vault_init.py against a vault, which may not exist yet
-# when this runs. Asserting all nine here would warn on every first install and
+# Scoped to --owner install.sh: the four ENFORCEMENT hooks are wired by vault_init
+# against a vault, which may not exist yet when this runs (step 7 wires them when
+# it does). Asserting all eleven here would warn on every vault-less install and
 # train the reader to ignore the one warning that matters.
 #
 # `|| true` is not laziness: this whole script runs under `set -e`, and the
@@ -475,6 +476,32 @@ EOF
   fi
   git -C "$VAULT_PATH" config core.hooksPath .githooks 2>/dev/null \
     && echo "Wired vault git attribution → $VAULT_PATH (.githooks)"
+
+  # Wire the ENFORCEMENT hooks too, now that a vault is known.
+  #
+  # These are owned by vault_init.py, which until 0.12.1 wired them only when a vault
+  # was CREATED. So an UPGRADE copied a new hook and never registered it: 0.12.0
+  # shipped guard_vault_writes.sh and every existing machine reported it unwired at
+  # session start, with no instruction in that message that would fix it. A hook that
+  # ships inert is the exact failure the Core tier exists to close, and shipping one
+  # while the component check says "clean" is worse than not shipping it at all.
+  #
+  # The call is idempotent: rule files are seeded only when absent, never overwritten,
+  # and an entry already in settings.json is reported as skipped.
+  if [ -f "$SRC/scripts/vault_init.py" ]; then
+    CORE_OUT=$(python3 "$SRC/scripts/vault_init.py" install-core-rules \
+                 --vault "$VAULT_PATH" 2>&1) && CORE_RC=0 || CORE_RC=$?
+    if [ "${CORE_RC:-1}" -eq 0 ]; then
+      if printf '%s' "$CORE_OUT" | grep -q '"action": "updated"'; then
+        echo "Wired enforcement hooks → ~/.claude/settings.json"
+      else
+        echo "Enforcement hooks already wired"
+      fi
+    else
+      echo "⚠ Could not wire the enforcement hooks. Run this, then restart:"
+      echo "  python3 \"$SRC/scripts/vault_init.py\" install-core-rules --vault \"$VAULT_PATH\""
+    fi
+  fi
 fi
 
 # ── Summary ────────────────────────────────────────────────────────────────

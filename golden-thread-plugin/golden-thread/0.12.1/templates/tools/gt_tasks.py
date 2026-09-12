@@ -25,7 +25,8 @@ lands on disk, while a stored rule stays correct forever.
 
 Usage:  python3 Projects/golden-thread/tools/gt_tasks.py [--vault PATH]
 """
-import argparse, datetime as dt, pathlib, re, sys
+import argparse
+import os, datetime as dt, pathlib, re, sys
 from zoneinfo import ZoneInfo
 
 STALE_P1_DAYS = 7      # a p::1 older than this escalates its project one level
@@ -194,7 +195,14 @@ def effective(pp, escalate, tasks, now, today, stage="active"):
 
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument("--vault", default=str(pathlib.Path(__file__).resolve().parents[3]))
+    # The default is the vault this copy of the tool was installed into (tools live at
+    # <vault>/Projects/golden-thread/tools/), which is why a bare run works. $GT_VAULT
+    # still wins, so a session opened against one vault cannot regenerate another's
+    # TASKS.md by accident -- core_explicit_vault_target.
+    ap.add_argument("--vault", default=os.environ.get("GT_VAULT")
+                    or str(pathlib.Path(__file__).resolve().parents[3]))
+    ap.add_argument("--dry-run", "-n", action="store_true",
+                    help="print the rollup to stdout; do not write TASKS.md")
     args = ap.parse_args()
     vault = pathlib.Path(args.vault)
     projects_dir = vault / "Projects"
@@ -333,7 +341,13 @@ def main():
     L.append("```dataview\nTABLE WITHOUT ID link(file.folder, slug) AS Project, pp AS PP, stage AS Stage, domain AS Domain\n"
              "FROM \"Projects\"\nWHERE type = \"project\" AND file.name = \"README\"\nSORT pp ASC, slug ASC\n```\n")
 
-    (vault / "TASKS.md").write_text("\n".join(L) + "\n")
+    out = "\n".join(L) + "\n"
+    if args.dry_run:
+        print(out)
+        print("dry run: TASKS.md not written (%d line(s) would change hands)" % len(L),
+              file=sys.stderr)
+        return
+    (vault / "TASKS.md").write_text(out)
     print(f"TASKS.md written — {len(rows)} open tasks across {len(projects)} projects")
     print(f"  waiting on you: {len(yours)}   ready to work: {len(mine)}   other: {len(other)}   "
           f"inbox: {len(inbox)}   review: {len(review)}   shelved: {sum(p['shelved'] for p in projects)}")
