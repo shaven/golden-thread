@@ -91,6 +91,8 @@ alongside the code they describe. Start with Getting Started; the Manual is the 
 
 | Document | What it covers |
 |---|---|
+| [Changelog](CHANGELOG.md) | What changed in each release, newest first |
+| [Announcements](../../discussions/categories/announcements) | Release write-ups: what broke, what changed, and what you have to do |
 | [Getting Started](golden-thread-plugin/ONBOARDING.md) · [PDF](golden-thread-plugin/ONBOARDING.pdf) | A guided first session in six steps, about fifteen minutes |
 | [User Manual](golden-thread-plugin/MANUAL.md) · [PDF](golden-thread-plugin/MANUAL.pdf) | Complete reference: every skill, the vault layout, verification, the promotion ladder |
 | [Install Guide](golden-thread-plugin/INSTALL.md) | Installing both plugins, wiring the hooks, adopting an existing vault |

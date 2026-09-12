@@ -121,7 +121,9 @@ print("\n".join(out))
 PY
 )
 [ -z "$MISSING" ] && ok "every skill in README, MANUAL, golden-thread-docs; every setting in MANUAL" || { echo "$MISSING"; bad "docs do not cover the release"; }
-STALE=$(for f in README.md MANUAL.md golden-thread-docs.md ONBOARDING.md ../README.md; do
+# ../CHANGELOG.md is included deliberately: a changelog nobody checks is the first
+# document to go stale, and it is the one a stranger trusts most.
+STALE=$(for f in README.md MANUAL.md golden-thread-docs.md ONBOARDING.md ../README.md ../CHANGELOG.md; do
   [ -f "$f" ] || continue
   grep -q "$GTV" "$f" || echo "$f never names $GTV"
 done)
