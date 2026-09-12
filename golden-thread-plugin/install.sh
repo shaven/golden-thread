@@ -29,7 +29,19 @@ fi
 # beside it, hooks referenced from settings.json pointing at files that had never
 # been copied.
 #
-# Deliberate rollback:  ./install.sh 0.9.3   (or GT_VERSION=0.9.3 ./install.sh)
+# Deliberate rollback:  ./install.sh 0.11.0  (or GT_VERSION=0.11.0 ./install.sh)
+#
+# Only the current release and the one before it are kept on disk (2026-09-12: fifteen
+# version directories were 9.6 MB of tree that nothing read). Every earlier release is
+# still in git, so rolling back further is two steps rather than one:
+#
+#   git log --oneline -- golden-thread/0.9.14        # find the commit that had it
+#   git checkout <commit> -- golden-thread/0.9.14    # restore the directory
+#   ./install.sh 0.9.14
+#
+# Restoring it also makes it the newest-but-one again, never the newest: latest_version
+# picks numerically, so a restored 0.9.14 cannot silently become what install.sh
+# installs by default.
 
 # Sorted numerically per field, NOT lexically: a lexical sort puts 0.9.4 above
 # 0.10.0 and would start reinstalling the older release the moment a minor
