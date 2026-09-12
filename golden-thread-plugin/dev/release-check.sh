@@ -77,6 +77,13 @@ OUT=$(python3 "$GT/scripts/skill_lint.py" "$GT" 2>&1); rc=$?
 OUT=$(python3 "$GT/scripts/skill_lint.py" "$WIKI" 2>&1); rc=$?
 [ $rc -eq 0 ] && ok "skill_lint (gt-wiki)" || { echo "$OUT" | tail -15; bad "skill_lint (gt-wiki)"; }
 
+step "cli contract"
+# core_explicit_vault_target requires the CALLER to name the vault. This step asserts
+# the TOOLS still offer the flags that make that possible: a rule depending on a flag
+# nobody implements is unfollowable. The incident is in dev/check_cli_contract.py.
+OUT=$(python3 dev/check_cli_contract.py "$GT" 2>&1); rc=$?
+[ $rc -eq 0 ] && ok "$OUT" || { echo "$OUT" | tail -20; bad "a vault tool can write without being told which vault"; }
+
 step "docs"
 OUT=$(python3 build-docs.py 2>&1); rc=$?
 [ $rc -eq 0 ] && ok "every .html matches its .md" || { echo "$OUT" | tail -12; bad "docs drifted — fix the .md, then ./build-docs.py --build"; }

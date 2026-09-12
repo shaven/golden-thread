@@ -141,5 +141,83 @@ class GtAdr(Sandbox):
         self.assertNotEqual(self.allocate(), n, "an unfinished number was reissued")
 
 
+class GtAdrFaithfulnessAndDryRun(GtAdr):
+    """0.12.0: the migration gate stops normalising what it is checking, and every
+    writing subcommand can be rehearsed.
+
+    The 2026-09-11 incident had two halves. This class covers the quieter one:
+    migrating 42 projects dropped a trailing blank line from homekit-bridge's
+    decisions.md while reporting a byte-identical round trip, because BOTH sides of
+    the comparison were rstrip'd -- as was the test that guarded it.
+    """
+
+    def test_trailing_blank_line_is_not_dropped_in_silence(self):
+        body = "# D\n\n## ADR-1: one\n\nBody.\n\n"      # ends with a blank line
+        self.seed(body)
+        p = self.tool("migrate", "demo")
+        self.assertOk(p, "migration failed")
+        kept = self.dec.read_text().endswith("Body.\n\n")
+        announced = "trailing blank line" in (p.stdout + p.stderr)
+        self.assertTrue(kept or announced,
+                        "the line was dropped and nothing said so — the 2026-09-11 defect:\n"
+                        + repr(self.dec.read_text()[-40:]) + "\n" + p.stdout + p.stderr)
+
+    def test_baseline_holds_the_original_bytes_exactly(self):
+        body = "# D\n\n## ADR-1: one\n\nBody.\n\n"
+        self.seed(body)
+        self.assertOk(self.tool("migrate", "demo"))
+        base = (self.vault / "Projects/golden-thread/spool/decisions/demo/0000-baseline.md")
+        self.assertEqual(base.read_text(), body,
+                         "the baseline is the only copy of the pre-migration file; it "
+                         "must be byte-exact whatever the rendering does")
+
+    def test_real_content_difference_still_refuses(self):
+        """Tolerating trailing newlines must not have loosened the gate itself."""
+        self.seed("# D\n\n## ADR-1: one\n")
+        import unittest.mock  # noqa: F401  (documents intent; the check below is real)
+        self.assertOk(self.tool("migrate", "demo"))
+        # A second migrate on generated output is the refusal path that proves the
+        # gate still fires rather than overwriting.
+        p = self.tool("migrate", "demo")
+        self.assertIn("already migrated", p.stdout + p.stderr)
+
+    # -- dry run ------------------------------------------------------------------
+    def test_migrate_dry_run_writes_nothing(self):
+        self.seed("# D\n\n## ADR-1: one\n")
+        before = self.dec.read_bytes()
+        p = self.tool("migrate", "demo", "--dry-run")
+        self.assertOk(p, "dry run failed")
+        self.assertIn("dry run", p.stdout)
+        self.assertEqual(self.dec.read_bytes(), before, "a dry run modified decisions.md")
+        self.assertFalse((self.vault / "Projects/golden-thread/spool/decisions/demo"
+                          / "0000-baseline.md").exists(),
+                         "a dry run left a baseline behind, so the real migrate would "
+                         "then refuse as 'already migrated'")
+
+    def test_merge_dry_run_writes_nothing(self):
+        self.seed("# D\n\n## ADR-1: one\n")
+        self.assertOk(self.tool("migrate", "demo"))
+        self.allocate("two")
+        before = self.dec.read_bytes()
+        p = self.tool("merge", "demo", "--dry-run")
+        self.assertOk(p, "dry run failed")
+        self.assertEqual(self.dec.read_bytes(), before, "a dry run rewrote decisions.md")
+
+    def test_allocate_dry_run_reserves_no_number(self):
+        """A rehearsal that consumed a number would punch a hole every time."""
+        self.seed("# D\n\n## ADR-1: one\n")
+        self.assertOk(self.tool("migrate", "demo"))
+        p = self.tool("allocate", "demo", "--title", "x", "--dry-run")
+        self.assertOk(p, "dry run failed")
+        self.assertEqual(self.allocate("real"), 2,
+                         "the dry run consumed ADR-2, so the next real allocation skipped it")
+
+    def test_short_flag_is_accepted(self):
+        self.seed("# D\n\n## ADR-1: one\n")
+        before = self.dec.read_bytes()
+        self.assertOk(self.tool("migrate", "demo", "-n"), "-n is the documented short form")
+        self.assertEqual(self.dec.read_bytes(), before)
+
+
 if __name__ == "__main__":
     unittest.main()

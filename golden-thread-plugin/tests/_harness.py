@@ -67,6 +67,23 @@ def load_module(path: Path, name: str = None):
     return mod
 
 
+def enforcement_hooks():
+    """The Core-rule hook scripts, READ from gt_components rather than listed here.
+
+    Six test files used to carry their own copy of ("inject_core_rules.sh",
+    "validate_response.sh", "guard_session_claims.sh"). Adding a fourth hook in
+    0.12.0 broke nineteen tests at once, not one of which was about that hook --
+    the same drift MANIFEST.json exists to prevent, one level down. So derive the
+    list from the single declaration, the way install.sh already does.
+    """
+    mod = load_module(SCRIPTS / "gt_components.py", "gt_components_for_tests")
+    return tuple(dict.fromkeys(r["script"] for r in mod.HOOK_REGISTRATIONS
+                               if r["owner"].startswith("vault_init.py")))
+
+
+ENFORCEMENT_HOOKS = enforcement_hooks()
+
+
 class Sandbox(unittest.TestCase):
     """Base class: a temp dir with an empty HOME and an environment pointing at it."""
 

@@ -10,7 +10,7 @@ import os
 import time
 import unittest
 
-from _harness import Sandbox, SCRIPTS
+from _harness import Sandbox, SCRIPTS, ENFORCEMENT_HOOKS
 
 WEEKLY = SCRIPTS / "gt_lint_weekly.py"
 
@@ -24,7 +24,7 @@ class WeeklyBase(Sandbox):
     def wired_vault(self):
         hooks = self.home / ".claude" / "golden-thread" / "hooks"
         hooks.mkdir(parents=True, exist_ok=True)
-        for n in ("inject_core_rules.sh", "validate_response.sh", "guard_session_claims.sh"):
+        for n in ENFORCEMENT_HOOKS:
             (hooks / n).write_text("#!/bin/sh\n")
             (hooks / n).chmod(0o755)
         return self.make_vault()

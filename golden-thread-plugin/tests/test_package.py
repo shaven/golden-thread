@@ -19,7 +19,7 @@ import unittest
 import zipfile
 from pathlib import Path
 
-from _harness import Sandbox, REPO, GT, WIKI
+from _harness import Sandbox, REPO, GT, WIKI, ENFORCEMENT_HOOKS
 
 TOP = ("package.sh", "install.sh", "selftest.sh", "README.md", "INSTALL.md",
        "ONBOARDING.md", "MANUAL.md")
@@ -81,7 +81,7 @@ class PackageTest(Sandbox):
         got_gt = {n[len(gt_prefix):] for n in names if n.startswith(gt_prefix)}
         self.assertEqual(got_gt, src_gt, "gt files missing from or extra in the zip")
         self.assertTrue(any(n.startswith(gt_prefix + "hooks/") for n in names), "hooks/ not shipped")
-        for hook in ("inject_core_rules.sh", "validate_response.sh", "guard_session_claims.sh"):
+        for hook in ENFORCEMENT_HOOKS:
             self.assertIn(gt_prefix + "hooks/" + hook, names)
         got_wiki = {n[len(wiki_prefix):] for n in names if n.startswith(wiki_prefix)}
         self.assertEqual(got_wiki, {f for f in shipped_files(WIKI, WIKI_DIRS) if "__pycache__" not in f})

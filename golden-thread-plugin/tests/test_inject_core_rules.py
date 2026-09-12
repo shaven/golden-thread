@@ -27,6 +27,21 @@ PAYLOAD = json.dumps({"session_id": "s1", "hook_event_name": "UserPromptSubmit",
                       "prompt": "hello", "cwd": "/"})
 
 
+def validated_imperatives():
+    """The first words of every `enforcement: validated` rule, read from the templates."""
+    out = set()
+    for f in sorted((TEMPLATES / "core-rules").glob("core_*.md")):
+        text = f.read_text(encoding="utf-8")
+        if "enforcement: validated" not in text:
+            continue
+        for line in text.splitlines():
+            if line.startswith("imperative:"):
+                imp = line.split(":", 1)[1].strip().strip('"').strip("'")
+                out.add(" ".join(imp.split()[:3]))
+                break
+    return out
+
+
 class InjectTestBase(Sandbox):
     def setUp(self):
         super().setUp()
@@ -91,9 +106,13 @@ class InjectHealthyTest(InjectTestBase):
     def test_validated_rules_come_first(self):
         ctx = self.inject()
         lines = self.rule_lines(ctx)
-        validated = {"Register your session", "Never put a secret", "Begin every response"}
+        # READ which rules are validated, never list them here: 0.12.0 added a fourth
+        # and the hardcoded set failed this test while the injector was ordering
+        # correctly -- a test that lies about the thing it guards.
+        validated = validated_imperatives()
         kinds = [any(l.startswith(v) for v in validated) for l in lines]
-        self.assertEqual(sum(kinds), 3, f"expected the three Validated rules:\n{ctx}")
+        self.assertEqual(sum(kinds), len(validated),
+                         f"expected the {len(validated)} Validated rules:\n{ctx}")
         self.assertEqual(kinds, sorted(kinds, reverse=True),
                          f"all Validated rules must precede Reminder rules:\n{ctx}")
 

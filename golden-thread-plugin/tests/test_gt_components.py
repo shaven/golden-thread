@@ -15,12 +15,17 @@ import shlex
 import shutil
 import unittest
 
-from _harness import Sandbox, SCRIPTS, load_module
+from _harness import Sandbox, SCRIPTS, load_module, ENFORCEMENT_HOOKS
 
 TOOL = SCRIPTS / "gt_components.py"
 
-HOOK_FILES = ("inject_core_rules.sh", "validate_response.sh", "guard_session_claims.sh",
-              "alpha.sh")
+HOOK_FILES = ENFORCEMENT_HOOKS + ("alpha.sh",)
+# Counts come from the declaration, never from a literal: 0.12.0 added an eleventh
+# hook and every literal 10 in this file failed a test that was not about it.
+_REGS = load_module(SCRIPTS / "gt_components.py", "gt_components_counts").HOOK_REGISTRATIONS
+N_HOOKS = len(_REGS)
+N_INSTALL_SH = sum(1 for r in _REGS if r["owner"] == "install.sh")
+N_ENFORCEMENT = N_HOOKS - N_INSTALL_SH
 HOOKDIR_SCRIPTS = ("gt_components.py", "gt_workers.py", "gt_version_check.py",
                    "gt_push_check.py", "gt_watch.py", "gt_report_card.py")
 
@@ -112,7 +117,7 @@ class Manifest(ComponentsBase):
         want = [{"event": r["event"], "script": r["script"], "args": list(r["args"]),
                  "owner": r["owner"]} for r in m.HOOK_REGISTRATIONS]
         self.assertEqual(man["hooks"], want)
-        self.assertEqual(len(want), 10)
+        self.assertEqual(len(want), N_HOOKS)
         owners = {r["owner"] for r in want}
         self.assertEqual(owners, {"install.sh", "vault_init.py install-core-rules"})
         # templates, not resolved paths: nothing machine-specific in the manifest
@@ -136,7 +141,7 @@ class Manifest(ComponentsBase):
 class HookRegistrations(ComponentsBase):
     def test_commands_resolve_and_survive_a_space_in_the_path(self):
         regs = self.registrations()
-        self.assertEqual(len(regs), 10)
+        self.assertEqual(len(regs), N_HOOKS)
         by = {(r["event"], r["script"]): r for r in regs}
         argv = shlex.split(by[("SessionStart", "gt_components.py")]["command"])
         self.assertEqual(argv, ["python3", str(self.installed / "gt_components.py"),
@@ -163,7 +168,7 @@ class Check(ComponentsBase):
         out = self.check()
         self.assertIn("components: clean", out)
         self.assertIn("installed matches 1.2.3", out)
-        self.assertIn("all 10 hooks wired", out)
+        self.assertIn(f"all {N_HOOKS} hooks wired", out)
 
     def test_hook_flag_emits_json_for_user_and_model(self):
         self.full_setup()
@@ -305,34 +310,33 @@ class Wiring(ComponentsBase):
         self.manifest()
         p = self.wiring(self.vdir)
         self.assertEqual(p.returncode, 1)
-        self.assertEqual(p.stdout.count("unwired"), 10, p.stdout)
+        self.assertEqual(p.stdout.count("unwired"), N_HOOKS, p.stdout)
 
     def test_empty_settings_file(self):
         self.manifest()
         self.settings.write_text("")
         p = self.wiring(self.vdir)
         self.assertEqual(p.returncode, 1)
-        self.assertEqual(p.stdout.count("unwired"), 10)
+        self.assertEqual(p.stdout.count("unwired"), N_HOOKS)
 
     def test_all_wired(self):
         self.full_setup()
         p = self.wiring(self.vdir)
         self.assertOk(p, "wiring")
-        self.assertIn("all 10 declared hooks are wired", p.stdout)
+        self.assertIn(f"all {N_HOOKS} declared hooks are wired", p.stdout)
 
     def test_owner_filter_after_dir(self):
         # install.sh's form: before a vault exists the enforcement hooks are
         # legitimately unwired, and must not count against the installer.
         self.manifest()
         self.install()
-        self.wire(drop=("inject_core_rules.sh", "validate_response.sh",
-                        "guard_session_claims.sh"))
+        self.wire(drop=ENFORCEMENT_HOOKS)
         p = self.wiring(self.vdir, "--owner", "install.sh")
         self.assertOk(p, "install.sh-owned hooks are all wired")
-        self.assertIn("all 7 declared hooks are wired (install.sh)", p.stdout)
+        self.assertIn(f"all {N_INSTALL_SH} declared hooks are wired (install.sh)", p.stdout)
         p = self.wiring(self.vdir)
         self.assertEqual(p.returncode, 1)
-        self.assertEqual(p.stdout.count("unwired"), 3)
+        self.assertEqual(p.stdout.count("unwired"), N_ENFORCEMENT)
 
     def test_old_manifest_is_judged_by_what_it_declared(self):
         # A release whose manifest declared only one hook must not be failed for
@@ -355,7 +359,7 @@ class Wiring(ComponentsBase):
         man_p.write_text(json.dumps(man))
         self.settings.write_text("{}")
         p = self.wiring(self.vdir)
-        self.assertEqual(p.stdout.count("unwired"), 10)
+        self.assertEqual(p.stdout.count("unwired"), N_HOOKS)
 
     def test_owner_flag_before_dir(self):
         # main() says flags are skipped when locating the version dir "or

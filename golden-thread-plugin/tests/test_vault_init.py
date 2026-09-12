@@ -4,15 +4,16 @@ Every run happens in a throwaway HOME; the hooks directory the tool looks for
 (~/.claude/golden-thread/hooks) is faked inside that HOME when a test needs wiring.
 """
 import json
+import pathlib
 import re
 import shutil
 import unittest
 from pathlib import Path
 
-from _harness import Sandbox, SCRIPTS
+from _harness import Sandbox, SCRIPTS, ENFORCEMENT_HOOKS
 
 VI = SCRIPTS / "vault_init.py"
-HOOK_NAMES = ("inject_core_rules.sh", "validate_response.sh", "guard_session_claims.sh")
+HOOK_NAMES = ENFORCEMENT_HOOKS
 
 
 class VaultInitBase(Sandbox):
@@ -200,7 +201,8 @@ class InstallCoreRulesTest(VaultInitBase):
         first = settings.read_text()
         res = self.vi_json("install-core-rules", "--vault", v, "--settings", settings)
         self.assertEqual(settings.read_text(), first, "second run changed settings")
-        self.assertEqual(len([r for r in res if "already wired" in r["note"]]), 3)
+        self.assertEqual(len([r for r in res if "already wired" in r["note"]]), len(HOOK_NAMES),
+                         "a second run must report every enforcement hook already wired")
 
     def test_missing_hook_scripts_is_an_error_not_a_silent_wire(self):
         v = self.bare_vault()
@@ -454,6 +456,71 @@ class ArchiveTest(VaultInitBase):
         v = self.make_vault()
         res = self.vi_json("archive-project", "--vault", v, "--slug", "ghost")
         self.assertTrue(self.actions(res, "error"))
+
+
+class DryRunTest(Sandbox):
+    """--dry-run must touch NOTHING. A rehearsal that misses one write site is worse
+    than no rehearsal, because it is believed: that is the 2026-09-11 incident in
+    miniature, where the careful path silently wrote the live vault.
+    """
+
+    def snapshot(self, root):
+        """Every path under root, with its bytes — the evidence that nothing moved."""
+        out = {}
+        for f in sorted(pathlib.Path(root).rglob("*")):
+            out[str(f)] = f.read_bytes() if f.is_file() else b"<dir>"
+        return out
+
+    def test_fresh_dry_run_creates_no_vault(self):
+        target = self.tmp / "would-be-vault"
+        p = self.py(VI, "fresh", "--vault", target, "--domain", "Test", "--dry-run")
+        self.assertOk(p, "dry run failed")
+        self.assertFalse(target.exists(), "--dry-run created the vault anyway")
+        self.assertFalse((self.home / ".claude" / "vault-config.json").exists(),
+                         "--dry-run claimed the global config")
+        self.assertIn("would-", p.stdout, "a dry run must still report what it would do")
+
+    def test_create_project_dry_run_changes_nothing(self):
+        v = self.make_vault()
+        before = self.snapshot(v)
+        p = self.py(VI, "create-project", "--vault", v, "--name", "ghost",
+                    "--title", "Ghost", "--domain", "test", "--topology", "local",
+                    "--dry-run")
+        self.assertOk(p, "dry run failed")
+        self.assertEqual(self.snapshot(v), before,
+                         "--dry-run modified the vault; compare the reported paths")
+        self.assertFalse((v / "Projects" / "ghost").exists())
+
+    def test_dry_run_then_real_run_produces_the_same_paths(self):
+        """The rehearsal must predict the real thing, or it is decoration."""
+        v = self.make_vault()
+        dryp = self.py(VI, "create-project", "--vault", v, "--name", "twin",
+                       "--title", "Twin", "--domain", "test", "--topology", "local",
+                       "--dry-run")
+        self.assertOk(dryp)
+        planned = {r["path"] for r in json.loads(dryp.stdout)
+                   if r["action"].startswith("would-")}
+        realp = self.py(VI, "create-project", "--vault", v, "--name", "twin",
+                        "--title", "Twin", "--domain", "test", "--topology", "local")
+        self.assertOk(realp)
+        done = {r["path"] for r in json.loads(realp.stdout)
+                if r["action"] in ("created", "updated")}
+        missed = planned - done
+        self.assertFalse(missed, f"the dry run promised paths the real run never wrote: {missed}")
+
+    def test_install_core_rules_dry_run_leaves_settings_alone(self):
+        v = self.make_vault()
+        settings = self.home / ".claude" / "settings.json"
+        before = settings.read_bytes() if settings.exists() else None
+        p = self.py(VI, "install-core-rules", "--vault", v, "--dry-run")
+        self.assertOk(p, "dry run failed")
+        after = settings.read_bytes() if settings.exists() else None
+        self.assertEqual(after, before, "--dry-run rewrote settings.json")
+
+    def test_short_flag_is_accepted(self):
+        target = self.tmp / "nope"
+        self.assertOk(self.py(VI, "fresh", "--vault", target, "--domain", "T", "-n"))
+        self.assertFalse(target.exists())
 
 
 if __name__ == "__main__":
