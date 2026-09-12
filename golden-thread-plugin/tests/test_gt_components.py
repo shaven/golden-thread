@@ -15,7 +15,7 @@ import shlex
 import shutil
 import unittest
 
-from _harness import Sandbox, SCRIPTS, load_module, ENFORCEMENT_HOOKS
+from _harness import Sandbox, SCRIPTS, load_module, ENFORCEMENT_HOOKS, GT
 
 TOOL = SCRIPTS / "gt_components.py"
 
@@ -345,6 +345,52 @@ class Check(ComponentsBase):
         out = self.check()
         self.assertRegex(out, r"badpath\s+gt_components\.py")
         self.assertIn(str(old), out)
+
+
+class DuplicateDestinations(Sandbox):
+    """Two shipped files must never install to the same path.
+
+    gt_paths.py shipped from BOTH hooks/ (a 0.12.2-era copy) and scripts/ (current)
+    through every release from 0.9.13 to 0.12.7. install.sh copies hooks/* first and then
+    overwrites with scripts/gt_paths.py, so the correct file won -- by ordering, not by
+    design -- while the MANIFEST kept a hash for each path. The drift check therefore had
+    to disagree with one of them on every machine, forever. Worse, once 0.12.7 resolved
+    direction by identity it called that row `stale`, the auto-appliable state, so
+    component_updates=auto would have copied the 0.12.2 file over the correct one and
+    silently disabled the gated_by/budget_from keys the parallel Core rule reads.
+    """
+    def setUp(self):
+        super().setUp()
+        self.mod = load_module(SCRIPTS / "gt_components.py", "gt_components_dupdest")
+
+    def manifest(self, *rels):
+        d = self.tmp / "rel"
+        d.mkdir(exist_ok=True)
+        files = {rel: {"sha256": "%064x" % i, "bytes": 1} for i, rel in enumerate(rels)}
+        (d / "MANIFEST.json").write_text(json.dumps({"version": "9.9.9", "files": files}),
+                                        encoding="utf-8")
+        return d
+
+    def test_the_shipped_release_ships_nothing_twice(self):
+        self.assertEqual(self.mod.duplicate_destinations(str(GT)), {},
+                         "a release must not install two files to one destination")
+
+    def test_the_gt_paths_shape_is_detected(self):
+        d = self.manifest("hooks/gt_paths.py", "scripts/gt_paths.py", "scripts/vault_init.py")
+        dups = self.mod.duplicate_destinations(str(d))
+        self.assertEqual(len(dups), 1, dups)
+        dst, rels = next(iter(dups.items()))
+        self.assertTrue(dst.endswith("gt_paths.py"))
+        self.assertEqual(sorted(rels), ["hooks/gt_paths.py", "scripts/gt_paths.py"])
+
+    def test_same_basename_different_destinations_is_fine(self):
+        """templates/*/README.md pairs are distinct files, not a collision."""
+        d = self.manifest("templates/core-rules/README.md",
+                          "templates/demo-pizzabot/project/README.md")
+        self.assertEqual(self.mod.duplicate_destinations(str(d)), {})
+
+    def test_a_missing_manifest_is_not_a_crash(self):
+        self.assertEqual(self.mod.duplicate_destinations(str(self.tmp / "nope")), {})
 
 
 class Wiring(ComponentsBase):

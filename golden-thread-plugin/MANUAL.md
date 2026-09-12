@@ -1,6 +1,6 @@
 # Golden Thread — User Manual
 
-Complete reference for all seventeen skills. Written against **gt v0.12.7**.
+Complete reference for all seventeen skills. Written against **gt v0.12.8**.
 
 ---
 
@@ -828,7 +828,7 @@ project other than the one loaded.
 ## Script reference
 
 ```bash
-SCRIPTS=~/.claude/plugins/cache/golden-thread-plugin/gt/0.12.7/scripts
+SCRIPTS=~/.claude/plugins/cache/golden-thread-plugin/gt/0.12.8/scripts
 
 python3 $SCRIPTS/vault_init.py fresh --vault ~/my-vault --domain "My Team"
 

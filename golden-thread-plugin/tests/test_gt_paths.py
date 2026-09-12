@@ -17,7 +17,7 @@ import unittest
 from pathlib import Path
 from unittest import mock
 
-from _harness import Sandbox, HOOKS, load_module
+from _harness import Sandbox, HOOKS, SCRIPTS, load_module
 
 MODEL = "core_rule_priority_model.md"
 
@@ -38,7 +38,11 @@ class GtPathsTest(Sandbox):
         super().setUp()
         self.hooks = self.home / ".claude" / "golden-thread" / "hooks"
         self.hooks.mkdir(parents=True)
-        shutil.copy2(HOOKS / "gt_paths.py", self.hooks / "gt_paths.py")
+        # gt_paths.py ships from scripts/ and is INSTALLED into the hooks dir by
+        # install.sh. Until 0.12.8 a stale second copy also sat in hooks/, and these
+        # tests copied that one -- which is part of why the duplicate survived so
+        # long: the suite depended on it. The hooks dir is a destination, not a source.
+        shutil.copy2(SCRIPTS / "gt_paths.py", self.hooks / "gt_paths.py")
         env = {k: v for k, v in os.environ.items() if not k.startswith("GT_")}
         env["HOME"] = str(self.home)
         self._env = mock.patch.dict(os.environ, env, clear=True)
@@ -201,7 +205,11 @@ class GtPathsCliTest(Sandbox):
         super().setUp()
         self.hooks = self.home / ".claude" / "golden-thread" / "hooks"
         self.hooks.mkdir(parents=True)
-        shutil.copy2(HOOKS / "gt_paths.py", self.hooks / "gt_paths.py")
+        # gt_paths.py ships from scripts/ and is INSTALLED into the hooks dir by
+        # install.sh. Until 0.12.8 a stale second copy also sat in hooks/, and these
+        # tests copied that one -- which is part of why the duplicate survived so
+        # long: the suite depended on it. The hooks dir is a destination, not a source.
+        shutil.copy2(SCRIPTS / "gt_paths.py", self.hooks / "gt_paths.py")
         self.env["PYTHONDONTWRITEBYTECODE"] = "1"
 
     def run_cli(self):

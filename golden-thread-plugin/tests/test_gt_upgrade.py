@@ -63,10 +63,37 @@ class Status(UpgradeBase):
         self.assertIn("release:", p.stdout)
 
     def test_pending_decisions_are_listed_by_project(self):
+        """SUPERSEDED ASSERTION, inverted 2026-09-12.
+
+        This asserted `returncode != 0` for a vault with pending work, on the reading
+        that "pending work must not report success". The request that changed it
+        (2026-09-12-upgrade-status-exit-code) made the better argument: `status`
+        SUCCEEDED -- it looked and found pending steps, which is the normal answer for a
+        vault that has not been upgraded. Exiting 1 rendered every interactive
+        /gt:gt-upgrade run as a tool error, which trains the reader to ignore a check
+        whose entire job is to be read.
+
+        Nothing branched on the code: gt_doctor computes pending itself and the skill
+        reads the printed output (verified before changing it). The printed content is
+        asserted here unchanged, which is what callers actually consume.
+        """
         self.project("alpha")
         p = self.up("status")
         self.assertIn("alpha", p.stdout)
-        self.assertNotEqual(p.returncode, 0, "pending work must not report success")
+        self.assertIn("pending step(s)", p.stdout)
+        self.assertIn("Rehearse:", p.stdout, "the actionable hint must survive")
+        self.assertEqual(p.returncode, 0,
+                         "finding pending steps is a successful status, not a failure")
+
+    def test_up_to_date_vault_also_exits_zero(self):
+        p = self.up("status")
+        self.assertEqual(p.returncode, 0, p.stdout + p.stderr)
+
+    def test_a_missing_vault_still_fails(self):
+        """The exit code has to stay meaningful for real failures."""
+        p = self.py(UP, "status", "--vault", str(self.tmp / "no-such-vault"))
+        self.assertNotEqual(p.returncode, 0,
+                            "a vault that does not exist is a genuine failure")
 
     def test_status_writes_nothing(self):
         before = self.snapshot()

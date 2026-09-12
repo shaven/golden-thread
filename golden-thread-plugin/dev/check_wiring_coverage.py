@@ -273,6 +273,16 @@ def check(version_dir, keep=False):
             print("sandbox kept at %s" % sandbox, file=sys.stderr)
         else:
             shutil.rmtree(sandbox, ignore_errors=True)
+    # Two shipped files installing to ONE destination: the manifest then records two
+    # hashes for one path, so the drift check must disagree with one of them forever.
+    # Found 2026-09-12 -- gt_paths.py shipped from both hooks/ (a 0.12.2-era copy) and
+    # scripts/ (current). install.sh copied hooks/* first and overwrote with scripts/,
+    # so the right file won by ordering while every machine reported permanent drift.
+    for dst, rels in sorted(comp.duplicate_destinations(version_dir).items()):
+        problems.append("%s is installed from %d shipped files (%s) -- the manifest keeps "
+                        "a hash for each, so drift can never read clean. Ship it once."
+                        % (dst, len(rels), ", ".join(rels)))
+
     return problems
 
 

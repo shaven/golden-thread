@@ -1,0 +1,376 @@
+{
+ "files": {
+  "hooks/guard_session_claims.py": {
+   "bytes": 5809,
+   "sha256": "b595207e69b649f328c18b54563177923d3040408abcdbd8ea533738a33ef582"
+  },
+  "hooks/guard_session_claims.sh": {
+   "bytes": 1177,
+   "sha256": "c0902228daf1bea0a1060f7b5ea43fe14d720b17781b7a57f9b8a727015768b9"
+  },
+  "hooks/guard_test_before_commit.py": {
+   "bytes": 10533,
+   "sha256": "775846567dc333d2478176d1f7320b3613510e0049021d055bff8ff63bc9ada5"
+  },
+  "hooks/guard_test_before_commit.sh": {
+   "bytes": 994,
+   "sha256": "ac931245e292b46783850b3dbcd99904f965f898714ee950c9552c7b043a8fd3"
+  },
+  "hooks/guard_vault_writes.py": {
+   "bytes": 6587,
+   "sha256": "7e49689ee57337992379be68448277d45dc0123adb5b394b01cf46dc3cb48468"
+  },
+  "hooks/guard_vault_writes.sh": {
+   "bytes": 1218,
+   "sha256": "837037f83d5d6d5d51b57d9461671e6f53b127b8fa2c40bd01b893459c76f9ae"
+  },
+  "hooks/inject_core_rules.sh": {
+   "bytes": 5519,
+   "sha256": "b5e2b8f5b8e030a19b367261d9619683a8c9c6632ee1015a666c8e964442e94d"
+  },
+  "hooks/validate_response.sh": {
+   "bytes": 8754,
+   "sha256": "e306a150da44292d39124476f5404358cfcc2f1318fb329702a47f138106c05d"
+  },
+  "scripts/gt_components.py": {
+   "bytes": 40036,
+   "sha256": "e519fc6eccefd742dd104d0c593171782d9a37a8e1494fd82db6bce3a0cad7ea"
+  },
+  "scripts/gt_demo.sh": {
+   "bytes": 8658,
+   "sha256": "e402c83f9f959da253d6dd0e095f40c216afc27c695c37aeb6c2b87a4ee91847"
+  },
+  "scripts/gt_doctor.py": {
+   "bytes": 16659,
+   "sha256": "912fae6f90a7fec08347b79f532a6bf92a9899c92b8e67566fb9a3aea217a4f4"
+  },
+  "scripts/gt_ingest.py": {
+   "bytes": 9740,
+   "sha256": "cea0d9fbd3b1b1c7c8acfa6efd479dde165de962d022926216c5bd34c33ee843"
+  },
+  "scripts/gt_lint.py": {
+   "bytes": 37752,
+   "sha256": "abcb78566c9fff9431f612639622180beb83585b751a5fb8470ef2b2b40864af"
+  },
+  "scripts/gt_lint_weekly.py": {
+   "bytes": 4990,
+   "sha256": "d28551ffb0f9934ba192a7bc656feed02bf3bd25e44c0ce8cabe56b2028200f3"
+  },
+  "scripts/gt_paths.py": {
+   "bytes": 4579,
+   "sha256": "1e12b716a04605fc157e9a1264d348f8e1d5ab289c34185563e07c3bb65cfb94"
+  },
+  "scripts/gt_push_check.py": {
+   "bytes": 10614,
+   "sha256": "97448249bb05b6a3dbb39cf1ab65aa1ca7bc9390ea427fbd5919a70a2954873c"
+  },
+  "scripts/gt_report_card.py": {
+   "bytes": 13561,
+   "sha256": "7ca5c2ef87e45de93c20008883717502bdf8f91028ea16f919431819c7218770"
+  },
+  "scripts/gt_settings.py": {
+   "bytes": 32273,
+   "sha256": "dcd66a73c566a355f46ff658609477f8cf05f674e5c6e20449d304ce0bfda0d9"
+  },
+  "scripts/gt_test_receipt.py": {
+   "bytes": 5474,
+   "sha256": "00a4fba9f436e2188772a9e26741fe4c9d6e406724654ae139b605b4772c81e0"
+  },
+  "scripts/gt_upgrade.py": {
+   "bytes": 19503,
+   "sha256": "d7c76899b0ad2ec9ef15033bee751c648f7f8099bde9d5365978217b4ac8ee49"
+  },
+  "scripts/gt_version_check.py": {
+   "bytes": 8956,
+   "sha256": "7d23ae988bfc1ceaf52a8e30a65285e6933d69e0843673df1e4e40bb6cd33423"
+  },
+  "scripts/gt_watch.py": {
+   "bytes": 32714,
+   "sha256": "6479661103a3119396228305259068f91b29f5b69fe49bb69ed23fc196234d18"
+  },
+  "scripts/gt_workers.py": {
+   "bytes": 13740,
+   "sha256": "f7c2fa57126e7648552a38e2a960af5f14249eebc4de0829fe093eff21e48f07"
+  },
+  "scripts/skill_lint.py": {
+   "bytes": 4723,
+   "sha256": "d56bbd01ce9ba0e74b36ea2bf15fcfccd5d2d4a1ef8fdbdd33d02ae8c36fb7a0"
+  },
+  "scripts/vault_init.py": {
+   "bytes": 52697,
+   "sha256": "861115cd6faaaa95414b16472fc0f19ccbde091dfedce5e370acd106284ed5ef"
+  },
+  "templates/CONVENTIONS.md": {
+   "bytes": 19546,
+   "sha256": "5003ec9f6af14e6b8e52c679b2666bdaf360b8513b86906899493289bca37fb2"
+  },
+  "templates/INBOX.md": {
+   "bytes": 817,
+   "sha256": "036fe2517b084f4b413b577288ac6243684bba18d36fe1c90839a21fbdb4a6b6"
+  },
+  "templates/INFRASTRUCTURE.md": {
+   "bytes": 1484,
+   "sha256": "4da7fd3054ff222d417523b526fc8c6d11b5c70472e272b0f350c9acce2928b7"
+  },
+  "templates/OPEN-IN-OBSIDIAN.md": {
+   "bytes": 2965,
+   "sha256": "e2a4112b671708fda9262dbbbfe1550f9c39a8c1fccef4153e9b491bf72d5be5"
+  },
+  "templates/PROJECTS-README.md": {
+   "bytes": 2456,
+   "sha256": "dfe407a83c7413960e67fab436f62c92aa5d7756d2d540ad41a259885a1b9073"
+  },
+  "templates/PROTOCOL.md": {
+   "bytes": 22412,
+   "sha256": "10e6a4a87e8218c428b53ee0708594d1fbcdf9a133aa8f1820ff6b980b5c9399"
+  },
+  "templates/core-rules/README.md": {
+   "bytes": 3703,
+   "sha256": "91a3a22bdc7f94f3dabd19317e6845b59c64bb079796ebb3eecd70df02d82b16"
+  },
+  "templates/core-rules/core_concurrent_session_claim.md": {
+   "bytes": 4867,
+   "sha256": "bdb5b107e9bcce4b61a07dfc934b64688cb4852620bbcc2dd896f0264b2a0c7d"
+  },
+  "templates/core-rules/core_explicit_vault_target.md": {
+   "bytes": 3356,
+   "sha256": "d856a54dcccc49f3ad2b228d12ea82b9e68d12664bd2fc636cb051b97614113a"
+  },
+  "templates/core-rules/core_global_memory_scope.md": {
+   "bytes": 1364,
+   "sha256": "94564bcfd2dde45d696af76ab6c02a8be52d0dff265874addff7e2eb59e8b59b"
+  },
+  "templates/core-rules/core_memory_load_policy.md": {
+   "bytes": 1226,
+   "sha256": "678290ccb586c36a7834e97a8de7f9f69fb3c447ff6fc3beaaf40717d0386d0c"
+  },
+  "templates/core-rules/core_no_secrets_in_transcript.md": {
+   "bytes": 3940,
+   "sha256": "75b31562537fe9a4fd29f21e5be7aea5fc8c3f78790a10c8218e54115cf4540f"
+  },
+  "templates/core-rules/core_parallel_when_beneficial.md": {
+   "bytes": 8800,
+   "sha256": "e35c5acdb5d23885c4ec5bf2c90faf843fbc8eb9e8237cf0b055e3cf421f577f"
+  },
+  "templates/core-rules/core_rule_priority_model.md": {
+   "bytes": 9437,
+   "sha256": "527e17002a294457a8ec95bebe6547b473a892fa8fa0221f4d31479b7242f0b8"
+  },
+  "templates/core-rules/core_secrets_live_in_the_store.md": {
+   "bytes": 4979,
+   "sha256": "75b1111c51201d13ad1b14d5dd811c975206233939b851803cfdef8830511706"
+  },
+  "templates/core-rules/core_test_before_commit.md": {
+   "bytes": 4741,
+   "sha256": "2fda8baa7d6fe461b3686f1d88f746af5bf126b4956806912c6e29e91805e865"
+  },
+  "templates/core-rules/core_timestamp_every_message.md": {
+   "bytes": 6323,
+   "sha256": "abe377c2fc6ce803c4c5b0cfa67a07f92775c9fa665b8056da6bbf5336084a86"
+  },
+  "templates/core-rules/core_verification_state.md": {
+   "bytes": 3153,
+   "sha256": "9904c087b6a6b4b8f56b417850dad3113f6e85e9bca02ff359b6c35d0b19efe9"
+  },
+  "templates/core-rules/enforcement.md": {
+   "bytes": 3650,
+   "sha256": "0e8e3423cab683fa70c229a55ec049324fcfbb5778e9e4b884210c036a4ee05b"
+  },
+  "templates/demo-pizzabot/project/README.md": {
+   "bytes": 1610,
+   "sha256": "38315d0a46752a44943eba0618d22fda73bbb5835b433f187c7cfe17312fb9a2"
+  },
+  "templates/demo-pizzabot/project/decisions.md": {
+   "bytes": 1170,
+   "sha256": "1c1c539d2defee16fa23ecf4cf9872e9a01bab084efd910ea41aeb27ee009a96"
+  },
+  "templates/demo-pizzabot/project/idea.md": {
+   "bytes": 1301,
+   "sha256": "343098945c7339117d9c630a86fe949085e7bfb566bd8939628092f3e260ba66"
+  },
+  "templates/demo-pizzabot/project/memory/MEMORY.md": {
+   "bytes": 202,
+   "sha256": "3f9861a6dd8221af66c6bf4adf5c5db4ab69e68e5473b1be2a459e32db34e841"
+  },
+  "templates/demo-pizzabot/project/memory/project-context.md": {
+   "bytes": 615,
+   "sha256": "09f5584ef7504ffce68ca0172bb75f9acd87f3155e2f870470956022432b6d99"
+  },
+  "templates/demo-pizzabot/project/research.md": {
+   "bytes": 2097,
+   "sha256": "5213c7b316e1199e4557343605f5b4ab4a05338fe112371b7417f817cdfbe4c1"
+  },
+  "templates/demo-pizzabot/project/source.md": {
+   "bytes": 862,
+   "sha256": "a9fd33ba86bc9182219a246dc482a63e865ffcef0833efe99117caca08ed9ab0"
+  },
+  "templates/demo-pizzabot/sources/2024-01-01 Conversation - PizzaBot Architecture.md": {
+   "bytes": 2105,
+   "sha256": "65d0f2293033c1318e783150c0f3afa382bb1e88c06636c92cbdf1aa648c930b"
+  },
+  "templates/demo-pizzabot/tour.md": {
+   "bytes": 5272,
+   "sha256": "0ebf9dba6f2fd14f3ff0e18b757abce0c196245a1366d66620f70c62b291a082"
+  },
+  "templates/githooks/post-commit": {
+   "bytes": 979,
+   "sha256": "875f2d3fae03e7bc8253b6bfd30fbc79114979b9f2f6f50fab12e9fd047c31f1"
+  },
+  "templates/githooks/prepare-commit-msg": {
+   "bytes": 1653,
+   "sha256": "4b1c6197303b70672a1a6adbd8ab7a40a49eaa73f1dee94a066512ed16d46147"
+  },
+  "templates/lint-declines.md": {
+   "bytes": 959,
+   "sha256": "26a05c66a783f3fcbcd6cfe758931dfdd983b94e8f8716d7022bc46a27b03b99"
+  },
+  "templates/memory-file.md": {
+   "bytes": 673,
+   "sha256": "49959c4c8d25a564827a798078825aefd234b02ff9faf57223fbecd65af48c63"
+  },
+  "templates/project-CLAUDE.md": {
+   "bytes": 2297,
+   "sha256": "ea859c571bdaad144f3cf7ab4b3fbd3f28b6ee3b6b298f41463f877175fe9ce2"
+  },
+  "templates/runbook.md": {
+   "bytes": 2087,
+   "sha256": "7386fa88b225580c3d8172310cfa2f21622e2cc13b3863d5f4517758da45e729"
+  },
+  "templates/source.md": {
+   "bytes": 2462,
+   "sha256": "6fb7d890a68046b3671c8e29ed6982c3ad5c5b9256e44ed7ceecb8fc79838acc"
+  },
+  "templates/tools/gt_adr.py": {
+   "bytes": 12737,
+   "sha256": "94f70b2da76ddaf9cd4c5c7fcfae0c5086acc714536c78f1ea9484bd533761f1"
+  },
+  "templates/tools/gt_closeout.py": {
+   "bytes": 11712,
+   "sha256": "550c1da6eec5cad2fd934e56131d5176b1bf52fa9e6d1c88ac79f3d0a5ca29b9"
+  },
+  "templates/tools/gt_edits.py": {
+   "bytes": 12148,
+   "sha256": "478e0e629b2c3f0531e04b4154bb95e1a5eb4f1eb8c26b139c5c876199a25296"
+  },
+  "templates/tools/gt_log.py": {
+   "bytes": 7325,
+   "sha256": "953434b11f90306631226012585411f922e56e7823fb4b5d06f726cb4b3abc47"
+  },
+  "templates/tools/gt_session.py": {
+   "bytes": 17189,
+   "sha256": "2bb16ecd73e0e0ccec69ca2ec4448abbca6de80bae3bdc25b9d3ff6febbb6933"
+  },
+  "templates/tools/gt_spool.py": {
+   "bytes": 8847,
+   "sha256": "6ab668ca716cd7d338cafdcd16cc70ed351af5992592beadc52749d76e0ff272"
+  },
+  "templates/tools/gt_tasks.py": {
+   "bytes": 16168,
+   "sha256": "d724181ae65a750a92e88ce9e010504b59d95d7878f28b513d54373dfd69f76b"
+  },
+  "templates/tools/safe_write.py": {
+   "bytes": 12889,
+   "sha256": "443244903358685dbd6b2d40654c798737cb23fdb4659035336c0b075a009ced"
+  },
+  "templates/watch.md": {
+   "bytes": 1034,
+   "sha256": "401f144a2b22c358d21959d388a7b9a0212ed42cd15b776d9bf715cb629b42cd"
+  },
+  "templates/wiki-CLAUDE.md": {
+   "bytes": 6578,
+   "sha256": "383c0e4b30c8c9c9447c4798f37debf1f4a0402b1e3ee068e7629e9d1ab21859"
+  }
+ },
+ "generated": "2026-09-12T13:12:20",
+ "hooks": [
+  {
+   "args": [
+    "check",
+    "{src}",
+    "--hook"
+   ],
+   "event": "SessionStart",
+   "owner": "install.sh",
+   "script": "gt_components.py"
+  },
+  {
+   "args": [
+    "check",
+    "--hook"
+   ],
+   "event": "SessionStart",
+   "owner": "install.sh",
+   "script": "gt_workers.py"
+  },
+  {
+   "args": [
+    "check",
+    "{plugin_root}",
+    "--hook"
+   ],
+   "event": "SessionStart",
+   "owner": "install.sh",
+   "script": "gt_version_check.py"
+  },
+  {
+   "args": [
+    "check",
+    "--hook"
+   ],
+   "event": "SessionStart",
+   "owner": "install.sh",
+   "script": "gt_push_check.py"
+  },
+  {
+   "args": [
+    "--hook"
+   ],
+   "event": "SessionStart",
+   "owner": "install.sh",
+   "script": "gt_watch.py"
+  },
+  {
+   "args": [],
+   "event": "PreCompact",
+   "owner": "install.sh",
+   "script": "gt_report_card.py"
+  },
+  {
+   "args": [],
+   "event": "SessionEnd",
+   "owner": "install.sh",
+   "script": "gt_report_card.py"
+  },
+  {
+   "args": [],
+   "event": "UserPromptSubmit",
+   "owner": "vault_init.py install-core-rules",
+   "script": "inject_core_rules.sh"
+  },
+  {
+   "args": [],
+   "event": "Stop",
+   "owner": "vault_init.py install-core-rules",
+   "script": "validate_response.sh"
+  },
+  {
+   "args": [],
+   "event": "PreToolUse",
+   "owner": "vault_init.py install-core-rules",
+   "script": "guard_session_claims.sh"
+  },
+  {
+   "args": [],
+   "event": "PreToolUse",
+   "owner": "vault_init.py install-core-rules",
+   "script": "guard_test_before_commit.sh"
+  },
+  {
+   "args": [],
+   "event": "PreToolUse",
+   "owner": "vault_init.py install-core-rules",
+   "script": "guard_vault_writes.sh"
+  }
+ ],
+ "version": "0.12.8"
+}

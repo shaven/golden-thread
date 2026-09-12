@@ -205,9 +205,25 @@ esac
 
 if [ "$QUICK" = no ]; then
   step "test harness"
+  # KEEP THE OUTPUT. This used to grep out the `FAIL:` lines and discard everything
+  # else, so a failing gate named the test and threw away the traceback -- and the only
+  # way to see why was to run it again. For a flake that is fatal: 2026-09-12 produced
+  # two parallel-only failures (test_gt_demo, test_gt_edits) whose evidence was gone
+  # before it could be read, which is exactly what dev/README.md warns against when it
+  # says a test failing in parallel IS the finding.
+  TESTLOG="${TMPDIR:-/tmp}/gt-release-check-tests.log"
   OUT=$(tests/run.sh 2>&1); rc=$?
+  printf '%s\n' "$OUT" > "$TESTLOG"
   echo "$OUT" | tail -3
-  [ $rc -eq 0 ] && ok "tests/run.sh" || { echo "$OUT" | grep -E '^(FAIL|ERROR):' | head -20; bad "tests/run.sh"; }
+  if [ $rc -eq 0 ]; then
+    ok "tests/run.sh"
+  else
+    echo "$OUT" | grep -E '^(FAIL|ERROR):' | head -20
+    echo "  full output, tracebacks included: $TESTLOG"
+    echo "  a unit that passes on its own is a PARALLEL-ONLY failure, which is a finding:"
+    echo "    GT_TEST_SERIAL=1 tests/run.sh <module>   # compare"
+    bad "tests/run.sh"
+  fi
   step "selftest"
   OUT=$(./selftest.sh 2>&1); rc=$?
   [ $rc -eq 0 ] && ok "$(echo "$OUT" | tail -1)" || { echo "$OUT" | grep FAIL | head; bad "selftest.sh"; }

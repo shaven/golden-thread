@@ -662,6 +662,38 @@ if __name__ == "__main__":
     unittest.main()
 
 
+class GtPathsIsShippedOnce(InstallTest):
+    """The end-to-end form of the 2026-09-12 report from the other machine.
+
+    It saw `hooks/gt_paths.py` reported as drifted at every session start and filed a
+    request to promote its installed copy into the plugin. The installed copy was already
+    correct; what was wrong was that the release shipped gt_paths.py TWICE -- from hooks/
+    (a 0.12.2-era copy without the gated_by/budget_from keys) and from scripts/ (current)
+    -- both landing on one destination, so the manifest had to disagree with one of them.
+
+    These assert the two things that together make the report impossible to reproduce:
+    the installed file has the keys, and the drift check reads clean about it.
+    """
+    def test_the_installed_copy_has_the_keys_the_core_rules_need(self):
+        p = self.install()
+        self.assertEqual(p.returncode, 0, p.stdout + p.stderr)
+        landed = self.home / ".claude" / "golden-thread" / "hooks" / "gt_paths.py"
+        self.assertTrue(landed.is_file())
+        text = landed.read_text(encoding="utf-8")
+        for key in ("gated_by", "budget_from"):
+            self.assertIn(key, text,
+                          "%s is how a rule names the setting that governs it; without it "
+                          "inject_core_rules.sh would have to hardcode setting names" % key)
+
+    def test_drift_reads_clean_about_gt_paths_after_a_fresh_install(self):
+        self.assertEqual(self.install().returncode, 0)
+        comp = self.home / ".claude" / "golden-thread" / "hooks" / "gt_components.py"
+        p = self.py(comp, "check", self.repo / "golden-thread" / GT.name)
+        self.assertNotIn("gt_paths", p.stdout,
+                         "a freshly installed tree must not report drift on gt_paths.py:\n"
+                         + p.stdout)
+
+
 class ManifestMismatch(InstallTest):
     """install.sh compares the files it is about to install against MANIFEST.json.
 

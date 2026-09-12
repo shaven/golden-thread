@@ -21,7 +21,7 @@ import subprocess
 import sys
 import unittest
 
-from _harness import Sandbox, HOOKS, PYTHON
+from _harness import Sandbox, HOOKS, SCRIPTS, PYTHON
 
 SESSIONS = "Projects/golden-thread/sessions"
 TS_FMT = "%Y-%m-%d %H:%M:%S %Z"
@@ -41,6 +41,10 @@ class GuardTestBase(Sandbox):
         for f in HOOKS.iterdir():
             if f.is_file():
                 shutil.copy2(f, self.hooks / f.name)
+        # install.sh also copies gt_paths.py from scripts/ into this directory, and the
+        # guard imports it at run time. Before 0.12.8 a stale duplicate in hooks/ made
+        # this work by accident.
+        shutil.copy2(SCRIPTS / "gt_paths.py", self.hooks / "gt_paths.py")
         self.env["PYTHONDONTWRITEBYTECODE"] = "1"
 
     def guard_raw(self, stdin, env=None):

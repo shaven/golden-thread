@@ -11,6 +11,57 @@ release's own summary line, kept short rather than reconstructed after the fact.
 
 ---
 
+## gt 0.12.8 — 2026-09-12
+
+**`gt_paths.py` shipped twice, and one of the copies was three releases stale.** If you
+have ever seen a drift report you could not clear, this is why.
+
+Two requests arrived from another machine. One asked to promote its installed
+`gt_paths.py` into the plugin, on the reading that the installed copy was the richer one
+and the source lacked the `gated_by` / `budget_from` keys. Half right, and the diagnosis
+inverted:
+
+- `scripts/gt_paths.py` has had those keys since **0.12.4**. The installed copy was
+  byte-identical to it.
+- `hooks/gt_paths.py` — a **second copy in the same release** — was the 0.12.2-era file
+  without them, and had been stale in every release from 0.9.13 through 0.12.7.
+
+Both install to the same destination. `install.sh` copies `hooks/*` first and then
+overwrites with `scripts/gt_paths.py`, so the correct file won — **by ordering, not by
+design** — while `MANIFEST.json` kept a hash for each path. The drift check therefore had
+to disagree with one of them on every machine, forever, and no user action could clear it.
+
+It got worse in 0.12.7. Resolving direction by identity made that row read `stale`, which
+is the **auto-appliable** state: with `component_updates=auto` the check would have copied
+the 0.12.2 file **over** the correct one, silently disabling the keys the parallel Core
+rule reads to know which setting governs it. A phantom that became destructive.
+
+- **`hooks/gt_paths.py` is deleted.** One file, one home: `scripts/`, installed to the
+  hooks directory by `install.sh`, exactly as the other hook-dir scripts are.
+- **`gt_components.duplicate_destinations()`** reports any destination claimed by more
+  than one shipped file, using the same mapper the drift check uses so the two cannot
+  disagree about where a file goes. Wired into the release gate: pointed at 0.12.7 it
+  names the defect, at 0.12.8 it reads clean.
+- Two end-to-end tests make the original report impossible to reproduce: the installed
+  copy carries both keys, and a freshly installed tree reports no drift on `gt_paths.py`.
+
+### `gt_upgrade.py status` no longer reports success as failure
+
+Pending migration steps exited 1, so every interactive `/gt:gt-upgrade` rendered as a tool
+error — training the reader to ignore a check whose whole job is to be read. `status`
+succeeded: it looked, and found pending steps. It now exits 0. Nothing branched on the
+code (`gt_doctor` computes pending itself, the skill reads the printed output), verified
+before changing it, and the printed output is unchanged and asserted so.
+
+**The test written for that request then found a second bug**: `status --vault
+<missing-path>` exited **0** and reported on the nonexistent path as an un-upgraded vault
+— "never stamped, every migration is offered" is an alarming thing to print about a typo.
+`cmd_run` had always refused a missing vault; `status` never did. It now exits 2, which
+also keeps the command able to fail at all now that pending is 0.
+
+Two assertions pinning the old behaviours were **inverted rather than deleted**, each with
+its original reasoning recorded, so neither can return from the argument that produced it.
+
 ## gt 0.12.7 — 2026-09-12
 
 **The installer checks that what it is about to install matches its manifest, and the
