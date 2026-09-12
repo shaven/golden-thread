@@ -114,7 +114,7 @@ pre, table { break-inside: avoid; font-size: 9px; }
 table { width:100%; border-collapse: collapse; }
 th, td { border:1px solid #ddd; padding:3px 5px; text-align:left; vertical-align:top; }
 </style></head><body><h1 id="golden-thread-user-manual">User Manual</h1>
-<p>Complete reference for all seventeen skills. Written against <strong>gt v0.12.4</strong>.</p>
+<p>Complete reference for all seventeen skills. Written against <strong>gt v0.12.5</strong>.</p>
 <hr />
 <h2 id="the-model">The model</h2>
 <p>Claude forgets everything between sessions. The vault doesn't. Golden Thread's
@@ -791,6 +791,12 @@ is registered here and can be switched off.</p>
 <td><code>/gt:gt-watch</code>: the hourly fetch and the session-start report of repo changes</td>
 </tr>
 <tr>
+<td><code>test_gate</code></td>
+<td><code>off</code> · <code>warn</code> · <code>auto</code> · <code>block</code></td>
+<td><code>auto</code></td>
+<td>Refuse a <code>git commit</code> of code whose tests have not been seen to pass; <code>auto</code> blocks only where the repo has a test command</td>
+</tr>
+<tr>
 <td><code>parallel_work</code></td>
 <td><code>off</code> · <code>on</code></td>
 <td><code>on</code></td>
@@ -817,6 +823,24 @@ processes at once, CPU well above 100%, and the fans to match. That is intended.
 with <code>set parallel_max &lt;N&gt;</code> or switch it off with <code>set parallel_work off</code>; nothing else
 about the plugin changes.</p>
 </blockquote>
+<p><strong>Test receipts.</strong> <code>core_test_before_commit</code> needs evidence that the tests passed on
+<em>this</em> tree, so a run leaves a receipt and the commit guard reads it:</p>
+<pre><code class="language-bash">gt_test_receipt.py record --repo . --what &quot;pytest -q&quot; --ok   # any project
+gt_test_receipt.py latest --repo .                           # what was last recorded
+gt_test_receipt.py check  --repo . --files a.py b.py         # does a receipt cover these?
+</code></pre>
+<p>A receipt covers a file only if it is newer than that file, so editing something after
+the run invalidates it automatically. <code>tests/run.sh</code> and <code>dev/release-check.sh</code> record
+their own. A repo with no tests is exempted once with <code>touch .gt-no-test-gate</code>; a single
+commit with <code>GT_TEST_GATE=off</code>.</p>
+<p><strong>The machine profile.</strong> <code>parallel_max: auto</code> resolves through <code>parallel_profile</code>, which
+<code>install.sh</code> measures on this machine and re-measures at every upgrade — cores for
+CPU-bound work, 2× cores (bounded by memory) for I/O-bound. Inspect or refresh it:</p>
+<pre><code class="language-bash">gt_settings.py detect-machine            # what this machine would measure
+gt_settings.py detect-machine --write    # measure and store it
+</code></pre>
+<p>Setting a number above what the machine can use is refused at the point you set it, and
+a number above core count is accepted with a note that it only helps I/O-bound work.</p>
 <p><strong>The budget as a number.</strong> Any script, in any project, can ask what the settings allow
 instead of inventing a worker count:</p>
 <pre><code class="language-bash">JOBS=$(python3 .../scripts/gt_settings.py jobs 42 --io-bound)   # 42 units of I/O-bound work
@@ -956,7 +980,7 @@ answer is not obvious — including when the honest answer is that the fact belo
 project other than the one loaded.</p>
 <hr />
 <h2 id="script-reference">Script reference</h2>
-<pre><code class="language-bash">SCRIPTS=~/.claude/plugins/cache/golden-thread-plugin/gt/0.12.4/scripts
+<pre><code class="language-bash">SCRIPTS=~/.claude/plugins/cache/golden-thread-plugin/gt/0.12.5/scripts
 
 python3 $SCRIPTS/vault_init.py fresh --vault ~/my-vault --domain &quot;My Team&quot;
 

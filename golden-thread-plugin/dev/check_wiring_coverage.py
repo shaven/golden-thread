@@ -55,6 +55,7 @@ PY = os.environ.get("GT_PYTHON", sys.executable or "python3")
 NOT_REGISTERED = {
     "guard_session_claims.py": "called by guard_session_claims.sh, not by the harness",
     "guard_vault_writes.py": "called by guard_vault_writes.sh, not by the harness",
+    "guard_test_before_commit.py": "called by guard_test_before_commit.sh, not by the harness",
     "gt_paths.py": "a library the hooks import; it is not a hook",
 }
 

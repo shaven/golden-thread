@@ -51,12 +51,39 @@ shipped broken while everything looked fine.
 
 ## Publishing
 
+**`dev/publish.sh` is the entry point.** It runs every publish requirement in order and
+stops at the first failure, so "publish" is one command rather than four things to
+remember in sequence:
+
+```bash
+dev/publish.sh --list      # the requirements, in order
+dev/publish.sh --dry-run   # what each would do
+dev/publish.sh             # publish
+```
+
+| Step | Guarantees |
+|---|---|
+| `gate` | every release check passes, tests and selftest included |
+| `committed` | the tree is committed, so what is published equals a commit |
+| `pushed` | the commit exists on the remote others read |
+| `gt-src` | the shared working copy holds this release, verified by selftest |
+| `announced` | a Discussion names this version (warn only — needs `gh`) |
+| `logged` | the vault records the publish |
+
+The requirements are **data** at the top of the script, and `--list` prints them, so the
+contract is readable without reading the implementation. There is no `--skip`: a step you
+may skip is not a requirement. It exists because on 2026-09-12 the gate, the commit and
+the push all happened and gt-src was left a release behind — invisible from this repo,
+since everything here was correct and only the copy the other machine reads was stale.
+
+
 | Script | What it does |
 |---|---|
 | `sync-gt-src.sh` | publishes the newest release to the shared working copy (`gt-src`) from a **committed** tree, scrubbed and verified. `--dry-run` shows what would change |
 | `foreign_files.py` | lists files in the publish destination that the publisher did not write, so a second writer is named before `rsync --delete` removes it |
 | `render-pdfs.sh` | re-renders the PDFs after a docs change, in parallel — one Chrome per document, each with its own `--user-data-dir`; workers from `gt_settings.py jobs`, `GT_RENDER_JOBS=1` for serial |
 | `feature_requests.py` | validates the cross-machine feature-request queue |
+| `publish.sh` | runs every publish requirement in order; `--list` prints them, `--dry-run` rehearses |
 | `scrub_check.py` | scans for employer and machine-specific strings; exit 1 = hits, other = could not scan (also a failure — an unscanned file is not a clean file) |
 
 ## Tests

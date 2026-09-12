@@ -214,5 +214,16 @@ if [ "$QUICK" = no ]; then
 fi
 
 printf '\n'
-if [ $FAILS -eq 0 ]; then echo "RELEASE CHECK PASSED — gt $GTV, gt-wiki $WV"; else echo "RELEASE CHECK FAILED — $FAILS step(s)"; fi
+if [ $FAILS -eq 0 ]; then
+  echo "RELEASE CHECK PASSED — gt $GTV, gt-wiki $WV"
+  # The receipt core_test_before_commit reads. A --quick pass skipped the tests and the
+  # selftest, so it is deliberately NOT evidence: recording one would let a commit
+  # through on the strength of a check that never ran the suite.
+  if [ "$QUICK" = no ]; then
+    python3 "$GT/scripts/gt_test_receipt.py" record --repo . \
+      --what "dev/release-check.sh" --ok >/dev/null 2>&1 || true
+  fi
+else
+  echo "RELEASE CHECK FAILED — $FAILS step(s)"
+fi
 exit $FAILS

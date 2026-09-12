@@ -1,0 +1,23 @@
+#!/bin/sh
+# Drain the edit ledger AFTER a commit succeeds.
+#
+# Deliberately post-commit rather than prepare-commit-msg: if the ledger were
+# truncated while composing the message and the commit were then aborted (empty
+# message, hook rejection, Ctrl-C), the attribution for those edits would be gone
+# with no way to recover it. Clearing only once the commit exists means an aborted
+# commit costs nothing.
+#
+# Entries for files still modified in the working tree are RETAINED, so an edit
+# that was not part of this commit stays attributed for whenever it is committed.
+#
+# FAILS OPEN: nothing here can affect the commit, which has already happened.
+
+GIT_DIR_ABS=$(git rev-parse --absolute-git-dir 2>/dev/null) || exit 0
+ROOT=$(git rev-parse --show-toplevel 2>/dev/null) || exit 0
+TOOL="$ROOT/Projects/golden-thread/tools/gt_edits.py"
+
+[ -f "$TOOL" ] || exit 0
+[ -f "$GIT_DIR_ABS/gt-edits.jsonl" ] || exit 0
+
+(cd "$ROOT" && python3 "$TOOL" commit-clear >/dev/null 2>&1)
+exit 0

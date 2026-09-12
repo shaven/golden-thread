@@ -11,6 +11,57 @@ release's own summary line, kept short rather than reconstructed after the fact.
 
 ---
 
+## gt 0.12.5 — 2026-09-12
+
+**A tenth Core rule: code is not committed until its tests have been seen to pass. Plus
+`auto` now measures your machine instead of guessing, and `publish` is one command.**
+
+- **`core_test_before_commit`** (Core/**Validated**) — enforced by a third `PreToolUse`
+  guard, on `git commit`. Evidence is a **receipt**: `tests/run.sh` and
+  `dev/release-check.sh` write one when they pass, any project writes one with
+  `gt_test_receipt.py record --ok`, and a receipt covers a file only if it is **newer**
+  than that file — so editing something after the run invalidates it automatically, with
+  nothing to remember. Setting `test_gate`: `off`, `warn`, `auto` (**default** — block
+  where the repo has a discoverable test command, warn where it does not), `block`.
+  **Per-repo opt-out:** `touch .gt-no-test-gate`. Per-commit: `GT_TEST_GATE=off`. Never
+  blocked: docs-only commits, and anything the guard cannot parse — it fails open.
+
+  It exists because 0.12.4 was committed and pushed with a **stale `MANIFEST.json`**. The
+  gate that catches exactly that had been run, then several more edits followed. The
+  discipline was fine; it had no mechanism.
+
+- **`parallel_max: auto` is now measured, not assumed.** `install.sh` records a
+  `parallel_profile` for the machine — cores, physical cores, memory, and the resulting
+  `cpu_max` / `io_max` — and re-measures at every upgrade, which is exactly when the
+  hardware may have changed. It never touches `parallel_work` or `parallel_max`: the
+  profile records the hardware, those record what you will allow. On a 16-core/128 GB
+  machine `io_max` comes out at **32**, where 0.12.4 hardcoded 20 — a number that was
+  right for the laptop it was chosen on and arbitrary everywhere else.
+
+- **A ceiling you set is checked against the machine.** `set parallel_max 40` on a
+  16-core box is refused, with the numbers; a value above core count is accepted with a
+  note that it helps I/O-bound work and does nothing for CPU-bound work. `--force`
+  covers the case the profile cannot see, like a fan-out bounded by the network.
+
+- **`dev/publish.sh` — publishing is one command.** Gate, committed, pushed, gt-src,
+  announced, logged, in order, stopping at the first failure. The requirements are data
+  at the top of the script and `--list` prints them; there is no `--skip`, because a step
+  you may skip is not a requirement. 0.12.4 shipped with gt-src left a release behind,
+  which is invisible from this repo: everything here was correct and only the copy the
+  other machine reads was stale.
+
+- **The hook-wiring list had a second copy, and now does not.** `vault_init.py` kept its
+  own hand-maintained list of which hooks to register — the same duplication that shipped
+  `guard_session_claims.sh` unwired in 0.9.5. It now reads
+  `gt_components.HOOK_REGISTRATIONS`, the one declaration `install.sh` already used.
+
+**Two bugs caught by the new rule's own tests**, both worth naming because each would
+have shipped silently: the commit guard's heredoc regex referenced a capture group that
+did not exist, so the guard threw on every call and the wrapper failed open — an inert
+guard that reported nothing; and an import failure in the guard now **announces** that it
+is degraded rather than quietly allowing, the same principle as
+`inject_core_rules.sh`'s ENFORCEMENT DEGRADED banner.
+
 ## gt 0.12.4 — 2026-09-12
 
 **A ninth Core rule: parallel execution is the default for divisible work, in every

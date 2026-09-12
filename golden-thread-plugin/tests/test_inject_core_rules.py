@@ -28,17 +28,24 @@ PAYLOAD = json.dumps({"session_id": "s1", "hook_event_name": "UserPromptSubmit",
 
 
 def validated_imperatives():
-    """The first words of every `enforcement: validated` rule, read from the templates."""
+    """The first words of every `enforcement: validated` rule, read from the templates.
+
+    Parsed with gt_paths.parse_rule -- the SAME reader the hook uses -- rather than by
+    scanning for an `imperative:` line. Two of the shipped validated rules take their
+    imperative from the first bolded sentence in the body instead of the frontmatter
+    key, so the old line-scan silently classified them as reminders. That made this
+    test agree with a wrong order: it passed while the injector was ordering correctly,
+    and started failing in 0.12.5 only because a fifth validated rule changed which
+    positions the misreadings landed in.
+    """
+    parse = load_module(SCRIPTS / "gt_paths.py", "gt_paths_for_inject_test").parse_rule
     out = set()
     for f in sorted((TEMPLATES / "core-rules").glob("core_*.md")):
-        text = f.read_text(encoding="utf-8")
-        if "enforcement: validated" not in text:
+        if f.name == "core_rule_priority_model.md":
             continue
-        for line in text.splitlines():
-            if line.startswith("imperative:"):
-                imp = line.split(":", 1)[1].strip().strip('"').strip("'")
-                out.add(" ".join(imp.split()[:3]))
-                break
+        r = parse(f)
+        if r.get("enforcement") == "validated" and r.get("imperative"):
+            out.add(" ".join(r["imperative"].split()[:3]))
     return out
 
 

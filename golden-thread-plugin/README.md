@@ -19,6 +19,13 @@ A Claude Code plugin that turns an Obsidian vault into the single source of trut
 > gt_settings.py set parallel_work off   # serial, and the rule stops being asserted
 > gt_settings.py show                    # what is allowed right now
 > ```
+>
+> **Also new in 0.12.5:** a `git commit` carrying code whose tests have not been seen to
+> pass is **refused**. Evidence is a receipt written by your test run (`tests/run.sh` and
+> `dev/release-check.sh` write their own; any project can with `gt_test_receipt.py record
+> --ok`). If a repo has no tests, exempt it once with `touch .gt-no-test-gate`; for a
+> single commit, `GT_TEST_GATE=off git commit …`; to switch it off entirely,
+> `gt_settings.py set test_gate off`. Docs-only commits are never blocked.
 
 ## What It Does
 
@@ -285,11 +292,11 @@ Python scripts can also be run directly from the command line:
 
 ```bash
 # Create a new vault
-python3 golden-thread/0.12.4/scripts/vault_init.py fresh \
+python3 golden-thread/0.12.5/scripts/vault_init.py fresh \
   --vault ~/my-vault --domain "My Team"
 
 # Scaffold a project
-python3 golden-thread/0.12.4/scripts/vault_init.py create-project \
+python3 golden-thread/0.12.5/scripts/vault_init.py create-project \
   --vault ~/my-vault \
   --name my-project \
   --title "My Project" \
@@ -300,29 +307,29 @@ python3 golden-thread/0.12.4/scripts/vault_init.py create-project \
   --project-dir ~/Projects/my-project
 
 # Scaffold a sub-project
-python3 golden-thread/0.12.4/scripts/vault_init.py create-project \
+python3 golden-thread/0.12.5/scripts/vault_init.py create-project \
   --vault ~/my-vault \
   --name sub-feature \
   --parent my-project \
   --title "Sub Feature"
 
 # Point vault-config.json at an existing vault
-python3 golden-thread/0.12.4/scripts/vault_init.py connect \
+python3 golden-thread/0.12.5/scripts/vault_init.py connect \
   --vault ~/existing-vault
 
 # Install/rewire Core-rule enforcement hooks
-python3 golden-thread/0.12.4/scripts/vault_init.py install-core-rules \
+python3 golden-thread/0.12.5/scripts/vault_init.py install-core-rules \
   --vault ~/my-vault
 
 # Scan a project directory for ingest candidates
-python3 golden-thread/0.12.4/scripts/gt_ingest.py ~/Projects/my-project --json
+python3 golden-thread/0.12.5/scripts/gt_ingest.py ~/Projects/my-project --json
 
 # Audit vault health
-python3 golden-thread/0.12.4/scripts/gt_lint.py ~/my-vault \
+python3 golden-thread/0.12.5/scripts/gt_lint.py ~/my-vault \
   --queue ~/my-vault/review-queue.md
 
 # View/change automatic behaviours
-python3 golden-thread/0.12.4/scripts/gt_settings.py show
+python3 golden-thread/0.12.5/scripts/gt_settings.py show
 ```
 
 ---

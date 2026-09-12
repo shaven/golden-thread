@@ -12,7 +12,7 @@ it at startup, look things up while working, and write back what they learn.
 Its distinguishing idea is the second problem, the one most memory systems never
 address: **writing a rule down does not mean it gets followed.**
 
-Plugin **v0.12.4**. Nine Core rules currently enforced, four of them *validated* — a
+Plugin **v0.12.5**. Ten Core rules currently enforced, five of them *validated* — a
 hook inspects the finished reply (`Stop`) or the tool call about to run (`PreToolUse`)
 and blocks it if the rule was broken.
 
@@ -34,6 +34,13 @@ and blocks it if the rule was broken.
 > gt_settings.py set parallel_work off   # serial, and the Core rule stops being injected
 > gt_settings.py show                    # what is currently allowed
 > ```
+>
+> **Also new in 0.12.5:** a `git commit` carrying code whose tests have not been seen to
+> pass is **refused**. Evidence is a receipt written by your test run (`tests/run.sh` and
+> `dev/release-check.sh` write their own; any project can with `gt_test_receipt.py record
+> --ok`). If a repo has no tests, exempt it once with `touch .gt-no-test-gate`; for a
+> single commit, `GT_TEST_GATE=off git commit …`; to switch it off entirely,
+> `gt_settings.py set test_gate off`. Docs-only commits are never blocked.
 >
 > `parallel_max` defaults to `auto` — as many workers as the machine allows, and never
 > more than there are units of work. Cap it before a long run if you need the machine to
@@ -93,6 +100,7 @@ The Core tier is deliberately small; every addition dilutes the reliability of t
 | `core_explicit_vault_target` | **validated** | Name the vault on every mutating tool run — `--vault` or `--dry-run` |
 | `core_secrets_live_in_the_store` | reminder | A secret's value rests only in the secrets store, never in source, a repo, a log or a session |
 | `core_parallel_when_beneficial` | reminder | Parallelise divisible work in every project, up to the `parallel_max` budget; serial must be justified |
+| `core_test_before_commit` | **validated** | Never commit code whose tests you have not seen pass; per-repo opt-out with `.gt-no-test-gate` |
 
 Two ways in: the user **designates** a rule, or an existing fact is **promoted** and
 must answer three questions — would its absence cause incorrect code, cause rework, or

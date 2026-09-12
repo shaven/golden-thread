@@ -28,6 +28,7 @@ EXPECTED = {
     "closeout_check": ("ask", ["off", "ask"]),
     "report_card": ("minimal", ["off", "minimal", "full"]),
     "install_demo": ("yes", ["yes", "no"]),
+    "test_gate": ("auto", ["off", "warn", "auto", "block"]),
     "parallel_work": ("on", ["off", "on"]),
     # values None == free-form; `validate` carries the shape instead of a closed list.
     "parallel_max": ("auto", None),
@@ -219,8 +220,13 @@ class SettingsInProcess(Sandbox):
         self.assertEqual(self.m.parallel_jobs(3), 3)
         self.assertEqual(self.m.parallel_jobs(10 ** 6), cores)
         # I/O-bound work is allowed above core count -- that is what `auto` means here.
-        self.assertGreater(self.m.parallel_jobs(10 ** 6, io_bound=True), cores - 1)
-        self.assertLessEqual(self.m.parallel_jobs(10 ** 6, io_bound=True), 20)
+        # The ceiling is READ from the machine profile, never hardcoded: this test used
+        # to assert `<= 20`, which was the constant 0.12.4 shipped, and it failed the
+        # moment 0.12.5 started measuring the machine (32 here). A test that pins a
+        # number the product deliberately derives will fail on the next machine anyway.
+        io_max = self.m.detect_machine()["io_max"]
+        self.assertGreater(io_max, cores - 1, "auto must allow oversubscription for I/O")
+        self.assertEqual(self.m.parallel_jobs(10 ** 6, io_bound=True), io_max)
 
     def test_parallel_jobs_honours_a_ceiling_and_off(self):
         self.config(vault_path=str(self.tmp), parallel_max="2")

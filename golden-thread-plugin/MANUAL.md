@@ -1,6 +1,6 @@
 # Golden Thread — User Manual
 
-Complete reference for all seventeen skills. Written against **gt v0.12.4**.
+Complete reference for all seventeen skills. Written against **gt v0.12.5**.
 
 ---
 
@@ -655,6 +655,7 @@ is registered here and can be switched off.
 | `push_check` | `off` · `report` | `report` | At session start, reports vault commits not yet pushed |
 | `report_card` | `off` · `minimal` · `full` | `minimal` | At `/compact`, summarises session hygiene |
 | `watch` | `off` · `report` | `off` | `/gt:gt-watch`: the hourly fetch and the session-start report of repo changes |
+| `test_gate` | `off` · `warn` · `auto` · `block` | `auto` | Refuse a `git commit` of code whose tests have not been seen to pass; `auto` blocks only where the repo has a test command |
 | `parallel_work` | `off` · `on` | `on` | Whether divisible work runs in parallel at all; `off` also stops the Core rule being injected |
 | `parallel_max` | `auto` · a positive integer | `auto` | Ceiling on concurrent workers. `auto` = as many as the machine allows |
 | `install_demo` | `yes` · `no` | `yes` | Whether `install.sh` installs `/gt:gt-demo`, its script and the PizzaBot template |
@@ -665,6 +666,32 @@ is registered here and can be switched off.
 > processes at once, CPU well above 100%, and the fans to match. That is intended. Cap it
 > with `set parallel_max <N>` or switch it off with `set parallel_work off`; nothing else
 > about the plugin changes.
+
+**Test receipts.** `core_test_before_commit` needs evidence that the tests passed on
+*this* tree, so a run leaves a receipt and the commit guard reads it:
+
+```bash
+gt_test_receipt.py record --repo . --what "pytest -q" --ok   # any project
+gt_test_receipt.py latest --repo .                           # what was last recorded
+gt_test_receipt.py check  --repo . --files a.py b.py         # does a receipt cover these?
+```
+
+A receipt covers a file only if it is newer than that file, so editing something after
+the run invalidates it automatically. `tests/run.sh` and `dev/release-check.sh` record
+their own. A repo with no tests is exempted once with `touch .gt-no-test-gate`; a single
+commit with `GT_TEST_GATE=off`.
+
+**The machine profile.** `parallel_max: auto` resolves through `parallel_profile`, which
+`install.sh` measures on this machine and re-measures at every upgrade — cores for
+CPU-bound work, 2× cores (bounded by memory) for I/O-bound. Inspect or refresh it:
+
+```bash
+gt_settings.py detect-machine            # what this machine would measure
+gt_settings.py detect-machine --write    # measure and store it
+```
+
+Setting a number above what the machine can use is refused at the point you set it, and
+a number above core count is accepted with a note that it only helps I/O-bound work.
 
 **The budget as a number.** Any script, in any project, can ask what the settings allow
 instead of inventing a worker count:
@@ -801,7 +828,7 @@ project other than the one loaded.
 ## Script reference
 
 ```bash
-SCRIPTS=~/.claude/plugins/cache/golden-thread-plugin/gt/0.12.4/scripts
+SCRIPTS=~/.claude/plugins/cache/golden-thread-plugin/gt/0.12.5/scripts
 
 python3 $SCRIPTS/vault_init.py fresh --vault ~/my-vault --domain "My Team"
 
