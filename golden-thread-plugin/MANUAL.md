@@ -240,6 +240,7 @@ project memory. If a page comes back `status: stale`, verify before acting on it
 ### Keeping the vault honest
 
 ```
+/gt:gt-doctor          # the whole install in one report; --fix re-wires hooks only
 /gt:gt-lint            # broken links, orphans, unlisted memory, scope leaks
 /gt:gt-runbook-lint    # facts duplicated across runbooks
 /gt:gt-refresh         # upstream changes to Sources/

@@ -313,7 +313,8 @@ artifact — never your reasoning. Budget for the possibility that it comes back
 <p>Reads <code>index.md</code>, follows wikilinks into <code>Knowledge/</code>, then falls back to grep and
 project memory. If a page comes back <code>status: stale</code>, verify before acting on it.</p>
 <h3 id="keeping-the-vault-honest">Keeping the vault honest</h3>
-<pre><code>/gt:gt-lint            # broken links, orphans, unlisted memory, scope leaks
+<pre><code>/gt:gt-doctor          # the whole install in one report; --fix re-wires hooks only
+/gt:gt-lint            # broken links, orphans, unlisted memory, scope leaks
 /gt:gt-runbook-lint    # facts duplicated across runbooks
 /gt:gt-refresh         # upstream changes to Sources/
 </code></pre>

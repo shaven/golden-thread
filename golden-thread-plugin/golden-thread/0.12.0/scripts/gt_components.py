@@ -209,7 +209,8 @@ HOOK_DIR_SCRIPTS = ("gt_paths.py", "gt_components.py", "gt_report_card.py",
                     "gt_push_check.py",
                     "gt_watch.py",         # upstream repo watch: cron fetch + SessionStart report (0.10.0)
                     "gt_lint.py",          # the vault linter lives in the hooks dir too (used by gt_lint_weekly.py and /gt:gt-lint)
-                    "gt_lint_weekly.py")   # weekly vault + wiki lint under launchd (0.9.11)
+                    "gt_lint_weekly.py",   # weekly vault + wiki lint under launchd (0.9.11)
+                    "gt_doctor.py")        # /gt:gt-doctor runs the other probes from here (0.12.0)
 
 
 # Every hook entry the plugin expects to find in ~/.claude/settings.json.
