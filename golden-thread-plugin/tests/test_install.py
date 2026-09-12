@@ -531,5 +531,68 @@ class ObsidianPointer(Sandbox):
                       "nothing here requires Obsidian; saying so prevents a false dependency")
 
 
+class WiringDoesNotDependOnGit(Sandbox):
+    """The enforcement hooks must be wired whenever a vault EXISTS.
+
+    Reported from the other machine, 2026-09-12: still unwired after installing 0.12.2.
+    0.12.1 put the wiring call inside the block gated on the vault being a git repo, so
+    a vault that is not a repo installed with the hooks inert AND was reported as "no
+    vault at all". Git decides whether the ATTRIBUTION hooks can be wired; it has
+    nothing to do with an entry in settings.json. Same bug, second branch.
+    """
+
+    def setUp(self):
+        super().setUp()
+        self.repo = self.tmp / "src" / "golden-thread-plugin"
+        self.repo.mkdir(parents=True)
+        shutil.copy2(INSTALL, self.repo / "install.sh")
+        shutil.copytree(GT, self.repo / "golden-thread" / GT.name, ignore=IGNORE)
+        shutil.copytree(WIKI, self.repo / "golden-thread-wiki" / WIKI.name, ignore=IGNORE)
+
+    def configure(self, vault, git=False):
+        vault.mkdir(parents=True, exist_ok=True)
+        (vault / "Projects").mkdir(exist_ok=True)
+        (vault / "index.md").write_text("# index\n")
+        if git:
+            self.git_init(vault)
+        cfg = self.home / ".claude" / "vault-config.json"
+        cfg.parent.mkdir(parents=True, exist_ok=True)
+        cfg.write_text(json.dumps({"vault_path": str(vault)}))
+
+    def guards(self):
+        f = self.home / ".claude" / "settings.json"
+        if not f.exists():
+            return []
+        d = json.loads(f.read_text())
+        return [h.get("command", "") for bl in d.get("hooks", {}).values() for b in bl
+                for h in b.get("hooks", []) if "guard_vault_writes" in (h.get("command") or "")]
+
+    def test_wired_when_the_vault_is_a_git_repo(self):
+        self.configure(self.tmp / "v", git=True)
+        p = self.sh(self.repo / "install.sh", timeout=300)
+        self.assertEqual(p.returncode, 0, p.stdout + p.stderr)
+        self.assertTrue(self.guards(), "not wired for a git vault")
+
+    def test_wired_when_the_vault_is_NOT_a_git_repo(self):
+        self.configure(self.tmp / "v", git=False)
+        p = self.sh(self.repo / "install.sh", timeout=300)
+        self.assertEqual(p.returncode, 0,
+                         "an install with a configured vault must not exit 4:\n"
+                         + p.stdout[-400:])
+        self.assertTrue(self.guards(),
+                        "a vault that is not a git repo left the enforcement hooks inert")
+
+    def test_a_non_git_vault_is_not_reported_as_no_vault(self):
+        self.configure(self.tmp / "v", git=False)
+        p = self.sh(self.repo / "install.sh", timeout=300)
+        self.assertNotIn("INSTALL INCOMPLETE", p.stdout,
+                         "a configured vault was reported as missing")
+
+    def test_still_exit_4_when_there_really_is_no_vault(self):
+        p = self.sh(self.repo / "install.sh", timeout=300)
+        self.assertEqual(p.returncode, 4)
+        self.assertFalse(self.guards())
+
+
 if __name__ == "__main__":
     unittest.main()

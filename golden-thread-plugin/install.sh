@@ -495,6 +495,38 @@ if [ -n "$VAULT_ARG" ] && [ "$NO_VAULT" != yes ]; then
   setup_vault "$VAULT_ARG" || true
 fi
 VAULT_PATH=$(python3 -c "import json,os;p=os.path.expanduser('~/.claude/vault-config.json');print(json.load(open(p)).get('vault_path','')) if os.path.exists(p) else print('')" 2>/dev/null)
+# Wire the ENFORCEMENT hooks whenever a vault EXISTS — nothing more is required.
+#
+# These are owned by vault_init.py, which until 0.12.1 wired them only when a vault was
+# CREATED, so an upgrade copied a new hook and never registered it (0.12.0 shipped
+# guard_vault_writes.sh inert on every existing machine). 0.12.1 fixed that but put the
+# call inside the block gated on the vault being a GIT REPO — so a vault that is not a
+# repo still installed with the hooks inert, and the installer then claimed there was
+# no vault at all. Git decides whether the ATTRIBUTION hooks can be wired; it has
+# nothing to do with an entry in settings.json.
+#
+# Idempotent: rule files are seeded only when absent, never overwritten, and an entry
+# already present is reported as skipped.
+wire_enforcement_hooks() {  # $1 = vault path
+  local vault="$1" out rc
+  [ -f "$SRC/scripts/vault_init.py" ] || return 0
+  out=$(python3 "$SRC/scripts/vault_init.py" install-core-rules --vault "$vault" 2>&1) && rc=0 || rc=$?
+  if [ "${rc:-1}" -eq 0 ]; then
+    if printf '%s' "$out" | grep -q '"action": "updated"'; then
+      echo "Wired enforcement hooks → ~/.claude/settings.json"
+    else
+      echo "Enforcement hooks already wired"
+    fi
+  else
+    echo "⚠ Could not wire the enforcement hooks. Run this, then restart:"
+    echo "  python3 \"$SRC/scripts/vault_init.py\" install-core-rules --vault \"$vault\""
+  fi
+}
+
+if [ -n "$VAULT_PATH" ] && [ -d "$VAULT_PATH" ]; then
+  wire_enforcement_hooks "$VAULT_PATH"
+fi
+
 # Ask git, not the filesystem: .git is a FILE for a worktree, a submodule or a
 # --separate-git-dir checkout, and `-d .git` skipped all of those silently.
 if [ -n "$VAULT_PATH" ] && git -C "$VAULT_PATH" rev-parse --git-dir >/dev/null 2>&1; then
@@ -558,32 +590,9 @@ EOF
   git -C "$VAULT_PATH" config core.hooksPath .githooks 2>/dev/null \
     && echo "Wired vault git attribution → $VAULT_PATH (.githooks)"
 
-  # Wire the ENFORCEMENT hooks too, now that a vault is known.
-  #
-  # These are owned by vault_init.py, which until 0.12.1 wired them only when a vault
-  # was CREATED. So an UPGRADE copied a new hook and never registered it: 0.12.0
-  # shipped guard_vault_writes.sh and every existing machine reported it unwired at
-  # session start, with no instruction in that message that would fix it. A hook that
-  # ships inert is the exact failure the Core tier exists to close, and shipping one
-  # while the component check says "clean" is worse than not shipping it at all.
-  #
-  # The call is idempotent: rule files are seeded only when absent, never overwritten,
-  # and an entry already in settings.json is reported as skipped.
-  if [ -f "$SRC/scripts/vault_init.py" ]; then
-    CORE_OUT=$(python3 "$SRC/scripts/vault_init.py" install-core-rules \
-                 --vault "$VAULT_PATH" 2>&1) && CORE_RC=0 || CORE_RC=$?
-    if [ "${CORE_RC:-1}" -eq 0 ]; then
-      if printf '%s' "$CORE_OUT" | grep -q '"action": "updated"'; then
-        echo "Wired enforcement hooks → ~/.claude/settings.json"
-      else
-        echo "Enforcement hooks already wired"
-      fi
-    else
-      echo "⚠ Could not wire the enforcement hooks. Run this, then restart:"
-      echo "  python3 \"$SRC/scripts/vault_init.py\" install-core-rules --vault \"$VAULT_PATH\""
-    fi
-  fi
-else
+fi
+
+if [ -z "$VAULT_PATH" ] || [ ! -d "$VAULT_PATH" ]; then
   # No vault. The four enforcement hooks are wired AGAINST a vault, so an install that
   # stops here leaves them inert — which is the state that produced a false "broken
   # install" report on 2026-09-12. Three ways out, and which one applies depends on

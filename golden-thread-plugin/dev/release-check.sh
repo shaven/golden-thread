@@ -84,6 +84,17 @@ step "cli contract"
 OUT=$(python3 dev/check_cli_contract.py "$GT" 2>&1); rc=$?
 [ $rc -eq 0 ] && ok "$OUT" || { echo "$OUT" | tail -20; bad "a vault tool can write without being told which vault"; }
 
+step "wiring coverage"
+# Does every shipped item REACH its destination? Proven by installing into a throwaway
+# HOME and asking each file where it ended up — including the upgrade path, where a
+# vault already exists and a newly shipped hook has to be registered.
+#
+# Every other check here reported "clean" while guard_vault_writes.sh shipped inert
+# through 0.12.0, 0.12.1 and 0.12.2: the manifest matched, the file was present, the
+# registration list agreed with itself. Only doing the install catches it.
+OUT=$(python3 dev/check_wiring_coverage.py "$GT" 2>&1); rc=$?
+[ $rc -eq 0 ] && ok "$OUT" || { echo "$OUT" | tail -20; bad "a shipped item does not reach its destination"; }
+
 step "docs"
 OUT=$(python3 build-docs.py 2>&1); rc=$?
 [ $rc -eq 0 ] && ok "every .html matches its .md" || { echo "$OUT" | tail -12; bad "docs drifted — fix the .md, then ./build-docs.py --build"; }

@@ -13,6 +13,29 @@ release's own summary line, kept short rather than reconstructed after the fact.
 
 ## gt 0.12.2 — 2026-09-12
 
+**Reported from a second machine: `guard_vault_writes.sh` still unwired.** It was right,
+and the bug had survived two fixes because each was confirmed from the one vantage point
+where it already worked.
+
+- 0.12.1 put the wiring call inside the block gated on the vault being a **git repo**. A
+  vault that is not a repo installed with the enforcement hooks inert — and was then
+  reported as no vault at all. Git decides whether the *attribution* hooks can be wired;
+  it has nothing to do with an entry in `settings.json`. The wiring now depends only on a
+  vault existing.
+- **`dev/check_wiring_coverage.py` is a new release gate**, and it is the durable answer:
+  it installs into a throwaway home — including the upgrade path, where a vault already
+  exists — and then asks every shipped hook, hook-dir script, skill, script, vault tool
+  and Core rule whether it reached its destination. Nothing is listed by hand; each set is
+  read from the release, so a file shipped tomorrow is covered tomorrow. A hook that ships
+  but is registered nowhere is itself a finding.
+  Every other check reported "clean" through all three releases: the manifest matched, the
+  files were present, the registration list agreed with itself. Only doing the install
+  catches an inert hook.
+
+### Earlier in 0.12.2
+
+
+
 **A vault is part of the install, not a thing to remember afterwards.**
 
 The enforcement hooks are wired against a vault, so an install without one ends with
