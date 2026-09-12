@@ -58,6 +58,17 @@ class InstallTest(Sandbox):
         return dest
 
     def install(self, *args, repo=None):
+        """Install the plugin only.
+
+        --no-vault is passed unless a test says otherwise: since 0.12.2 an install with
+        no vault and no flag STOPS with exit 4 rather than finishing with the
+        enforcement hooks inert. These tests are about what lands on disk, so they opt
+        out of that decision explicitly — VaultIsPartOfTheInstall covers the decision
+        itself.
+        """
+        if not any(a in ("--vault", "--no-vault") or str(a).startswith("--vault=")
+                   for a in args):
+            args = (*args, "--no-vault")
         return self.sh((repo or self.repo) / "install.sh", *args, timeout=300)
 
     # -- paths -------------------------------------------------------------------
@@ -369,11 +380,18 @@ class EnforcementHooksOnUpgrade(Sandbox):
                         for c in self.wired(ev))
             self.assertTrue(found, f"{name} is declared but wired nowhere")
 
-    def test_install_without_a_vault_still_succeeds(self):
-        """No vault yet: the enforcement hooks cannot be wired, and that is not an error."""
+    # test_install_without_a_vault_still_succeeds and
+    # test_without_a_vault_the_installer_explains_the_unwired_hooks were REMOVED in
+    # 0.12.2, not silently: they asserted that a vault-less install finishes quietly,
+    # which is precisely the behaviour that shipped inert hooks. The replacement
+    # contract (stop with exit 4, say what is needed, invent nothing) is covered by
+    # VaultIsPartOfTheInstall below.
+
+    def test_with_a_vault_it_does_not_print_the_no_vault_notice(self):
+        self.make_vault()
         p = self.sh(self.repo / "install.sh", timeout=300)
-        self.assertEqual(p.returncode, 0, p.stdout + p.stderr)
-        self.assertIn("installed", p.stdout)
+        self.assertNotIn("No vault configured", p.stdout,
+                         "a wired install must not warn about a vault that exists")
 
     def test_a_second_install_reports_already_wired(self):
         self.make_vault()
@@ -382,6 +400,135 @@ class EnforcementHooksOnUpgrade(Sandbox):
         self.assertEqual(p.returncode, 0)
         self.assertIn("already wired", p.stdout,
                       "a repeat install should say it changed nothing, not re-report a fix")
+
+
+class VaultIsPartOfTheInstall(Sandbox):
+    """An install that ends with no vault ends with the enforcement hooks inert.
+
+    0.12.2 makes finishing possible in one command, and makes the unfinished case
+    LOUD rather than silent — including for a non-interactive caller (an agent, a
+    pipe, CI), which must not have a directory invented for it.
+    """
+
+    def setUp(self):
+        super().setUp()
+        self.repo = self.tmp / "src" / "golden-thread-plugin"
+        self.repo.mkdir(parents=True)
+        shutil.copy2(INSTALL, self.repo / "install.sh")
+        shutil.copytree(GT, self.repo / "golden-thread" / GT.name, ignore=IGNORE)
+        shutil.copytree(WIKI, self.repo / "golden-thread-wiki" / WIKI.name, ignore=IGNORE)
+
+    def run_install(self, *args):
+        return self.sh(self.repo / "install.sh", *args, timeout=300)
+
+    def guard_entries(self):
+        s = self.home / ".claude" / "settings.json"
+        if not s.exists():
+            return []
+        d = json.loads(s.read_text())
+        return [h.get("command", "") for bl in d.get("hooks", {}).values() for b in bl
+                for h in b.get("hooks", []) if "guard_vault_writes" in (h.get("command") or "")]
+
+    # -- the non-interactive case: stop and ask, never guess ----------------------
+    def test_no_vault_non_interactive_stops_with_exit_4(self):
+        p = self.run_install()
+        self.assertEqual(p.returncode, 4,
+                         "a non-interactive install with no vault must stop, not finish "
+                         "silently with inert hooks:\n" + p.stdout[-500:])
+        self.assertIn("INSTALL INCOMPLETE", p.stdout)
+
+    def test_it_tells_the_caller_to_ask_the_user(self):
+        """The caller is often an agent; the decision is the user's."""
+        p = self.run_install()
+        self.assertIn("ASK THE USER", p.stdout)
+        self.assertIn("--vault", p.stdout, "it must name the flag that finishes the job")
+
+    def test_it_does_not_invent_a_vault(self):
+        self.run_install()
+        self.assertFalse((self.home / "Documents" / "GoldenThread").exists(),
+                         "the installer created a vault nobody asked for")
+        self.assertFalse((self.home / ".claude" / "vault-config.json").exists(),
+                         "the installer claimed the global vault config unasked")
+
+    # -- --vault finishes everything ---------------------------------------------
+    def test_vault_flag_creates_connects_and_wires(self):
+        target = self.tmp / "myvault"
+        p = self.run_install("--vault", str(target))
+        self.assertEqual(p.returncode, 0, p.stdout + p.stderr)
+        self.assertTrue((target / "Projects").is_dir(), "no vault was created")
+        self.assertTrue(self.guard_entries(),
+                        "the vault was created but the enforcement hooks are not wired")
+
+    def test_vault_flag_connects_an_existing_vault(self):
+        existing = self.make_vault()
+        (self.home / ".claude" / "vault-config.json").unlink()
+        p = self.run_install("--vault", str(existing))
+        self.assertEqual(p.returncode, 0, p.stdout + p.stderr)
+        cfg = json.loads((self.home / ".claude" / "vault-config.json").read_text())
+        self.assertEqual(cfg["vault_path"], str(existing.resolve()))
+
+    def test_gt_vault_env_is_the_same_as_the_flag(self):
+        target = self.tmp / "envvault"
+        p = self.sh(self.repo / "install.sh", timeout=300,
+                    env=dict(self.env, GT_VAULT=str(target)))
+        self.assertEqual(p.returncode, 0, p.stdout + p.stderr)
+        self.assertTrue((target / "Projects").is_dir())
+
+    # -- --no-vault is a deliberate choice, not a failure -------------------------
+    def test_no_vault_flag_succeeds_and_explains(self):
+        p = self.run_install("--no-vault")
+        self.assertEqual(p.returncode, 0, p.stdout + p.stderr)
+        self.assertIn("NOT wired", p.stdout)
+        self.assertIn("gt-init", p.stdout, "it must say what will wire them later")
+
+    # -- the existing contract must not regress ----------------------------------
+    def test_version_argument_still_works(self):
+        p = self.run_install(GT.name, "--no-vault")
+        self.assertEqual(p.returncode, 0, p.stdout + p.stderr)
+        self.assertIn(GT.name, p.stdout)
+
+    def test_help_describes_the_real_options(self):
+        p = self.run_install("--help")
+        self.assertEqual(p.returncode, 0)
+        for expected in ("--vault", "--no-vault", "exit 4"):
+            self.assertIn(expected, p.stdout, f"--help does not mention {expected}")
+        self.assertNotIn("git checkout", p.stdout,
+                         "--help is printing a different comment block from the script")
+
+    def test_unknown_option_is_refused(self):
+        p = self.run_install("--wat")
+        self.assertNotEqual(p.returncode, 0)
+
+
+class ObsidianPointer(Sandbox):
+    """A new vault explains how to look at it. The question is asked while standing in
+    the folder, often on a machine that never cloned the plugin — so the answer lives
+    in the vault, not only in the plugin's docs."""
+
+    def test_new_vault_carries_the_obsidian_file(self):
+        v = self.make_vault()
+        f = v / "OPEN-IN-OBSIDIAN.md"
+        self.assertTrue(f.is_file(), "a new vault does not say how to open it")
+        text = f.read_text()
+        self.assertIn(str(v), text, "the vault's own path was not substituted in")
+        self.assertNotIn("{{VAULT_PATH}}", text, "an unsubstituted placeholder shipped")
+
+    def test_it_names_the_plugin_the_conventions_depend_on(self):
+        """Dataview is not decoration: [p:: 1] inline fields ARE its syntax."""
+        text = (self.make_vault() / "OPEN-IN-OBSIDIAN.md").read_text()
+        self.assertIn("Dataview", text)
+        self.assertIn("[p::", text, "it must show the syntax that motivates the plugin")
+
+    def test_it_warns_that_generated_files_are_not_hand_edited(self):
+        text = (self.make_vault() / "OPEN-IN-OBSIDIAN.md").read_text()
+        for name in ("TASKS.md", "log.md", "decisions.md"):
+            self.assertIn(name, text,
+                          f"{name} is generated; editing it in Obsidian loses the edit")
+
+    def test_obsidian_is_presented_as_optional(self):
+        text = (self.make_vault() / "OPEN-IN-OBSIDIAN.md").read_text()
+        self.assertIn("optional", text.lower(),
+                      "nothing here requires Obsidian; saying so prevents a false dependency")
 
 
 if __name__ == "__main__":

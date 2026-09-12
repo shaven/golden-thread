@@ -18,7 +18,12 @@ fail=0
 ok()  { printf 'ok    %s\n' "$1"; }
 bad() { printf 'FAIL  %s\n' "$1"; fail=1; }
 
-if bash "$HERE/install.sh" >"$TMP/install.log" 2>&1; then ok "install.sh"; else bad "install.sh"; sed 's/^/      /' "$TMP/install.log"; exit 1; fi
+# --no-vault deliberately: this script installs FIRST and creates the vault in the
+# next step, which is the two-step sequence it exists to prove. Since 0.12.2 an
+# install with no vault and no flag stops with exit 4 rather than finishing with the
+# enforcement hooks inert, so the opt-out has to be explicit here — and exercising it
+# is worth as much as exercising the default.
+if bash "$HERE/install.sh" --no-vault >"$TMP/install.log" 2>&1; then ok "install.sh --no-vault"; else bad "install.sh"; sed 's/^/      /' "$TMP/install.log"; exit 1; fi
 VER=$(python3 -c "import json,os;print(json.load(open(os.path.expanduser('~/.claude/plugins/installed_plugins.json')))['plugins']['gt@golden-thread-plugin'][0]['version'])")
 SCRIPTS="$HOME/.claude/plugins/cache/golden-thread-plugin/gt/$VER/scripts"
 HOOKS="$HOME/.claude/golden-thread/hooks"

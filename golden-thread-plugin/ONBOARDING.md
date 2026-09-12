@@ -2,7 +2,7 @@
 
 A guided walkthrough for your first session. Six steps, ~15 minutes.
 
-**Requirements:** Python 3.8+, Claude Code installed. Written against **gt v0.12.1**.
+**Requirements:** Python 3.8+, Claude Code installed. Written against **gt v0.12.2**.
 
 ---
 
@@ -13,10 +13,19 @@ Unzip the plugin and run the installer:
 ```bash
 unzip golden-thread-plugin.zip
 cd golden-thread-plugin
-bash install.sh
+bash install.sh --vault ~/Documents/GoldenThread
 ```
 
 Then **restart Claude Code**. The `/gt:` skills are not available until you do.
+
+`--vault` names the folder your memory will live in, and lets the installer finish the
+job: it creates the vault (or connects one you already have) and wires the Core-rule
+enforcement hooks, which are wired against a vault and cannot be wired without one.
+
+Leave it off and the installer asks, if you are at a terminal. If something else is
+running it — an agent, CI — it stops with exit 4 and asks for the decision rather than
+choosing a directory for you. `bash install.sh --no-vault` installs the plugin alone,
+deliberately.
 
 The installer sets up two plugins:
 - **`gt`** — memory, projects, session workflow, and enforcement hooks
@@ -39,6 +48,12 @@ Claude will ask for:
 The script creates the folder structure, writes `~/.claude/vault-config.json` (the pointer every other skill reads), and **installs Core-rule enforcement hooks** into `~/.claude/settings.json`. Safe to re-run on a machine you've already set up.
 
 > **If you already have an Obsidian vault**, just give `gt-init` that path. It will only add what's missing — your existing notes are untouched.
+
+**Looking at the vault in Obsidian (optional).** A vault is a folder, so there is no
+import: install Obsidian, choose **Open folder as vault**, and pick this folder. The
+vault's own `OPEN-IN-OBSIDIAN.md` has the path and the details. Install **Dataview**
+if you want to sort tasks by the `[p:: 1]` inline fields, and **Obsidian Git** if you
+want your hand edits committed on a timer alongside Claude's.
 
 ---
 

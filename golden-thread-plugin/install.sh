@@ -72,7 +72,51 @@ assert_manifest_version() {
   fi
 }
 
-REQUESTED="${1:-${GT_VERSION:-}}"
+# ---- arguments ---------------------------------------------------------------
+#
+#   ./install.sh                     install the newest release
+#   ./install.sh 0.12.1              install a specific release (rollback)
+#   ./install.sh --vault <path>      install AND create/connect that vault
+#   ./install.sh --no-vault          install the plugin only, on purpose
+#
+# --vault exists because an install that ends with no vault ends with the Core-rule
+# enforcement hooks UNWIRED: they are wired against a vault. One command should be
+# able to finish the job.
+VAULT_ARG="${GT_VAULT:-}"
+NO_VAULT=no
+POSITIONAL=""
+while [ $# -gt 0 ]; do
+  case "$1" in
+    --vault)    VAULT_ARG="${2:-}"; shift 2 || true ;;
+    --vault=*)  VAULT_ARG="${1#--vault=}"; shift ;;
+    --no-vault) NO_VAULT=yes; shift ;;
+    -h|--help)
+      cat <<'USAGE'
+install.sh — install the gt and gt-wiki Claude Code plugins
+
+  ./install.sh                        install the newest release
+  ./install.sh 0.12.1                 install a specific release (deliberate rollback)
+  ./install.sh --vault <path>         install AND create or connect that vault
+  ./install.sh --no-vault             install the plugin only, on purpose
+  ./install.sh --help                 this text
+
+A vault is a plain folder of markdown where your memory lives. The Core-rule
+enforcement hooks are wired AGAINST a vault, so an install with no vault leaves them
+present but inert. --vault finishes the job in one command.
+
+With no vault and no --vault:
+  * at a terminal, you are asked where the vault should go;
+  * otherwise (an agent, a pipe, CI) the install stops with exit 4 and says what it
+    needs, rather than inventing a directory and claiming ~/.claude/vault-config.json.
+
+Environment: GT_VAULT (same as --vault), GT_VERSION (same as the version argument).
+USAGE
+      exit 0 ;;
+    -*) echo "unknown option: $1"; echo "try: install.sh [version] [--vault <path>] [--no-vault]"; exit 1 ;;
+    *)  POSITIONAL="$1"; shift ;;
+  esac
+done
+REQUESTED="${POSITIONAL:-${GT_VERSION:-}}"
 VERSION="${REQUESTED:-$(latest_version "$SCRIPT_DIR/golden-thread")}"
 WIKI_VERSION="${GT_WIKI_VERSION:-$(latest_version "$SCRIPT_DIR/golden-thread-wiki")}"
 
@@ -413,6 +457,43 @@ fi
 # tracked .githooks/ and core.hooksPath points at it. That config is per-clone
 # local state -- which is exactly why it belongs in the installer rather than in a
 # README nobody re-reads on a new machine.
+# The default only ever appears in a PROMPT or an instruction, never as something this
+# script picks on its own: an installer that invents a directory and claims the global
+# vault-config.json without being asked is how people learn not to trust installers.
+DEFAULT_VAULT="$HOME/Documents/GoldenThread"
+
+setup_vault() {  # $1 = path to create or connect
+  local target="$1" mode
+  if [ -d "$target/Projects" ] || [ -f "$target/index.md" ]; then
+    mode=connect
+  else
+    mode=fresh
+  fi
+  echo ""
+  if [ "$mode" = fresh ]; then
+    echo "Creating a vault at $target"
+    python3 "$SRC/scripts/vault_init.py" fresh --vault "$target" --domain "Personal" \
+      >/dev/null 2>&1 || { echo "⚠ could not create the vault at $target"; return 1; }
+  else
+    echo "Connecting the existing vault at $target"
+    python3 "$SRC/scripts/vault_init.py" connect --vault "$target" \
+      >/dev/null 2>&1 || { echo "⚠ could not connect $target"; return 1; }
+  fi
+  python3 "$SRC/scripts/vault_init.py" install-core-rules --vault "$target" >/dev/null 2>&1 \
+    && echo "Wired enforcement hooks → ~/.claude/settings.json" \
+    || echo "⚠ vault ready, but the enforcement hooks could not be wired"
+  echo "Vault ready: $target"
+  if [ -f "$target/OPEN-IN-OBSIDIAN.md" ]; then
+    echo "Obsidian is optional but recommended — see $target/OPEN-IN-OBSIDIAN.md"
+  fi
+  return 0
+}
+
+# --vault (or $GT_VAULT) was given: do the whole job in one command. Runs before the
+# config is read, so the path the user named is the one that gets set up and wired.
+if [ -n "$VAULT_ARG" ] && [ "$NO_VAULT" != yes ]; then
+  setup_vault "$VAULT_ARG" || true
+fi
 VAULT_PATH=$(python3 -c "import json,os;p=os.path.expanduser('~/.claude/vault-config.json');print(json.load(open(p)).get('vault_path','')) if os.path.exists(p) else print('')" 2>/dev/null)
 # Ask git, not the filesystem: .git is a FILE for a worktree, a submodule or a
 # --separate-git-dir checkout, and `-d .git` skipped all of those silently.
@@ -502,7 +583,59 @@ EOF
       echo "  python3 \"$SRC/scripts/vault_init.py\" install-core-rules --vault \"$VAULT_PATH\""
     fi
   fi
+else
+  # No vault. The four enforcement hooks are wired AGAINST a vault, so an install that
+  # stops here leaves them inert — which is the state that produced a false "broken
+  # install" report on 2026-09-12. Three ways out, and which one applies depends on
+  # who is running this.
+  if [ "$NO_VAULT" = yes ]; then
+    echo ""
+    echo "Installed without a vault (--no-vault). The Core-rule enforcement hooks are"
+    echo "present but NOT wired; they are wired against a vault. Run /gt:gt-init, or"
+    echo "  ./install.sh --vault <path>"
+    echo "when you have one."
+  elif [ -t 0 ] && [ -t 1 ]; then
+    # A person is watching. Ask; never invent a directory unasked.
+    echo ""
+    echo "No Golden Thread vault is configured on this machine."
+    echo "A vault is a plain folder of markdown — it is where your memory lives, and"
+    echo "the Core-rule enforcement hooks are wired against it."
+    printf 'Create one at %s? [Y = create / n = skip / or type a path]: ' "$DEFAULT_VAULT"
+    read -r ANSWER </dev/tty || ANSWER=""
+    case "$ANSWER" in
+      ""|y|Y|yes|YES)   CHOSEN="$DEFAULT_VAULT" ;;
+      n|N|no|NO)        CHOSEN="" ;;
+      *)                CHOSEN="$ANSWER" ;;
+    esac
+    if [ -n "$CHOSEN" ]; then
+      setup_vault "$CHOSEN" || true
+    else
+      echo "Skipped. Run /gt:gt-init in Claude Code when you are ready; that wires them."
+    fi
+  else
+    # NOT a terminal: an agent, a pipe or CI is running this. Do not guess a path and
+    # do not claim the global config. Stop, and say exactly what is needed, so the
+    # caller can put the question to the person instead of deciding for them.
+    echo ""
+    echo "════════════════════════════════════════════════════════════════════════"
+    echo "INSTALL INCOMPLETE — a vault is needed to finish"
+    echo "════════════════════════════════════════════════════════════════════════"
+    echo "The plugin is installed, but the Core-rule enforcement hooks are NOT wired:"
+    echo "they are wired against a vault, and this machine has none configured."
+    echo ""
+    echo "This is not a failure — it needs one decision that is not mine to make:"
+    echo "WHERE the vault should live. A vault is a plain folder of markdown files."
+    echo ""
+    echo "  Already have one?   ./install.sh --vault /path/to/existing-vault"
+    echo "  Want a new one?     ./install.sh --vault \"$DEFAULT_VAULT\""
+    echo "  Deliberately none?  ./install.sh --no-vault"
+    echo ""
+    echo "ASK THE USER which they want before re-running. Exit 4 means exactly this."
+    echo "════════════════════════════════════════════════════════════════════════"
+    exit 4
+  fi
 fi
+
 
 # ── Summary ────────────────────────────────────────────────────────────────
 #

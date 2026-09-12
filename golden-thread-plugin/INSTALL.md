@@ -12,16 +12,29 @@ The plugin lives in the `golden-thread-plugin/` subdirectory of the
 ```bash
 git clone git@github.com:shaven/golden-thread.git
 cd golden-thread/golden-thread-plugin
-bash install.sh
+bash install.sh --vault ~/Documents/GoldenThread
 ```
 
-Or as a one-liner:
+`--vault` is what makes this one step instead of two. A **vault** is a plain folder of
+markdown where your memory lives, and the Core-rule enforcement hooks are wired
+*against* a vault — so an install with no vault leaves those hooks present but inert.
+Pass the path and the installer creates it (or connects an existing one) and wires
+everything.
 
-```bash
-git clone git@github.com:shaven/golden-thread.git && bash golden-thread/golden-thread-plugin/install.sh
-```
+| You have | Run |
+|---|---|
+| no vault yet | `bash install.sh --vault ~/Documents/GoldenThread` |
+| an existing vault or Obsidian folder | `bash install.sh --vault /path/to/it` — nothing existing is overwritten |
+| no idea yet | `bash install.sh` — at a terminal it asks; answer or skip |
+| a deliberate reason for none | `bash install.sh --no-vault` |
 
-`install.sh` resolves its own paths, so it can be run from anywhere.
+**If something else is running the installer** — an agent, a script, CI — and no vault
+is configured, it stops with **exit 4** and says what it needs rather than inventing a
+directory and claiming `~/.claude/vault-config.json`. That is a question for a person:
+where should the vault live? Re-run with `--vault` once you know.
+
+`install.sh` resolves its own paths, so it can be run from anywhere. Run
+`bash install.sh --help` for every option.
 
 ---
 
@@ -110,9 +123,43 @@ Both are worth running on a **second machine** in particular. Files sync; a
 
 ---
 
+## Using it with Obsidian (optional)
+
+Nothing requires Obsidian — the vault is plain markdown and git, and Claude Code reads
+and writes it with nothing else installed. Obsidian is for *you*, to read and follow
+links by hand.
+
+There is no import step: an Obsidian vault **is** a folder.
+
+1. Install Obsidian from <https://obsidian.md> (free).
+2. **Open folder as vault**, and select your vault folder.
+3. Trust the folder when asked — it is your own.
+
+Every vault this plugin creates carries an `OPEN-IN-OBSIDIAN.md` at its root with the
+path filled in, so the instructions are there when you are standing in the folder.
+
+**Plugins that matter for this vault**, in order:
+
+| Plugin | Why |
+|---|---|
+| **Dataview** (community) | Tasks carry inline fields — `[p:: 1] [waiting:: agent]`. That is Dataview syntax; with it you can sort and query by priority, owner and due date |
+| **Obsidian Git** (community) | The vault is a git repo. Commits and pushes on a timer, so your edits do not sit uncommitted while a Claude session works the same tree |
+| Backlinks, Graph view (core) | Already on. The `[[wikilinks]]` between pages are the structure |
+
+Templater, Tasks and Kanban are fine plugins this vault does not assume.
+
+**One caution before editing in Obsidian:** `TASKS.md`, `log.md` and every
+`decisions.md` are **generated** from per-session files under
+`Projects/golden-thread/spool/`. An edit typed into them is lost at the next merge —
+add decisions with `tools/gt_adr.py` and log lines with `tools/gt_log.py`. Every other
+file is yours.
+
+---
+
 ## First run
 
-Open any Claude Code session and type:
+If you installed with `--vault`, your vault already exists and every hook is wired;
+skip to creating a project. Otherwise, open any Claude Code session and type:
 
 ```
 /gt:gt-init

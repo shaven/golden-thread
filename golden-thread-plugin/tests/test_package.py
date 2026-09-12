@@ -112,7 +112,7 @@ class PackageTest(Sandbox):
         _, z = self.package()
         out = self.tmp / "unpacked"
         self.assertOk(self.run_cmd(["unzip", "-q", z, "-d", out]))
-        p = self.sh(out / DIST / "install.sh", timeout=300)
+        p = self.sh(out / DIST / "install.sh", "--no-vault", timeout=300)
         self.assertOk(p, "install.sh from the zip failed")
         self.assertIn(f"Installing gt {GT.name}", p.stdout)
         self.assertIn("Verified hook wiring", p.stdout)

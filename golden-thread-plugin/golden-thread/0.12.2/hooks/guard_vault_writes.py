@@ -65,13 +65,43 @@ def deny(reason):
     sys.exit(0)
 
 
+HEREDOC = re.compile(r"<<-?\s*'?\"?([A-Za-z_][A-Za-z0-9_]*)'?\"?")
+
+
+def strip_heredocs(command):
+    """Remove heredoc BODIES. They are data being written, not commands being run.
+
+    2026-09-12: this guard denied a command whose heredoc contained the text of an
+    install script -- the command was WRITING a line that mentions a vault tool, not
+    running one. A guard that fires on a quoted mention is a guard people turn off, so
+    the body is dropped and only the command lines around it are inspected.
+
+    Conservative by construction: an unterminated heredoc drops the rest of the input,
+    which can only cause an ALLOW.
+    """
+    lines = command.splitlines()
+    out, i = [], 0
+    while i < len(lines):
+        line = lines[i]
+        out.append(line)
+        m = HEREDOC.search(line)
+        i += 1
+        if not m:
+            continue
+        end = m.group(1)
+        while i < len(lines) and lines[i].strip() != end:
+            i += 1
+        i += 1                        # skip the terminator itself
+    return "\n".join(out)
+
+
 def segments(command):
     """Split a command line into the pieces that run as separate commands.
 
     Shell operators only -- this is not a parser, and it does not need to be. A piece
     it splits wrongly produces at worst an unrecognised tool, which allows.
     """
-    return [s for s in re.split(r"&&|\|\||[;\n|]", command) if s.strip()]
+    return [s for s in re.split(r"&&|\|\||[;\n|]", strip_heredocs(command)) if s.strip()]
 
 
 def inspect(segment):

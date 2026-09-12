@@ -103,15 +103,22 @@
   h1,h2,h3{break-after:avoid;} table{break-inside:avoid;}
 </style></head><body><h1 id="golden-thread-getting-started">Golden Thread — Getting Started</h1>
 <p>A guided walkthrough for your first session. Six steps, ~15 minutes.</p>
-<p><strong>Requirements:</strong> Python 3.8+, Claude Code installed. Written against <strong>gt v0.12.1</strong>.</p>
+<p><strong>Requirements:</strong> Python 3.8+, Claude Code installed. Written against <strong>gt v0.12.2</strong>.</p>
 <hr />
 <h2 id="step-1-install">Step 1 — Install</h2>
 <p>Unzip the plugin and run the installer:</p>
 <pre><code class="language-bash">unzip golden-thread-plugin.zip
 cd golden-thread-plugin
-bash install.sh
+bash install.sh --vault ~/Documents/GoldenThread
 </code></pre>
 <p>Then <strong>restart Claude Code</strong>. The <code>/gt:</code> skills are not available until you do.</p>
+<p><code>--vault</code> names the folder your memory will live in, and lets the installer finish the
+job: it creates the vault (or connects one you already have) and wires the Core-rule
+enforcement hooks, which are wired against a vault and cannot be wired without one.</p>
+<p>Leave it off and the installer asks, if you are at a terminal. If something else is
+running it — an agent, CI — it stops with exit 4 and asks for the decision rather than
+choosing a directory for you. <code>bash install.sh --no-vault</code> installs the plugin alone,
+deliberately.</p>
 <p>The installer sets up two plugins:
 - <strong><code>gt</code></strong> — memory, projects, session workflow, and enforcement hooks
 - <strong><code>gt-wiki</code></strong> — knowledge base with immutable sources</p>
@@ -127,6 +134,11 @@ bash install.sh
 <blockquote>
 <p><strong>If you already have an Obsidian vault</strong>, just give <code>gt-init</code> that path. It will only add what's missing — your existing notes are untouched.</p>
 </blockquote>
+<p><strong>Looking at the vault in Obsidian (optional).</strong> A vault is a folder, so there is no
+import: install Obsidian, choose <strong>Open folder as vault</strong>, and pick this folder. The
+vault's own <code>OPEN-IN-OBSIDIAN.md</code> has the path and the details. Install <strong>Dataview</strong>
+if you want to sort tasks by the <code>[p:: 1]</code> inline fields, and <strong>Obsidian Git</strong> if you
+want your hand edits committed on a timer alongside Claude's.</p>
 <hr />
 <h2 id="step-3-create-your-first-project">Step 3 — Create your first project</h2>
 <pre><code>/gt:gt-create

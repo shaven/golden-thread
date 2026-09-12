@@ -11,6 +11,27 @@ release's own summary line, kept short rather than reconstructed after the fact.
 
 ---
 
+## gt 0.12.2 — 2026-09-12
+
+**A vault is part of the install, not a thing to remember afterwards.**
+
+The enforcement hooks are wired against a vault, so an install without one ends with
+them present and inert — and the next session start reports them unwired, which reads
+as a broken install.
+
+- `install.sh --vault <path>` creates or connects a vault and wires everything, in one
+  command. `GT_VAULT` does the same. `--no-vault` is the deliberate opt-out.
+- With no vault and no flag: at a terminal it asks where the vault should go; anywhere
+  else — an agent, a pipe, CI — it stops with **exit 4** and says what it needs. It
+  never invents a directory or claims `~/.claude/vault-config.json` unasked, because
+  where your memory lives is not an installer's decision.
+- Every new vault carries `OPEN-IN-OBSIDIAN.md` with its own path filled in: how to
+  open a folder as a vault, which plugins the conventions actually rely on (Dataview,
+  because `[p:: 1]` inline fields are its syntax; Obsidian Git, because the vault is a
+  repo), and which generated files must not be hand-edited.
+- `--help` prints real usage. It had been extracting a nearby comment block, and
+  printed the rollback instructions instead.
+
 ## gt 0.12.1 — 2026-09-12
 
 **A hook that ships inert is worse than one that does not ship.**
