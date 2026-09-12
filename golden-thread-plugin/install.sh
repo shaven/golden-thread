@@ -83,10 +83,12 @@ assert_manifest_version() {
 # enforcement hooks UNWIRED: they are wired against a vault. One command should be
 # able to finish the job.
 VAULT_ARG="${GT_VAULT:-}"
+FORCE_MANIFEST=no
 NO_VAULT=no
 POSITIONAL=""
 while [ $# -gt 0 ]; do
   case "$1" in
+    --force-manifest-mismatch) FORCE_MANIFEST=yes; shift ;;
     --vault)    VAULT_ARG="${2:-}"; shift 2 || true ;;
     --vault=*)  VAULT_ARG="${1#--vault=}"; shift ;;
     --no-vault) NO_VAULT=yes; shift ;;
@@ -97,6 +99,9 @@ install.sh — install the gt and gt-wiki Claude Code plugins
   ./install.sh                        install the newest release
   ./install.sh 0.12.1                 install a specific release (deliberate rollback)
   ./install.sh --vault <path>         install AND create or connect that vault
+  ./install.sh --force-manifest-mismatch
+                                      install even when shipped files disagree with
+                                      MANIFEST.json (see below)
   ./install.sh --no-vault             install the plugin only, on purpose
   ./install.sh --help                 this text
 
@@ -174,6 +179,66 @@ if [ "$INSTALL_DEMO" = "no" ]; then
   echo "install_demo=no — skipping demo skill, script, and templates"
 fi
 
+# Do the files about to be installed match the manifest shipping beside them?
+#
+# CALLED BEFORE ANYTHING IS COPIED. A refusal has to mean nothing was installed, and the
+# first version of this check ran at step 1c -- after the cache copy -- so it "refused" a
+# tree it had already installed. Same ordering mistake as the 0.12.5 machine profile,
+# found the same way: by running it and looking, not by reading it.
+#
+# Since 0.12.6 the installer no longer regenerates the manifest, so source and manifest
+# CAN disagree and nothing at install time noticed. dev/release-check.sh catches it, but
+# only on the machine that runs the gate: a second machine installing from gt-src would
+# install files the manifest does not describe, be told nothing, and then report component
+# drift at every session start. On 2026-09-12 exactly that shipped -- 0.12.4 was committed
+# with a stale manifest and only the gate saw it.
+#
+# Policy (owner decision, 2026-09-12): REFUSE when a file that EXECUTES disagrees, WARN
+# when only copied files do, and treat a developer's uncommitted or untracked edit as the
+# warning case. That last clause is what keeps this usable -- editing a script and
+# installing to test it is the normal loop here, and a gate that fires on the normal loop
+# gets overridden by reflex and then ignored.
+verify_source_tree() {
+  [ -f "$SRC/scripts/gt_components.py" ] || return 0
+  [ -f "$SRC/MANIFEST.json" ] || return 0        # written later, when absent
+  # `set -e` aborts on a failing command substitution, so the status must be captured in
+  # the same statement. The first version wrote `OUT=$(...)` then `RC=$?` on the next
+  # line, and every refusal killed the script with the helper's own exit code before the
+  # policy below ever ran.
+  local out rc=0
+  out=$(python3 "$SRC/scripts/gt_components.py" verify-source "$SRC" 2>&1) || rc=$?
+  case $rc in
+    0) [ -n "${out##source matches*}" ] && {
+         echo "Manifest: local edits present, installing anyway:"
+         printf '%s\n' "$out" | sed 's/^/  /'; }
+       return 0 ;;
+    4) echo "⚠ Manifest mismatch in copied files — installing anyway:"
+       printf '%s\n' "$out" | sed 's/^/  /'
+       return 0 ;;
+    3) if [ "$FORCE_MANIFEST" = yes ]; then
+         echo "⚠ Manifest mismatch in EXECUTABLE files — overridden by --force-manifest-mismatch:"
+         printf '%s\n' "$out" | sed 's/^/  /'
+         return 0
+       fi
+       echo ""
+       echo "REFUSING TO INSTALL — shipped files that EXECUTE do not match MANIFEST.json"
+       printf '%s\n' "$out" | sed 's/^/  /'
+       echo ""
+       echo "Nothing has been installed. These files run on every prompt, so installing a"
+       echo "set the manifest does not describe means running code nobody has verified, and"
+       echo "every later component check reporting drift this could have caught once."
+       echo ""
+       echo "  Meant to change them?   regenerate the manifest with the command above,"
+       echo "                          then re-run this installer"
+       echo "  Installing anyway?      ./install.sh --force-manifest-mismatch"
+       exit 6 ;;
+    *) echo "Manifest check could not run (exit $rc) — continuing:"
+       printf '%s\n' "$out" | sed 's/^/  /'
+       return 0 ;;
+  esac
+}
+verify_source_tree
+
 # 1. Install plugin files into cache
 mkdir -p "$CACHE"
 for dir in .claude-plugin skills scripts templates commands hooks; do
@@ -233,6 +298,7 @@ if [ -f "$SRC/scripts/gt_components.py" ]; then
     python3 "$SRC/scripts/gt_components.py" manifest "$SRC" >/dev/null 2>&1 \
       && echo "Wrote component MANIFEST → $SRC/MANIFEST.json  (none was present)"
   fi
+
 fi
 
 mkdir -p "$WIKI_CACHE"

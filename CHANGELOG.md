@@ -11,6 +11,59 @@ release's own summary line, kept short rather than reconstructed after the fact.
 
 ---
 
+## gt 0.12.7 — 2026-09-12
+
+**The installer checks that what it is about to install matches its manifest, and the
+drift check stops claiming a direction it cannot prove.** Two halves of the same failure,
+both reported the same day.
+
+### install.sh verifies the source against MANIFEST.json
+
+Requested 2026-09-11 (`install-refuse-stale-manifest`), and the refuse-or-warn question
+it existed to settle was decided by the repo owner on 2026-09-12:
+
+- **Refuse** when a file that **executes** (`hooks/`, `scripts/`) disagrees with the
+  manifest — exit 6, the file named, the regenerate command named, and **nothing
+  installed**.
+- **Warn** when only copied files (`templates/`, `skills/`) disagree; the install
+  completes.
+- **Exempt** a developer's uncommitted or untracked edit, per git, downgrading it to a
+  warning. Editing a script and installing to test it is the normal loop here, and a gate
+  that fires on the normal loop gets overridden by reflex and then ignored.
+- `--force-manifest-mismatch` installs anyway, and says so.
+
+It matters on a machine that is not the one running the release gate: since 0.12.6 the
+installer no longer regenerates the manifest, so a second machine installing from `gt-src`
+could install files the manifest does not describe, be told nothing, and then report drift
+at every session start for a mismatch the installer could have caught once. This earned
+its own release the same day it was wanted: 0.12.4 shipped with a stale `MANIFEST.json`,
+and only the gate saw it.
+
+### `ahead` no longer means "we guessed from an mtime"
+
+Another machine reported `hooks/gt_paths.py` as `ahead` of the plugin source at every
+session start, with the advice *"installed is NEWER — the plugin source needs updating from
+it"*. The installed file turned out to be **byte-identical** to what the plugin ships, and
+the direction had never been established: `install.sh` copies with plain `cp`, so every
+installed file carries the install-time mtime and is **always** newer than its source. Any
+content mismatch therefore read as `ahead`, which is never auto-applied — a permanent
+warning, pointing the wrong way, with no way out.
+
+- Direction is now decided by **identity first**: a copy whose hash matches the same file
+  in another release on disk, or in the plugin cache, is a leftover from that install and
+  is `stale` — reportable and applicable.
+- When nothing local can establish direction, the state is **`differs`**, which says so
+  plainly and prints the three resolutions with real paths: diff them, capture the
+  installed copy into the plugin, or delete it and re-install. It is never auto-applied,
+  exactly as `ahead` never was.
+- `ahead` is still recognised, so nothing that consumed it breaks.
+
+**Also:** the test fixture now regenerates its own manifest, so a working tree mid-edit
+does not fail every install test for a reason unrelated to the test. And a test that pinned
+"a stale manifest still installs" was **inverted rather than deleted**, with the original
+intent recorded in it, so the old assertion cannot come back from the reasoning that
+produced it.
+
 ## gt 0.12.6 — 2026-09-12
 
 **The install-time machine measurement actually happens now.** Take this if you have

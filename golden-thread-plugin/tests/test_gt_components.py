@@ -5,7 +5,7 @@ containing a space (the real plugin lives under "Golden Thread"), manifested by 
 real tool, "installed" into the sandbox HOME, and wired from the tool's own
 `hook-registrations` output. The real release's MANIFEST.json is never rewritten.
 
-States covered: clean, stale, ahead, missing, extra, no-manifest, unwired, badpath;
+States covered: clean, stale, differs, missing, extra, no-manifest, unwired, badpath;
 policies off/report/confirm/auto; --hook JSON vs plain text.
 """
 import hashlib
@@ -193,16 +193,60 @@ class Check(ComponentsBase):
         self.assertRegex(out, r"stale\s+hooks/alpha\.sh")
         self.assertNotIn("apply with", out)          # report policy: no command offered
 
-    def test_ahead_installed_newer_is_never_called_stale(self):
+    def test_an_unexplained_difference_is_never_called_stale(self):
+        """Installed-newer-by-mtime is reported as `differs`, not as a direction.
+
+        This test used to assert `ahead` and the words "installed is NEWER". That claim
+        was unsupportable: install.sh copies with plain `cp`, so EVERY installed file
+        carries the install-time mtime and is always newer than its source. Any content
+        mismatch therefore read as "installed is newer, update the plugin from it" -- and
+        on another machine, 2026-09-12, that message appeared at every session start for a
+        gt_paths.py whose installed copy was in fact OLDER, with no way for the user to
+        act on it.
+
+        The safety property is unchanged and still asserted here: never `stale`, never
+        auto-applied. Only the claim about direction is gone, replaced by the resolution
+        steps.
+        """
         self.full_setup()
         dst = self.installed / "alpha.sh"
         dst.write_text("#!/bin/sh\n# newer local fix\n")
         self.set_mtime(dst, +3600)
         out = self.check()
-        self.assertRegex(out, r"ahead\s+hooks/alpha\.sh")
-        self.assertIn("installed is NEWER", out)
+        self.assertRegex(out, r"differs\s+hooks/alpha\.sh")
+        self.assertIn("could NOT be established", out)
+        self.assertNotIn("installed is NEWER", out,
+                         "do not assert a direction mtime cannot establish")
         self.assertNotRegex(out, r"stale\s+hooks/alpha")
         self.assertIn("never auto-applied", out)
+        # A message with no way out is a message people scroll past.
+        self.assertIn("resolve hooks/alpha.sh", out)
+        self.assertIn("re-run install.sh", out)
+
+    def test_a_copy_from_another_release_is_stale_not_unexplained(self):
+        """Identity beats mtime: a leftover from a release we can see IS stale.
+
+        The reported case, generalised -- an installed file left behind by an earlier
+        install, carrying a fresh mtime from `cp`. If its hash matches the same file in
+        another release on disk, its origin is known and it is safe to update.
+        """
+        self.full_setup()
+        dst = self.installed / "alpha.sh"
+        old_content = "#!/bin/sh\n# shipped by an earlier release\n"
+        dst.write_text(old_content)
+        self.set_mtime(dst, +3600)                       # newer, as cp always leaves it
+        # A sibling release whose manifest records exactly that content.
+        sibling = self.vdir.parent / "1.2.2"
+        (sibling / "hooks").mkdir(parents=True)
+        (sibling / "hooks" / "alpha.sh").write_text(old_content)
+        import hashlib
+        sha = hashlib.sha256(old_content.encode()).hexdigest()
+        (sibling / "MANIFEST.json").write_text(json.dumps(
+            {"version": "1.2.2", "files": {"hooks/alpha.sh": {"sha256": sha}}}), encoding="utf-8")
+        out = self.check()
+        self.assertRegex(out, r"stale\s+hooks/alpha\.sh",
+                         "a copy identified in another release is stale, not unexplained")
+        self.assertNotIn("differs", out)
 
     def test_hookdir_script_drift_is_mapped(self):
         self.full_setup()
@@ -261,13 +305,14 @@ class Check(ComponentsBase):
         self.assertEqual((self.installed / "inject_core_rules.sh").read_text(),
                          (src / "inject_core_rules.sh").read_text())
         self.assertEqual(stale.read_text(), (src / "validate_response.sh").read_text())
-        self.assertEqual(ahead.read_text(), "# newer local work\n", "auto overwrote `ahead`")
+        self.assertEqual(ahead.read_text(), "# newer local work\n",
+                         "auto overwrote a file it could not prove was safe to touch")
         self.assertTrue(extra.exists(), "auto deleted an `extra`")
         # a second check sees only what auto must never touch
         out = self.check()
         self.assertNotIn("stale", out)
         self.assertNotIn("missing", out)
-        self.assertIn("ahead", out)
+        self.assertIn("differs", out)
 
     def test_apply_subcommand(self):
         self.full_setup()

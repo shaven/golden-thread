@@ -113,7 +113,13 @@ def run_upgrade(repo, home):
     env.pop("GT_VAULT", None)
     for var in [k for k in env if k.startswith("CLAUDE")]:
         env.pop(var, None)
-    p = subprocess.run(["bash", str(Path(repo) / "install.sh")],
+    # --force-manifest-mismatch, deliberately: this checker's whole method is to install
+    # a TAMPERED tree (an orphan hook added, a shipped script broken) and then ask where
+    # each file ended up. Since 0.12.7 install.sh refuses a source whose executing files
+    # disagree with its manifest, which would stop every negative case here at exit 6
+    # before the thing under test could be observed. This is the one caller for which the
+    # override is the correct behaviour rather than an escape hatch.
+    p = subprocess.run(["bash", str(Path(repo) / "install.sh"), "--force-manifest-mismatch"],
                        capture_output=True, text=True, timeout=600, env=env,
                        stdin=subprocess.DEVNULL)
     return p.returncode, (p.stdout or "") + (p.stderr or "")
@@ -124,7 +130,8 @@ def run_install(repo, home, vault):
     env.pop("GT_VAULT", None)
     for var in [k for k in env if k.startswith("CLAUDE")]:
         env.pop(var, None)
-    p = subprocess.run(["bash", str(Path(repo) / "install.sh"), "--vault", str(vault)],
+    p = subprocess.run(["bash", str(Path(repo) / "install.sh"), "--vault", str(vault),
+                        "--force-manifest-mismatch"],
                        capture_output=True, text=True, timeout=600, env=env,
                        stdin=subprocess.DEVNULL)
     return p.returncode, (p.stdout or "") + (p.stderr or "")

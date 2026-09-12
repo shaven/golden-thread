@@ -55,7 +55,23 @@ class InstallTest(Sandbox):
         shutil.copy2(INSTALL, dest / "install.sh")
         shutil.copytree(GT, dest / "golden-thread" / GT.name, ignore=IGNORE)
         shutil.copytree(WIKI, dest / "golden-thread-wiki" / WIKI.name, ignore=IGNORE)
+        self.regenerate_manifest(dest / "golden-thread" / GT.name)
         return dest
+
+    def regenerate_manifest(self, version_dir: Path):
+        """Make the fixture's manifest describe the fixture.
+
+        Since 0.12.7 install.sh REFUSES a source whose executing files disagree with its
+        manifest. This copy is a synthetic tree -- IGNORE drops __pycache__ and friends,
+        and more importantly the working tree's manifest is stale for as long as someone
+        is mid-edit, which is most of the time during development. Without this, every
+        install test fails with a manifest refusal that has nothing to do with what the
+        test is checking.
+
+        Tests that want a mismatch create one AFTER this, which is the honest way round:
+        the fixture starts consistent and each test breaks exactly what it means to break.
+        """
+        self.py(version_dir / "scripts" / "gt_components.py", "manifest", version_dir)
 
     def install(self, *args, repo=None):
         """Install the plugin only.
@@ -248,17 +264,26 @@ class InstallTest(Sandbox):
         self.assertTrue(manifest.is_file(),
                         "no manifest was present and install.sh did not create one")
 
-    def test_stale_manifest_still_installs(self):
-        """Pins that this change did not quietly add a refusal.
+    def test_stale_manifest_in_an_executing_file_now_refuses(self):
+        """SUPERSEDED PIN, deliberately inverted.
 
-        Refusing a source whose files disagree with its manifest is tracked separately
-        as 2026-09-11-install-refuse-stale-manifest; it is a behaviour change and must
-        not arrive as a side effect of the fix above.
+        This asserted that a stale manifest still installs, to stop a refusal arriving as
+        a side effect of the "leave the source tree clean" fix. That was correct while the
+        refusal was only a proposal. The owner decided it on 2026-09-12
+        (2026-09-11-install-refuse-stale-manifest): refuse for files that EXECUTE, warn for
+        files that are copied, exempt a developer's uncommitted edit.
+
+        Kept rather than deleted, with the old intent recorded, so nobody reintroduces the
+        old assertion from the reasoning that produced it. ManifestMismatch covers the full
+        behaviour; this one pins that the specific file named here is on the refusing side.
         """
         victim = self.src() / "scripts" / "gt_settings.py"
         victim.write_text(victim.read_text(encoding="utf-8") + "\n# drift\n", encoding="utf-8")
         p = self.install()
-        self.assertOk(p, "an install with a stale manifest should still succeed today")
+        self.assertEqual(p.returncode, 6,
+                         "scripts/ executes, so a stale manifest there must refuse\n" + p.stdout)
+        self.assertIn("gt_components.py manifest", p.stdout,
+                      "the refusal names the command that fixes it")
 
     # -- the skill summary is derived, not typed -----------------------------------
     def _summary_skills(self, out, prefix="/gt:"):
@@ -635,3 +660,95 @@ class WiringDoesNotDependOnGit(Sandbox):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class ManifestMismatch(InstallTest):
+    """install.sh compares the files it is about to install against MANIFEST.json.
+
+    Requested 2026-09-11 (2026-09-11-install-refuse-stale-manifest); the refuse-or-warn
+    question it existed to settle was decided by the owner on 2026-09-12: refuse for files
+    that EXECUTE, warn for files that are only copied, and treat a developer's uncommitted
+    edit as the warning case.
+
+    The sandbox copy is deliberately NOT a git tree, which makes it the "clean checkout on
+    a second machine" case -- the one the request is actually about. The local-edit
+    exemption is tested separately, with a real git repo.
+    """
+    HOOK = "hooks/inject_core_rules.sh"
+    TEMPLATE = "templates/core-rules/README.md"
+
+    def shipped(self, rel):
+        return self.repo / "golden-thread" / GT.name / rel
+
+    def edit(self, rel, line="# edited without regenerating the manifest\n"):
+        p = self.shipped(rel)
+        p.write_text(p.read_text(encoding="utf-8") + line, encoding="utf-8")
+        return p
+
+    # -- the case it exists for ------------------------------------------------------
+    def test_a_modified_executing_file_refuses_and_installs_nothing(self):
+        self.edit(self.HOOK)
+        p = self.install()
+        self.assertEqual(p.returncode, 6,
+                         "a modified hook must refuse with its own exit code\n" + p.stdout)
+        self.assertIn("REFUSING TO INSTALL", p.stdout)
+        self.assertIn(self.HOOK, p.stdout, "the refusal must name the file")
+        self.assertIn("gt_components.py manifest", p.stdout,
+                      "the refusal must name the command that fixes it")
+        self.assertFalse(self.plugins.exists(),
+                         "REFUSING means nothing was installed; the cache exists")
+
+    def test_the_override_installs_the_modified_source(self):
+        marker = "# deliberate local change\n"
+        self.edit(self.HOOK, marker)
+        p = self.install("--force-manifest-mismatch")
+        self.assertEqual(p.returncode, 0, p.stdout + p.stderr)
+        self.assertIn("overridden by --force-manifest-mismatch", p.stdout)
+        landed = self.home / ".claude" / "golden-thread" / "hooks" / "inject_core_rules.sh"
+        self.assertTrue(landed.is_file(), "the override must complete the install")
+        self.assertIn(marker.strip(), landed.read_text(encoding="utf-8"),
+                      "the modified file is what should have landed")
+
+    # -- executes vs merely copied ---------------------------------------------------
+    def test_a_modified_copied_file_warns_and_installs(self):
+        self.edit(self.TEMPLATE)
+        p = self.install()
+        self.assertEqual(p.returncode, 0,
+                         "a template is copied, not run: warn, do not refuse\n" + p.stdout)
+        self.assertIn("Manifest mismatch in copied files", p.stdout)
+        self.assertIn(self.TEMPLATE, p.stdout)
+        self.assertTrue(self.plugins.exists(), "the install should have completed")
+
+    # -- the developer loop ----------------------------------------------------------
+    def test_an_uncommitted_edit_warns_instead_of_refusing(self):
+        """Editing a script and installing to test it is the normal loop here.
+
+        A gate that fires on the normal loop gets overridden by reflex and then ignored,
+        so git's own answer decides: uncommitted or untracked means work in progress.
+        """
+        self.git_init(self.repo)                      # commit the tree as it stands
+        self.edit(self.HOOK)                          # now an uncommitted modification
+        p = self.install()
+        self.assertEqual(p.returncode, 0,
+                         "an uncommitted edit must not refuse\n" + p.stdout)
+        self.assertIn("local edits present", p.stdout)
+        self.assertIn(self.HOOK, p.stdout, "it still says which file differs")
+        self.assertTrue(self.plugins.exists())
+
+    # -- degenerate inputs -----------------------------------------------------------
+    def test_a_clean_source_is_silent_about_the_manifest(self):
+        p = self.install()
+        self.assertEqual(p.returncode, 0, p.stdout + p.stderr)
+        for noise in ("REFUSING", "Manifest mismatch", "local edits present"):
+            self.assertNotIn(noise, p.stdout,
+                             "a matching tree must produce no mismatch report")
+
+    def test_a_source_with_no_manifest_is_handled_explicitly(self):
+        man = self.repo / "golden-thread" / GT.name / "MANIFEST.json"
+        if man.exists():
+            man.unlink()
+        p = self.install()
+        self.assertEqual(p.returncode, 0, p.stdout + p.stderr)
+        self.assertNotIn("Traceback", p.stdout + p.stderr,
+                         "a missing manifest must not crash the installer")
+        self.assertTrue(man.is_file(), "the installer writes one when it is absent")
