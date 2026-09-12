@@ -451,22 +451,6 @@ if [ -f "$SRC/scripts/gt_components.py" ]; then
   fi
 fi
 
-# 6b. Measure this machine, so `parallel_max: auto` means THIS machine.
-#
-# core_parallel_when_beneficial's budget is `auto` by default, and auto has to be a
-# property of the hardware rather than a number someone once chose: the 20-worker
-# ceiling that shipped in 0.12.4 was right for the laptop it was picked on and
-# arbitrary everywhere else. So the ceilings are measured here -- at install, and again
-# at every upgrade, which is exactly when the hardware may have changed.
-#
-# It writes `parallel_profile` only. `parallel_work` and `parallel_max` are the user's
-# preferences and are never touched: re-running this installer must not undo a ceiling
-# somebody set on purpose.
-if [ -f "$HOME/.claude/vault-config.json" ]; then
-  python3 "$SRC/scripts/gt_settings.py" detect-machine --write 2>/dev/null \
-    | sed 's/^/  /' || true
-fi
-
 # 7. Wire the VAULT's git repo for per-edit attribution, if it is one.
 #
 # .git/hooks is not tracked and does not survive a clone, so the hooks ship in a
@@ -731,4 +715,21 @@ echo "Demo not installed (install_demo=no in vault-config.json)."
 echo "Set install_demo=yes and re-run install.sh to add /gt:gt-demo."
 echo ""
 fi
+# Measure this machine, so `parallel_max: auto` means THIS machine.
+#
+# PLACED HERE, AFTER the vault is configured, and that position is the whole point.
+# In 0.12.5 this ran as step 6b, BEFORE setup_vault created vault-config.json, so on a
+# fresh machine there was no config to write into and the step silently skipped: the
+# profile only ever appeared on a machine that already had one. Found 2026-09-12 by
+# installing into a throwaway HOME and looking for the value rather than trusting the
+# installer's own output, which said nothing either way.
+#
+# It writes `parallel_profile` only. `parallel_work` and `parallel_max` are the user's
+# preferences and are never touched: re-running this installer must not undo a ceiling
+# somebody set on purpose.
+if [ -f "$HOME/.claude/vault-config.json" ]; then
+  python3 "$SRC/scripts/gt_settings.py" detect-machine --write 2>/dev/null \
+    | sed 's/^/  /' || true
+fi
+
 echo "Restart Claude Code to load the plugins."

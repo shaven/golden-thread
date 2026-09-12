@@ -459,6 +459,45 @@ class VaultIsPartOfTheInstall(Sandbox):
         self.assertTrue(self.guard_entries(),
                         "the vault was created but the enforcement hooks are not wired")
 
+    def test_a_fresh_install_measures_the_machine(self):
+        """The profile must exist after installing onto a machine that had nothing.
+
+        0.12.5 wrote it from a step that ran BEFORE the vault was configured, so on a
+        fresh machine there was no vault-config.json to write into and the step silently
+        skipped -- the profile appeared only where one already existed. Every other check
+        passed: the files arrived, the hooks wired, the installer said nothing was wrong.
+        So this asserts the VALUE, not the delivery. `parallel_max: auto` resolves through
+        it, which is the whole reason it is measured at install time.
+        """
+        target = self.tmp / "freshvault"
+        p = self.run_install("--vault", str(target))
+        self.assertEqual(p.returncode, 0, p.stdout + p.stderr)
+        cfg = json.loads((self.home / ".claude" / "vault-config.json").read_text())
+        prof = cfg.get("parallel_profile")
+        self.assertIsInstance(prof, dict,
+                              "a fresh install must record parallel_profile; got %r" % prof)
+        for key in ("cores", "cpu_max", "io_max", "host", "detected_at"):
+            self.assertIn(key, prof, "profile is missing %s" % key)
+        self.assertGreaterEqual(prof["cpu_max"], 1)
+        self.assertGreaterEqual(prof["io_max"], prof["cpu_max"],
+                                "I/O work may use at least as many workers as CPU work")
+
+    def test_reinstalling_keeps_a_ceiling_the_user_chose(self):
+        """The profile is hardware; parallel_max is a preference. Only one is rewritten."""
+        target = self.tmp / "keepvault"
+        self.assertEqual(self.run_install("--vault", str(target)).returncode, 0)
+        cfgpath = self.home / ".claude" / "vault-config.json"
+        cfg = json.loads(cfgpath.read_text())
+        cfg["parallel_max"] = "2"
+        cfg["parallel_work"] = "off"
+        cfgpath.write_text(json.dumps(cfg, indent=2), encoding="utf-8")
+        self.assertEqual(self.run_install("--vault", str(target)).returncode, 0)
+        after = json.loads(cfgpath.read_text())
+        self.assertEqual(after.get("parallel_max"), "2",
+                         "re-running the installer must not undo a ceiling somebody set")
+        self.assertEqual(after.get("parallel_work"), "off")
+        self.assertIsInstance(after.get("parallel_profile"), dict)
+
     def test_vault_flag_connects_an_existing_vault(self):
         existing = self.make_vault()
         (self.home / ".claude" / "vault-config.json").unlink()

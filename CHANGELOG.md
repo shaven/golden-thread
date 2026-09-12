@@ -11,6 +11,33 @@ release's own summary line, kept short rather than reconstructed after the fact.
 
 ---
 
+## gt 0.12.6 — 2026-09-12
+
+**The install-time machine measurement actually happens now.** Take this if you have
+0.12.5.
+
+0.12.5 introduced `parallel_profile`, measured at install so `parallel_max: auto` means
+the machine in front of you. It ran as step 6b of `install.sh` — **before** `setup_vault`
+creates `vault-config.json`. On a machine that already had a config it worked, which is
+every machine the author tested on. On a **fresh** install there was nothing to write into
+and the step skipped silently, so the profile appeared only where one already existed and
+`auto` fell back to reading the machine live on every call.
+
+Found by installing into a throwaway `HOME` and looking for the value, rather than
+trusting the installer's output — which said nothing either way. Measured before and after
+on an otherwise empty home: `parallel_profile` ABSENT with the 0.12.5 ordering, and
+`{cores: 16, cpu_max: 16, io_max: 32}` with this one (`self-verified`).
+
+- The measurement moved to **after** the vault is configured, and the installer now prints
+  what it recorded.
+- Two tests assert the **value**, not the delivery: a fresh install records a profile with
+  every field, and re-running the installer does **not** overwrite a `parallel_max` or
+  `parallel_work` the user chose. Every existing check passed through this bug — the files
+  arrived, the hooks wired, the gate was green — because they all asked whether things were
+  *installed*, and none asked whether the number was *there*.
+
+Nothing else changed; the 0.12.5 payload is otherwise identical.
+
 ## gt 0.12.5 — 2026-09-12
 
 **A tenth Core rule: code is not committed until its tests have been seen to pass. Plus
