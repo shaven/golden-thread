@@ -89,8 +89,8 @@
    "sha256": "d56bbd01ce9ba0e74b36ea2bf15fcfccd5d2d4a1ef8fdbdd33d02ae8c36fb7a0"
   },
   "scripts/vault_init.py": {
-   "bytes": 51104,
-   "sha256": "608e451176f38d776e68818fe2def3b9b466df8c0684fccfa1b2dfc88eb8ecd9"
+   "bytes": 51636,
+   "sha256": "976d7e9107b7a03415af0f3a87102927dad6102377ee1b5623688eda2e4552d3"
   },
   "templates/CONVENTIONS.md": {
    "bytes": 19546,
@@ -103,6 +103,10 @@
   "templates/INFRASTRUCTURE.md": {
    "bytes": 1484,
    "sha256": "4da7fd3054ff222d417523b526fc8c6d11b5c70472e272b0f350c9acce2928b7"
+  },
+  "templates/OPEN-IN-OBSIDIAN.md": {
+   "bytes": 2965,
+   "sha256": "e2a4112b671708fda9262dbbbfe1550f9c39a8c1fccef4153e9b491bf72d5be5"
   },
   "templates/PROJECTS-README.md": {
    "bytes": 2456,
@@ -261,7 +265,7 @@
    "sha256": "383c0e4b30c8c9c9447c4798f37debf1f4a0402b1e3ee068e7629e9d1ab21859"
   }
  },
- "generated": "2026-09-12T08:02:17",
+ "generated": "2026-09-12T09:23:51",
  "hooks": [
   {
    "args": [
@@ -346,5 +350,5 @@
    "script": "guard_vault_writes.sh"
   }
  ],
- "version": "0.12.1"
+ "version": "0.12.3"
 }

@@ -11,6 +11,23 @@ release's own summary line, kept short rather than reconstructed after the fact.
 
 ---
 
+## gt 0.12.3 — 2026-09-12
+
+**A name for the installer fix, and a gate so the next one cannot go unnamed.**
+
+The plugin payload is byte-identical to 0.12.2. This release exists because 0.12.2's
+installer bug was fixed and committed *without* a version bump, so two published states
+both called themselves 0.12.2: one whose `install.sh` wires the Core-rule enforcement
+hooks and one whose `install.sh` does not. "Which version wires correctly?" had no
+answer. If you have 0.12.2, take this.
+
+- `dev/check_installer_version.py` fails the release gate when `install.sh` or
+  `selftest.sh` has changed since the newest version directory was cut — committed or
+  still dirty. `MANIFEST.json` hashes only what lives inside a version directory, so the
+  file a user actually runs had nothing covering it at all. It decides from git history
+  rather than a recorded hash, because regenerating a manifest after editing the
+  installer would quietly bless the edit — the very move that caused this.
+
 ## gt 0.12.2 — 2026-09-12
 
 **Reported from a second machine: `guard_vault_writes.sh` still unwired.** It was right,

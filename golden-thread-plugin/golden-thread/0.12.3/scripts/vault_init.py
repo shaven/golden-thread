@@ -764,6 +764,15 @@ def seed_vault_workspace(vault: Path):
     if inbox.exists():
         ensure_file(vault / "INBOX.md", inbox.read_text(encoding="utf-8"))
 
+    # How to open this folder in Obsidian, and which plugins the vault's own
+    # conventions actually rely on. Seeded INTO the vault rather than left in the
+    # plugin's docs because the question ("how do I look at this?") is asked while
+    # looking at the folder, often on a machine that never cloned the plugin.
+    obs = TEMPLATES_DIR / "OPEN-IN-OBSIDIAN.md"
+    if obs.exists():
+        ensure_file(vault / "OPEN-IN-OBSIDIAN.md",
+                    obs.read_text(encoding="utf-8").replace("{{VAULT_PATH}}", str(vault)))
+
     # The merge BASE for the documents an owner edits, and the version stamp that says
     # which release they came from. Without these, gt_upgrade.py has no way to take a
     # release's changes into an edited PROTOCOL.md without either overwriting the

@@ -84,6 +84,14 @@ step "cli contract"
 OUT=$(python3 dev/check_cli_contract.py "$GT" 2>&1); rc=$?
 [ $rc -eq 0 ] && ok "$OUT" || { echo "$OUT" | tail -20; bad "a vault tool can write without being told which vault"; }
 
+step "installer version"
+# install.sh is what a user RUNS and it is NOT covered by MANIFEST.json, which hashes
+# only what lives inside a version directory. On 2026-09-12 an installer fix was
+# committed with no bump, so two published states both called themselves 0.12.2 — one
+# whose installer wires the enforcement hooks and one whose installer does not.
+OUT=$(python3 dev/check_installer_version.py . 2>&1); rc=$?
+[ $rc -eq 0 ] && ok "$OUT" || { echo "$OUT"; bad "the installer changed without a version bump"; }
+
 step "wiring coverage"
 # Does every shipped item REACH its destination? Proven by installing into a throwaway
 # HOME and asking each file where it ended up — including the upgrade path, where a
