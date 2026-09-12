@@ -72,6 +72,21 @@ cat > "$STAGE/SOURCE.json" <<EOF
  "synced_at": "$(date '+%Y-%m-%dT%H:%M:%S%z')", "files": $N}
 EOF
 
+# A file in the destination that this publisher did not write is the signal that
+# something else writes here. rsync --delete removes it regardless; naming it first
+# is what makes a second writer visible. See dev/foreign_files.py for the incident.
+echo "== foreign files in $DEST"
+FOREIGN=$("$PY" dev/foreign_files.py "$DEST" "$STAGE" 2>/dev/null || true)
+if [ -n "$FOREIGN" ]; then
+  COUNT=$(printf '%s\n' "$FOREIGN" | wc -l | tr -d ' ')
+  echo "  $COUNT file(s) in gt-src that this publisher did not write:"
+  printf '%s\n' "$FOREIGN" | head -40 | sed 's/^/    /'
+  [ "$COUNT" -gt 40 ] && echo "    ... and $((COUNT - 40)) more"
+  echo "  Backed up below, then removed. If any of it is work, rescue it FIRST."
+else
+  echo "  none - gt-src holds only what was published"
+fi
+
 echo "== changes to $DEST"
 mkdir -p "$DEST"
 rsync -a --delete --checksum --itemize-changes --dry-run --exclude '.DS_Store' "$STAGE/" "$DEST/" | grep -v '^\.d' || true
