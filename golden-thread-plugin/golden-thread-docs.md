@@ -1,9 +1,9 @@
 # Golden Thread Plugin — Documentation
-## Version gt 0.11.0 / gt-wiki 0.1.2
+## Version gt 0.12.0 / gt-wiki 0.1.2
 
 ---
 
-Golden Thread turns an Obsidian vault into the single source of truth for all AI memory across every project and every session. The tiered rule model introduced in v0.6.0 now carries **seven hook-backed Core rules** enforced at three points in the turn, 0.9.12 added `gt-route` for the middle of a session, and 0.9.13 makes the session-start component check verify that the hooks are **wired**, not merely installed, and 0.11.0 makes `log.md` and `decisions.md` generated files so concurrent sessions cannot overwrite one another. gt-wiki 0.1.1 provides an LLM-powered knowledge base with immutable sources and interlinked pages.
+Golden Thread turns an Obsidian vault into the single source of truth for all AI memory across every project and every session. The tiered rule model introduced in v0.6.0 now carries **seven hook-backed Core rules** enforced at three points in the turn, 0.9.12 added `gt-route` for the middle of a session, and 0.9.13 makes the session-start component check verify that the hooks are **wired**, not merely installed, 0.11.0 makes `log.md` and `decisions.md` generated files so concurrent sessions cannot overwrite one another, and 0.12.0 stops a vault tool running against a vault it was never told to touch. gt-wiki 0.1.2 provides an LLM-powered knowledge base with immutable sources and interlinked pages.
 
 ---
 
@@ -27,10 +27,10 @@ Facts move up the hierarchy as they prove themselves general. They never move ba
 
 ---
 
-## Core Rules (gt 0.11.0)
+## Core Rules (gt 0.12.0)
 
 Golden Thread defines a tiered rule model that separates rules by scope and enforcement strength.
-**Seven Core rules ship as of 0.11.0**, up from one at 0.6.0:
+**Seven Core rules ship as of 0.12.0**, up from one at 0.6.0:
 
 | # | Rule |
 |---|---|
@@ -58,6 +58,15 @@ Verify the set at any time with `echo '{}' | ~/.claude/golden-thread/hooks/injec
 |---|---|
 | Reminder | Injected on every turn via `UserPromptSubmit` hook. |
 | Validated | Checked by a `Stop` hook that blocks any reply violating it; machine-enforced. |
+
+Since 0.12.0 a **second `PreToolUse` guard** (`guard_vault_writes.sh`) denies a vault-mutating
+tool run that does not say *which* vault it means — no `--vault`, no `--dry-run`, no
+`GT_VAULT`. It exists because a session rehearsing the 0.11.0 migration in a scratch copy
+had one tool that took `--vault` and one that did not, so the same loop migrated all 42
+`decisions.md` files of the live vault. A rehearsal that cannot be told where to rehearse is
+not a rehearsal. Read-only subcommands are never denied, and anything it cannot parse with
+certainty is allowed — it fails open, as every guard here does, because a guard that blocks
+wrongly makes every session unusable.
 
 Since 0.9.5 a third point exists: a **`PreToolUse`** hook (`guard_session_claims.sh`) denies a
 `Write`/`Edit` to a vault file another live session holds a claim on. It fails open on any parse
@@ -126,7 +135,7 @@ The canonical rule definitions live in `Projects/golden-thread/core-rules/` insi
 |---|---|
 | `/gt:gt-demo` | An eleven-act guided tour on the fictional PizzaBot 3000 project, run in its own throwaway vault — `start` builds it, `tour` runs the acts one click at a time (Core rules, open, task rollup, capture, wiki, route, validate, lint, promote, watch, inbox and close), `end` shows the receipt, `clean` rebuilds, `remove` switches it off. Skipped at install when `install_demo` is `no`. |
 
-### Concurrent sessions stop colliding (0.11.0)
+### Concurrent sessions stop colliding (0.12.0)
 
 `log.md` and `decisions.md` are the two files every session appends and none owns. In one
 working tree there are no branches to collide and no merge to resolve — just
@@ -294,7 +303,7 @@ bash install.sh
 # Restart Claude Code
 ```
 
-Installs both `gt` (v0.11.0) and `gt-wiki` (v0.1.2) as separate plugins under the `golden-thread-plugin` marketplace. Requires Python 3.8+.
+Installs both `gt` (v0.12.0) and `gt-wiki` (v0.1.2) as separate plugins under the `golden-thread-plugin` marketplace. Requires Python 3.8+.
 
 `install.sh` installs the **newest version directory** present, not a hardcoded constant — pass an argument only to roll back deliberately (`./install.sh 0.9.3`). Never pipe it to `head`: `set -o pipefail` turns the closed pipe into an abort partway through, leaving the cache updated and registration undone.
 

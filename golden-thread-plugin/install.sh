@@ -152,12 +152,31 @@ if [ -d "$SRC/hooks" ]; then
 fi
 
 # 1c. Component MANIFEST. gt_components.py compares what is INSTALLED against
-# these hashes at session start. Generated at install time so it always describes
-# the version actually being shipped -- a hand-maintained manifest would drift,
-# which is the failure this whole mechanism exists to detect.
+# these hashes at session start.
+#
+# It used to be REGENERATED here on every run, so that it always described the
+# version actually being shipped -- a hand-maintained manifest would drift, which is
+# the failure the whole mechanism exists to detect. That reasoning was right when it
+# was written and is now covered better elsewhere: dev/release-check.sh verifies
+# "MANIFEST.json files map matches the tree" on every release, and that gate did not
+# exist then. The drift protection is kept; only its location moved.
+#
+# Regenerating here cost more than it bought. Every install rewrote the file's
+# `generated` timestamp INSIDE THE SOURCE TREE, so each run dirtied git, and
+# dev/sync-gt-src.sh -- which refuses to publish from an uncommitted tree -- had to
+# be unblocked by committing the noise. On 2026-09-11 one session made four commits
+# whose entire content was a changed timestamp. Anyone installing from the shared
+# gt-src copy was also silently modifying it.
+#
+# So: write it only when it is ABSENT, because gt_components.compare() cannot do
+# anything without one. Never overwrite a manifest that is already there.
 if [ -f "$SRC/scripts/gt_components.py" ]; then
-  python3 "$SRC/scripts/gt_components.py" manifest "$SRC" >/dev/null 2>&1 \
-    && echo "Wrote component MANIFEST → $SRC/MANIFEST.json"
+  if [ -f "$SRC/MANIFEST.json" ]; then
+    echo "Component MANIFEST present → left untouched (verified by dev/release-check.sh)"
+  else
+    python3 "$SRC/scripts/gt_components.py" manifest "$SRC" >/dev/null 2>&1 \
+      && echo "Wrote component MANIFEST → $SRC/MANIFEST.json  (none was present)"
+  fi
 fi
 
 mkdir -p "$WIKI_CACHE"
@@ -456,32 +475,59 @@ fi
 echo ""
 echo "Golden Thread $VERSION installed."
 echo ""
+# The skill lists are DERIVED from what was just installed, not typed here. A
+# hardcoded list is a second copy of the truth, and it goes stale silently: gt 0.10.0
+# shipped /gt:gt-watch and this summary did not mention it, so the installer told a
+# new user a skill did not exist that did. Same failure as a hardcoded VERSION, and
+# the same fix -- read what is on disk.
+#
+# Reads the installed CACHE rather than the source, so what is listed is what the
+# user actually got: with install_demo=no, gt-demo has already been removed from the
+# cache by then and drops out of the list for free, with no second condition to keep
+# in step.
+list_skills() {  # $1 = skills dir, $2 = command prefix
+  local d="$1" prefix="$2" name desc
+  [ -d "$d" ] || return 0
+  for sk in "$d"/*/; do
+    name=$(basename "$sk")
+    [ -f "$sk/SKILL.md" ] || continue
+    # First sentence of the description, trimmed; quotes optional in the frontmatter.
+    desc=$(python3 - "$sk/SKILL.md" <<'PYEOF'
+import re, sys
+LIMIT = 66
+try:
+    t = open(sys.argv[1], encoding="utf-8", errors="replace").read(4000)
+except OSError:
+    raise SystemExit
+m = re.search(r'^description:\s*(.+?)\s*$', t, re.M)
+if not m:
+    raise SystemExit
+d = m.group(1).strip().strip('"').strip("'")
+# First sentence, where a sentence ends in ". " after a word character. Several
+# descriptions open with a clause list ("Commands: add, remove, ...") or a colon,
+# so cut at the first of sentence-end / " -- " / ": " and take whichever comes first.
+for pat in (r'(?<=\w)\.\s', r'\s[-—]{1,2}\s', r':\s'):
+    parts = re.split(pat, d, maxsplit=1)
+    if len(parts) > 1 and len(parts[0]) >= 20:
+        d = parts[0]
+        break
+d = d.rstrip(' .:,;-—')
+# Truncate on a WORD boundary. A mid-word cut reads as corruption rather than
+# brevity, and this line is the first thing a new user sees.
+if len(d) > LIMIT:
+    d = d[:LIMIT].rsplit(' ', 1)[0].rstrip(' .,;:-—') + '…'
+print(d)
+PYEOF
+)
+    printf '  %-24s %s\n' "$prefix$name" "$desc"
+  done
+}
+
 echo "gt skills:"
-echo "  /gt:gt-init          set up the vault, wire a project, write vault-config.json"
-echo "  /gt:gt-open          load a project — source.md first, memory index only"
-echo "  /gt:gt-create        scaffold a project and freeze its idea.md"
-echo "  /gt:gt-ingest        import an existing project's notes (copies, never moves)"
-echo "  /gt:gt-route         mid-session: what is this now, where does it go, right place?"
-echo "  /gt:gt-work          write the session back to research/decisions/design"
-echo "  /gt:gt-promote       graduate a fact up a level, or out to a repo CLAUDE.md"
-echo "  /gt:gt-validate      re-derive a claim with a fresh-context validator"
-echo "  /gt:gt-query         look a topic up across Knowledge and project memory"
-echo "  /gt:gt-review        sweep daily notes for uncaptured tasks and ideas"
-echo "  /gt:gt-farm          hand bulk or mechanical work to an external AI as a packet"
-echo "  /gt:gt-refresh       check Sources/ for upstream changes and supersede"
-echo "  /gt:gt-lint          14 health checks, including core-unenforced"
-echo "  /gt:gt-settings      inspect or switch off anything this plugin does on its own"
-echo "  /gt:gt-runbook-lint  find facts duplicated across runbooks"
-if [ "$INSTALL_DEMO" = "yes" ]; then
-echo "  /gt:gt-demo          manage a repeatable live demo session (PizzaBot 3000)"
-fi
+list_skills "$CACHE/skills" "/gt:"
 echo ""
 echo "gt-wiki skills:"
-echo "  /gt-wiki:gt-wiki-init     set up a new wiki vault"
-echo "  /gt-wiki:gt-wiki          query the wiki"
-echo "  /gt-wiki:gt-wiki-ingest   add a source to the wiki"
-echo "  /gt-wiki:gt-wiki-lint     health-check the wiki"
-echo "  /gt-wiki:gt-wiki-refresh  check sources for upstream changes"
+list_skills "$WIKI_CACHE/skills" "/gt-wiki:"
 echo ""
 if [ "$INSTALL_DEMO" = "no" ]; then
 echo "Demo not installed (install_demo=no in vault-config.json)."

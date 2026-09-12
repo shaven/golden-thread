@@ -214,6 +214,91 @@ class InstallTest(Sandbox):
         self.assertFalse((self.home / ".claude" / "settings.json").exists())
         self.assertFalse(self.plugins.exists())
 
+    # -- the source tree is not the installer's to modify --------------------------
+    def test_install_leaves_the_source_tree_byte_identical(self):
+        """install.sh must not rewrite MANIFEST.json where it installs FROM.
+
+        It used to regenerate it every run, changing only the `generated` timestamp,
+        which dirtied git and made dev/sync-gt-src.sh refuse to publish until someone
+        committed the noise. Four such commits were made in one day.
+        """
+        manifest = self.src() / "MANIFEST.json"
+        before = manifest.read_bytes() if manifest.is_file() else None
+        self.assertIsNotNone(before, "fixture has no MANIFEST.json to protect")
+        self.assertOk(self.install())
+        self.assertEqual(manifest.read_bytes(), before,
+                         "install.sh rewrote MANIFEST.json in the source tree")
+
+    def test_install_writes_a_manifest_only_when_none_exists(self):
+        """gt_components.compare() cannot work without one, so absent still means write."""
+        manifest = self.src() / "MANIFEST.json"
+        manifest.unlink()
+        self.assertOk(self.install())
+        self.assertTrue(manifest.is_file(),
+                        "no manifest was present and install.sh did not create one")
+
+    def test_stale_manifest_still_installs(self):
+        """Pins that this change did not quietly add a refusal.
+
+        Refusing a source whose files disagree with its manifest is tracked separately
+        as 2026-09-11-install-refuse-stale-manifest; it is a behaviour change and must
+        not arrive as a side effect of the fix above.
+        """
+        victim = self.src() / "scripts" / "gt_settings.py"
+        victim.write_text(victim.read_text(encoding="utf-8") + "\n# drift\n", encoding="utf-8")
+        p = self.install()
+        self.assertOk(p, "an install with a stale manifest should still succeed today")
+
+    # -- the skill summary is derived, not typed -----------------------------------
+    def _summary_skills(self, out, prefix="/gt:"):
+        names = set()
+        for line in out.splitlines():
+            line = line.strip()
+            if line.startswith(prefix):
+                names.add(line.split()[0][len(prefix):])
+        return names
+
+    def test_summary_lists_every_installed_skill(self):
+        """A hardcoded list goes stale silently: 0.10.0 shipped gt-watch and the
+        summary never mentioned it, so the installer denied a skill that existed."""
+        p = self.install()
+        self.assertOk(p)
+        listed = self._summary_skills(p.stdout)
+        on_disk = {d.name for d in (self.cache() / "skills").iterdir()
+                   if (d / "SKILL.md").is_file()}
+        self.assertEqual(listed, on_disk,
+                         f"summary and installed skills disagree; "
+                         f"missing from summary: {sorted(on_disk - listed)}, "
+                         f"listed but absent: {sorted(listed - on_disk)}")
+
+    def test_summary_lists_every_installed_wiki_skill(self):
+        p = self.install()
+        self.assertOk(p)
+        listed = self._summary_skills(p.stdout, "/gt-wiki:")
+        on_disk = {d.name for d in (self.cache("gt-wiki") / "skills").iterdir()
+                   if (d / "SKILL.md").is_file()}
+        self.assertEqual(listed, on_disk)
+
+    def test_summary_omits_the_demo_when_it_is_not_installed(self):
+        self.config(install_demo="no")
+        p = self.install()
+        self.assertOk(p)
+        self.assertNotIn("gt-demo", self._summary_skills(p.stdout),
+                         "gt-demo was listed as available but was not installed")
+        listed = self._summary_skills(p.stdout)
+        on_disk = {d.name for d in (self.cache() / "skills").iterdir()
+                   if (d / "SKILL.md").is_file()}
+        self.assertEqual(listed, on_disk)
+
+    def test_summary_descriptions_are_not_cut_mid_word(self):
+        """The first thing a new user reads; a mid-word cut reads as corruption."""
+        p = self.install()
+        self.assertOk(p)
+        for line in p.stdout.splitlines():
+            if line.strip().startswith("/gt:") and line.rstrip().endswith("\u2026"):
+                self.assertRegex(line.rstrip(), r"[A-Za-z0-9)\]]\u2026$",
+                                 f"description truncated mid-word: {line!r}")
+
     def test_manifest_version_mismatch_refuses(self):
         pj = self.src() / ".claude-plugin" / "plugin.json"
         d = json.loads(pj.read_text())
