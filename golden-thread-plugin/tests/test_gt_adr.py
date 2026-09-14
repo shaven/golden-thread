@@ -26,12 +26,33 @@ class GtAdr(Sandbox):
         return self.py(TOOLS / "gt_adr.py", "--vault", self.vault, *args, **kw)
 
     def seed(self, text):
+        """Stand in a PRE-0.11 decisions.md: since 0.14.0 create-project hands back a
+        project already migrated, so the scaffold's baseline goes too, or `migrate`
+        would answer "already migrated" and the tests below would test nothing."""
+        (self.vault / "Projects/golden-thread/spool/decisions/demo"
+         / "0000-baseline.md").unlink(missing_ok=True)
         self.dec.write_text(text, encoding="utf-8")
 
     def allocate(self, title="t"):
         p = self.tool("allocate", "demo", "--title", title)
         self.assertOk(p, "allocate failed")
         return int(p.stdout.strip())
+
+    # -- born current (regression 2026-09-14) -------------------------------------
+    def test_new_project_is_born_migrated_and_renders_allocations(self):
+        """create-project left decisions.md without a baseline, so `decisions-spool`
+        was pending the moment a project existed and install.sh migrated it."""
+        base = self.vault / "Projects/golden-thread/spool/decisions/demo/0000-baseline.md"
+        self.assertTrue(base.is_file(), "create-project left no decisions baseline")
+        before = self.dec.read_bytes()
+        self.assertOk(self.tool("merge", "demo"))
+        self.assertEqual(self.dec.read_bytes(), before, "scaffold is not what merge renders")
+        self.assertIn("already migrated", self.tool("migrate", "demo").stdout)
+        self.assertEqual(self.allocate("first real decision"), 1)
+        self.assertOk(self.tool("merge", "demo"))
+        text = self.dec.read_text()
+        self.assertIn("## ADR-1: first real decision", text)
+        self.assertIn("# Demo Decisions", text)
 
     # -- allocation --------------------------------------------------------------
     def test_allocation_is_exclusive_and_sequential(self):

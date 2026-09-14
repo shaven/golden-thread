@@ -1,6 +1,6 @@
 # Golden Thread — User Manual
 
-Complete reference for all seventeen skills. Written against **gt v0.13.0**.
+Complete reference for all seventeen skills. Written against **gt v0.14.0**.
 
 ---
 
@@ -240,12 +240,53 @@ project memory. If a page comes back `status: stale`, verify before acting on it
 ### Keeping the vault honest
 
 ```
-/gt:gt-upgrade         # after install.sh: migrate the vault (status, then --dry-run)
+/gt:gt-upgrade         # finish what install.sh could not apply (review, conflicts)
 /gt:gt-doctor          # the whole install in one report; --fix re-wires hooks only
 /gt:gt-lint            # broken links, orphans, unlisted memory, scope leaks
 /gt:gt-runbook-lint    # facts duplicated across runbooks
 /gt:gt-refresh         # upstream changes to Sources/
 ```
+
+**What `install.sh` does on an upgrade (0.14.0).** One run from any older release ends where a
+fresh install of the newest would, so skipping releases is safe:
+
+1. Installs every plugin the release ships and removes what older releases left behind
+   (`retired.json`), after a backup.
+2. Applies one-time **machine migrations** (`gt_machine_migrate.py`) — changes under
+   `~/.claude/` a skipped release would have made. Each runs once, judged from the machine's
+   actual state; the first failure stops the install with `INSTALL INCOMPLETE`.
+3. Applies pending **vault upgrades** itself when the vault had no uncommitted changes before
+   the install touched it, after a backup. Results are left uncommitted for you to review.
+   A vault the same install created gets an initial commit first. A vault holding your own
+   uncommitted work is never touched — the install prints the command to run instead.
+
+Two things are always left for you, reported by the install and by `/gt:gt-upgrade`:
+**needs a person: no merge base** (a PROTOCOL.md or CONVENTIONS.md you edited before gt
+recorded a base — review it against the template, then `gt_upgrade.py run --record-base
+<doc>`), and **conflict awaiting you** (resolve the `.merge-conflict` file, then
+`--record-base`). Neither is ever merged unattended, and neither is re-run on every install.
+
+```bash
+python3 $SCRIPTS/gt_machine_migrate.py status          # machine migrations pending here
+python3 $SCRIPTS/gt_upgrade.py --vault <vault> status  # vault upgrades pending
+```
+
+**Modules (0.14.0).** Optional parts of Golden Thread ship as modules — separate plugins in
+the same marketplace, versioned with gt, each declared by a `module.json`. Today: `wiki`
+(`gt-wiki`) and `demo` (`gt-demo`), both on by default.
+
+```bash
+bash install.sh --list-modules          # each module, its state, and why
+bash install.sh --without demo          # remove it; the choice is remembered
+bash install.sh --with demo             # bring it back
+```
+
+The choice lives in `~/.claude/golden-thread/install-choices.json`. A module that is off
+leaves nothing behind: no plugin cache, marketplace entry, enabled flag, hooks or hook
+scripts. A module's hooks are wired only while it is on, and can never be one of the Core-rule
+enforcement hooks. `/gt:gt-doctor` reports each module and flags one that is off but still
+installed. A module may ship a demo act (`module.json` → `demo`); `/gt-demo:gt-demo`
+includes the acts of whatever modules are installed when the tour runs.
 
 Run `gt-lint` after any structural change. Triage into three piles: *you broke it*
 (fix now), *already broken* (record in `review-queue.md`), *false positive* (suppress
@@ -674,7 +715,6 @@ is registered here and can be switched off.
 | `test_gate` | `off` · `warn` · `auto` · `block` | `auto` | Refuse a `git commit` of code whose tests have not been seen to pass; `auto` blocks only where the repo has a test command |
 | `parallel_work` | `off` · `on` | `on` | Whether divisible work runs in parallel at all; `off` also stops the Core rule being injected |
 | `parallel_max` | `auto` · a positive integer | `auto` | Ceiling on concurrent workers. `auto` = as many as the machine allows |
-| `install_demo` | `yes` · `no` | `yes` | Whether `install.sh` installs `/gt:gt-demo`, its script and the PizzaBot template |
 
 
 > **Heads-up:** `parallel_work` is `on` and `parallel_max` is `auto` out of the box, so
@@ -776,25 +816,28 @@ on and install the cron entry.
 
 ---
 
-### `/gt:gt-demo`
+### `/gt-demo:gt-demo`
+
+*Module `demo` (plugin `gt-demo`), installed by default. `bash install.sh --without demo`
+removes it; `--with demo` brings it back.*
 
 An eleven-act guided tour of Golden Thread on PizzaBot 3000, a fictional pizza-ordering
 project. It runs in its **own throwaway vault**, so nothing it does can reach yours.
 
 ```
-/gt:gt-demo start    — build the demo vault and print the command that opens it
-/gt:gt-demo tour     — (in the demo session) run the tour; you only click Next
-/gt:gt-demo end      — every commit and file the tour produced
-/gt:gt-demo clean    — delete the demo vault and build a fresh one
-/gt:gt-demo remove   — delete the demo and switch it off (install_demo = no)
-/gt:gt-demo status   — is there a demo vault, and how old is it
+/gt-demo:gt-demo start    — build the demo vault and print the command that opens it
+/gt-demo:gt-demo tour     — (in the demo session) run the tour; you only click Next
+/gt-demo:gt-demo end      — every commit and file the tour produced
+/gt-demo:gt-demo clean    — delete the demo vault and build a fresh one
+/gt-demo:gt-demo remove   — delete the demo vault; `bash install.sh --without demo` removes the module
+/gt-demo:gt-demo status   — is there a demo vault, and how old is it
 ```
 
 **Running it:** `start` builds the vault at `~/.claude/golden-thread/demo-vault` and prints
 `cd <demo vault> && GT_VAULT=<demo vault> GT_WATCH=report GT_WATCH_STATE=<demo vault>/.demo/watch claude`
 — the extra variables let the watch act run without touching this machine's watch
 settings or state. Run that in a new terminal and type
-`/gt:gt-demo tour`. For each act Claude says one line to the audience, does the work with
+`/gt-demo:gt-demo tour`. For each act Claude says one line to the audience, does the work with
 the real skill, says what just happened, and offers buttons — **Next**, **Repeat this
 act**, **Skip ahead**, **End tour**.
 
@@ -844,7 +887,7 @@ project other than the one loaded.
 ## Script reference
 
 ```bash
-SCRIPTS=~/.claude/plugins/cache/golden-thread-plugin/gt/0.13.0/scripts
+SCRIPTS=~/.claude/plugins/cache/golden-thread-plugin/gt/0.14.0/scripts
 
 python3 $SCRIPTS/vault_init.py fresh --vault ~/my-vault --domain "My Team"
 

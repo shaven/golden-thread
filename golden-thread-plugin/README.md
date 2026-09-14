@@ -91,7 +91,7 @@ Facts move up the hierarchy as they prove themselves general. They never move ba
 | `/gt:gt-runbook-lint` | Scan all project `runbook.md` files for content that has drifted into multiple runbooks. Classifies duplicated content by type and routes it to the right shared layer (PROTOCOL.md, Knowledge page, or repo CLAUDE.md) via `gt-promote`. |
 | `/gt:gt-settings` | View and change what Golden Thread does automatically: component drift checking at session start, and the session report card at compact. Every automatic behaviour can be switched off. |
 | `/gt:gt-watch` | Watch any git repo you depend on. A cron fetch classifies each change by rules, and the next session opens with a **P0** when a watched repo ships a security fix (CVE/GHSA ids, security releases, advisories). Watches are vault notes; state stays on the machine. Off until switched on. |
-| `/gt:gt-demo` | An eleven-act guided tour on the fictional PizzaBot 3000 project, in its own throwaway vault so it never touches yours. `start` builds the demo vault, `tour` runs the acts one click at a time, `end` shows what the tour produced, `clean` rebuilds, `remove` switches the demo off. |
+| `/gt-demo:gt-demo` (module `demo`) | An eleven-act guided tour on the fictional PizzaBot 3000 project, in its own throwaway vault so it never touches yours. `start` builds the demo vault, `tour` runs the acts one click at a time, `end` shows what the tour produced, `clean` rebuilds, `remove` deletes the demo vault; `bash install.sh --without demo` removes the module. |
 
 ---
 
@@ -292,11 +292,11 @@ Python scripts can also be run directly from the command line:
 
 ```bash
 # Create a new vault
-python3 golden-thread/0.13.0/scripts/vault_init.py fresh \
+python3 golden-thread/0.14.0/scripts/vault_init.py fresh \
   --vault ~/my-vault --domain "My Team"
 
 # Scaffold a project
-python3 golden-thread/0.13.0/scripts/vault_init.py create-project \
+python3 golden-thread/0.14.0/scripts/vault_init.py create-project \
   --vault ~/my-vault \
   --name my-project \
   --title "My Project" \
@@ -307,29 +307,29 @@ python3 golden-thread/0.13.0/scripts/vault_init.py create-project \
   --project-dir ~/Projects/my-project
 
 # Scaffold a sub-project
-python3 golden-thread/0.13.0/scripts/vault_init.py create-project \
+python3 golden-thread/0.14.0/scripts/vault_init.py create-project \
   --vault ~/my-vault \
   --name sub-feature \
   --parent my-project \
   --title "Sub Feature"
 
 # Point vault-config.json at an existing vault
-python3 golden-thread/0.13.0/scripts/vault_init.py connect \
+python3 golden-thread/0.14.0/scripts/vault_init.py connect \
   --vault ~/existing-vault
 
 # Install/rewire Core-rule enforcement hooks
-python3 golden-thread/0.13.0/scripts/vault_init.py install-core-rules \
+python3 golden-thread/0.14.0/scripts/vault_init.py install-core-rules \
   --vault ~/my-vault
 
 # Scan a project directory for ingest candidates
-python3 golden-thread/0.13.0/scripts/gt_ingest.py ~/Projects/my-project --json
+python3 golden-thread/0.14.0/scripts/gt_ingest.py ~/Projects/my-project --json
 
 # Audit vault health
-python3 golden-thread/0.13.0/scripts/gt_lint.py ~/my-vault \
+python3 golden-thread/0.14.0/scripts/gt_lint.py ~/my-vault \
   --queue ~/my-vault/review-queue.md
 
 # View/change automatic behaviours
-python3 golden-thread/0.13.0/scripts/gt_settings.py show
+python3 golden-thread/0.14.0/scripts/gt_settings.py show
 ```
 
 ---

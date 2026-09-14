@@ -84,6 +84,100 @@ class DoctorRuns(DoctorBase):
         self.assertEqual(data["checks"][0]["state"], "unknown")
 
 
+class DoctorModulesCheck(DoctorBase):
+    """`modules`: on/off and why, version, requires_gt, and an ON module's plugin state.
+
+    OFF by choice is never drift; an ON module whose plugin is not registered or not
+    enabled is. The check only READS installed_plugins.json and settings.json.
+    """
+
+    def setUp(self):
+        super().setUp()
+        self.root = self.tmp / "Golden Thread" / "plugin"
+        gt = self.root / "golden-thread" / "0.14.0" / ".claude-plugin"
+        gt.mkdir(parents=True)
+        (gt / "plugin.json").write_text('{"name": "gt", "version": "0.14.0"}')
+        self.module("demo", "on", ">=0.14.0,<0.15.0")
+        self.module("wiki", "on", ">=0.14.0")
+        self.module("far", "on", ">=0.20.0")
+        self.module("quiet", "off", ">=0.14.0")
+
+    def module(self, name, default, requires):
+        vd = self.root / ("golden-thread-" + name) / "1.0.0"
+        (vd / ".claude-plugin").mkdir(parents=True)
+        (vd / ".claude-plugin" / "plugin.json").write_text(
+            json.dumps({"name": "gt-" + name, "version": "1.0.0"}))
+        (vd / "module.json").write_text(json.dumps({
+            "schema": 1, "name": name, "plugin": "gt-" + name, "version": "1.0.0",
+            "requires_gt": requires, "summary": "fixture", "default": default}))
+
+    def register(self, installed=(), enabled=()):
+        pl = self.home / ".claude" / "plugins"
+        pl.mkdir(parents=True, exist_ok=True)
+        (pl / "installed_plugins.json").write_text(json.dumps({"version": 2, "plugins": {
+            "gt-%s@golden-thread-plugin" % n: [{"version": "1.0.0"}] for n in installed}}))
+        (self.home / ".claude" / "settings.json").write_text(json.dumps({"enabledPlugins": {
+            "gt-%s@golden-thread-plugin" % n: True for n in enabled}}))
+
+    def row(self):
+        p = self.doctor("--json", "--only", "modules", "--plugin-root", str(self.root))
+        self.assertNotIn("Traceback", p.stdout + p.stderr)
+        data = json.loads(p.stdout)
+        self.assertEqual([c["check"] for c in data["checks"]], ["modules"])
+        return data["checks"][0]
+
+    def line(self, row, name):
+        return next(l for l in row["detail"].splitlines() if l.startswith(name + " "))
+
+    def test_healthy_modules_and_off_by_choice_is_not_drift(self):
+        choices = self.home / ".claude" / "golden-thread" / "install-choices.json"
+        choices.parent.mkdir(parents=True, exist_ok=True)
+        choices.write_text(json.dumps({"version": 1, "choices": {"wiki": "off"}}))
+        self.register(installed=("demo",), enabled=("demo",))
+        row = self.row()
+        self.assertEqual(row["state"], "ok", row)
+        self.assertIn("4 module(s): 1 on, 3 off", row["summary"])
+        demo = self.line(row, "demo")
+        self.assertIn("on", demo)
+        self.assertIn("1.0.0", demo)
+        self.assertIn("admits gt 0.14.0", demo)
+        self.assertIn("installed and enabled", demo)
+        self.assertIn("not installed by choice (recorded choice)", self.line(row, "wiki"))
+        self.assertIn("not installed by choice (module default)", self.line(row, "quiet"))
+        far = self.line(row, "far")
+        self.assertIn("does NOT admit gt 0.14.0", far)
+        self.assertIn("requires gt >=0.20.0", far)
+
+    def test_on_module_whose_plugin_is_missing_or_disabled_needs_attention(self):
+        self.register(installed=("demo",), enabled=())
+        row = self.row()
+        self.assertEqual(row["state"], "warn")
+        self.assertIn("not enabled in settings.json", self.line(row, "demo"))
+        wiki = self.line(row, "wiki")
+        self.assertIn("not in installed_plugins.json", wiki)
+        self.assertIn("install.sh", row["fix"])
+
+    def test_off_module_still_installed_is_reported(self):
+        self.register(installed=("demo", "wiki", "quiet"), enabled=("demo", "wiki"))
+        row = self.row()
+        self.assertEqual(row["state"], "warn")
+        self.assertIn("still installed", self.line(row, "quiet"))
+
+    def test_the_check_only_reads(self):
+        self.register(installed=("demo",), enabled=("demo",))
+        files = [self.home / ".claude" / "plugins" / "installed_plugins.json",
+                 self.home / ".claude" / "settings.json"]
+        before = [f.read_bytes() for f in files]
+        self.row()
+        self.assertEqual([f.read_bytes() for f in files], before)
+        self.assertFalse((self.home / ".claude" / "golden-thread" /
+                          "install-choices.json").exists())
+
+    def test_no_plugin_root_is_unknown(self):
+        p = self.doctor("--json", "--only", "modules")
+        self.assertEqual(json.loads(p.stdout)["checks"][0]["state"], "unknown")
+
+
 class DoctorVaultCheck(DoctorBase):
     def test_unmigrated_decisions_are_reported(self):
         v = self.make_vault()

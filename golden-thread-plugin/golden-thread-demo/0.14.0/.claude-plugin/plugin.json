@@ -1,0 +1,9 @@
+{
+  "name": "gt-demo",
+  "version": "0.14.0",
+  "description": "Golden Thread demo: a live, self-running guided tour of PizzaBot 3000 in its own throwaway vault. Build, tour, inspect and rebuild the demo without touching the real vault.",
+  "author": {
+    "name": "Stacy Haven",
+    "email": "shaven@shavenconsulting.com"
+  }
+}

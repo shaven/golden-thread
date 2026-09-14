@@ -1,4 +1,4 @@
-"""install.sh prunes what the target release no longer ships, and reports vault upgrades.
+"""install.sh prunes what the target release no longer ships, converging on a fresh install.
 
 Added in 0.13.0. Until then the installer only ever added:
   * old gt-wiki cache versions lingered (gt caches were pruned, gt-wiki's never were);
@@ -14,15 +14,14 @@ Contracts pinned here:
     unknown entry there is reported and kept; a user's own hook always survives;
   * a hooks-dir file is removed (after a backup) only when retired.json lists it and
     the release does not ship it; an unknown file is reported and kept;
-  * with a vault, pending migrations are summarised with "/gt:gt-upgrade", a current
-    vault says "none pending", and a broken gt_upgrade never fails the install;
+  * vault upgrades: see test_install_vault_upgrade.py (applied when clean since 0.14.0);
   * installing over an old release (0.12.8, from git) converges on a fresh install.
 """
 import hashlib
 import json
 import shutil
 
-from _harness import Sandbox, REPO, GT, WIKI
+from _harness import Sandbox, REPO, GT, WIKI, latest_version_dir
 
 INSTALL = REPO / "install.sh"
 IGNORE = shutil.ignore_patterns("__pycache__", "*.pyc", ".DS_Store")
@@ -200,53 +199,8 @@ class RetiresHookFiles(RetiredBase):
         self.assertNotIn("this release retired", p.stdout)
 
 
-class ReportsVaultUpgrades(PruneBase):
-    def vault(self):
-        """A vault brought fully up to date first, so each test starts from 'current'.
-
-        vault_init fresh leaves log-spool reported pending (log.md is not yet generated),
-        so a bare fresh vault is not a "current" fixture.
-        """
-        v = self.make_vault()
-        self.config(vault_path=str(v))
-        up = self.src / "scripts" / "gt_upgrade.py"
-        self.assertOk(self.py(up, "run", "--vault", v, "--allow-dirty"))
-        st = self.py(up, "status", "--vault", v)
-        self.assertIn("nothing pending", st.stdout, "fixture: vault not current\n" + st.stdout)
-        return v
-
-    def test_a_pending_migration_is_summarised_with_the_skill_to_run(self):
-        v = self.vault()
-        # The doc-merge step: PROTOCOL.md differs from the shipped template. (A missing
-        # Core rule would not do -- install-core-rules re-seeds it during the install.)
-        protocol = v / "Projects" / "PROTOCOL.md"
-        edited = protocol.read_text(encoding="utf-8") + "\nlocal edit\n"
-        protocol.write_text(edited, encoding="utf-8")
-        p = self.install()
-        self.assertIn("pending step(s):", p.stdout)
-        self.assertIn("doc-merge", p.stdout)
-        self.assertIn("Run /gt:gt-upgrade to apply", p.stdout)
-        self.assertNotIn("none pending", p.stdout)
-        self.assertEqual(protocol.read_text(encoding="utf-8"), edited,
-                         "the installer applied a migration; it may only report")
-
-    def test_a_current_vault_says_none_pending(self):
-        self.vault()
-        p = self.install()
-        self.assertIn("Vault upgrades: none pending", p.stdout)
-        self.assertNotIn("Run /gt:gt-upgrade to apply", p.stdout)
-
-    def test_a_broken_gt_upgrade_does_not_fail_the_install(self):
-        self.vault()
-        (self.src / "scripts" / "gt_upgrade.py").write_text("raise SystemExit(3)\n")
-        self.manifest()
-        p = self.install()                      # asserts exit 0
-        self.assertIn("could not run", p.stdout)
-        self.assertIn("Restart Claude Code", p.stdout)
-
-    def test_no_vault_prints_no_upgrade_line(self):
-        p = self.install()
-        self.assertNotIn("Vault upgrades", p.stdout)
+# ReportsVaultUpgrades moved to test_install_vault_upgrade.py in 0.14.0, when install.sh
+# began APPLYING pending upgrades to a clean vault instead of only reporting them.
 
 
 OLD_RELEASE = ("0f82843", "0.12.8", "0.1.2")     # commit, gt, gt-wiki at that commit
@@ -269,6 +223,14 @@ class UpgradeConverges(Sandbox):
         shutil.copy2(INSTALL, self.new_repo / "install.sh")
         shutil.copytree(GT, self.new_repo / "golden-thread" / GT.name, ignore=IGNORE)
         shutil.copytree(WIKI, self.new_repo / "golden-thread-wiki" / WIKI.name, ignore=IGNORE)
+        # 0.14.0: every module ships beside gt; both installs must lay them down (default on)
+        try:
+            demo = latest_version_dir(REPO / "golden-thread-demo")
+        except (RuntimeError, OSError):
+            demo = None
+        if demo is not None:
+            shutil.copytree(demo, self.new_repo / "golden-thread-demo" / demo.name, ignore=IGNORE)
+        self.has_demo = demo is not None
         self.assertOk(self.py(self.new_repo / "golden-thread" / GT.name / "scripts"
                               / "gt_components.py", "manifest",
                               self.new_repo / "golden-thread" / GT.name))
@@ -333,6 +295,12 @@ class UpgradeConverges(Sandbox):
         self.assertEqual(up["entries"], fresh["entries"], "gt hook entries differ")
         self.assertEqual(up["hook_files"], fresh["hook_files"], "hooks dir differs")
         self.assertEqual(up["cache"], fresh["cache"], "plugin cache differs")
+        plugins = {f.split("/", 1)[0] for f in fresh["cache"]}
+        self.assertIn("gt-wiki", plugins)
+        if self.has_demo:
+            self.assertIn("gt-demo", plugins, "the demo module was not installed")
+            self.assertFalse([f for f in up["cache"] if f.startswith("gt/") and "demo" in f],
+                             "the upgraded gt plugin still carries the demo")
         self.assertTrue(user_file.is_file(), "a user's file in the hooks dir was removed")
         stop = [h["command"] for b in json.loads(s.read_text())["hooks"]["Stop"]
                 for h in b["hooks"]]

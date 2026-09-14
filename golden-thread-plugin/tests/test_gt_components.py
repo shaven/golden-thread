@@ -485,5 +485,219 @@ class Wiring(ComponentsBase):
         self.assertRegex(p.stdout, r"unwired\s+gt_workers\.py\s+SessionStart")
 
 
+
+class ModuleBase(ComponentsBase):
+    """A fixture plugin root with gt 1.2.3 and two modules beside it.
+
+    zed (default on) declares a SessionStart reporter hook taking {src} and a hook-dir
+    script; yak (default off) declares a Stop guard.
+    """
+
+    def setUp(self):
+        super().setUp()
+        (self.vdir / ".claude-plugin").mkdir()
+        (self.vdir / ".claude-plugin" / "plugin.json").write_text(
+            '{"name": "gt", "version": "1.2.3"}')
+        self.zed = self.module("zed", "on", hooks=[
+            {"event": "SessionStart", "script": "zed_report.py",
+             "args": ["check", "{src}", "--hook"], "kind": "reporter"}],
+            hookdir=["zed_report.py"])
+        self.yak = self.module("yak", "off", hooks=[
+            {"event": "Stop", "script": "yak_guard.sh", "kind": "guard"}])
+        self.choices = self.home / ".claude" / "golden-thread" / "install-choices.json"
+
+    def module(self, name, default, hooks=(), hookdir=(), requires=">=1.0.0,<2.0.0",
+               version="0.3.0"):
+        vd = self.root / ("golden-thread-" + name) / version
+        for sub in (".claude-plugin", "scripts", "hooks"):
+            (vd / sub).mkdir(parents=True, exist_ok=True)
+        (vd / ".claude-plugin" / "plugin.json").write_text(
+            json.dumps({"name": "gt-" + name, "version": version}))
+        for h in hooks:
+            sub = "hooks" if h["script"].endswith(".sh") else "scripts"
+            (vd / sub / h["script"]).write_text("# %s\n" % h["script"])
+        for s in hookdir:
+            (vd / "scripts" / s).write_text("# %s\n" % s)
+        (vd / "module.json").write_text(json.dumps({
+            "schema": 1, "name": name, "plugin": "gt-" + name, "version": version,
+            "requires_gt": requires, "summary": "fixture " + name, "default": default,
+            "hooks": list(hooks), "hookdir_scripts": list(hookdir)}))
+        return vd
+
+    def states(self, *args):
+        return self.py(TOOL, "module-states", self.root, "--home", self.home, *args)
+
+    def choose(self, **choices):
+        self.choices.parent.mkdir(parents=True, exist_ok=True)
+        self.choices.write_text(json.dumps({"version": 1, "choices": choices}))
+
+
+class ModuleStates(ModuleBase):
+    def test_default_then_choice_then_override(self):
+        p = self.states()
+        self.assertOk(p)
+        self.assertEqual(json.loads(p.stdout), {"yak": "off", "zed": "on"})
+        self.choose(zed="off", yak="on")
+        self.assertEqual(json.loads(self.states().stdout), {"yak": "on", "zed": "off"})
+        p = self.states("--with", "zed", "--without", "yak")
+        self.assertEqual(json.loads(p.stdout), {"yak": "off", "zed": "on"})
+        self.assertEqual(json.loads(self.choices.read_text())["choices"],
+                         {"zed": "off", "yak": "on"}, "module-states must never persist")
+
+    def test_detail_says_why(self):
+        self.choose(yak="on")
+        det = json.loads(self.states("--detail", "--without", "zed").stdout)
+        self.assertEqual(det["zed"]["reason"], "--without")
+        self.assertEqual(det["yak"]["reason"], "recorded choice")
+        self.assertEqual(det["yak"]["version"], "0.3.0")
+        self.assertEqual(det["yak"]["plugin"], "gt-yak")
+        self.assertTrue(det["yak"]["admitted"])
+
+    def test_unknown_name_and_gt_are_refused_with_the_module_list(self):
+        for args in (("--with", "nope"), ("--without", "nope"), ("--with", "gt"),
+                     ("--without", "gt")):
+            p = self.states(*args)
+            self.assertEqual(p.returncode, 2, args)
+            self.assertIn("modules: yak, zed", p.stdout + p.stderr, args)
+        p = self.states("--with", "zed", "--without", "zed")
+        self.assertEqual(p.returncode, 2)
+
+    def test_requires_gt_mismatch_is_off_for_this_run_and_choice_kept(self):
+        self.module("far", "on", requires=">=2.0.0")
+        self.choose(far="on")
+        p = self.states("--with", "far")
+        self.assertOk(p)
+        self.assertEqual(json.loads(p.stdout)["far"], "off")
+        self.assertIn("requires gt >=2.0.0", p.stderr)
+        self.assertEqual(json.loads(self.choices.read_text())["choices"]["far"], "on")
+        # Judged against the gt being installed, which install.sh may pin.
+        p = self.states("--gt-version", "2.1.0")
+        self.assertEqual(json.loads(p.stdout)["far"], "on")
+        self.assertEqual(json.loads(p.stdout)["zed"], "off")
+
+    def test_invalid_module_is_listed_but_off(self):
+        bad = self.module("bad", "on")
+        data = json.loads((bad / "module.json").read_text())
+        data["colour"] = "blue"
+        (bad / "module.json").write_text(json.dumps(data))
+        det = json.loads(self.states("--detail").stdout)
+        self.assertEqual(det["bad"]["state"], "off")
+        self.assertIn("unknown key 'colour'", det["bad"]["reason"])
+
+    def test_newest_module_release_is_the_one_read(self):
+        self.module("zed", "off", version="0.10.0")
+        det = json.loads(self.states("--detail").stdout)
+        self.assertEqual((det["zed"]["version"], det["zed"]["state"]), ("0.10.0", "off"))
+
+    def test_no_modules_is_an_empty_object(self):
+        empty = self.tmp / "empty"
+        empty.mkdir()
+        p = self.py(TOOL, "module-states", empty, "--home", self.home)
+        self.assertOk(p)
+        self.assertEqual(json.loads(p.stdout), {})
+
+    def test_record_choice(self):
+        self.choose(yak="on")
+        data = json.loads(self.choices.read_text())
+        data["note"] = "kept"
+        self.choices.write_text(json.dumps(data))
+        p = self.py(TOOL, "record-choice", self.home, "zed", "off")
+        self.assertOk(p)
+        doc = json.loads(self.choices.read_text())
+        self.assertEqual(doc["choices"], {"yak": "on", "zed": "off"})
+        self.assertEqual((doc["version"], doc["note"]), (1, "kept"))
+        self.assertEqual(json.loads(self.states().stdout)["zed"], "off")
+        for args in (("gt", "on"), ("zed", "maybe"), ("Bad Name", "on")):
+            self.assertEqual(self.py(TOOL, "record-choice", self.home, *args).returncode, 2, args)
+        p = self.py(TOOL, "record-choice", self.home, "nope", "on", "--plugin-root", self.root)
+        self.assertEqual(p.returncode, 2)
+        self.assertIn("modules: yak, zed", p.stdout)
+        self.assertNotIn("nope", json.loads(self.choices.read_text())["choices"])
+
+    def test_record_choice_creates_the_file(self):
+        self.assertFalse(self.choices.exists())
+        self.assertOk(self.py(TOOL, "record-choice", self.home, "yak", "on"))
+        self.assertEqual(json.loads(self.choices.read_text()),
+                         {"version": 1, "choices": {"yak": "on"}})
+
+    def test_usage(self):
+        self.assertEqual(self.py(TOOL, "module-states").returncode, 2)
+        self.assertEqual(self.py(TOOL, "record-choice", self.home, "zed").returncode, 2)
+
+
+class ModuleHooks(ModuleBase):
+    def test_on_module_hooks_are_registered_and_tagged(self):
+        regs = self.registrations()
+        mine = [r for r in regs if r.get("module")]
+        self.assertEqual(len(regs), N_HOOKS + 1)
+        self.assertEqual(len(mine), 1)
+        r = mine[0]
+        self.assertEqual((r["event"], r["script"], r["owner"], r["module"]),
+                         ("SessionStart", "zed_report.py", "install.sh", "zed"))
+        argv = shlex.split(r["command"])
+        self.assertEqual(argv[:2], ["python3", str(self.installed / "zed_report.py")])
+        self.assertEqual(argv[2:], ["check", str(self.zed), "--hook"],
+                         "{src} in a module hook is the module's own version dir")
+        self.assertFalse(any("module" in x for x in regs[:N_HOOKS]))
+
+    def test_off_module_hooks_are_not_registered(self):
+        self.choose(zed="off", yak="on")
+        mine = [r for r in self.registrations() if r.get("module")]
+        self.assertEqual([(r["module"], r["script"]) for r in mine], [("yak", "yak_guard.sh")])
+        self.assertEqual(shlex.split(mine[0]["command"]), [str(self.installed / "yak_guard.sh")])
+
+    def test_home_flag_reads_that_homes_choices(self):
+        other = self.tmp / "other-home"
+        (other / ".claude" / "golden-thread").mkdir(parents=True)
+        (other / ".claude" / "golden-thread" / "install-choices.json").write_text(
+            json.dumps({"choices": {"zed": "off"}}))
+        p = self.py(TOOL, "hook-registrations", self.vdir, "--home", other)
+        self.assertOk(p)
+        self.assertFalse(any(r.get("module") for r in json.loads(p.stdout)))
+
+    def test_manifest_hooks_stay_gts_static_list(self):
+        man = self.manifest()
+        self.assertEqual(len(man["hooks"]), N_HOOKS)
+        self.assertFalse(any("module" in h or h["script"].startswith("zed")
+                             for h in man["hooks"]))
+
+    def test_hookdir_scripts_include_on_modules(self):
+        p = self.py(TOOL, "hookdir-scripts")
+        self.assertNotIn("zed_report.py", p.stdout.split())
+        p = self.py(TOOL, "hookdir-scripts", self.root, "--home", self.home)
+        self.assertOk(p)
+        names = p.stdout.split()
+        self.assertEqual(names[-1], "zed_report.py")
+        self.choose(zed="off")
+        p = self.py(TOOL, "hookdir-scripts", self.root)
+        self.assertNotIn("zed_report.py", p.stdout.split())
+
+    def test_wiring_counts_on_module_hooks_and_skips_off_ones(self):
+        self.full_setup()                            # wires gt + zed (on)
+        shutil.copy2(self.zed / "scripts" / "zed_report.py", self.installed / "zed_report.py")
+        p = self.py(TOOL, "wiring", self.vdir)
+        self.assertOk(p)
+        self.assertIn("all %d declared hooks are wired" % (N_HOOKS + 1), p.stdout)
+        # yak switched on but not wired: its hook is drift.
+        self.choose(yak="on")
+        p = self.py(TOOL, "wiring", self.vdir)
+        self.assertEqual(p.returncode, 1)
+        self.assertRegex(p.stdout, r"unwired\s+yak_guard\.sh\s+Stop")
+        # zed off and its entry removed: not drift -- not installed by choice.
+        self.choose(zed="off")
+        self.wire([r for r in self.registrations()], drop=("zed_report.py", "yak_guard.sh"))
+        p = self.py(TOOL, "wiring", self.vdir)
+        self.assertOk(p, "an OFF module's hook was reported as unwired")
+        self.assertIn("all %d declared hooks are wired" % N_HOOKS, p.stdout)
+
+    def test_check_is_clean_with_an_on_module_installed(self):
+        self.full_setup()
+        shutil.copy2(self.zed / "scripts" / "zed_report.py", self.installed / "zed_report.py")
+        out = self.check()
+        self.assertIn("clean", out)
+        self.assertIn("all %d hooks wired" % (N_HOOKS + 1), out)
+        self.assertNotIn("extra", out)
+
+
 if __name__ == "__main__":
     unittest.main()

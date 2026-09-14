@@ -7,7 +7,12 @@ Contracts pinned here:
   * the shipped repo lists gt and gt-wiki, and every one carries a MANIFEST.json
     that matches its tree;
   * `manifest-check` exits 2 for a plugin with no MANIFEST.json (the gate fails),
-    1 for a stale one, 0 once `manifest` has written it.
+    1 for a stale one, 0 once `manifest` has written it;
+  * `modules` prints "<name> <plugin> <version> <default>" for every plugin whose NEWEST
+    release carries module.json (gt core has none), sorted by name, exit 0 even if none;
+  * `module-check` exits 0 valid, 1 invalid naming the reasons, 2 not a module; with
+    `--gt V` it also requires requires_gt to admit V. Format cases live in
+    test_module_format.py, which holds this reader to the release's copy.
 """
 import json
 import shutil
@@ -97,6 +102,56 @@ class PluginsTest(Sandbox):
         vd = self.plugin(root, "zeta-module", "1.0.0", "zeta")
         (vd / "MANIFEST.json").write_text('{"files": {}}')
         self.assertEqual(self.py(TOOL, "manifest-check", vd).returncode, 3)
+
+    def module(self, root, d, v, name, default="on", requires=">=0.10.0"):
+        vd = root / d / v
+        if not vd.exists():
+            self.plugin(root, d, v, "gt-" + name)
+        plugin = json.loads((vd / ".claude-plugin" / "plugin.json").read_text())["name"]
+        (vd / "module.json").write_text(json.dumps({
+            "schema": 1, "name": name, "plugin": plugin, "version": v,
+            "requires_gt": requires, "summary": "fixture", "default": default}))
+        return vd
+
+    def test_modules_lists_only_module_releases_newest_first_sorted_by_name(self):
+        root = self.fake_root()
+        self.module(root, "zeta-module", "1.10.0", "zeta", default="off")
+        self.module(root, "zeta-module", "1.2.0", "zeta")         # older: ignored
+        self.module(root, "alpha", "0.1.0", "alpha")
+        p = self.py(TOOL, "modules", root)
+        self.assertOk(p)
+        self.assertEqual(p.stdout.splitlines(),
+                         ["alpha gt-alpha 0.1.0 on", "zeta zeta 1.10.0 off"])
+        empty = self.tmp / "nomods"
+        self.plugin(empty, "golden-thread", "1.0.0", "gt")
+        p = self.py(TOOL, "modules", empty)
+        self.assertOk(p)
+        self.assertEqual(p.stdout, "")
+
+    def test_a_module_whose_newest_release_lacks_module_json_is_not_a_module(self):
+        root = self.fake_root()
+        self.module(root, "zeta-module", "1.2.0", "zeta")
+        self.assertEqual(self.py(TOOL, "modules", root).stdout, "")
+
+    def test_module_check_exit_codes(self):
+        root = self.fake_root()
+        vd = self.module(root, "zeta-module", "1.10.0", "zeta", requires=">=0.10.0,<0.11.0")
+        self.assertEqual(self.py(TOOL, "module-check", vd).returncode, 0)
+        self.assertEqual(self.py(TOOL, "module-check", vd, "--gt", "0.10.0").returncode, 0)
+        p = self.py(TOOL, "module-check", vd, "--gt", "0.11.0")
+        self.assertEqual(p.returncode, 1)
+        self.assertIn("does not admit", p.stdout)
+        p = self.py(TOOL, "module-check", root / "golden-thread" / "0.10.0")
+        self.assertEqual(p.returncode, 2)
+        self.assertIn("not a module", p.stdout)
+        data = json.loads((vd / "module.json").read_text())
+        data["version"] = "9.9.9"
+        (vd / "module.json").write_text(json.dumps(data))
+        p = self.py(TOOL, "module-check", vd)
+        self.assertEqual(p.returncode, 1)
+        self.assertIn("differs from the directory name", p.stdout)
+        self.assertEqual(self.py(TOOL, "module-check").returncode, 2)
+        self.assertEqual(self.py(TOOL, "module-check", vd, "--gt").returncode, 2)
 
     def test_usage_error_is_exit_2(self):
         self.assertEqual(self.py(TOOL).returncode, 2)

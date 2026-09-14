@@ -10,12 +10,16 @@ Contract:
     Core rule is found where it belongs after a real install into a throwaway HOME;
   * exit 1, naming each one, otherwise;
   * a hook that ships but is declared in no registration is itself a finding — that is
-    the shape the bug took.
+    the shape the bug took;
+  * module hooks (0.14.0): an ON module's hooks must be wired and its hook-dir files
+    installed; an OFF module's must be absent. `module_findings` judges a home, so it is
+    tested here against fixture homes without running install.sh.
 """
+import json
 import shutil
 import unittest
 
-from _harness import Sandbox, REPO, GT, WIKI
+from _harness import Sandbox, REPO, GT, WIKI, SCRIPTS, load_module
 
 
 CHECK = REPO / "dev" / "check_wiring_coverage.py"
@@ -65,8 +69,8 @@ class WiringCoverage(Sandbox):
         inst = root / "install.sh"
         src = inst.read_text()
         broken = src.replace(
-            'if [ -n "$VAULT_PATH" ] && [ -d "$VAULT_PATH" ]; then\n  wire_enforcement_hooks "$VAULT_PATH"\nfi',
-            'if [ -n "$VAULT_PATH" ] && [ -d "$VAULT_PATH" ] && [ -e "$VAULT_PATH/.no-such-marker" ]; then\n  wire_enforcement_hooks "$VAULT_PATH"\nfi')
+            'if [ -n "$VAULT_PATH" ] && [ -d "$VAULT_PATH" ]; then\n  snapshot_vault_state "$VAULT_PATH"\n  wire_enforcement_hooks "$VAULT_PATH"\nfi',
+            'if [ -n "$VAULT_PATH" ] && [ -d "$VAULT_PATH" ] && [ -e "$VAULT_PATH/.no-such-marker" ]; then\n  snapshot_vault_state "$VAULT_PATH"\n  wire_enforcement_hooks "$VAULT_PATH"\nfi')
         self.assertNotEqual(broken, src, "fixture did not narrow the wiring condition")
         inst.write_text(broken)
         p = self.check(vdir)
@@ -140,6 +144,95 @@ class WiringCoverage(Sandbox):
     def test_usage_error_is_exit_2(self):
         p = self.py(CHECK)
         self.assertEqual(p.returncode, 2)
+
+
+class ModuleWiring(Sandbox):
+    """A fixture module with a reporter hook: wired when on, absent when off."""
+
+    def setUp(self):
+        super().setUp()
+        self.cov = load_module(CHECK, "check_wiring_coverage_under_test")
+        self.comp = load_module(SCRIPTS / "gt_components.py", "gt_components_cov_test")
+        self.repo = self.tmp / "repo"
+        gt = self.repo / "golden-thread" / "1.0.0" / ".claude-plugin"
+        gt.mkdir(parents=True)
+        (gt / "plugin.json").write_text('{"name": "gt", "version": "1.0.0"}')
+        self.vd = self.repo / "golden-thread-zed" / "0.1.0"
+        for sub in (".claude-plugin", "scripts", "hooks"):
+            (self.vd / sub).mkdir(parents=True)
+        (self.vd / ".claude-plugin" / "plugin.json").write_text(
+            '{"name": "gt-zed", "version": "0.1.0"}')
+        (self.vd / "scripts" / "zed_report.py").write_text("print('zed')\n")
+        (self.vd / "module.json").write_text(json.dumps({
+            "schema": 1, "name": "zed", "plugin": "gt-zed", "version": "0.1.0",
+            "requires_gt": ">=1.0.0", "summary": "fixture", "default": "on",
+            "hooks": [{"event": "SessionStart", "script": "zed_report.py",
+                       "args": ["--hook"], "kind": "reporter"}],
+            "hookdir_scripts": ["zed_report.py"]}))
+        self.hooks = self.home / ".claude" / "golden-thread" / "hooks"
+        self.hooks.mkdir(parents=True)
+
+    def install(self, wire=True, copy=True, event="SessionStart"):
+        cmd = "python3 %s --hook" % (self.hooks / "zed_report.py")
+        hooks = {event: [{"hooks": [{"type": "command", "command": cmd}]}]} if wire else {}
+        (self.home / ".claude" / "settings.json").write_text(json.dumps({"hooks": hooks}))
+        if copy:
+            shutil.copy2(self.vd / "scripts" / "zed_report.py", self.hooks / "zed_report.py")
+
+    def findings(self):
+        return self.cov.module_findings(self.repo, self.home, self.comp, gt_version="1.0.0")
+
+    def choose(self, state):
+        p = self.home / ".claude" / "golden-thread" / "install-choices.json"
+        p.write_text(json.dumps({"version": 1, "choices": {"zed": state}}))
+
+    def test_on_and_wired_is_clean(self):
+        self.install()
+        self.assertEqual(self.findings(), [])
+
+    def test_on_but_not_wired_is_inert(self):
+        self.install(wire=False)
+        out = self.findings()
+        self.assertEqual(len(out), 1, out)
+        self.assertIn("zed_report.py is declared for SessionStart but NOT wired", out[0])
+
+    def test_on_but_wired_under_the_wrong_event_is_inert(self):
+        self.install(event="Stop")
+        self.assertTrue(any("NOT wired" in p for p in self.findings()))
+
+    def test_on_but_hookdir_script_missing(self):
+        self.install(copy=False)
+        self.assertTrue(any("was not installed" in p for p in self.findings()))
+
+    def test_off_and_absent_is_clean(self):
+        self.choose("off")
+        self.install(wire=False, copy=False)
+        self.assertEqual(self.findings(), [])
+
+    def test_off_but_still_wired_or_installed(self):
+        self.choose("off")
+        self.install()
+        out = self.findings()
+        self.assertTrue(any("OFF but its hook zed_report.py is still wired" in p for p in out), out)
+        self.assertTrue(any("OFF but zed_report.py is still in" in p for p in out), out)
+
+    def test_undeclared_module_hook_file_is_reported(self):
+        (self.vd / "hooks" / "zed_orphan.sh").write_text("#!/bin/sh\n")
+        self.install()
+        self.assertTrue(any("hooks/zed_orphan.sh ships but is declared in NO hook" in p
+                            for p in self.findings()))
+
+    def test_invalid_module_is_reported(self):
+        data = json.loads((self.vd / "module.json").read_text())
+        data["colour"] = "blue"
+        (self.vd / "module.json").write_text(json.dumps(data))
+        self.install()
+        self.assertTrue(any("invalid module.json" in p for p in self.findings()))
+
+    def test_a_release_without_the_module_reader_has_no_modules(self):
+        class Old:
+            HOOK_REGISTRATIONS = ()
+        self.assertEqual(self.cov.module_findings(self.repo, self.home, Old()), [])
 
 
 if __name__ == "__main__":
