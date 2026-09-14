@@ -47,7 +47,7 @@ Facts move up the hierarchy as they prove themselves general. They never move ba
 
 ---
 
-## Seventeen Skills
+## Eighteen Skills (plus modules)
 
 ### Setup
 
@@ -228,6 +228,15 @@ second level is a genuine sub-project created with `--parent`.
 ## Install
 
 See [INSTALL.md](INSTALL.md) for step-by-step instructions, including how to install from a GitHub release.
+
+```bash
+bash install.sh --vault <vault>     # gt plus every module that is on; then restart Claude Code
+bash install.sh --list-modules      # optional parts: wiki (gt-wiki), demo (gt-demo) — both on by default
+bash install.sh --without demo      # leave one out; remembered
+```
+
+Re-running it upgrades from any older release to the newest, including vault upgrades when your
+vault is committed.
 
 After running `/gt:gt-init`, Golden Thread also wires enforcement hooks into `~/.claude/settings.json`. These re-assert Core rules at session start and session end. If you ever need to rewire them manually:
 

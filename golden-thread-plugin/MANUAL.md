@@ -1,6 +1,6 @@
 # Golden Thread — User Manual
 
-Complete reference for all seventeen skills. Written against **gt v0.14.0**.
+Complete reference for gt's eighteen skills and its modules. Written against **gt v0.14.0**.
 
 ---
 
