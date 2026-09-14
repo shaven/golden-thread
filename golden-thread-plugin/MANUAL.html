@@ -114,7 +114,7 @@ pre, table { break-inside: avoid; font-size: 9px; }
 table { width:100%; border-collapse: collapse; }
 th, td { border:1px solid #ddd; padding:3px 5px; text-align:left; vertical-align:top; }
 </style></head><body><h1 id="golden-thread-user-manual">User Manual</h1>
-<p>Complete reference for all seventeen skills. Written against <strong>gt v0.12.9</strong>.</p>
+<p>Complete reference for all seventeen skills. Written against <strong>gt v0.13.0</strong>.</p>
 <hr />
 <h2 id="the-model">The model</h2>
 <p>Claude forgets everything between sessions. The vault doesn't. Golden Thread's
@@ -399,6 +399,17 @@ python3 $T/gt_adr.py migrate my-project
 would invalidate every existing reference to them. <code>gt-lint</code>'s <code>adr-collision</code> reports
 those so you can decide. A deliberate <code>## ADR-6 amendment:</code> is not a collision and is
 left alone.</p>
+<p><strong>Movement events (0.13.0).</strong> <code>gt_events.py</code> records <em>what moved where</em> as structured JSON
+lines, the data the planned flow visualizer and dashboard read. Same spool pattern as the
+log: one file per session under <code>spool/events/</code>, merged into <code>events.jsonl</code>. In 0.13.0 the
+tool and schema ship; other tools start emitting events in a later release.</p>
+<pre><code class="language-bash">python3 $T/gt_events.py --vault &lt;vault&gt; emit --kind promote --item Knowledge/Quote-API.md \
+    --from Projects/ats/memory/quote_api.md --to Knowledge/Quote-API.md --level-from 2 --level-to 4
+python3 $T/gt_events.py --vault &lt;vault&gt; validate          # report bad lines, exit 1 if any
+python3 $T/gt_events.py --vault &lt;vault&gt; list --kind promote --json
+</code></pre>
+<p>Every event is checked before it is written: vault-relative paths only, a closed list of
+kinds, levels 1–5, a note of at most 120 characters, no unknown keys.</p>
 <p><strong>Hand-editing a generated file is not a style violation</strong> — the change is lost at the
 next merge. <code>gt-lint</code> reports it as <code>generated-hand-edited</code>.</p>
 <p>Both commands sit on one shared primitive, <code>gt_spool.py</code>: per-session spool files plus a
@@ -986,7 +997,7 @@ answer is not obvious — including when the honest answer is that the fact belo
 project other than the one loaded.</p>
 <hr />
 <h2 id="script-reference">Script reference</h2>
-<pre><code class="language-bash">SCRIPTS=~/.claude/plugins/cache/golden-thread-plugin/gt/0.12.9/scripts
+<pre><code class="language-bash">SCRIPTS=~/.claude/plugins/cache/golden-thread-plugin/gt/0.13.0/scripts
 
 python3 $SCRIPTS/vault_init.py fresh --vault ~/my-vault --domain &quot;My Team&quot;
 
@@ -1020,6 +1031,11 @@ there to override that. <strong>Re-run it before reading <code>TASKS.md</code></
 computed against the clock (stale-P1 ageing, deadline windows, <code>pp_escalate</code>), so the
 ranking changes with time even when no file has changed. <code>TASKS.md</code> is generated and
 must never be hand-edited.</p>
+<p><code>--json</code> prints the ranked rollup to stdout without writing <code>TASKS.md</code>. Deadline windows
+may span days (0.13.0): <code>Fri 16:00 → Sun 16:44 America/Chicago -&gt; 0</code>, including spans
+that wrap the week; the zone always comes from the rule, never the machine.</p>
+<p><code>gt_lint.py --json</code> emits findings as JSON, and <code>gt_lint.py --runbooks</code> reports lines
+duplicated across projects' runbooks — the detection step of <code>/gt:gt-runbook-lint</code>.</p>
 <hr />
 <h2 id="troubleshooting">Troubleshooting</h2>
 <p><strong>"vault-config.json not found"</strong> — run <code>/gt:gt-init</code>.</p>

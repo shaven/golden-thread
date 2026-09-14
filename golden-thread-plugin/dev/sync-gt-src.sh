@@ -33,13 +33,15 @@ for a in "$@"; do
 done
 PY="${GT_PYTHON:-python3}"
 
-newest() {
-  for d in "$1"/*/; do
-    n=$(basename "$d"); [[ "$n" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] || continue
-    [ -f "$d/.claude-plugin/plugin.json" ] && echo "$n"
-  done | sort -t. -k1,1n -k2,2n -k3,3n | tail -1
-}
-GTV=$(newest golden-thread); WV=$(newest golden-thread-wiki)
+# Every plugin and its newest version, by the one rule in dev/plugins.py — the same
+# answer release-check.sh and package.sh get. "<dir> <version> <name>" per line.
+PDIRS=(); PVERS=(); PLABEL=""; PJSON=""; GTV=""
+while read -r d v n; do
+  PDIRS+=("$d"); PVERS+=("$v"); PLABEL="${PLABEL:+$PLABEL, }$n $v"
+  PJSON="$PJSON\"$(printf '%s' "$n" | tr -- '-' '_')\": \"$v\", "
+  [ "$d" = golden-thread ] && GTV="$v"
+done < <("$PY" dev/plugins.py list)
+[ "${#PDIRS[@]}" -gt 0 ] || { echo "REFUSED: no installable plugin version directory found"; exit 2; }
 
 if [ -n "$(git status --porcelain -- .)" ]; then
   echo "REFUSED: the plugin tree has uncommitted changes — commit first, so gt-src equals a commit."
@@ -51,10 +53,12 @@ PREFIX=$(git rev-parse --show-prefix)       # e.g. golden-thread-plugin/
 
 STAGE=$(mktemp -d); VCOPY=""; trap 'rm -rf "$STAGE" "$VCOPY"' EXIT
 git ls-files -z -- . | while IFS= read -r -d '' f; do
-  case "$f" in
-    golden-thread/"$GTV"/*|golden-thread-wiki/"$WV"/*) ;;
-    golden-thread/*|golden-thread-wiki/*) continue ;;          # older releases stay home
-  esac
+  for i in "${!PDIRS[@]}"; do                                 # older releases stay home
+    case "$f" in
+      "${PDIRS[$i]}/${PVERS[$i]}"/*) ;;
+      "${PDIRS[$i]}"/*) continue 2 ;;
+    esac
+  done
   mkdir -p "$STAGE/$(dirname "$f")"
   cp -p "$f" "$STAGE/$f"
 done
@@ -68,7 +72,7 @@ if ! "$PY" dev/scrub_check.py "$STAGE"; then
 fi
 
 cat > "$STAGE/SOURCE.json" <<EOF
-{"commit": "$COMMIT", "path": "$PREFIX", "gt": "$GTV", "gt_wiki": "$WV",
+{"commit": "$COMMIT", "path": "$PREFIX", $PJSON
  "synced_at": "$(date '+%Y-%m-%dT%H:%M:%S%z')", "files": $N}
 EOF
 
@@ -107,7 +111,7 @@ if [ -n "$(ls -A "$DEST" 2>/dev/null)" ]; then
   echo "backed up $HAVE files → $BK"
 fi
 rsync -a --delete --checksum --exclude '.DS_Store' "$STAGE/" "$DEST/"
-echo "published $N files (gt $GTV, gt-wiki $WV) from $COMMIT → $DEST"
+echo "published $N files ($PLABEL) from $COMMIT → $DEST"
 
 # Prove what landed is complete and works — not merely that a copy ran. On
 # 2026-09-11 the other machine received a gt-src with no hooks, no scripts and no
@@ -121,14 +125,22 @@ vok()  { printf 'ok    %s\n' "$1"; }
 vbad() { printf 'FAIL  %s\n' "$1"; VFAIL=$((VFAIL+1)); }
 GOT=$(find "$DEST" -type f ! -name .DS_Store ! -name SOURCE.json | wc -l | tr -d ' ')
 [ "$GOT" = "$N" ] && vok "$GOT files, matching the commit" || vbad "gt-src holds $GOT files, the commit $N"
-for f in install.sh selftest.sh build-docs.py README.md MANUAL.md INSTALL.md tests/run.sh dev/release-check.sh \
-         "golden-thread/$GTV/.claude-plugin/plugin.json" "golden-thread/$GTV/MANIFEST.json" \
-         "golden-thread-wiki/$WV/.claude-plugin/plugin.json"; do
+for f in install.sh selftest.sh build-docs.py README.md MANUAL.md INSTALL.md tests/run.sh dev/release-check.sh dev/plugins.py; do
   [ -f "$DEST/$f" ] || vbad "missing $f"
 done
-for d in hooks scripts skills templates; do
-  [ -n "$(ls -A "$DEST/golden-thread/$GTV/$d" 2>/dev/null)" ] || vbad "golden-thread/$GTV/$d is empty"
+# Every plugin arrives with its metadata AND its MANIFEST.json (hash trust, since 0.13.0).
+for i in "${!PDIRS[@]}"; do
+  for f in .claude-plugin/plugin.json MANIFEST.json; do
+    [ -f "$DEST/${PDIRS[$i]}/${PVERS[$i]}/$f" ] || vbad "missing ${PDIRS[$i]}/${PVERS[$i]}/$f"
+  done
 done
+if [ -n "$GTV" ]; then
+  for d in hooks scripts skills templates; do
+    [ -n "$(ls -A "$DEST/golden-thread/$GTV/$d" 2>/dev/null)" ] || vbad "golden-thread/$GTV/$d is empty"
+  done
+else
+  vbad "no golden-thread release in the published tree"
+fi
 while IFS= read -r f; do bash -n "$f" 2>/dev/null || vbad "bash -n $f"; done < <(find "$DEST" -name '*.sh')
 VCOPY=$(mktemp -d); cp -Rp "$DEST/." "$VCOPY/"
 if OUT=$(cd "$VCOPY" && ./selftest.sh 2>&1); then vok "$(echo "$OUT" | tail -1) — run from a copy of gt-src"; else echo "$OUT" | grep FAIL | head || true; vbad "selftest.sh from gt-src"; fi

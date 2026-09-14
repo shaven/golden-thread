@@ -1,6 +1,6 @@
 # Golden Thread — User Manual
 
-Complete reference for all seventeen skills. Written against **gt v0.12.9**.
+Complete reference for all seventeen skills. Written against **gt v0.13.0**.
 
 ---
 
@@ -358,6 +358,21 @@ python3 $T/gt_adr.py migrate my-project
 would invalidate every existing reference to them. `gt-lint`'s `adr-collision` reports
 those so you can decide. A deliberate `## ADR-6 amendment:` is not a collision and is
 left alone.
+
+**Movement events (0.13.0).** `gt_events.py` records *what moved where* as structured JSON
+lines, the data the planned flow visualizer and dashboard read. Same spool pattern as the
+log: one file per session under `spool/events/`, merged into `events.jsonl`. In 0.13.0 the
+tool and schema ship; other tools start emitting events in a later release.
+
+```bash
+python3 $T/gt_events.py --vault <vault> emit --kind promote --item Knowledge/Quote-API.md \
+    --from Projects/ats/memory/quote_api.md --to Knowledge/Quote-API.md --level-from 2 --level-to 4
+python3 $T/gt_events.py --vault <vault> validate          # report bad lines, exit 1 if any
+python3 $T/gt_events.py --vault <vault> list --kind promote --json
+```
+
+Every event is checked before it is written: vault-relative paths only, a closed list of
+kinds, levels 1–5, a note of at most 120 characters, no unknown keys.
 
 **Hand-editing a generated file is not a style violation** — the change is lost at the
 next merge. `gt-lint` reports it as `generated-hand-edited`.
@@ -829,7 +844,7 @@ project other than the one loaded.
 ## Script reference
 
 ```bash
-SCRIPTS=~/.claude/plugins/cache/golden-thread-plugin/gt/0.12.9/scripts
+SCRIPTS=~/.claude/plugins/cache/golden-thread-plugin/gt/0.13.0/scripts
 
 python3 $SCRIPTS/vault_init.py fresh --vault ~/my-vault --domain "My Team"
 
@@ -867,6 +882,13 @@ there to override that. **Re-run it before reading `TASKS.md`** — project prio
 computed against the clock (stale-P1 ageing, deadline windows, `pp_escalate`), so the
 ranking changes with time even when no file has changed. `TASKS.md` is generated and
 must never be hand-edited.
+
+`--json` prints the ranked rollup to stdout without writing `TASKS.md`. Deadline windows
+may span days (0.13.0): `Fri 16:00 → Sun 16:44 America/Chicago -> 0`, including spans
+that wrap the week; the zone always comes from the rule, never the machine.
+
+`gt_lint.py --json` emits findings as JSON, and `gt_lint.py --runbooks` reports lines
+duplicated across projects' runbooks — the detection step of `/gt:gt-runbook-lint`.
 
 ---
 

@@ -241,5 +241,59 @@ class HeredocsAreDataNotCommands(GuardBase):
         self.assertAllowed(cmd, "<<EOF without quotes is still a heredoc body")
 
 
+class OnlyTheExecutedProgramCounts(GuardBase):
+    """2026-09-13: real sessions were denied for commands that merely NAMED a vault
+    tool -- in a commit message, or as the file argument of a read-only program. A tool
+    counts only when it is the program the shell executes."""
+
+    COMMIT = ('git commit -m "Record the spool fix\n\n'
+              'gt_log.py add writes the text; gt_adr.py migrate | gt_tasks.py && done"')
+
+    def assertSilent(self, command, msg, env=None):
+        payload = {"session_id": "caller", "hook_event_name": "PreToolUse",
+                   "tool_name": "Bash", "tool_input": {"command": command}}
+        proc = self.sh(self.hooks / "guard_vault_writes.sh",
+                       input=json.dumps(payload), env=env or self.env)
+        self.assertOk(proc)
+        self.assertEqual(proc.stdout, "", msg)
+
+    def test_tool_named_in_a_quoted_commit_message(self):
+        self.assertSilent(self.COMMIT, "a quoted commit message is text, not a command")
+
+    def test_read_only_programs_that_name_a_tool(self):
+        for cmd in ("find . -name gt_tasks.py",
+                    "sed -n 1,40p Projects/golden-thread/tools/gt_tasks.py",
+                    "diff a/gt_log.py b/gt_log.py",
+                    "grep -n add gt_log.py",
+                    "cat gt_spool.py",
+                    "python3 -m py_compile tools/gt_log.py",
+                    "echo 'python3 gt_adr.py migrate; gt_tasks.py'"):
+            with self.subTest(cmd=cmd):
+                self.assertSilent(cmd, "an argument to another program is data")
+
+    def test_help_is_read_only(self):
+        for cmd in ("python3 gt_log.py add --help", "python3 tools/gt_tasks.py -h",
+                    "gt_adr.py migrate --help"):
+            with self.subTest(cmd=cmd):
+                self.assertSilent(cmd, "--help prints usage and writes nothing")
+
+    def test_true_positives_in_new_positions(self):
+        for cmd in ('cd x && python3 ./gt_log.py add "t"',
+                    "env FOO=1 python3 gt_tasks.py",
+                    "/usr/bin/env python3 /abs/gt_spool.py merge",
+                    "gt_log.py add note",
+                    "./tools/gt_log.py add note",
+                    "sudo -u me python3.12 gt_adr.py migrate p",
+                    "time python3 gt_tasks.py",
+                    "echo \"$(python3 gt_tasks.py)\"",
+                    "bash -c 'python3 gt_adr.py migrate p'",
+                    "git status; (cd x && python3 gt_log.py merge)"):
+            with self.subTest(cmd=cmd):
+                self.assertDenied(cmd, "an executed vault tool with no target is still denied")
+
+    def test_unterminated_substitution_fails_open(self):
+        self.assertSilent("echo $(python3 gt_tasks.py", "unparseable -> no objection")
+
+
 if __name__ == "__main__":
     unittest.main()

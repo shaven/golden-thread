@@ -12,6 +12,7 @@ from _harness import Sandbox, REPO
 
 SYNC = REPO / "dev" / "sync-gt-src.sh"
 SCRUB = REPO / "dev" / "scrub_check.py"
+PLUGINS = REPO / "dev" / "plugins.py"
 
 
 class SyncGtSrcTest(Sandbox):
@@ -25,11 +26,15 @@ class SyncGtSrcTest(Sandbox):
         (r / "dev").mkdir(parents=True)
         shutil.copy(SYNC, r / "dev" / "sync-gt-src.sh")
         shutil.copy(SCRUB, r / "dev" / "scrub_check.py")
-        for plugin, versions in (("golden-thread", ("0.9.9", "0.10.0")), ("golden-thread-wiki", ("0.1.0", "0.1.1"))):
+        shutil.copy(PLUGINS, r / "dev" / "plugins.py")
+        # A third plugin proves the sync iterates over what is discovered, not a named pair.
+        for plugin, name, versions in (("golden-thread", "gt", ("0.9.9", "0.10.0")),
+                                       ("golden-thread-wiki", "gt-wiki", ("0.1.0", "0.1.1")),
+                                       ("gt-extra", "gt-extra", ("1.0.0", "1.2.0"))):
             for v in versions:
                 d = r / plugin / v
                 (d / ".claude-plugin").mkdir(parents=True)
-                (d / ".claude-plugin" / "plugin.json").write_text(json.dumps({"version": v}))
+                (d / ".claude-plugin" / "plugin.json").write_text(json.dumps({"name": name, "version": v}))
                 (d / "skills").mkdir()
                 (d / "skills" / "note.md").write_text(f"{plugin} {v}\n")
         (r / "install.sh").write_text("#!/bin/sh\necho hi\n")
@@ -55,10 +60,12 @@ class SyncGtSrcTest(Sandbox):
         self.assertNotIn("golden-thread/0.9.9/skills/note.md", got)
         self.assertIn("golden-thread-wiki/0.1.1/skills/note.md", got)
         self.assertNotIn("golden-thread-wiki/0.1.0/skills/note.md", got)
+        self.assertIn("gt-extra/1.2.0/skills/note.md", got, "a third plugin must publish too")
+        self.assertNotIn("gt-extra/1.0.0/skills/note.md", got)
         self.assertIn("install.sh", got)
         self.assertNotIn("golden-thread-plugin.zip", got, "untracked build artifacts must not publish")
         src = json.loads((self.dest / "SOURCE.json").read_text())
-        self.assertEqual((src["gt"], src["gt_wiki"]), ("0.10.0", "0.1.1"))
+        self.assertEqual((src["gt"], src["gt_wiki"], src["gt_extra"]), ("0.10.0", "0.1.1", "1.2.0"))
 
     def test_refuses_dirty_tree(self):
         (self.repo / "MANUAL.md").write_text("# edited\n")
@@ -84,6 +91,8 @@ class SyncGtSrcTest(Sandbox):
         self.assertEqual(proc.returncode, 3, proc.stdout)
         self.assertIn("missing selftest.sh", proc.stdout)
         self.assertIn("is empty", proc.stdout)
+        self.assertIn("missing gt-extra/1.2.0/MANIFEST.json", proc.stdout,
+                      "every plugin must arrive with its MANIFEST.json")
 
     def test_backs_up_and_deletes_stray_files(self):
         self.dest.mkdir()

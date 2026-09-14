@@ -185,6 +185,11 @@ class EscalationTest(Sandbox):
         self.assertEqual(self.eff(3, [], "Mon-Fri 13:00-15:15 America/Chicago -> 0"), 3)
         self.assertEqual(self.eff(3, [], "Sat-Sun 07:00-15:15 America/Chicago -> 0"), 3)
 
+    def test_span_window_reaches_pp0(self):
+        # NOW is Wed 12:00 Chicago.
+        self.assertEqual(self.eff(3, [], "Tue 16:00 → Thu 16:44 America/Chicago -> 0"), 0)
+        self.assertEqual(self.eff(3, [], "Fri 16:00 → Sun 16:44 America/Chicago -> 0"), 3)
+
     def test_shelved_and_done_tasks_and_closed_projects_never_escalate(self):
         self.assertEqual(self.eff(3, [self.task(p=7, due=self.d(-1))]), 3)
         self.assertEqual(self.eff(3, [self.task(done=True, due=self.d(-1))]), 3)
@@ -192,6 +197,175 @@ class EscalationTest(Sandbox):
             with self.subTest(stage=stage):
                 self.assertEqual(self.eff(3, [self.task(p=1, since=self.d(-30), due=self.d(-1))],
                                           stage=stage), 3)
+
+
+CHI = "America/Chicago"
+
+
+def chicago(y, mo, d, h, mi, s=0):
+    from zoneinfo import ZoneInfo
+    return dt.datetime(y, mo, d, h, mi, s, tzinfo=ZoneInfo(CHI))
+
+
+class WindowTest(Sandbox):
+    """parse_window / window_contains: daily and cross-day span forms, host-zone free."""
+
+    # 2026-09-11 is a Friday; 09-13 Sunday; 09-14 Monday; 09-16 Wednesday.
+    def setUp(self):
+        super().setUp()
+        v = self.make_vault()
+        self.m = load_module(v / "Projects" / "golden-thread" / "tools" / "gt_tasks.py", "gt_tasks_win")
+
+    def is_open(self, rule, when):
+        return self.m.window_open(rule, when) is not None
+
+    def test_daily_form_unchanged(self):
+        rule = "Mon-Fri 07:00-15:15 America/Chicago -> 0"
+        self.assertEqual(self.m.window_open(rule, chicago(2026, 9, 16, 12, 0)), 0)
+        self.assertTrue(self.is_open(rule, chicago(2026, 9, 16, 7, 0)))
+        self.assertTrue(self.is_open(rule, chicago(2026, 9, 16, 15, 15)), "end is inclusive")
+        self.assertFalse(self.is_open(rule, chicago(2026, 9, 16, 15, 15, 1)))
+        self.assertFalse(self.is_open(rule, chicago(2026, 9, 16, 6, 59)))
+        self.assertFalse(self.is_open(rule, chicago(2026, 9, 13, 12, 0)), "Sunday")
+        # reversed ranges never opened before; they still do not
+        self.assertFalse(self.is_open("Fri-Mon 07:00-15:15 America/Chicago -> 0", chicago(2026, 9, 11, 12, 0)))
+        self.assertFalse(self.is_open("Mon-Fri 22:00-02:00 America/Chicago -> 0", chicago(2026, 9, 16, 23, 0)))
+
+    def test_malformed_rules_are_closed_not_crashes(self):
+        for rule in (None, "", "garbage", "Xyz-Fri 07:00-15:15 America/Chicago -> 0",
+                     "Mon-Fri 25:00-26:00 America/Chicago -> 0",
+                     "Fri 16:00 → Sun 16:44 Not/AZone -> 0", "Fri 16:00 → Sun 16:44 -> 0"):
+            with self.subTest(rule=rule):
+                self.assertIsNone(self.m.window_open(rule, chicago(2026, 9, 11, 17, 0)))
+
+    def test_cross_day_span(self):
+        for sep in ("→", "-", "–", " → ", " - "):
+            rule = "Fri 16:00%sSun 16:44 America/Chicago -> 0" % sep
+            with self.subTest(sep=sep):
+                self.assertIsNotNone(self.m.parse_window(rule))
+                self.assertTrue(self.is_open(rule, chicago(2026, 9, 11, 17, 0)), "Fri 17:00")
+                self.assertTrue(self.is_open(rule, chicago(2026, 9, 11, 16, 0)), "start inclusive")
+                self.assertTrue(self.is_open(rule, chicago(2026, 9, 12, 3, 0)), "Sat")
+                self.assertTrue(self.is_open(rule, chicago(2026, 9, 13, 16, 44)), "end inclusive")
+                self.assertFalse(self.is_open(rule, chicago(2026, 9, 13, 16, 45)), "Sun 16:45")
+                self.assertFalse(self.is_open(rule, chicago(2026, 9, 11, 15, 59)), "Fri 15:59")
+                self.assertFalse(self.is_open(rule, chicago(2026, 9, 16, 12, 0)), "Wed")
+
+    def test_week_wrapping_span(self):
+        rule = "Sun 17:00 → Fri 16:00 America/Chicago -> 1"
+        self.assertEqual(self.m.window_open(rule, chicago(2026, 9, 13, 17, 0)), 1, "Sun 17:00")
+        self.assertTrue(self.is_open(rule, chicago(2026, 9, 14, 0, 0)), "Mon midnight")
+        self.assertTrue(self.is_open(rule, chicago(2026, 9, 16, 12, 0)), "Wed")
+        self.assertTrue(self.is_open(rule, chicago(2026, 9, 11, 16, 0)), "Fri 16:00")
+        self.assertFalse(self.is_open(rule, chicago(2026, 9, 11, 16, 1)), "Fri 16:01")
+        self.assertFalse(self.is_open(rule, chicago(2026, 9, 12, 12, 0)), "Sat")
+        self.assertFalse(self.is_open(rule, chicago(2026, 9, 13, 16, 59)), "Sun 16:59")
+
+    def test_zone_comes_from_rule_not_utc_instant(self):
+        # Fri 17:00 Chicago == Fri 22:00 UTC; Sun 16:45 Chicago == Sun 21:45 UTC
+        utc = dt.timezone.utc
+        rule = "Fri 16:00 → Sun 16:44 America/Chicago -> 0"
+        self.assertTrue(self.is_open(rule, dt.datetime(2026, 9, 11, 22, 0, tzinfo=utc)))
+        self.assertFalse(self.is_open(rule, dt.datetime(2026, 9, 13, 21, 45, tzinfo=utc)))
+        self.assertFalse(self.is_open(rule, dt.datetime(2026, 9, 11, 16, 30, tzinfo=utc)),
+                         "16:30 UTC is 11:30 Chicago: host/UTC reading leaked in")
+        # naive datetimes are UTC, never host-local
+        self.assertTrue(self.is_open(rule, dt.datetime(2026, 9, 11, 22, 0)))
+
+
+class CliClockTest(Sandbox):
+    """GT_NOW + --json through the real CLI."""
+
+    def setUp(self):
+        super().setUp()
+        self.vault = self.make_vault()
+        self.tool = self.vault / "Projects" / "golden-thread" / "tools" / "gt_tasks.py"
+
+    project = GtTasksTest.project
+
+    def cli(self, *args, tz="UTC", now="2026-09-11T22:00:00+00:00"):
+        return self.run_cmd([self.py_exe(), self.tool, "--vault", self.vault, *args],
+                            env={"GT_NOW": now, "TZ": tz})
+
+    @staticmethod
+    def py_exe():
+        import sys
+        return sys.executable
+
+    def fixture(self):
+        self.project("market", pp=2, extra='pp_escalate: "Fri 16:00 → Sun 16:44 America/Chicago -> 0"',
+                     tasks=["- [ ] weekend check [p:: 2] [waiting:: user]",
+                            "- [ ] old urgent [p:: 1] [since:: 2026-08-01]"])
+        self.project("other", pp=1, tasks=["- [ ] ask it [p:: 1] [waiting:: user]",
+                                           "- [ ] build it [p:: 2] [due:: 2026-09-12]",
+                                           "- [ ] vendor [waiting:: external]"])
+        (self.vault / "INBOX.md").write_text("# Inbox\n\n- [ ] loose thought [since:: 2026-09-01]\n")
+
+    def json_of(self, proc):
+        import json
+        self.assertOk(proc, "gt_tasks.py --json failed")
+        return json.loads(proc.stdout)
+
+    def test_json_never_writes_and_parses(self):
+        self.fixture()
+        tasks_md = self.vault / "TASKS.md"
+        if tasks_md.exists():
+            tasks_md.unlink()
+        for args in (("--json",), ("--json", "--dry-run")):
+            with self.subTest(args=args):
+                data = self.json_of(self.cli(*args))
+                self.assertFalse(tasks_md.exists(), "--json wrote TASKS.md")
+                self.assertEqual(data["version"], 1)
+                self.assertIn("generated_at", data)
+                self.assertEqual([i["text"] for i in data["sections"]["inbox"]], ["loose thought"])
+                self.assertIsInstance(data["sections"]["review"], list)
+                t = {x["text"]: x for x in data["tasks"]}
+                self.assertEqual(set(t), {"weekend check", "old urgent", "ask it", "build it", "vendor"})
+                self.assertEqual([x["rank"] for x in data["tasks"]], list(range(1, 6)))
+                self.assertTrue(t["weekend check"]["window_open"])
+                self.assertEqual(t["weekend check"]["priority"], "PP0-P2")
+                self.assertFalse(t["ask it"]["window_open"])
+                self.assertTrue(t["old urgent"]["stale"])
+                self.assertFalse(t["build it"]["stale"])
+                self.assertEqual(t["build it"]["due"], "2026-09-12")
+                self.assertEqual(t["old urgent"]["since"], "2026-08-01")
+                for k in ("rank", "project", "priority", "text", "due", "since", "window_open", "stale"):
+                    self.assertIn(k, data["tasks"][0])
+        tasks_md.write_text("SENTINEL\n")
+        self.json_of(self.cli("--json"))
+        self.assertEqual(tasks_md.read_text(), "SENTINEL\n", "--json modified TASKS.md")
+
+    def test_json_rank_matches_markdown_order(self):
+        self.fixture()
+        data = self.json_of(self.cli("--json"))
+        self.assertOk(self.cli(), "markdown run failed")
+        md = (self.vault / "TASKS.md").read_text()
+        md_rows = [l.split(" | ")[1] for l in md.splitlines() if l.startswith("| `PP")]
+        # markdown groups by waiting (user, agent, other); within that, global rank order
+        groups = {"user": 0, "agent": 1}
+        want = [x["text"] for x in sorted(data["tasks"],
+                                          key=lambda x: (groups.get(x["waiting"], 2), x["rank"]))]
+        self.assertEqual(md_rows, want)
+        pri = [l.split(" | ")[0].strip("|` ") for l in md.splitlines() if l.startswith("| `PP")]
+        by_text = {x["text"]: x["priority"] for x in data["tasks"]}
+        self.assertEqual(pri, [by_text[t] for t in md_rows])
+
+    def test_host_tz_does_not_change_window_result(self):
+        self.fixture()
+        a = self.json_of(self.cli("--json", tz="UTC"))
+        b = self.json_of(self.cli("--json", tz="Asia/Tokyo"))
+        self.assertEqual([(x["text"], x["priority"], x["window_open"]) for x in a["tasks"]],
+                         [(x["text"], x["priority"], x["window_open"]) for x in b["tasks"]])
+        # Sun 16:45 Chicago = 21:45 UTC: closed under either host zone
+        for tz in ("UTC", "America/Chicago"):
+            with self.subTest(tz=tz):
+                d = self.json_of(self.cli("--json", tz=tz, now="2026-09-13T21:45:00Z"))
+                self.assertFalse({x["text"]: x for x in d["tasks"]}["weekend check"]["window_open"])
+
+    def test_bad_gt_now_fails_loudly(self):
+        self.fixture()
+        proc = self.cli("--json", now="yesterday-ish")
+        self.assertNotEqual(proc.returncode, 0)
 
 
 if __name__ == "__main__":

@@ -11,6 +11,63 @@ release's own summary line, kept short rather than reconstructed after the fact.
 
 ---
 
+## gt 0.13.0 · gt-wiki 0.1.3 — 2026-09-14
+
+**Upgrading from any older release now lands you on the same install a fresh one would.**
+`install.sh` installs only the newest release — it never steps through the ones in
+between — but until now it only ever *added*: a hook entry or hook-directory file an older
+release installed stayed forever once a newer one stopped shipping it. This release makes
+convergence a requirement and the first mechanism behind it.
+
+- **`retired.json` ships in every release** and records everything earlier releases
+  installed into `~/.claude/golden-thread/hooks/` or wired into `settings.json` that this
+  one no longer does. `install.sh` removes exactly those, after a backup, and prints each
+  removal. Anything it does not recognise is reported and left in place — it never guesses.
+- **A new release-gate step, `check_retired.py`,** fails any release that stops installing
+  or registering something without recording it, so an unrecorded removal cannot ship.
+- **Old gt-wiki cache versions are pruned**, as gt's already were.
+- **Pending vault upgrades are shown at the end of every install**, with the command to
+  apply them. They are reported, not yet applied automatically — see below.
+- A test installs 0.12.8 with a vault, upgrades it to 0.13.0, and asserts the hooks,
+  hook-directory files and plugin caches match a fresh 0.13.0 install, with the user's own
+  hooks and files intact.
+
+**The vault-write guard reads commands, not strings.** It blocked a `git commit` whose
+*message* mentioned `gt_log.py add`, and read-only commands that merely named a tool —
+`grep`, `sed -n`, `diff`, `cat`, and `--help`. It now objects only when a vault tool is the
+program actually being run, including through `python3`, `env`, `sudo`, `bash -c` and
+`$(…)`. Every existing denial still holds.
+
+**New and extended tools**
+- **`gt_events.py`** (vault tool): structured movement events — `emit`, `merge`,
+  `validate`, `list` — on the same per-session spool pattern as the log. Schema v1 is
+  validated before anything is written. Other tools start emitting in a later release.
+- **`gt_tasks.py --json`** prints the ranked rollup without writing `TASKS.md`. Deadline
+  windows can **span days** (`Fri 16:00 → Sun 16:44 America/Chicago`), including spans that
+  wrap the week.
+- **`gt_lint.py --json`**, and **`gt_lint.py --runbooks`**, which reports lines duplicated
+  across projects' runbooks. `/gt:gt-runbook-lint` said a script did the detection; now one
+  does.
+
+**The public release no longer assumes one person's machine.**
+- `gt_doctor`'s gt-src check reads `gt_src` from `vault-config.json` (or `$GT_SRC`) and
+  reports *not configured* instead of checking a hard-coded folder.
+- The weekly lint report goes to `lint_report_dir`, else the folder earlier releases used
+  if it already exists, else `<vault>/.gt/lint`; it says so when gt-wiki is not installed.
+- `/gt:gt-farm` no longer depends on a project only one vault had.
+- The demo tour resolves its vault and scripts instead of hard-coding them.
+- The announcement check reads Discussion bodies as well as titles, and `0.12.1` no longer
+  matches `0.12.10`.
+
+**Release machinery**
+- Every build tool discovers plugins through one rule (`dev/plugins.py`) instead of naming
+  gt and gt-wiki, so a future module is gated, packaged and published automatically.
+- **gt-wiki 0.1.3 ships a `MANIFEST.json`**, and the gate fails any plugin without one.
+
+**Not yet:** applying vault upgrades during install. `gt_upgrade run` refuses a vault with
+uncommitted changes, and a vault created moments earlier by the same install is always
+uncommitted — so turning it on needs that settled first.
+
 ## gt 0.12.9 — 2026-09-13
 
 **The guards were approving tool calls they meant to ignore.** Upgrade promptly.

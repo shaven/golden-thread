@@ -24,43 +24,35 @@ set -euo pipefail
 # newest version directory that carries plugin metadata. A constant here is a
 # constant that goes stale the next time someone adds a directory and forgets
 # this file -- which is exactly what happened.
+#
+# Since 0.13.0 the PLUGINS are derived too: every plugin dev/plugins.py discovers is
+# shipped, rather than a gt + gt-wiki pair named here, so a third plugin cannot be left
+# out of the artifact by a script nobody remembered to edit.
 
 cd "$(dirname "$0")"
 DIST="golden-thread-plugin"
 ZIP="golden-thread-plugin.zip"
 
-# Sorted numerically per field, not lexically: a lexical sort puts 0.9.4 above
-# 0.10.0 and would start shipping the older release at double digits.
-latest_version() {
-  local root="$1" d name
-  for d in "$root"/*/; do
-    name=$(basename "$d")
-    [[ "$name" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] || continue
-    [ -f "$d/.claude-plugin/plugin.json" ] || continue
-    echo "$name"
-  done | sort -t. -k1,1n -k2,2n -k3,3n | tail -1
-}
-
-VERSION="$(latest_version golden-thread)"
-WIKI_VERSION="$(latest_version golden-thread-wiki)"
-[ -n "$VERSION" ]      || { echo "✗ no installable gt version directory found"; exit 1; }
-[ -n "$WIKI_VERSION" ] || { echo "✗ no installable gt-wiki version directory found"; exit 1; }
+# Newest per plugin, sorted numerically per field (dev/plugins.py): a lexical sort puts
+# 0.9.4 above 0.10.0 and would start shipping the older release at double digits.
+PLUGINS="$(python3 dev/plugins.py list)" || true
+echo "$PLUGINS" | grep -q '^golden-thread ' \
+  || { echo "✗ no installable gt version directory found"; exit 1; }
 
 STAGE="$(mktemp -d)"
 trap 'rm -rf "$STAGE"' EXIT
 rm -f "$ZIP"
-mkdir -p "$STAGE/$DIST/golden-thread/$VERSION"
-mkdir -p "$STAGE/$DIST/golden-thread-wiki/$WIKI_VERSION"
 
-# hooks/ is NOT optional -- see note 2 above.
-for dir in .claude-plugin skills scripts templates hooks; do
-  [ -d "golden-thread/$VERSION/$dir" ] \
-    && cp -R "golden-thread/$VERSION/$dir" "$STAGE/$DIST/golden-thread/$VERSION/"
-done
-for dir in .claude-plugin skills scripts templates commands hooks; do
-  [ -d "golden-thread-wiki/$WIKI_VERSION/$dir" ] \
-    && cp -R "golden-thread-wiki/$WIKI_VERSION/$dir" "$STAGE/$DIST/golden-thread-wiki/$WIKI_VERSION/"
-done
+LABEL=""
+while read -r plugin version name; do
+  mkdir -p "$STAGE/$DIST/$plugin/$version"
+  # hooks/ is NOT optional -- see note 2 above.
+  for dir in .claude-plugin skills scripts templates commands hooks; do
+    [ -d "$plugin/$version/$dir" ] \
+      && cp -R "$plugin/$version/$dir" "$STAGE/$DIST/$plugin/$version/"
+  done
+  LABEL="${LABEL:+$LABEL, }$name $version"
+done <<< "$PLUGINS"
 
 # MANIFEST.json is deliberately NOT shipped: install.sh regenerates it against the
 # files it actually lays down, so a stale manifest in the zip would make the very
@@ -76,8 +68,8 @@ chmod +x "$STAGE/$DIST/install.sh" "$STAGE/$DIST/selftest.sh" 2>/dev/null || tru
 
 (cd "$STAGE" && zip -qr "$OLDPWD/$ZIP" "$DIST")
 
-echo "Created $ZIP  (gt $VERSION, gt-wiki $WIKI_VERSION)"
+echo "Created $ZIP  ($LABEL)"
 # State what a consumer will find, so a wrong build is visible here rather than on
 # someone else's machine after they follow INSTALL.md.
-unzip -l "$ZIP" | awk '/golden-thread(-wiki)?\/[0-9]/ {print $4}' \
-  | sed -E 's#(golden-thread(-wiki)?/[0-9.]+)/.*#\1#' | sort -u | sed 's/^/  ships /'
+unzip -l "$ZIP" | awk -v d="$DIST" '$4 ~ ("^" d "/[^/]+/[0-9]+[.][0-9]+[.][0-9]+/") {print $4}' \
+  | sed -E "s#^($DIST/[^/]+/[0-9.]+)/.*#\1#" | sort -u | sed 's/^/  ships /'
