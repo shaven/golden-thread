@@ -28,6 +28,7 @@ EXPECTED = {
     "closeout_check": ("ask", ["off", "ask"]),
     "report_card": ("minimal", ["off", "minimal", "full"]),
     "install_demo": ("yes", ["yes", "no"]),
+    "protected_paths": ("ask", ["off", "ask"]),
     "test_gate": ("auto", ["off", "warn", "auto", "block"]),
     "parallel_work": ("on", ["off", "on"]),
     # values None == free-form; `validate` carries the shape instead of a closed list.

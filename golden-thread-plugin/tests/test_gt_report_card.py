@@ -4,6 +4,10 @@ Fixture: a fresh vault from vault_init.py, fully committed so the baseline is cl
 Modes off / minimal / full; hygiene findings (uncommitted files, stale TASKS.md,
 unrecoverable vs recoverable safe_write backlog, unattributed edits); feature
 findings only under `full`; closeout candidates gated by closeout_check.
+
+Since 0.12.9 the card is also parked in ~/.claude/golden-thread/notices/report-card.md
+(PreCompact/SessionEnd stdout reaches no one, per the hooks reference, 2026-09-13) and
+delivered by `surface --hook` at SessionStart as JSON.
 """
 import json
 import os
@@ -30,8 +34,8 @@ class ReportCard(Sandbox):
         d.update(kv)
         p.write_text(json.dumps(d))
 
-    def card(self, *args):
-        p = self.py(TOOL, *args)
+    def card(self, *args, input=""):
+        p = self.py(TOOL, *args, input=input)
         self.assertOk(p, "report card must never fail a session close")
         return p.stdout
 
@@ -178,6 +182,119 @@ class ReportCard(Sandbox):
         rows = [json.loads(l) for l in rec.read_text().splitlines()]
         self.assertEqual([(r["event"], r["slug"], r["source"]) for r in rows],
                          [("asked", "done-proj", "report-card")])
+
+    # -- notice file + SessionStart surface (0.12.9) --------------------------------
+    @property
+    def notice(self):
+        return self.home / ".claude" / "golden-thread" / "notices" / "report-card.md"
+
+    def precompact(self, sid="sess-1"):
+        return self.card(input=json.dumps({"session_id": sid,
+                                           "hook_event_name": "PreCompact"}))
+
+    def surface(self):
+        p = self.py(TOOL, "surface", "--hook", input="")
+        self.assertOk(p, "surface must fail open")
+        return p
+
+    def test_precompact_writes_notice(self):
+        for i in range(8):
+            (self.vault / ("n%d.md" % i)).write_text("x")
+        out = self.precompact()
+        self.assertIn("8 uncommitted file(s)", out)          # stdout still carries it
+        body = self.notice.read_text()
+        self.assertIn("session sess-1", body)
+        self.assertIn("PreCompact", body)
+        self.assertIn("8 uncommitted file(s)", body)
+        self.assertRegex(body, r"## Report card -- \d{4}-\d{2}-\d{2}T")
+        self.assertEqual([f.name for f in self.notice.parent.iterdir()], ["report-card.md"],
+                         "atomic write must not leave temp files behind")
+
+    def test_off_writes_no_notice(self):
+        self.setting(report_card="off")
+        self.assertEqual(self.precompact(), "")
+        self.assertFalse(self.notice.exists())
+
+    def test_surface_emits_json_and_removes_notice(self):
+        for i in range(8):
+            (self.vault / ("n%d.md" % i)).write_text("x")
+        self.precompact()
+        p = self.surface()
+        d = json.loads(p.stdout)
+        self.assertIn("systemMessage", d)
+        self.assertIn("1 finding", d["systemMessage"])
+        self.assertEqual(len(d["systemMessage"].splitlines()), 1)
+        hso = d["hookSpecificOutput"]
+        self.assertEqual(hso["hookEventName"], "SessionStart")
+        self.assertIn("8 uncommitted file(s)", hso["additionalContext"])
+        self.assertIn("first reply", hso["additionalContext"])
+        self.assertFalse(self.notice.exists())
+        self.assertEqual(self.surface().stdout, "")          # delivered once only
+
+    def test_surface_without_notice_is_silent(self):
+        p = self.surface()
+        self.assertEqual(p.stdout, "")
+        self.assertEqual(p.stderr, "")
+
+    def test_surface_unreadable_notice_is_silent(self):
+        self.notice.mkdir(parents=True)                      # a directory, not a file
+        self.assertEqual(self.surface().stdout, "")
+        self.notice.rmdir()
+        self.notice.write_bytes(b"")                         # empty
+        self.assertEqual(self.surface().stdout, "")
+        self.notice.write_text("x")
+        self.notice.chmod(0)                                 # unreadable
+        try:
+            p = self.surface()
+            if os.geteuid() != 0:
+                self.assertEqual(p.stdout, "")
+        finally:
+            self.notice.chmod(0o600)
+
+    def test_surface_truncates_large_notice(self):
+        self.notice.parent.mkdir(parents=True)
+        self.notice.write_text("GOLDEN THREAD report card (minimal)\n" + "   - y\n" * 5000)
+        p = self.surface()
+        self.assertLess(len(p.stdout), 10000)
+        self.assertIn("truncated", json.loads(p.stdout)["hookSpecificOutput"]["additionalContext"])
+
+    def test_successive_runs_stack_up_to_cap(self):
+        self.precompact("s1")
+        self.precompact("s2")
+        body = self.notice.read_text()
+        self.assertIn("session s1", body)
+        self.assertIn("session s2", body)
+        self.precompact("s3")
+        self.precompact("s4")
+        body = self.notice.read_text()
+        self.assertNotIn("session s1", body)
+        for s in ("s2", "s3", "s4"):
+            self.assertIn("session %s" % s, body)
+        ctx = json.loads(self.surface().stdout)["hookSpecificOutput"]["additionalContext"]
+        self.assertLess(ctx.index("session s2"), ctx.index("session s4"))
+
+    def test_closeout_calls_pass_vault(self):
+        tools = self.vault / "Projects" / "golden-thread" / "tools"
+        tools.mkdir(parents=True, exist_ok=True)
+        log = self.tmp / "argv.jsonl"
+        (tools / "gt_closeout.py").write_text(
+            "import json, sys\n"
+            "open(%r, 'a').write(json.dumps(sys.argv[1:]) + '\\n')\n"
+            "if 'candidates' in sys.argv:\n"
+            "    print(json.dumps([{'slug': 'p1', 'stage': 'active', 'reasons': ['r']}]))\n"
+            % str(log))
+        self.run_cmd(["git", "-C", self.vault, "add", "-A"])
+        self.run_cmd(["git", "-C", self.vault, "commit", "-q", "-m", "stub"])
+        self.setting(closeout_check="ask")
+        out = self.precompact()
+        self.assertIn("ASK THE USER", out)
+        calls = [json.loads(l) for l in log.read_text().splitlines()]
+        self.assertEqual(len(calls), 2)
+        for c in calls:
+            self.assertEqual(c[0], "--vault")
+            self.assertEqual(os.path.realpath(c[1]), os.path.realpath(self.vault))
+        self.assertIn("ask", calls[1])
+        self.assertIn("ASK THE USER", self.notice.read_text())
 
 
 if __name__ == "__main__":

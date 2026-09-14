@@ -32,6 +32,7 @@ import json
 import os
 import shlex
 import re
+import subprocess
 import sys
 import zipfile
 from pathlib import Path
@@ -193,15 +194,57 @@ def walk(paths):
                 yield Path(dirpath) / f
 
 
+def repo_files(repo):
+    """Every file a push of `repo` would publish: tracked, plus untracked-but-not-ignored.
+
+    Why the whole repository and not a list of directories: until 0.12.9 the release gate
+    scrubbed only paths under golden-thread-plugin/, so everything at the repository root
+    -- CHANGELOG.md, README.md, docs/, and a sync handoff naming internal systems -- was
+    published to the public remote without ever being scanned. Found 2026-09-13 with the
+    file already live. A path list is a list of what someone remembered; `git ls-files`
+    is what actually ships. Untracked files are included so a new file in a release that
+    is not committed yet is scanned before the commit, not after the push.
+
+    Returns None when git cannot enumerate -- the caller reports that as exit 2, never
+    as clean.
+    """
+    try:
+        out = subprocess.run(
+            ["git", "-C", str(repo), "ls-files", "-z", "--cached", "--others", "--exclude-standard"],
+            capture_output=True, check=True).stdout
+    except (OSError, subprocess.CalledProcessError):
+        return None
+    root = Path(repo)
+    files = []
+    for rel in out.decode("utf-8", "surrogateescape").split("\0"):
+        if not rel:
+            continue
+        p = root / rel
+        if p.is_file() and not rel.endswith((".pyc", ".DS_Store")):   # tracked-but-deleted in the tree: nothing to publish
+            files.append(p)
+    return files
+
+
 def main(argv=None):
     ap = argparse.ArgumentParser(description="Scan for employer/machine-specific strings.")
-    ap.add_argument("paths", nargs="+")
+    ap.add_argument("paths", nargs="*")
+    ap.add_argument("--repo", help="scan every file a push of this git repository publishes "
+                                   "(tracked + untracked-not-ignored), from its root")
     ap.add_argument("--no-pdf", action="store_true", help="skip PDFs knowingly")
     ap.add_argument("--quiet", action="store_true")
     a = ap.parse_args(argv)
+    if not a.paths and not a.repo:
+        ap.error("give paths to scan, or --repo <dir>")
     pats = load_terms()
     hits, unscanned, n = [], [], 0
-    for f in walk(a.paths):
+    targets = list(walk(a.paths))
+    if a.repo:
+        rf = repo_files(a.repo)
+        if rf is None:
+            print(f"UNSCANNED {a.repo}  (git could not list the repository)")
+            return 2
+        targets += rf
+    for f in targets:
         n += 1
         h, why = scan_file(f, pats, pdf=not a.no_pdf)
         hits += h

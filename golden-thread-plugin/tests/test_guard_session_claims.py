@@ -1,16 +1,17 @@
 """guard_session_claims.sh / .py -- the PreToolUse hook for core_concurrent_session_claim.
 
 Contract:
-  * Input: the PreToolUse payload on stdin. Output: ALWAYS one JSON object with
-    hookSpecificOutput.hookEventName == PreToolUse and permissionDecision allow|deny;
-    exit 0.
+  * Input: the PreToolUse payload on stdin. Always exit 0. A deny is one JSON object
+    with hookSpecificOutput.hookEventName == PreToolUse and permissionDecision deny.
+    NO objection is NO output: never permissionDecision "allow", which Claude Code
+    treats as "skip the user's permission prompt" (hooks reference, 2026-09-13).
   * Deny a Write/Edit/MultiEdit/NotebookEdit whose target is inside the vault when
     another LIVE session's file in Projects/golden-thread/sessions/ claims that path
     (exact file, or a claimed directory prefix).
   * Liveness: same host -> os.kill(pid, 0) decides; otherwise the last_execution
     heartbeat must be <= 30 minutes old. The caller's own session id never blocks it.
   * FAIL OPEN: malformed input, other tools, no vault, target outside the vault, no
-    sessions dir, python unavailable -> allow.
+    sessions dir, python unavailable -> no output, exit 0.
 """
 import datetime
 import json
@@ -50,6 +51,8 @@ class GuardTestBase(Sandbox):
     def guard_raw(self, stdin, env=None):
         proc = self.sh(self.hooks / "guard_session_claims.sh", input=stdin, env=env)
         self.assertOk(proc, "the guard must always exit 0")
+        if not proc.stdout.strip():
+            return {}                    # no objection: the normal permission flow decides
         try:
             out = json.loads(proc.stdout)
         except ValueError as exc:
@@ -64,11 +67,12 @@ class GuardTestBase(Sandbox):
         return self.guard_raw(json.dumps(payload), env=env)
 
     def assertAllow(self, hso, msg=""):
-        self.assertEqual(hso["permissionDecision"], "allow",
+        """Allowed = exit 0 (checked in guard_raw) and NO permissionDecision at all."""
+        self.assertNotIn("permissionDecision", hso,
                          f"{msg}\n{hso.get('permissionDecisionReason', '')}")
 
     def assertDeny(self, hso, msg=""):
-        self.assertEqual(hso["permissionDecision"], "deny", msg)
+        self.assertEqual(hso.get("permissionDecision"), "deny", msg)
         self.assertIn("core_concurrent_session_claim", hso["permissionDecisionReason"])
 
 
@@ -212,6 +216,25 @@ class GuardTest(GuardTestBase):
         (stub / "python3").write_text("#!/bin/sh\nexit 127\n")
         (stub / "python3").chmod(0o755)
         self.assertAllow(self.guard(self.target, env={"PATH": f"{stub}:/usr/bin:/bin"}))
+
+    def test_no_objection_emits_no_permission_decision(self):
+        """2026-09-13: the guard printed permissionDecision "allow" on every call it did
+        not block, which skips the user's permission prompt. No objection = no output."""
+        payload = {"session_id": "caller", "hook_event_name": "PreToolUse",
+                   "tool_name": "Read", "tool_input": {"file_path": str(self.target)}}
+        proc = self.sh(self.hooks / "guard_session_claims.sh", input=json.dumps(payload))
+        self.assertOk(proc)
+        self.assertEqual(proc.stdout, "", "no objection must print nothing")
+
+    def test_broken_python_target_prints_nothing(self):
+        (self.hooks / "guard_session_claims.py").write_text("raise SystemExit(3)\n")
+        proc = self.sh(self.hooks / "guard_session_claims.sh", input="{}")
+        self.assertOk(proc, "a broken guard must still exit 0")
+        self.assertEqual(proc.stdout, "", "fail open is silent, never an allow")
+        (self.hooks / "guard_session_claims.py").unlink()
+        proc = self.sh(self.hooks / "guard_session_claims.sh", input="{}")
+        self.assertOk(proc, "a missing guard must still exit 0")
+        self.assertEqual(proc.stdout, "")
 
     # -- heartbeats written in another time zone -----------------------------------------
     def test_fresh_heartbeat_from_another_time_zone_still_denies(self):

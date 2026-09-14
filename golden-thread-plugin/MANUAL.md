@@ -1,6 +1,6 @@
 # Golden Thread — User Manual
 
-Complete reference for all seventeen skills. Written against **gt v0.12.8**.
+Complete reference for all seventeen skills. Written against **gt v0.12.9**.
 
 ---
 
@@ -653,7 +653,8 @@ is registered here and can be switched off.
 | `version_check` | `off` · `report` | `report` | At session start, reports when a newer plugin version is checked in than the one installed |
 | `orphan_check` | `off` · `report` · `reap` | `report` | At session start, looks for abandoned background Claude workers; `reap` stops them |
 | `push_check` | `off` · `report` | `report` | At session start, reports vault commits not yet pushed |
-| `report_card` | `off` · `minimal` · `full` | `minimal` | At `/compact`, summarises session hygiene |
+| `report_card` | `off` · `minimal` · `full` | `minimal` | At `/compact` and session end, summarises session hygiene; the card is shown at the start of your next session, because output at those two events is never displayed |
+| `protected_paths` | `off` · `ask` | `ask` | A Write or Edit to the vault's `core-rules/` or `global-memory/`, to `~/.claude/golden-thread/`, or to `~/.claude/settings.json` always shows the permission prompt; editing an existing file in `Sources/` is refused (supersede it with a new file). Shell commands that write those files are not seen |
 | `watch` | `off` · `report` | `off` | `/gt:gt-watch`: the hourly fetch and the session-start report of repo changes |
 | `test_gate` | `off` · `warn` · `auto` · `block` | `auto` | Refuse a `git commit` of code whose tests have not been seen to pass; `auto` blocks only where the repo has a test command |
 | `parallel_work` | `off` · `on` | `on` | Whether divisible work runs in parallel at all; `off` also stops the Core rule being injected |
@@ -828,7 +829,7 @@ project other than the one loaded.
 ## Script reference
 
 ```bash
-SCRIPTS=~/.claude/plugins/cache/golden-thread-plugin/gt/0.12.8/scripts
+SCRIPTS=~/.claude/plugins/cache/golden-thread-plugin/gt/0.12.9/scripts
 
 python3 $SCRIPTS/vault_init.py fresh --vault ~/my-vault --domain "My Team"
 

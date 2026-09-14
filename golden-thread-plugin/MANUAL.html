@@ -114,7 +114,7 @@ pre, table { break-inside: avoid; font-size: 9px; }
 table { width:100%; border-collapse: collapse; }
 th, td { border:1px solid #ddd; padding:3px 5px; text-align:left; vertical-align:top; }
 </style></head><body><h1 id="golden-thread-user-manual">User Manual</h1>
-<p>Complete reference for all seventeen skills. Written against <strong>gt v0.12.8</strong>.</p>
+<p>Complete reference for all seventeen skills. Written against <strong>gt v0.12.9</strong>.</p>
 <hr />
 <h2 id="the-model">The model</h2>
 <p>Claude forgets everything between sessions. The vault doesn't. Golden Thread's
@@ -782,7 +782,13 @@ is registered here and can be switched off.</p>
 <td><code>report_card</code></td>
 <td><code>off</code> · <code>minimal</code> · <code>full</code></td>
 <td><code>minimal</code></td>
-<td>At <code>/compact</code>, summarises session hygiene</td>
+<td>At <code>/compact</code> and session end, summarises session hygiene; the card is shown at the start of your next session, because output at those two events is never displayed</td>
+</tr>
+<tr>
+<td><code>protected_paths</code></td>
+<td><code>off</code> · <code>ask</code></td>
+<td><code>ask</code></td>
+<td>A Write or Edit to the vault's <code>core-rules/</code> or <code>global-memory/</code>, to <code>~/.claude/golden-thread/</code>, or to <code>~/.claude/settings.json</code> always shows the permission prompt; editing an existing file in <code>Sources/</code> is refused (supersede it with a new file). Shell commands that write those files are not seen</td>
 </tr>
 <tr>
 <td><code>watch</code></td>
@@ -980,7 +986,7 @@ answer is not obvious — including when the honest answer is that the fact belo
 project other than the one loaded.</p>
 <hr />
 <h2 id="script-reference">Script reference</h2>
-<pre><code class="language-bash">SCRIPTS=~/.claude/plugins/cache/golden-thread-plugin/gt/0.12.8/scripts
+<pre><code class="language-bash">SCRIPTS=~/.claude/plugins/cache/golden-thread-plugin/gt/0.12.9/scripts
 
 python3 $SCRIPTS/vault_init.py fresh --vault ~/my-vault --domain &quot;My Team&quot;
 

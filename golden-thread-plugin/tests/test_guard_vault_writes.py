@@ -1,14 +1,15 @@
 """guard_vault_writes.sh / .py -- the PreToolUse hook for core_explicit_vault_target.
 
 Contract:
-  * Input: the PreToolUse payload on stdin. Output: ALWAYS one JSON object with
-    hookSpecificOutput.hookEventName == PreToolUse and permissionDecision allow|deny;
-    exit 0.
+  * Input: the PreToolUse payload on stdin. Always exit 0. A deny is one JSON object
+    with hookSpecificOutput.hookEventName == PreToolUse and permissionDecision deny.
+    NO objection is NO output: never permissionDecision "allow", which Claude Code
+    treats as "skip the user's permission prompt" (hooks reference, 2026-09-13).
   * Deny a Bash command that invokes a vault tool with a WRITING subcommand and names
     no target: no --vault, no --dry-run, no GT_VAULT (inline or in the environment).
   * Read-only subcommands (status, list, check) are never denied.
   * FAIL OPEN: malformed input, other tools, empty command, unparseable shell, an
-    unknown tool or an unknown subcommand -> allow. This hook sits in front of every
+    unknown tool or an unknown subcommand -> no output. This hook sits in front of every
     Bash call, so a wrong deny costs more than a missed one.
 """
 import json
@@ -32,6 +33,8 @@ class GuardBase(Sandbox):
     def decide_raw(self, stdin, env=None):
         proc = self.sh(self.hooks / "guard_vault_writes.sh", input=stdin, env=env or self.env)
         self.assertOk(proc, "the guard must always exit 0")
+        if not proc.stdout.strip():
+            return {}                    # no objection: the normal permission flow decides
         try:
             out = json.loads(proc.stdout)
         except ValueError as exc:
@@ -47,12 +50,14 @@ class GuardBase(Sandbox):
 
     def assertDenied(self, command, msg, env=None):
         hso = self.decide(command, env=env)
-        self.assertEqual(hso["permissionDecision"], "deny", msg)
+        self.assertEqual(hso.get("permissionDecision"), "deny", msg)
         return hso
 
     def assertAllowed(self, command, msg, tool="Bash", env=None):
         hso = self.decide(command, tool=tool, env=env)
-        self.assertEqual(hso["permissionDecision"], "allow", msg)
+        # Allowed = exit 0 and NO permissionDecision at all (2026-09-13: "allow" skips
+        # the user's permission prompt; silence leaves the normal flow in charge).
+        self.assertNotIn("permissionDecision", hso, msg)
         return hso
 
 
@@ -132,8 +137,30 @@ class GuardVaultWrites(GuardBase):
 
     def test_malformed_json_allows(self):
         hso = self.decide_raw("{not json")
-        self.assertEqual(hso["permissionDecision"], "allow",
+        self.assertNotIn("permissionDecision", hso,
                          "unparseable input must fail open, never deny")
+
+    def test_no_objection_emits_no_permission_decision(self):
+        """2026-09-13: the guard printed permissionDecision "allow" on every call it did
+        not block, which skips the user's permission prompt. No objection = no output."""
+        for tool, ti in (("Read", {"file_path": "/etc/hosts"}), ("Bash", {"command": "ls"})):
+            with self.subTest(tool=tool):
+                payload = {"session_id": "caller", "hook_event_name": "PreToolUse",
+                           "tool_name": tool, "tool_input": ti}
+                proc = self.sh(self.hooks / "guard_vault_writes.sh",
+                               input=json.dumps(payload), env=self.env)
+                self.assertOk(proc)
+                self.assertEqual(proc.stdout, "", "no objection must print nothing")
+
+    def test_broken_or_missing_python_target_prints_nothing(self):
+        (self.hooks / "guard_vault_writes.py").write_text("raise SystemExit(3)\n")
+        proc = self.sh(self.hooks / "guard_vault_writes.sh", input="{}", env=self.env)
+        self.assertOk(proc, "a broken guard must still exit 0")
+        self.assertEqual(proc.stdout, "", "fail open is silent, never an allow")
+        (self.hooks / "guard_vault_writes.py").unlink()
+        proc = self.sh(self.hooks / "guard_vault_writes.sh", input="{}", env=self.env)
+        self.assertOk(proc, "a missing guard must still exit 0")
+        self.assertEqual(proc.stdout, "")
 
     def test_unbalanced_quotes_allow(self):
         self.assertAllowed('python3 tools/gt_adr.py migrate "proj',
@@ -157,6 +184,19 @@ class GuardVaultWrites(GuardBase):
     def test_gt_tasks_always_writes(self):
         self.assertDenied("python3 Projects/golden-thread/tools/gt_tasks.py",
                           "gt_tasks.py rewrites TASKS.md however it is invoked")
+
+    def test_gt_closeout_ask_and_answer_are_writes(self):
+        self.assertDenied("python3 Projects/golden-thread/tools/gt_closeout.py ask proj",
+                          "gt_closeout.py ask appends to closeout-signals.jsonl")
+        self.assertDenied("python3 tools/gt_closeout.py answer proj yes",
+                          "gt_closeout.py answer appends to closeout-signals.jsonl")
+
+    def test_gt_closeout_read_only_subcommands_allowed(self):
+        for cmd in ("python3 tools/gt_closeout.py candidates",
+                    "python3 tools/gt_closeout.py history proj",
+                    "python3 tools/gt_closeout.py ask proj --vault /tmp/copy"):
+            with self.subTest(cmd=cmd):
+                self.assertAllowed(cmd, "read-only or targeted gt_closeout.py must pass")
 
     def test_vault_init_destructive_mode_denied(self):
         self.assertDenied("python3 scripts/vault_init.py merge-project a b",

@@ -62,6 +62,48 @@ class ScrubCheckTest(Sandbox):
         (self.tree / "doc.pdf").write_bytes(b"%PDF-1.4\n%fake\n")
         self.assertEqual(self.scan(extra=("--no-pdf",)).returncode, 0)
 
+    # -- --repo: everything a push publishes (0.12.9) -------------------------------
+    # The gate used to scrub a list of plugin directories, and a file at the repository
+    # root that named internal systems went public unscanned. These pin the scope.
+
+    def _repo(self):
+        repo = self.git_init(self.tmp / "repo", commit=False)
+        (repo / "plugin").mkdir()
+        (repo / "plugin" / "a.md").write_text("clean\n")
+        return repo
+
+    def test_repo_scans_a_committed_file_at_the_repository_root(self):
+        repo = self._repo()
+        (repo / "HANDOFF.md").write_text("notes about zorblax\n")
+        self.run_cmd(["git", "-C", repo, "add", "-A"])
+        self.run_cmd(["git", "-C", repo, "-c", "user.name=t", "-c", "user.email=t@t",
+                      "commit", "-q", "-m", "x"])
+        proc = self.scan(extra=("--repo", repo))
+        self.assertEqual(proc.returncode, 1, proc.stdout)
+        self.assertIn("HANDOFF.md:1", proc.stdout)
+
+    def test_repo_scans_untracked_files_before_they_are_committed(self):
+        repo = self._repo()
+        (repo / "plugin" / "new.md").write_text("zorblax\n")
+        proc = self.scan(extra=("--repo", repo))
+        self.assertEqual(proc.returncode, 1,
+                         "a new file in an uncommitted release must be scanned before the commit")
+
+    def test_repo_skips_ignored_files(self):
+        repo = self._repo()
+        (repo / ".gitignore").write_text("local/\n")
+        (repo / "local").mkdir()
+        (repo / "local" / "scratch.md").write_text("zorblax\n")
+        proc = self.scan(extra=("--repo", repo))
+        self.assertEqual(proc.returncode, 0, "an ignored file is never pushed: " + proc.stdout)
+
+    def test_repo_that_git_cannot_list_is_unscanned_not_clean(self):
+        not_a_repo = self.tmp / "plain"
+        not_a_repo.mkdir()
+        proc = self.scan(extra=("--repo", not_a_repo))
+        self.assertEqual(proc.returncode, 2)
+        self.assertIn("UNSCANNED", proc.stdout)
+
     def test_skips_git_and_pycache(self):
         (self.tree / ".git").mkdir()
         (self.tree / ".git" / "config").write_text("zorblax\n")
