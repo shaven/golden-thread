@@ -56,6 +56,16 @@ class PluginsTest(Sandbox):
         self.assertEqual(p.stdout.splitlines(),
                          ["golden-thread 0.10.0 gt", "zeta-module 1.10.0 zeta"])
 
+    def test_releases_lists_newest_and_previous_numerically(self):
+        # gt-src carries newest + previous so `install.sh <previous>` can roll back (2026-09-14).
+        root = self.fake_root()
+        p = self.py(TOOL, "releases", root / "zeta-module")
+        self.assertOk(p)
+        self.assertEqual(p.stdout.split(), ["1.10.0", "1.2.0"],
+                         "1.10.0 beats 1.2.0; no plugin.json and non-semver dirs are skipped")
+        self.assertEqual(self.py(TOOL, "releases", root / "golden-thread", "1").stdout.split(), ["0.10.0"])
+        self.assertEqual(self.py(TOOL, "releases", root / "archive").returncode, 1)
+
     def test_newest_and_empty_root(self):
         root = self.fake_root()
         self.assertEqual(self.py(TOOL, "newest", root / "zeta-module").stdout.strip(), "1.10.0")

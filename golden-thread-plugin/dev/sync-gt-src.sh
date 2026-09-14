@@ -10,7 +10,9 @@
 #   * only files git TRACKS here (no zips, caches, scratch, untracked work)
 #   * only from a COMMITTED tree, so gt-src always equals one commit (recorded in
 #     gt-src/SOURCE.json)
-#   * only the NEWEST version directory of each plugin; older releases stay here
+#   * the NEWEST version directory of each plugin AND the one before it, so a machine
+#     installing from gt-src can roll back with `install.sh <previous>`; older releases
+#     stay here (owner decision, 2026-09-14 -- newest-only left nothing to roll back to)
 #   * never a single employer- or machine-specific string: dev/scrub_check.py runs on
 #     the staged set first, and any hit — or any file it could not scan — aborts
 #
@@ -51,12 +53,19 @@ fi
 COMMIT=$(git rev-parse HEAD)
 PREFIX=$(git rev-parse --show-prefix)       # e.g. golden-thread-plugin/
 
+# Which release directories travel: newest + the one before, per plugin, space-joined.
+KEEP=()
+for i in "${!PDIRS[@]}"; do
+  KEEP+=("$("$PY" dev/plugins.py releases "${PDIRS[$i]}" 2 | tr '\n' ' ')")
+done
+
 STAGE=$(mktemp -d); VCOPY=""; trap 'rm -rf "$STAGE" "$VCOPY"' EXIT
 git ls-files -z -- . | while IFS= read -r -d '' f; do
   for i in "${!PDIRS[@]}"; do                                 # older releases stay home
     case "$f" in
-      "${PDIRS[$i]}/${PVERS[$i]}"/*) ;;
-      "${PDIRS[$i]}"/*) continue 2 ;;
+      "${PDIRS[$i]}"/*)
+        rel=${f#"${PDIRS[$i]}"/}; ver=${rel%%/*}
+        case " ${KEEP[$i]}" in *" $ver "*) ;; *) continue 2 ;; esac ;;
     esac
   done
   mkdir -p "$STAGE/$(dirname "$f")"
