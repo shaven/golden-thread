@@ -1,9 +1,9 @@
 # Golden Thread Plugin — Documentation
-## Version gt 0.14.0 / gt-wiki 0.1.3
+## Version gt 0.14.0 / gt-wiki 0.2.0 / gt-demo 0.14.0
 
 ---
 
-Golden Thread turns an Obsidian vault into the single source of truth for all AI memory across every project and every session. The tiered rule model introduced in v0.6.0 now carries **seven hook-backed Core rules** enforced at three points in the turn, 0.9.12 added `gt-route` for the middle of a session, and 0.9.13 makes the session-start component check verify that the hooks are **wired**, not merely installed, 0.11.0 makes `log.md` and `decisions.md` generated files so concurrent sessions cannot overwrite one another, 0.12.3 stops a vault tool running against a vault it was never told to touch, 0.12.4 makes parallel execution the default for divisible work in every project, and 0.12.5 stops code being committed before its tests have been seen to pass. gt-wiki 0.1.2 provides an LLM-powered knowledge base with immutable sources and interlinked pages.
+Golden Thread turns an Obsidian vault into the single source of truth for all AI memory across every project and every session. The tiered rule model introduced in v0.6.0 now carries **seven hook-backed Core rules** enforced at three points in the turn, 0.9.12 added `gt-route` for the middle of a session, and 0.9.13 makes the session-start component check verify that the hooks are **wired**, not merely installed, 0.11.0 makes `log.md` and `decisions.md` generated files so concurrent sessions cannot overwrite one another, 0.12.3 stops a vault tool running against a vault it was never told to touch, 0.12.4 makes parallel execution the default for divisible work in every project, 0.12.5 stops code being committed before its tests have been seen to pass, 0.13.0 makes an upgrade from any older release end where a fresh install would, and 0.14.0 splits optional parts into modules you can decline — gt-wiki 0.2.0 (an LLM-powered knowledge base with immutable sources and interlinked pages) and gt-demo 0.14.0 (the guided tour).
 
 ---
 
@@ -308,7 +308,7 @@ bash install.sh
 # Restart Claude Code
 ```
 
-Installs both `gt` (v0.14.0) and `gt-wiki` (v0.1.3) as separate plugins under the `golden-thread-plugin` marketplace. Requires Python 3.8+.
+Installs `gt` (v0.14.0) and each module that is on — `gt-wiki` (v0.2.0) and `gt-demo` (v0.14.0), both on by default — as separate plugins under the `golden-thread-plugin` marketplace. Choose modules with `--list-modules`, `--without <name>` and `--with <name>` (remembered). Re-running upgrades from any older release. Requires Python 3.8+.
 
 `install.sh` installs the **newest version directory** present, not a hardcoded constant — pass an argument only to roll back deliberately (`./install.sh 0.9.3`). Never pipe it to `head`: `set -o pipefail` turns the closed pipe into an abort partway through, leaving the cache updated and registration undone.
 

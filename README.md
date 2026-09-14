@@ -115,9 +115,10 @@ costly, so a broken hook announces itself.
 
 | Path | What it is |
 |---|---|
-| `golden-thread-plugin/golden-thread/<ver>/` | The `gt` plugin — 14 skills, scripts, templates, hooks |
-| `golden-thread-plugin/golden-thread-wiki/<ver>/` | The `gt-wiki` plugin — 5 skills for standalone wiki vaults |
-| `golden-thread-plugin/install.sh` | Installs both, wires the hooks, registers the marketplace |
+| `golden-thread-plugin/golden-thread/<ver>/` | The `gt` plugin — 18 skills, scripts, templates, hooks |
+| `golden-thread-plugin/golden-thread-wiki/<ver>/` | Module `wiki` (plugin `gt-wiki`) — 5 skills for LLM wiki vaults |
+| `golden-thread-plugin/golden-thread-demo/<ver>/` | Module `demo` (plugin `gt-demo`) — the guided PizzaBot 3000 tour |
+| `golden-thread-plugin/install.sh` | Installs gt and every module that is on, wires the hooks, applies upgrades |
 
 The vault *content* lives in a separate private repo. This one is the machinery.
 
@@ -132,7 +133,7 @@ alongside the code they describe. Start with Getting Started; the Manual is the 
 | [Announcements](../../discussions/categories/announcements) | Release write-ups: what broke, what changed, and what you have to do |
 | [Getting Started](golden-thread-plugin/ONBOARDING.md) · [PDF](golden-thread-plugin/ONBOARDING.pdf) | A guided first session in six steps, about fifteen minutes |
 | [User Manual](golden-thread-plugin/MANUAL.md) · [PDF](golden-thread-plugin/MANUAL.pdf) | Complete reference: every skill, the vault layout, verification, the promotion ladder |
-| [Install Guide](golden-thread-plugin/INSTALL.md) | Installing both plugins, wiring the hooks, adopting an existing vault |
+| [Install Guide](golden-thread-plugin/INSTALL.md) | Installing gt and its modules, choosing modules, upgrading and rolling back, wiring the hooks, adopting an existing vault |
 | [Obsidian & Daily Workflow](golden-thread-plugin/OBSIDIAN-WORKFLOW.md) · [PDF](golden-thread-plugin/OBSIDIAN-WORKFLOW.pdf) | Living in the vault day to day — daily notes, properties, Dataview |
 | [Developer Guide](golden-thread-plugin/golden-thread-developer-guide.html) · [PDF](golden-thread-plugin/golden-thread-developer-guide.pdf) | Internals: hooks, scripts, the component manifest, extending the plugin |
 | [Plugin Documentation](golden-thread-plugin/golden-thread-docs.md) · [HTML](golden-thread-plugin/golden-thread-docs.html) · [PDF](golden-thread-plugin/golden-thread-docs.pdf) | The combined document — overview, Core rules, every skill, install and operation, in one file. Refreshed to current on 2026-09-09 (it had been frozen at gt 0.6.0 for six releases); now tracks the shipped release and is checked for drift by `build-docs.py` |
@@ -145,9 +146,15 @@ The PDFs and HTML are rendered from the markdown beside them — when the two di
 ## Install
 
 ```bash
-bash golden-thread-plugin/install.sh
+bash golden-thread-plugin/install.sh --vault <path>
 # then restart Claude Code — plugins and hooks load at session start
 ```
+
+That installs gt and every **module** that is on — today `wiki` (gt-wiki) and `demo`
+(gt-demo), both on by default. Choose with `--list-modules`, `--without <name>` and
+`--with <name>`; the choice is remembered. Re-running it upgrades from any older release to
+the newest, removing what old releases left behind and applying vault upgrades when your
+vault is committed. See the [Install Guide](golden-thread-plugin/INSTALL.md).
 
 Scaffold a vault, or adopt an existing one:
 
@@ -167,7 +174,7 @@ cannot be reached and the rules are not loaded — the banner names the cause.
 
 ## The skills
 
-Seventeen skills. Each composes through files rather than through other skills, so
+Eighteen skills in gt, plus the skills of its modules. Each composes through files rather than through other skills, so
 removing any one leaves the rest working.
 
 | Skill | What it does |

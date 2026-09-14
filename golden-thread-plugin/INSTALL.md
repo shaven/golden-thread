@@ -66,7 +66,28 @@ curl -fsSL https://github.com/shaven/golden-thread/archive/refs/heads/main.tar.g
 rather than carrying a hardcoded one, so this guide does not name a version either. To
 pin an older release deliberately: `bash install.sh 0.9.3`.
 
-It copies into Claude Code's plugin cache:
+**What gets installed.** gt itself, plus each **module** — an optional plugin that ships
+beside gt and is versioned with it. Today there are two, both on by default:
+
+| Module | Plugin | What it adds |
+|---|---|---|
+| `wiki` | `gt-wiki` | five `/gt-wiki:*` skills for an LLM wiki (ingest, lint, refresh, init) |
+| `demo` | `gt-demo` | `/gt-demo:gt-demo`, the guided PizzaBot 3000 tour in its own throwaway vault |
+
+You do not install modules separately — one `install.sh` run installs gt and every module
+that is on. To choose:
+
+```bash
+bash install.sh --list-modules        # each module, whether it is on, and why
+bash install.sh --without demo        # remove it completely; the choice is remembered
+bash install.sh --with demo           # bring it back
+```
+
+The choice lives in `~/.claude/golden-thread/install-choices.json` and later installs keep it.
+A module that is off leaves nothing behind — no plugin cache, marketplace entry, enabled
+flag, hooks or hook scripts. gt itself cannot be removed this way.
+
+It copies each plugin into Claude Code's plugin cache — gt's looks like this:
 
 ```
 ~/.claude/plugins/cache/golden-thread-plugin/gt/<version>/
@@ -82,8 +103,20 @@ The enforcement hooks are **also** copied outside the cache, to
 `~/.claude/golden-thread/hooks/`, and `~/.claude/settings.json` references them by
 absolute path — so the path survives a project rename, a vault move, or a version bump.
 
-Re-running `install.sh` is safe. Note it **removes superseded caches** for the plugin
-rather than leaving them beside the new one.
+Re-running `install.sh` is safe, and **an upgrade from any older release ends where a fresh
+install of the newest would**, so skipping releases is fine. On each run it:
+
+1. removes superseded caches and anything an older release installed that this one no
+   longer ships (`retired.json`, after a backup) — files it does not recognise are reported
+   and left alone;
+2. applies one-time **machine migrations** (changes under `~/.claude/` a skipped release would
+   have made); the first failure stops the install with `INSTALL INCOMPLETE`, nothing is
+   rolled back, and re-running is safe;
+3. applies pending **vault upgrades** itself when the vault had no uncommitted changes before
+   the install touched it (after a backup; the results are left uncommitted for you to
+   review). If the vault holds your own uncommitted work it only reports, and prints the
+   command to run. A `PROTOCOL.md` or `CONVENTIONS.md` you edited is never merged
+   unattended — it is listed as *needs a person* for `/gt:gt-upgrade`.
 
 `install.sh` does **not** choose or create a vault. The vault path is written to
 `~/.claude/vault-config.json` by `/gt:gt-init` (below), which runs `vault_init.py` in
@@ -91,7 +124,8 @@ rather than leaving them beside the new one.
 hooks and the first `TASKS.md`. If a vault is already configured when `install.sh`
 runs, it refreshes that vault's tools to the installed templates.
 
-`install.sh` registers the six hooks it owns in `~/.claude/settings.json` and then
+`install.sh` registers the nine hooks it owns in `~/.claude/settings.json` (the other five,
+the Core-rule enforcement hooks, are wired against the vault) and then
 verifies them, printing either `Verified hook wiring → every hook this installer owns
 is connected` or a list of what will never run. Read that line: **a file being
 installed and a file being wired are different things**, and until 0.9.13 nothing
@@ -104,14 +138,14 @@ Then confirm enforcement is actually live, because a rule that is not wired is n
 # Are the Core rules being asserted? (the UserPromptSubmit hook)
 echo '{}' | ~/.claude/golden-thread/hooks/inject_core_rules.sh
 
-# Are ALL NINE declared hooks wired? (0.9.13+)
+# Are ALL declared hooks wired? (14 in 0.14.0)
 python3 ~/.claude/golden-thread/hooks/gt_components.py wiring \
   "<plugin-repo>/golden-thread/<version>"
 ```
 
 The Core rules should print. Silence or an error means they are not being asserted.
 
-The second command should print `all 9 declared hooks are wired`. It is the broader
+The second command should print `all 14 declared hooks are wired`. It is the broader
 check of the two: the first proves one hook answers, while this one compares live
 settings against the list of every hook the release declares — so it can report the
 case the first cannot, which is a hook that was never registered at all. Anything it
@@ -120,6 +154,13 @@ does not exist on this machine (a version directory removed by a later bump, mos
 
 Both are worth running on a **second machine** in particular. Files sync; a
 `settings.json` on another box does not.
+
+Two more checks after an upgrade:
+
+```bash
+python3 ~/.claude/golden-thread/hooks/gt_doctor.py      # includes a modules row: on/off, installed, enabled
+python3 "<plugin-repo>/golden-thread/<version>/scripts/gt_upgrade.py" --vault <vault> status
+```
 
 ---
 
@@ -225,16 +266,30 @@ If your project already has `.claude/memory/` files or CLAUDE.md constraints:
 
 ## Updating
 
-Run `bash install.sh` again from the repo (after `git pull`), then restart Claude Code.
-It installs the newest version directory it finds and removes superseded caches for the
-plugin, so exactly one version is live at a time.
+Run `bash install.sh --vault <vault>` again from the repo (after `git pull`), then restart
+Claude Code. It installs the newest release of gt and of each module that is on, removes
+superseded caches and retired files, applies machine migrations and — if your vault is
+committed — vault upgrades. Exactly one version of each plugin is live at a time. Commit your
+vault first so the install can apply its upgrades rather than only report them.
+
+**Rollback:** the repo (and a gt-src copy) keeps the previous release, so
+`bash install.sh <previous version> --vault <vault>` reinstalls it; your module choices and
+vault are kept.
 
 ---
 
 ## Uninstall
 
 ```bash
-rm -rf ~/.claude/plugins/cache/golden-thread-plugin
+rm -rf ~/.claude/plugins/cache/golden-thread-plugin \
+       ~/.claude/plugins/marketplaces/golden-thread-plugin \
+       ~/.claude/golden-thread/hooks
 ```
+
+Then remove the `golden-thread-plugin` entries from `~/.claude/plugins/installed_plugins.json`
+and `~/.claude/plugins/known_marketplaces.json`, the `*@golden-thread-plugin` keys under
+`enabledPlugins` in `~/.claude/settings.json`, and every hook whose command points into
+`~/.claude/golden-thread/hooks/` — otherwise Claude Code keeps calling hooks that no longer
+exist. To drop only an optional part, use `bash install.sh --without <module>` instead.
 
 Your vault and `~/.claude/vault-config.json` are unaffected — the vault is yours, not the plugin's.
