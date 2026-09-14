@@ -11,6 +11,53 @@ release's own summary line, kept short rather than reconstructed after the fact.
 
 ---
 
+## gt 0.12.9 — 2026-09-13
+
+**The guards were approving tool calls they meant to ignore.** Upgrade promptly.
+
+All three PreToolUse guards — the session-claim guard, the vault-target guard and the
+commit-test guard — answered `permissionDecision: "allow"` for every tool call they did not
+block, and they run on every tool call. Claude Code's hooks reference defines `allow` as
+"skip the interactive permission prompt"; the neutral answer is to exit 0 and print
+nothing. So a guard written to stay out of the way was instead waving calls past the
+permission prompt you would otherwise have seen. Deny and ask rules in your settings still
+applied, which is why nothing looked wrong.
+
+- **Every guard now prints nothing when it has no objection**, including when it fails
+  open on an error. Denials are unchanged. A regression test per guard asserts empty
+  output for a harmless call, and those tests fail against 0.12.8.
+- The commit guard's warn-mode note is still delivered, as context with no decision.
+
+**Protected paths now need a person to see the write.** Until this release nothing but
+skill prose stopped a session's Write or Edit tool from changing the files every session
+depends on. A new guard, `guard_protected_paths`, and a new setting, `protected_paths`
+(`ask` by default, or `off`):
+
+- A Write or Edit to the vault's `core-rules/` or `global-memory/`, to
+  `~/.claude/golden-thread/`, or to `~/.claude/settings.json` always shows the permission
+  prompt, in any permission mode. Approving it is fine when the change is intended.
+- Editing or overwriting an **existing** file in `Sources/` is refused — supersede it with
+  a new file. Creating a new source is unaffected.
+- Paths are resolved first, so `..` and symlinks do not get around it. It does **not** see
+  shell commands that write the same files.
+
+**The report card was never shown.** It runs at `/compact`, automatic compaction and
+session end, and output at those events reaches neither you nor the assistant. It now
+saves the card, and a new session-start step shows it at the start of your next session —
+including the close-out question, which the assistant is told to put to you. Its
+docstring also stopped claiming it never writes to the vault: its close-out step appends
+`closeout-signals.jsonl`, and `gt_closeout.py ask` / `answer` are now covered by the
+vault-target guard.
+
+**The release gate scrubs everything a push publishes.** It used to scan a list of plugin
+directories, so files at the repository root were published unscanned — and one that
+named internal systems did reach the public repository before it was removed.
+`scrub_check.py --repo` scans tracked files plus untracked files that are not ignored, and
+the gate now uses it.
+
+Hooks wired by `install.sh` go from 7 to 9: the session-start report-card step and the
+protected-path guard. Re-run `bash install.sh` and restart Claude Code.
+
 ## gt 0.12.8 — 2026-09-12
 
 **`gt_paths.py` shipped twice, and one of the copies was three releases stale.** If you

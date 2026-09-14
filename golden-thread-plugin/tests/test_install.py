@@ -7,7 +7,7 @@ and a sandbox HOME. Nothing touches the real repo or the real ~/.claude.
 Contracts pinned here:
   * gt and gt-wiki land in ~/.claude/plugins/cache/... AND the marketplace, file for
     file; both are registered and enabled;
-  * the seven hooks install.sh owns are registered in settings.json and verified, and
+  * the nine hooks install.sh owns are registered in settings.json and verified, and
     point at files that exist in the sandbox;
   * install_demo=no leaves out exactly the demo skill, script and templates from
     BOTH cache and marketplace -- including a demo left by an earlier install;
@@ -25,9 +25,11 @@ INSTALL = REPO / "install.sh"
 DEMO = ("skills/gt-demo", "scripts/gt_demo.sh", "templates/demo-pizzabot")
 GT_DIRS = (".claude-plugin", "skills", "scripts", "templates", "commands", "hooks")
 WIKI_DIRS = (".claude-plugin", "skills", "scripts", "templates", "commands")
+# 0.12.9 adds two: the SessionStart report-card surface step, and the protected-path guard.
 OWNED = {"SessionStart": {"gt_components.py", "gt_workers.py", "gt_version_check.py",
-                          "gt_push_check.py", "gt_watch.py"},
-         "PreCompact": {"gt_report_card.py"}, "SessionEnd": {"gt_report_card.py"}}
+                          "gt_push_check.py", "gt_watch.py", "gt_report_card.py"},
+         "PreCompact": {"gt_report_card.py"}, "SessionEnd": {"gt_report_card.py"},
+         "PreToolUse": {"guard_protected_paths.sh"}}
 IGNORE = shutil.ignore_patterns("__pycache__", "*.pyc", ".DS_Store")
 
 
@@ -146,14 +148,14 @@ class InstallTest(Sandbox):
         return {ev: [h["command"] for block in blocks for h in block.get("hooks", [])]
                 for ev, blocks in hooks.items()}
 
-    def test_seven_hooks_registered_and_verified(self):
+    def test_nine_hooks_registered_and_verified(self):
         p = self.install()
         self.assertOk(p)
-        self.assertIn("Registered 7 hooks", p.stdout)
+        self.assertIn("Registered 9 hooks", p.stdout)
         self.assertIn("Verified hook wiring", p.stdout)
         self.assertNotIn("INCOMPLETE", p.stdout)
         reg = self.registered()
-        self.assertEqual(sum(len(v) for v in reg.values()), 7, reg)
+        self.assertEqual(sum(len(v) for v in reg.values()), 9, reg)
         hooks_dir = str(self.home / ".claude" / "golden-thread" / "hooks")
         for event, scripts in OWNED.items():
             cmds = reg.get(event, [])
@@ -203,7 +205,7 @@ class InstallTest(Sandbox):
         p = self.install()
         self.assertOk(p)
         self.assertEqual(self.settings(), s1, "second run changed settings.json")
-        self.assertEqual(sum(len(v) for v in self.registered().values()), 7, "hooks duplicated")
+        self.assertEqual(sum(len(v) for v in self.registered().values()), 9, "hooks duplicated")
         self.assertEqual(files_under(self.cache(), GT_DIRS), files1)
         vers = [d.name for d in (self.plugins / "cache" / "golden-thread-plugin" / "gt").iterdir()]
         self.assertEqual(vers, [GT.name])
@@ -223,7 +225,7 @@ class InstallTest(Sandbox):
         self.assertTrue(s["enabledPlugins"]["other@x"])
         self.assertIn("echo user-hook", self.registered()["SessionStart"])
         self.assertEqual(self.registered()["Stop"], ["echo user-hook"])
-        self.assertEqual(len(self.registered()["SessionStart"]), 6)   # user hook + 5 gt SessionStart hooks
+        self.assertEqual(len(self.registered()["SessionStart"]), 7)   # user hook + 6 gt SessionStart hooks
         self.assertFalse(old.exists(), "superseded gt cache left behind")
         backups = list((self.home / ".claude" / "golden-thread" / "backups").glob("settings.json.*"))
         self.assertTrue(backups, "pre-existing settings.json was not backed up")

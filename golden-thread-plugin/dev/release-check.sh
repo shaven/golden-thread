@@ -196,7 +196,12 @@ PY2
 [ -z "$REFS" ] && ok "every script/template a skill names exists in the release" || { echo "$REFS"; bad "skills reference files that do not ship"; }
 
 step "scrub (employer and machine names)"
-OUT=$("${GT_PYTHON:-python3}" dev/scrub_check.py "$GT" "$WIKI" dev tests *.md *.html *.pdf *.sh *.py 2>&1); rc=$?
+# The WHOLE repository, not a list of plugin directories. Until 0.12.9 this scrubbed
+# "$GT" "$WIKI" dev tests and the plugin root, so every file above golden-thread-plugin/
+# -- CHANGELOG.md, README.md, docs/, and a sync handoff naming internal systems -- reached
+# the public remote unscanned. Found 2026-09-13 with that file already live. --repo scans
+# what a push publishes: tracked files plus untracked-but-not-ignored ones.
+OUT=$("${GT_PYTHON:-python3}" dev/scrub_check.py --repo "$(git rev-parse --show-toplevel 2>/dev/null || echo "$ROOT")" 2>&1); rc=$?
 case $rc in
   0) ok "$(echo "$OUT" | tail -1)";;
   1) echo "$OUT" | grep '^HIT' | head -20; bad "employer/machine strings present";;

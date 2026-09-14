@@ -1,9 +1,11 @@
 """guard_test_before_commit.sh / .py -- the PreToolUse hook for core_test_before_commit.
 
 Contract:
-  * Input: the PreToolUse payload on stdin. Output: ALWAYS one JSON object with
-    hookSpecificOutput.hookEventName == PreToolUse and permissionDecision allow|deny;
-    exit 0.
+  * Input: the PreToolUse payload on stdin. Always exit 0. A deny is one JSON object
+    with hookSpecificOutput.hookEventName == PreToolUse and permissionDecision deny.
+    NO objection is NO output: never permissionDecision "allow", which Claude Code
+    treats as "skip the user's permission prompt" (hooks reference, 2026-09-13).
+    Warn mode and a degraded gate add additionalContext, still with no decision.
   * Deny `git commit` when the repo has CODE staged, has a discoverable test command,
     and no passing receipt newer than every staged file.
   * Allow: docs-only commits, a repo with `.gt-no-test-gate`, GT_TEST_GATE=off,
@@ -73,6 +75,8 @@ class CommitGuardBase(Sandbox):
         proc = self.sh(self.hooks / "guard_test_before_commit.sh",
                        input=json.dumps(payload), env=env or self.env)
         self.assertOk(proc, "the guard must always exit 0")
+        if not proc.stdout.strip():
+            return {}                    # no objection: the normal permission flow decides
         try:
             out = json.loads(proc.stdout)
         except ValueError as exc:
@@ -83,12 +87,14 @@ class CommitGuardBase(Sandbox):
 
     def assertDenied(self, msg, **kw):
         hso = self.decide(**kw)
-        self.assertEqual(hso["permissionDecision"], "deny", msg)
+        self.assertEqual(hso.get("permissionDecision"), "deny", msg)
         return hso
 
     def assertAllowed(self, msg, **kw):
         hso = self.decide(**kw)
-        self.assertEqual(hso["permissionDecision"], "allow", msg)
+        # Allowed = exit 0 and NO permissionDecision at all: empty stdout, or (warn mode)
+        # additionalContext only. 2026-09-13: "allow" skips the user's permission prompt.
+        self.assertNotIn("permissionDecision", hso, msg)
         return hso
 
 
@@ -162,6 +168,7 @@ class CommitGuard(CommitGuardBase):
         self.write("app.py")
         self.stage("app.py")
         hso = self.assertAllowed("warn mode must not block", )
+        self.assertEqual(hso.get("hookEventName"), "PreToolUse")
         self.assertIn("core_test_before_commit", hso.get("additionalContext", ""),
                       "warn mode has to actually say something, or it is just off")
 
@@ -212,9 +219,29 @@ class CommitGuard(CommitGuardBase):
             proc = self.sh(self.hooks / "guard_test_before_commit.sh",
                            input=payload, env=self.env)
             self.assertOk(proc, "malformed input must still exit 0")
-            self.assertEqual(json.loads(proc.stdout)["hookSpecificOutput"]
-                             ["permissionDecision"], "allow",
-                             "unparseable payload must fail OPEN")
+            self.assertEqual(proc.stdout, "", "unparseable payload must fail OPEN, silently")
+
+    def test_no_objection_emits_no_permission_decision(self):
+        """2026-09-13: the guard printed permissionDecision "allow" on every call it did
+        not block, which skips the user's permission prompt. No objection = no output."""
+        for tool, ti in (("Read", {"file_path": "/etc/hosts"}), ("Bash", {"command": "ls"})):
+            with self.subTest(tool=tool):
+                payload = {"session_id": "caller", "hook_event_name": "PreToolUse",
+                           "tool_name": tool, "tool_input": ti, "cwd": str(self.repo)}
+                proc = self.sh(self.hooks / "guard_test_before_commit.sh",
+                               input=json.dumps(payload), env=self.env)
+                self.assertOk(proc)
+                self.assertEqual(proc.stdout, "", "no objection must print nothing")
+
+    def test_broken_or_missing_python_target_prints_nothing(self):
+        (self.hooks / "guard_test_before_commit.py").write_text("raise SystemExit(3)\n")
+        proc = self.sh(self.hooks / "guard_test_before_commit.sh", input="{}", env=self.env)
+        self.assertOk(proc, "a broken guard must still exit 0")
+        self.assertEqual(proc.stdout, "", "fail open is silent, never an allow")
+        (self.hooks / "guard_test_before_commit.py").unlink()
+        proc = self.sh(self.hooks / "guard_test_before_commit.sh", input="{}", env=self.env)
+        self.assertOk(proc, "a missing guard must still exit 0")
+        self.assertEqual(proc.stdout, "")
 
     def test_outside_a_repo_is_allowed(self):
         outside = self.tmp / "not-a-repo"
