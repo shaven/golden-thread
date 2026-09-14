@@ -9,8 +9,10 @@ Contracts pinned here:
     file; both are registered and enabled;
   * the nine hooks install.sh owns are registered in settings.json and verified, and
     point at files that exist in the sandbox;
-  * install_demo=no leaves out exactly the demo skill, script and templates from
-    BOTH cache and marketplace -- including a demo left by an earlier install;
+  * the demo is module `demo` (plugin gt-demo) since 0.14.0: gt itself ships no demo, and
+    install_demo=no in vault-config.json (recorded as the module choice by the machine
+    migration) leaves gt-demo out of cache, marketplace and settings -- including a demo
+    left by an earlier install -- while gt and gt-wiki are installed file for file;
   * a second run is idempotent; foreign settings survive; old gt caches are pruned;
   * a bad version request or a manifest/dir mismatch refuses before installing.
 """
@@ -19,7 +21,7 @@ import shutil
 import unittest
 from pathlib import Path
 
-from _harness import Sandbox, REPO, GT, WIKI
+from _harness import Sandbox, REPO, GT, WIKI, latest_version_dir
 
 INSTALL = REPO / "install.sh"
 DEMO = ("skills/gt-demo", "scripts/gt_demo.sh", "templates/demo-pizzabot")
@@ -31,6 +33,10 @@ OWNED = {"SessionStart": {"gt_components.py", "gt_workers.py", "gt_version_check
          "PreCompact": {"gt_report_card.py"}, "SessionEnd": {"gt_report_card.py"},
          "PreToolUse": {"guard_protected_paths.sh"}}
 IGNORE = shutil.ignore_patterns("__pycache__", "*.pyc", ".DS_Store")
+try:
+    DEMO_MODULE = latest_version_dir(REPO / "golden-thread-demo")
+except (RuntimeError, OSError):
+    DEMO_MODULE = None
 
 
 def files_under(root: Path, dirs):
@@ -135,9 +141,9 @@ class InstallTest(Sandbox):
         self.assertIn("golden-thread-plugin", known)
         self.assertEqual(self.settings()["enabledPlugins"],
                          {"gt@golden-thread-plugin": True, "gt-wiki@golden-thread-plugin": True})
-        # demo is installed by default
+        # 0.14.0: the demo moved to the gt-demo module; gt carries none of it
         for d in DEMO:
-            self.assertTrue((self.cache() / d).exists(), d)
+            self.assertFalse((self.cache() / d).exists(), d)
         hooks_dir = self.home / ".claude" / "golden-thread" / "hooks"
         for f in ("inject_core_rules.sh", "validate_response.sh", "gt_paths.py", "gt_components.py"):
             self.assertTrue((hooks_dir / f).is_file(), f)
@@ -170,33 +176,48 @@ class InstallTest(Sandbox):
                           self.src(), "--owner", "install.sh"])
         self.assertOk(w)
 
+    # -- the demo module (0.14.0; until then install_demo=no stripped it out of gt) ----
+    def add_demo_module(self):
+        if DEMO_MODULE is None:
+            self.skipTest("golden-thread-demo module not in this tree")
+        shutil.copytree(DEMO_MODULE, self.repo / "golden-thread-demo" / DEMO_MODULE.name,
+                        ignore=IGNORE)
+
+    def demo_absent(self):
+        key = "gt-demo@golden-thread-plugin"
+        self.assertFalse((self.plugins / "cache" / "golden-thread-plugin" / "gt-demo").exists())
+        self.assertFalse(self.market("gt-demo").exists())
+        self.assertNotIn(key, self.settings()["enabledPlugins"])
+        inst = json.loads((self.plugins / "installed_plugins.json").read_text())["plugins"]
+        self.assertNotIn(key, inst)
+
     def test_install_demo_no_omits_exactly_the_demo(self):
-        for d in DEMO:
-            self.assertTrue((self.src() / d).exists(), f"fixture: {d} missing from the source")
+        self.add_demo_module()
         self.config(install_demo="no")
         p = self.install()
         self.assertOk(p)
-        self.assertIn("install_demo=no", p.stdout)
-        self.assertFalse([l for l in p.stdout.splitlines() if l.startswith("  /gt:gt-demo")],
+        self.assertIn("demo off (by your choice)", p.stdout)
+        self.assertFalse([l for l in p.stdout.splitlines() if "/gt-demo:gt-demo" in l],
                          "summary lists the demo skill as installed")
-        want = {f for f in files_under(self.src(), GT_DIRS) if not is_demo(f)}
+        self.demo_absent()
+        want = files_under(self.src(), GT_DIRS)
+        self.assertFalse([f for f in want if is_demo(f)], "gt source still ships the demo")
         for where, root in (("cache", self.cache()), ("marketplace", self.market())):
             with self.subTest(where=where):
-                for d in DEMO:
-                    self.assertFalse((root / d).exists(), f"{where} still has {d}")
                 self.assertEqual(files_under(root, GT_DIRS), want)
         # gt-wiki is untouched by the demo setting
         self.assertEqual(files_under(self.cache("gt-wiki"), WIKI_DIRS),
                          files_under(self.src("gt-wiki"), WIKI_DIRS))
 
     def test_install_demo_no_clears_a_demo_left_by_an_earlier_install(self):
+        self.add_demo_module()
         self.assertOk(self.install())
-        self.assertTrue((self.cache() / DEMO[0]).exists())
+        self.assertTrue((self.market("gt-demo") / "skills" / "gt-demo" / "SKILL.md").is_file())
         self.config(install_demo="no")
-        self.assertOk(self.install())
-        for root in (self.cache(), self.market()):
-            for d in DEMO:
-                self.assertFalse((root / d).exists(), f"{root}: {d} survived")
+        p = self.install()
+        self.assertOk(p)
+        self.assertIn("removed cache", p.stdout)
+        self.demo_absent()
 
     def test_second_run_is_idempotent(self):
         self.assertOk(self.install())
@@ -318,10 +339,11 @@ class InstallTest(Sandbox):
         self.assertEqual(listed, on_disk)
 
     def test_summary_omits_the_demo_when_it_is_not_installed(self):
+        self.add_demo_module()
         self.config(install_demo="no")
         p = self.install()
         self.assertOk(p)
-        self.assertNotIn("gt-demo", self._summary_skills(p.stdout),
+        self.assertFalse(self._summary_skills(p.stdout, "/gt-demo:"),
                          "gt-demo was listed as available but was not installed")
         listed = self._summary_skills(p.stdout)
         on_disk = {d.name for d in (self.cache() / "skills").iterdir()

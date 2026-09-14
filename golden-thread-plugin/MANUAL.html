@@ -114,7 +114,7 @@ pre, table { break-inside: avoid; font-size: 9px; }
 table { width:100%; border-collapse: collapse; }
 th, td { border:1px solid #ddd; padding:3px 5px; text-align:left; vertical-align:top; }
 </style></head><body><h1 id="golden-thread-user-manual">User Manual</h1>
-<p>Complete reference for all seventeen skills. Written against <strong>gt v0.13.0</strong>.</p>
+<p>Complete reference for all seventeen skills. Written against <strong>gt v0.14.0</strong>.</p>
 <hr />
 <h2 id="the-model">The model</h2>
 <p>Claude forgets everything between sessions. The vault doesn't. Golden Thread's
@@ -313,12 +313,46 @@ artifact — never your reasoning. Budget for the possibility that it comes back
 <p>Reads <code>index.md</code>, follows wikilinks into <code>Knowledge/</code>, then falls back to grep and
 project memory. If a page comes back <code>status: stale</code>, verify before acting on it.</p>
 <h3 id="keeping-the-vault-honest">Keeping the vault honest</h3>
-<pre><code>/gt:gt-upgrade         # after install.sh: migrate the vault (status, then --dry-run)
+<pre><code>/gt:gt-upgrade         # finish what install.sh could not apply (review, conflicts)
 /gt:gt-doctor          # the whole install in one report; --fix re-wires hooks only
 /gt:gt-lint            # broken links, orphans, unlisted memory, scope leaks
 /gt:gt-runbook-lint    # facts duplicated across runbooks
 /gt:gt-refresh         # upstream changes to Sources/
 </code></pre>
+<p><strong>What <code>install.sh</code> does on an upgrade (0.14.0).</strong> One run from any older release ends where a
+fresh install of the newest would, so skipping releases is safe:</p>
+<ol>
+<li>Installs every plugin the release ships and removes what older releases left behind
+   (<code>retired.json</code>), after a backup.</li>
+<li>Applies one-time <strong>machine migrations</strong> (<code>gt_machine_migrate.py</code>) — changes under
+   <code>~/.claude/</code> a skipped release would have made. Each runs once, judged from the machine's
+   actual state; the first failure stops the install with <code>INSTALL INCOMPLETE</code>.</li>
+<li>Applies pending <strong>vault upgrades</strong> itself when the vault had no uncommitted changes before
+   the install touched it, after a backup. Results are left uncommitted for you to review.
+   A vault the same install created gets an initial commit first. A vault holding your own
+   uncommitted work is never touched — the install prints the command to run instead.</li>
+</ol>
+<p>Two things are always left for you, reported by the install and by <code>/gt:gt-upgrade</code>:
+<strong>needs a person: no merge base</strong> (a PROTOCOL.md or CONVENTIONS.md you edited before gt
+recorded a base — review it against the template, then <code>gt_upgrade.py run --record-base
+&lt;doc&gt;</code>), and <strong>conflict awaiting you</strong> (resolve the <code>.merge-conflict</code> file, then
+<code>--record-base</code>). Neither is ever merged unattended, and neither is re-run on every install.</p>
+<pre><code class="language-bash">python3 $SCRIPTS/gt_machine_migrate.py status          # machine migrations pending here
+python3 $SCRIPTS/gt_upgrade.py --vault &lt;vault&gt; status  # vault upgrades pending
+</code></pre>
+<p><strong>Modules (0.14.0).</strong> Optional parts of Golden Thread ship as modules — separate plugins in
+the same marketplace, versioned with gt, each declared by a <code>module.json</code>. Today: <code>wiki</code>
+(<code>gt-wiki</code>) and <code>demo</code> (<code>gt-demo</code>), both on by default.</p>
+<pre><code class="language-bash">bash install.sh --list-modules          # each module, its state, and why
+bash install.sh --without demo          # remove it; the choice is remembered
+bash install.sh --with demo             # bring it back
+</code></pre>
+<p>The choice lives in <code>~/.claude/golden-thread/install-choices.json</code>. A module that is off
+leaves nothing behind: no plugin cache, marketplace entry, enabled flag, hooks or hook
+scripts. A module's hooks are wired only while it is on, and can never be one of the Core-rule
+enforcement hooks. <code>/gt:gt-doctor</code> reports each module and flags one that is off but still
+installed. A module may ship a demo act (<code>module.json</code> → <code>demo</code>); <code>/gt-demo:gt-demo</code>
+includes the acts of whatever modules are installed when the tour runs.</p>
 <p>Run <code>gt-lint</code> after any structural change. Triage into three piles: <em>you broke it</em>
 (fix now), <em>already broken</em> (record in <code>review-queue.md</code>), <em>false positive</em> (suppress
 <strong>with the reason</strong>). The check that matters most is <code>memory-unlisted</code> — a memory file
@@ -825,12 +859,6 @@ is registered here and can be switched off.</p>
 <td><code>auto</code></td>
 <td>Ceiling on concurrent workers. <code>auto</code> = as many as the machine allows</td>
 </tr>
-<tr>
-<td><code>install_demo</code></td>
-<td><code>yes</code> · <code>no</code></td>
-<td><code>yes</code></td>
-<td>Whether <code>install.sh</code> installs <code>/gt:gt-demo</code>, its script and the PizzaBot template</td>
-</tr>
 </tbody>
 </table>
 <blockquote>
@@ -906,21 +934,23 @@ matching your own <code>p0_when</code>. A new release, a major-version jump, a c
 <p>Off until you switch it on: setting <code>watch</code> (<code>off</code> · <code>report</code>). <code>add</code> offers to switch it
 on and install the cron entry.</p>
 <hr />
-<h3 id="gtgt-demo"><code>/gt:gt-demo</code></h3>
+<h3 id="gt-demogt-demo"><code>/gt-demo:gt-demo</code></h3>
+<p><em>Module <code>demo</code> (plugin <code>gt-demo</code>), installed by default. <code>bash install.sh --without demo</code>
+removes it; <code>--with demo</code> brings it back.</em></p>
 <p>An eleven-act guided tour of Golden Thread on PizzaBot 3000, a fictional pizza-ordering
 project. It runs in its <strong>own throwaway vault</strong>, so nothing it does can reach yours.</p>
-<pre><code>/gt:gt-demo start    — build the demo vault and print the command that opens it
-/gt:gt-demo tour     — (in the demo session) run the tour; you only click Next
-/gt:gt-demo end      — every commit and file the tour produced
-/gt:gt-demo clean    — delete the demo vault and build a fresh one
-/gt:gt-demo remove   — delete the demo and switch it off (install_demo = no)
-/gt:gt-demo status   — is there a demo vault, and how old is it
+<pre><code>/gt-demo:gt-demo start    — build the demo vault and print the command that opens it
+/gt-demo:gt-demo tour     — (in the demo session) run the tour; you only click Next
+/gt-demo:gt-demo end      — every commit and file the tour produced
+/gt-demo:gt-demo clean    — delete the demo vault and build a fresh one
+/gt-demo:gt-demo remove   — delete the demo vault; `bash install.sh --without demo` removes the module
+/gt-demo:gt-demo status   — is there a demo vault, and how old is it
 </code></pre>
 <p><strong>Running it:</strong> <code>start</code> builds the vault at <code>~/.claude/golden-thread/demo-vault</code> and prints
 <code>cd &lt;demo vault&gt; &amp;&amp; GT_VAULT=&lt;demo vault&gt; GT_WATCH=report GT_WATCH_STATE=&lt;demo vault&gt;/.demo/watch claude</code>
 — the extra variables let the watch act run without touching this machine's watch
 settings or state. Run that in a new terminal and type
-<code>/gt:gt-demo tour</code>. For each act Claude says one line to the audience, does the work with
+<code>/gt-demo:gt-demo tour</code>. For each act Claude says one line to the audience, does the work with
 the real skill, says what just happened, and offers buttons — <strong>Next</strong>, <strong>Repeat this
 act</strong>, <strong>Skip ahead</strong>, <strong>End tour</strong>.</p>
 <p><strong>The acts:</strong> Core rules enforced (a prepared reply carrying a key is blocked) · open a
@@ -997,7 +1027,7 @@ answer is not obvious — including when the honest answer is that the fact belo
 project other than the one loaded.</p>
 <hr />
 <h2 id="script-reference">Script reference</h2>
-<pre><code class="language-bash">SCRIPTS=~/.claude/plugins/cache/golden-thread-plugin/gt/0.13.0/scripts
+<pre><code class="language-bash">SCRIPTS=~/.claude/plugins/cache/golden-thread-plugin/gt/0.14.0/scripts
 
 python3 $SCRIPTS/vault_init.py fresh --vault ~/my-vault --domain &quot;My Team&quot;
 

@@ -7,8 +7,11 @@ Contract:
   * `run` refuses a dirty git tree, so the upgrade stays one `git checkout` from undone.
   * A migration that REFUSES does not stop the others; it is reported, and a later run
     continues from there.
-  * A document merge without a base does not overwrite the owner's file.
+  * A document merge without a base does not overwrite the owner's file, records no base,
+    and is reported as needing a person rather than as a pending step.
   * A conflicting merge leaves the document untouched and writes the markers beside it.
+  * A conflict already written for the same base, template and document is not redone:
+    a second run writes nothing and reports "conflict awaiting you".
 """
 import json
 import subprocess
@@ -203,16 +206,37 @@ class DocumentMerges(UpgradeBase):
     def doc(self):
         return self.v / "Projects" / "PROTOCOL.md"
 
-    def test_no_base_leaves_the_document_alone_and_records_one(self):
+    def test_no_base_is_left_alone_never_captured_and_never_pending(self):
+        # 0.14.0: capturing the owner's CURRENT file as the base made the next run's merge
+        # (base == ours) take the release's side everywhere -- the owner's edits lost.
         d = self.doc()
         d.parent.mkdir(parents=True, exist_ok=True)
+        (self.v / BASE / "PROTOCOL.md").unlink()
         d.write_text("# Mine\n\nlocal edits\n")
         before = d.read_bytes()
-        self.up("run", "--allow-dirty")
-        self.assertEqual(d.read_bytes(), before,
-                         "an owner's document was overwritten with no merge base")
-        self.assertTrue((self.v / BASE / "PROTOCOL.md").is_file(),
-                        "no base captured, so the next upgrade cannot merge either")
+        for _ in range(2):
+            p = self.up("run", "--allow-dirty")
+            self.assertEqual(d.read_bytes(), before,
+                             "an owner's document was overwritten with no merge base")
+            self.assertFalse((self.v / BASE / "PROTOCOL.md").exists(),
+                             "a base was recorded without a person reviewing the document")
+            self.assertIn("needs a person: no merge base — review %s against the shipped "
+                          "template, then run /gt:gt-upgrade" % d, p.stdout)
+        st = self.up("status")
+        self.assertNotIn("doc-merge", st.stdout, "a no-base document offered as an appliable step")
+        self.assertIn("needs a person: no merge base", st.stdout)
+
+    def test_record_base_is_explicit_and_records_the_shipped_template(self):
+        d = self.doc()
+        (self.v / BASE / "PROTOCOL.md").unlink()
+        d.write_text("# Mine\n\nlocal edits\n")
+        before = d.read_bytes()
+        p = self.up("run", "--allow-dirty", "--record-base", "PROTOCOL.md")
+        self.assertOk(p)
+        self.assertEqual((self.v / BASE / "PROTOCOL.md").read_text(),
+                         (TEMPLATES / "PROTOCOL.md").read_text())
+        self.assertEqual(d.read_bytes(), before)
+        self.assertNotIn("needs a person", self.up("status").stdout)
 
     def test_with_a_base_the_release_changes_are_merged_in(self):
         shipped = (TEMPLATES / "PROTOCOL.md").read_text()
@@ -227,6 +251,20 @@ class DocumentMerges(UpgradeBase):
         after = d.read_text()
         self.assertIn("A section this vault added", after,
                       "the vault's own edit was lost in the merge")
+
+    def test_an_owner_edit_already_merged_is_not_pending_again(self):
+        # base == shipped and the vault carries its own edit: the release has nothing
+        # left to give, so status must not offer doc-merge (it did, forever, before 0.14.0).
+        shipped = (TEMPLATES / "PROTOCOL.md").read_text()
+        base = self.v / BASE / "PROTOCOL.md"
+        base.parent.mkdir(parents=True, exist_ok=True)
+        base.write_text(shipped)
+        d = self.doc()
+        d.write_text(shipped + "\n## A section this vault added\n")
+        self.assertNotIn("doc-merge", self.up("status").stdout)
+        # ...while a base the release has moved past still is.
+        base.write_text(shipped.replace("\n", "\n\n", 1))
+        self.assertIn("doc-merge", self.up("status").stdout)
 
     def test_a_conflict_leaves_the_document_untouched(self):
         shipped = (TEMPLATES / "PROTOCOL.md").read_text()
@@ -244,6 +282,63 @@ class DocumentMerges(UpgradeBase):
         self.assertTrue(d.with_suffix(".md.merge-conflict").is_file(),
                         "the conflicted text was not left anywhere to resolve")
         self.assertNotEqual(shipped, d.read_text())
+
+    def conflicting(self):
+        base = self.v / BASE / "PROTOCOL.md"
+        base.write_text("\n".join("base line %d" % i for i in range(40)) + "\n")
+        d = self.doc()
+        d.write_text("\n".join("vault line %d" % i for i in range(40)) + "\n")
+        return d
+
+    def git_status(self):
+        return subprocess.run(["git", "-C", str(self.v), "status", "--porcelain",
+                               "--untracked-files=all"], capture_output=True, text=True).stdout
+
+    def test_a_conflict_awaiting_its_owner_is_not_redone(self):
+        d = self.conflicting()
+        self.commit_all()
+        first = self.up("run")
+        self.assertIn("CONFLICT", first.stdout, first.stdout + first.stderr)
+        conflict = d.with_suffix(".md.merge-conflict")
+        awaiting = ("needs a person: conflict awaiting you: %s — resolve, then /gt:gt-upgrade"
+                    % conflict)
+        self.assertIn(awaiting, first.stdout)
+        before, status_before = self.snapshot(), self.git_status()
+        second = self.up("run", "--allow-dirty")
+        self.assertEqual(self.snapshot(), before, "a second run rewrote files for the same conflict")
+        self.assertEqual(self.git_status(), status_before)
+        self.assertNotIn("backup:", second.stdout, "the awaiting conflict was treated as pending")
+        self.assertIn(awaiting, second.stdout)
+        st = self.up("status")
+        self.assertIn("nothing pending", st.stdout)
+        self.assertIn(awaiting, st.stdout)
+
+    def test_a_changed_document_makes_the_conflict_pending_again(self):
+        d = self.conflicting()
+        self.up("run", "--allow-dirty")
+        self.assertNotIn("doc-merge", self.up("status").stdout)
+        d.write_text(d.read_text() + "the owner is working on it\n")
+        st = self.up("status")
+        self.assertIn("doc-merge", st.stdout, "new inputs must be merged again")
+        self.assertNotIn("conflict awaiting you", st.stdout)
+
+    def test_record_base_settles_a_resolved_conflict(self):
+        d = self.conflicting()
+        self.up("run", "--allow-dirty")
+        conflict = d.with_suffix(".md.merge-conflict")
+        p = self.up("run", "--allow-dirty", "--record-base", "PROTOCOL.md")
+        self.assertIn("resolve it into", p.stdout, "record-base ignored an unresolved conflict")
+        d.write_text("the owner's resolution\n")
+        conflict.unlink()
+        resolved = d.read_bytes()
+        p = self.up("run", "--allow-dirty", "--record-base", "PROTOCOL.md")
+        self.assertIn("recorded the", p.stdout, p.stdout + p.stderr)
+        self.assertEqual((self.v / BASE / "PROTOCOL.md").read_text(),
+                         (TEMPLATES / "PROTOCOL.md").read_text())
+        self.assertEqual(d.read_bytes(), resolved)
+        st = self.up("status")
+        self.assertIn("nothing pending", st.stdout)
+        self.assertNotIn("needs a person", st.stdout)
 
 
 if __name__ == "__main__":

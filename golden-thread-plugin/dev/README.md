@@ -27,6 +27,7 @@ shipped broken while everything looked fine.
 | cli contract | `check_cli_contract.py` | a vault tool that writes without accepting `--vault` and `--dry-run` |
 | installer version | `check_installer_version.py` | `install.sh` or `selftest.sh` changed since the newest release was cut |
 | retired | `check_retired.py` | a release that stops installing a hook-dir file or registering a hook without listing it in `retired.json`, so upgrades from older releases would leave it behind |
+| modules | `plugins.py module-check` | a module whose `module.json` is invalid (unknown key, a listed file missing, a hook claiming a Core-rule enforcement script, a version mismatch) or whose `requires_gt` does not admit the gt being released |
 | wiring coverage | `check_wiring_coverage.py` | a shipped hook, script, skill, tool or Core rule that does not reach its destination in a real install |
 | docs | *(inline)* + `build-docs.py` | a skill, vault tool, setting or `dev/` script documented nowhere; HTML drifted from its `.md`; a PDF older than its source; docs that never name the current version |
 | scrub | `scrub_check.py` | an employer or machine-specific string in anything shipped |

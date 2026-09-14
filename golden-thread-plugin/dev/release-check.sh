@@ -65,6 +65,20 @@ for d in "${PDIRS[@]}"; do
   [ "$pv" = "$v" ] && ok "$d plugin.json says $pv" || bad "$d plugin.json says $pv, directory says $v"
 done
 
+step "modules"
+# A module (a plugin dir whose newest release carries module.json, 0.14.0) must have a
+# valid module.json -- no unknown keys, every listed skill/script/template present, no
+# Core-rule enforcement hook -- and its requires_gt must admit the gt being released, or
+# install.sh would skip it on every machine that installs this release.
+NMOD=0
+for d in "${PDIRS[@]}"; do
+  [ -f "$d/module.json" ] || continue
+  NMOD=$((NMOD+1))
+  OUT=$(python3 dev/plugins.py module-check "$d" --gt "$GTV" 2>&1); rc=$?
+  [ $rc -eq 0 ] && ok "$OUT (admits gt $GTV)" || { echo "$OUT" | tail -15; bad "$d module.json invalid or does not admit gt $GTV"; }
+done
+[ $NMOD -gt 0 ] || ok "no modules ship in this release"
+
 step "manifest"
 # EVERY plugin ships a MANIFEST.json and it must match its tree. A plugin without one
 # fails (dev/plugins.py manifest-check exits 2): until 0.13.0 only gt had hash trust, and
@@ -204,6 +218,13 @@ for root in map(pathlib.Path, sys.argv[1:]):
     # Any script a skill names, by filename, wherever it says it lives: on 2026-09-11 a
     # skill ran <vault>/Projects/golden-thread/gt-demo.sh, which shipped nowhere.
     have = {p.name for p in root.rglob("*") if p.is_file()} | {p.name for p in pathlib.Path(".").iterdir() if p.is_file()}
+    # A MODULE requires gt (module.json requires_gt), so its skills may name gt's core
+    # scripts -- the demo tour runs vault_init.py and gt_watch.py from gt. A name that ships in
+    # neither the module nor gt still fails. (0.14.0: the demo moved out of gt.)
+    if (root / "module.json").is_file():
+        gt_core = sorted(pathlib.Path("golden-thread").glob("[0-9]*.[0-9]*.[0-9]*/"), key=lambda d: tuple(int(x) for x in d.name.split(".")))
+        if gt_core:
+            have |= {p.name for p in gt_core[-1].rglob("*") if p.is_file()}
     for sk in root.glob("skills/*/SKILL.md"):
         for name in sorted(set(re.findall(r"\b([\w.-]+\.(?:py|sh))\b", sk.read_text(encoding="utf-8")))):
             if name not in have:

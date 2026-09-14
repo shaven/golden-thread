@@ -27,13 +27,15 @@ EXPECTED = {
     "watch": ("off", ["off", "report"]),
     "closeout_check": ("ask", ["off", "ask"]),
     "report_card": ("minimal", ["off", "minimal", "full"]),
-    "install_demo": ("yes", ["yes", "no"]),
     "protected_paths": ("ask", ["off", "ask"]),
     "test_gate": ("auto", ["off", "warn", "auto", "block"]),
     "parallel_work": ("on", ["off", "on"]),
     # values None == free-form; `validate` carries the shape instead of a closed list.
     "parallel_max": ("auto", None),
 }
+# install_demo is gone since 0.14.0: the demo is a module and its install is a module
+# choice (install-choices.json), not a gt setting.
+REMOVED = ("install_demo",)
 
 
 class SettingsCli(Sandbox):
@@ -79,37 +81,43 @@ class SettingsCli(Sandbox):
 
     def test_invalid_value_falls_back_to_default(self):
         self.config(vault_path=str(self.tmp), component_updates="sometimes",
-                    install_demo="maybe", report_card="")
+                    push_check="maybe", report_card="")
         self.assertEqual(self.get("component_updates"), "report")
-        self.assertEqual(self.get("install_demo"), "yes")
+        self.assertEqual(self.get("push_check"), "report")
         self.assertEqual(self.get("report_card"), "minimal")
 
     def test_value_is_normalised(self):
         self.config(vault_path=str(self.tmp), component_updates="  AUTO ",
-                    install_demo="No")
+                    push_check="Off")
         self.assertEqual(self.get("component_updates"), "auto")
-        self.assertEqual(self.get("install_demo"), "no")
+        self.assertEqual(self.get("push_check"), "off")
 
-    def test_install_demo_values(self):
-        self.assertEqual(self.get("install_demo"), "yes")
+    def test_install_demo_is_no_longer_a_setting(self):
+        """The demo is a module since 0.14.0; its install is a module choice."""
         self.config(vault_path=str(self.tmp), install_demo="no")
-        self.assertEqual(self.get("install_demo"), "no")
-        self.config(vault_path=str(self.tmp), install_demo="yes")
-        self.assertEqual(self.get("install_demo"), "yes")
+        self.assertEqual(self.get("install_demo"), "", "install_demo is still registered")
+        p = self.py(TOOL, "set", "install_demo", "no")
+        self.assertEqual(p.returncode, 2)
+        self.assertIn("unknown setting", p.stdout)
+        p = self.py(TOOL, "show")
+        self.assertOk(p)
+        self.assertNotIn("install_demo", p.stdout)
+        cfg = json.loads(self.cfg_path().read_text())
+        self.assertEqual(cfg.get("install_demo"), "no", "a user's key must be left alone")
 
     def test_non_string_value_does_not_crash(self):
-        # A hand-edited `"install_demo": true` / `"report_card": 1` is the obvious way
-        # to write a yes/no flag in JSON. It is not a registered value, so the default
+        # A hand-edited `"report_card": true` / `"report_card": 1` is the obvious way
+        # to write a flag in JSON. It is not a registered value, so the default
         # must apply -- the reader must not raise, and `show` (what /gt:gt-settings
         # renders) must not die on it.
         for bad in (True, 1, ["no"]):
-            self.config(vault_path=str(self.tmp), install_demo=bad)
-            p = self.py(TOOL, "get", "install_demo")
+            self.config(vault_path=str(self.tmp), report_card=bad)
+            p = self.py(TOOL, "get", "report_card")
             self.assertOk(p, "gt_settings.get() raised on a non-string value %r "
                              "(`(v or '').strip()` assumes str)" % (bad,))
-            self.assertEqual(p.stdout.strip(), "yes")
+            self.assertEqual(p.stdout.strip(), "minimal")
             p = self.py(TOOL, "show")
-            self.assertOk(p, "show crashed on install_demo=%r" % (bad,))
+            self.assertOk(p, "show crashed on report_card=%r" % (bad,))
 
     def test_unknown_setting_get_prints_empty(self):
         p = self.py(TOOL, "get", "no_such_setting")
@@ -125,14 +133,14 @@ class SettingsCli(Sandbox):
         push = [l for l in p.stdout.splitlines() if l.strip().startswith("push_check")][0]
         self.assertIn("off", push)
         self.assertNotIn("default", push)
-        demo = [l for l in p.stdout.splitlines() if l.strip().startswith("install_demo")][0]
-        self.assertIn("yes", demo)
-        self.assertIn("default", demo)
+        card = [l for l in p.stdout.splitlines() if l.strip().startswith("report_card")][0]
+        self.assertIn("minimal", card)
+        self.assertIn("default", card)
 
     def test_explain(self):
-        p = self.py(TOOL, "explain", "install_demo")
+        p = self.py(TOOL, "explain", "report_card")
         self.assertOk(p)
-        self.assertIn("current: yes, default: yes", p.stdout)
+        self.assertIn("current: minimal, default: minimal", p.stdout)
         p = self.py(TOOL, "explain", "bogus")
         self.assertEqual(p.returncode, 2)
         self.assertIn("unknown setting", p.stdout)
@@ -144,26 +152,26 @@ class SettingsCli(Sandbox):
 
     # -- writing -------------------------------------------------------------------
     def test_set_refuses_without_vault_path(self):
-        p = self.py(TOOL, "set", "install_demo", "no")
+        p = self.py(TOOL, "set", "report_card", "off")
         self.assertEqual(p.returncode, 2)
         self.assertIn("refusing", p.stdout)
         self.assertFalse(self.cfg_path().exists(),
                          "set created a config with no vault_path")
         self.config(core_rules_path="x")
-        p = self.py(TOOL, "set", "install_demo", "no")
+        p = self.py(TOOL, "set", "report_card", "off")
         self.assertEqual(p.returncode, 2)
-        self.assertNotIn("install_demo", self.cfg_path().read_text())
+        self.assertNotIn("report_card", self.cfg_path().read_text())
 
     def test_set_writes_top_level_key_and_keeps_others(self):
         self.config(vault_path="/some/vault", core_rules_path="Projects/x",
                     report_card="full")
-        p = self.py(TOOL, "set", "install_demo", "NO")
+        p = self.py(TOOL, "set", "push_check", "OFF")
         self.assertOk(p)
-        self.assertIn("install_demo: yes -> no", p.stdout)
+        self.assertIn("push_check: report -> off", p.stdout)
         d = json.loads(self.cfg_path().read_text())
         self.assertEqual(d, {"vault_path": "/some/vault", "core_rules_path": "Projects/x",
-                             "report_card": "full", "install_demo": "no"})
-        self.assertEqual(self.get("install_demo"), "no")
+                             "report_card": "full", "push_check": "off"})
+        self.assertEqual(self.get("push_check"), "off")
 
     def test_set_rejects_invalid_value_and_unknown_name(self):
         self.config(vault_path="/v")
@@ -174,6 +182,66 @@ class SettingsCli(Sandbox):
         p = self.py(TOOL, "set", "nonsense", "on")
         self.assertEqual(p.returncode, 2)
         self.assertEqual(self.cfg_path().read_text(), before)
+
+
+class ModuleSettings(Sandbox):
+    """An ON module's settings are registered at load and shown under its name."""
+
+    def setUp(self):
+        super().setUp()
+        import shutil
+        self.root = self.tmp / "Golden Thread" / "plugin"
+        gt = self.root / "golden-thread" / "9.9.9"
+        (gt / "scripts").mkdir(parents=True)
+        (gt / ".claude-plugin").mkdir()
+        (gt / ".claude-plugin" / "plugin.json").write_text('{"name": "gt", "version": "9.9.9"}')
+        for n in ("gt_settings.py", "gt_components.py"):
+            shutil.copy2(SCRIPTS / n, gt / "scripts" / n)
+        self.tool = gt / "scripts" / "gt_settings.py"
+        self.module("zed", requires=">=9.0.0", settings=[
+            {"key": "zed_mode", "default": "calm", "values": ["calm", "loud"],
+             "summary": "How loud zed is."},
+            {"key": "report_card", "default": "full", "values": ["full"],
+             "summary": "A module may not override a gt setting."}])
+
+    def module(self, name, requires, settings):
+        vd = self.root / ("golden-thread-" + name) / "1.0.0"
+        (vd / ".claude-plugin").mkdir(parents=True, exist_ok=True)
+        (vd / ".claude-plugin" / "plugin.json").write_text(
+            json.dumps({"name": "gt-" + name, "version": "1.0.0"}))
+        (vd / "module.json").write_text(json.dumps({
+            "schema": 1, "name": name, "plugin": "gt-" + name, "version": "1.0.0",
+            "requires_gt": requires, "summary": "fixture", "default": "on",
+            "settings": settings}))
+
+    def test_on_module_settings_are_registered_and_shown_under_its_name(self):
+        self.config(vault_path=str(self.tmp))
+        p = self.py(self.tool, "show")
+        self.assertOk(p)
+        lines = p.stdout.splitlines()
+        self.assertIn("module zed", lines)
+        head = lines.index("module zed")
+        self.assertTrue(any(l.strip().startswith("zed_mode") for l in lines[head:]))
+        self.assertFalse(any(l.strip().startswith("zed_mode") for l in lines[:head]))
+        self.assertEqual(self.py(self.tool, "get", "zed_mode").stdout.strip(), "calm")
+        self.assertOk(self.py(self.tool, "set", "zed_mode", "loud"))
+        self.assertEqual(self.py(self.tool, "get", "zed_mode").stdout.strip(), "loud")
+        self.assertEqual(self.py(self.tool, "get", "report_card").stdout.strip(), "minimal",
+                         "a module setting overrode gt's own")
+
+    def test_off_module_registers_nothing(self):
+        choices = self.home / ".claude" / "golden-thread" / "install-choices.json"
+        choices.parent.mkdir(parents=True)
+        choices.write_text(json.dumps({"version": 1, "choices": {"zed": "off"}}))
+        p = self.py(self.tool, "show")
+        self.assertOk(p)
+        self.assertNotIn("zed_mode", p.stdout)
+        self.assertEqual(self.py(self.tool, "get", "zed_mode").stdout.strip(), "")
+
+    def test_module_not_admitting_this_gt_registers_nothing(self):
+        self.module("zed", requires=">=10.0.0", settings=[
+            {"key": "zed_mode", "default": "calm", "values": ["calm"], "summary": "x"}])
+        self.assertNotIn("zed_mode", self.py(self.tool, "show").stdout)
 
 
 class SettingsInProcess(Sandbox):
@@ -194,7 +262,11 @@ class SettingsInProcess(Sandbox):
         self.assertTrue(self.m.CONFIG.startswith(str(self.home)))
 
     def test_registry_is_self_consistent(self):
-        self.assertEqual(set(self.m.SETTINGS), set(EXPECTED))
+        # gt's own settings; a module's (registered from its module.json) carry "module".
+        own = {n for n, s in self.m.SETTINGS.items() if not s.get("module")}
+        self.assertEqual(own, set(EXPECTED))
+        for gone in REMOVED:
+            self.assertNotIn(gone, self.m.SETTINGS)
         for name, spec in self.m.SETTINGS.items():
             if spec["values"] is None:
                 # A free-form setting must still say what it accepts, and its own

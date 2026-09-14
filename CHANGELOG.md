@@ -11,6 +11,66 @@ release's own summary line, kept short rather than reconstructed after the fact.
 
 ---
 
+## gt 0.14.0 — in progress (branch `release/0.14.0`, not released)
+
+**An upgrade now finishes the job without you.** 0.13.0 removed what older releases left
+behind; this release adds the other two pieces an upgrade from any older release needs.
+
+- **Machine migrations** (`gt_machine_migrate.py`, run by `install.sh`): one-time changes
+  under `~/.claude/` that a skipped release would have made. Each is applied once, judged
+  from the machine's actual state rather than a record, stops the install at the first
+  failure (`INSTALL INCOMPLETE`, exit 7), and backs up what it changes. The first one records
+  your demo choice in `install-choices.json`, ready for optional modules.
+- **Vault upgrades are applied by the install** when the vault had no uncommitted changes
+  before the install touched it (after a backup; results left uncommitted for review). A
+  vault the same install created gets an initial commit. Your own uncommitted work is never
+  touched — the install prints the command instead.
+- **Your edits are never merged away.** A PROTOCOL.md or CONVENTIONS.md with no base gt
+  recorded is never merged unattended: it is reported as *needs a person* until you review
+  it and run `gt_upgrade.py run --record-base <doc>`. Connecting an existing vault no longer
+  records a base for an edited document. A merge conflict is reported, not re-run on every
+  install.
+- **`install.sh` installs every plugin the release ships**, discovered by the same rule as the
+  release gate, instead of naming gt and gt-wiki. `--list-plugins` shows what it found.
+
+**Optional parts are modules you can decline.**
+- A module is a separate plugin in the same marketplace, declared by `module.json` and
+  versioned with gt. **`wiki`** (gt-wiki 0.2.0) and **`demo`** (gt-demo 0.14.0) ship as modules,
+  both on by default.
+- `bash install.sh --without demo` removes a module completely — plugin cache, marketplace
+  entry, enabled flag, hooks and hook scripts — and remembers the choice; `--with demo` brings
+  it back; `--list-modules` shows each module's state and why.
+- **The demo moved out of gt.** It is now `/gt-demo:gt-demo` (was `/gt:gt-demo`). `remove`
+  deletes the demo vault and points to `install.sh --without demo`. If you had
+  `install_demo: no`, the upgrade keeps the demo off.
+- Modules may declare hooks, tagged with the module name and wired only while the module is
+  on; a module can never claim a Core-rule enforcement hook. Module settings appear in
+  `gt_settings.py show` under the module's name; gt's `install_demo` setting is gone.
+- gt skills that point at the wiki say how to install it when it is off, and the version
+  check reports a declined module as "not installed by choice".
+- `/gt:gt-doctor` gains a modules check; the release gate validates every `module.json` and
+  that its `requires_gt` admits the gt being released.
+
+**The demo shows what you have installed.** `/gt-demo:gt-demo` assembles its tour when it
+runs: gt's core acts plus one act from each installed module that ships one
+(`module.json` → `demo`), placed before the closing act so its work appears in the receipt.
+The wiki act now lives in the wiki module — install it and the act appears; remove it and
+it is gone. Third-party extensions will not supply act text of their own.
+
+**Fixed, found by this release's regression**
+- **New vaults and new projects start current.** Since 0.11.0 `vault_init fresh` created
+  `log.md`, and `create-project` created `decisions.md`, in the pre-spool layout, so every
+  new vault and project was born one upgrade behind. Now that installs apply upgrades, a
+  fresh install would have ended with changes to review on a vault created seconds earlier.
+- **`merge-project` no longer loses decisions.** It wrote the source project's ADRs into the
+  destination's generated `decisions.md`, and the next re-render deleted them. They now go
+  into the destination's spool, the ADR count is verified before anything is removed, and a
+  failure part-way leaves both projects as they were.
+- **`rename-project` moves the decisions spool** with the project, so the renamed project
+  does not read as unmigrated and its next ADR does not restart at 1.
+- **`--dry-run` means nothing changes** for `merge-project` (it moved notes and deleted files)
+  and `rename-project` (it renamed the folder).
+
 ## gt 0.13.0 · gt-wiki 0.1.3 — 2026-09-14
 
 **Upgrading from any older release now lands you on the same install a fresh one would.**

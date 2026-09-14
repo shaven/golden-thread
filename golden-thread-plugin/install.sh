@@ -58,6 +58,387 @@ latest_version() {
   done | sort -t. -k1,1n -k2,2n -k3,3n | tail -1
 }
 
+# A plugin's name is what Claude Code keys it by (cache dir, marketplace entry,
+# "<name>@golden-thread-plugin"); the directory name is only the fallback.
+plugin_name_of() {  # $1 = version dir
+  python3 -c "import json,sys
+try:
+    d = json.load(open(sys.argv[1], encoding='utf-8'))
+    n = d.get('name')
+except (OSError, ValueError, AttributeError):
+    n = None
+print(n or '')" "$1/.claude-plugin/plugin.json" 2>/dev/null || true
+}
+
+# WHICH plugins this tree ships (0.14.0). Until 0.13.0 this installer named gt and
+# gt-wiki by hand in ~22 places, so a third plugin beside them would have been silently
+# skipped. The rule is the one dev/plugins.py implements -- every top-level
+# <dir>/<N.N.N>/.claude-plugin/plugin.json, newest per dir, sorted by dir name -- and
+# tests/test_install_plugins.py asserts the two agree on the real repo. It is repeated
+# here rather than called because install.sh must stand alone: it runs from gt-src and
+# from zip packages, neither of which is guaranteed to carry dev/.
+#
+# Output: "<dir>\t<version>\t<name>" per plugin.
+discover_plugins() {  # $1 = plugin root
+  local root="$1" d dir ver name
+  for d in "$root"/*/; do
+    [ -d "$d" ] || continue
+    dir=$(basename "$d")
+    ver=$(latest_version "$root/$dir")
+    [ -n "$ver" ] || continue
+    name=$(plugin_name_of "$root/$dir/$ver")
+    printf '%s\t%s\t%s\n' "$dir" "$ver" "${name:-$dir}"
+  done | LC_ALL=C sort -t "$(printf '\t')" -k1,1
+}
+
+# MODULES (0.14.0). A discovered plugin whose version dir carries module.json is a module:
+# optional, chosen with --with / --without, the choice kept in
+# ~/.claude/golden-thread/install-choices.json. gt itself is never a module. The
+# effective state (flag this run > recorded choice > the module's default) is asked of
+# the gt being installed (`gt_components.py module-states`), and computed here the same
+# way only when that gt predates the subcommand (a rollback). A module whose requires_gt
+# does not admit the gt being installed is skipped -- treated as off for this run, its
+# recorded choice left alone.
+#
+# One helper, several subcommands, so the reading of module.json is written once:
+#   scan <root> <gt-version> <dir> <ver> <name> ...   -> JSON list of modules on stdout
+#   resolve <in.json> <out.json> <home> <states-json|-> [with:N|without:N ...]
+#   record <home> <name> on|off                        (fallback for record-choice)
+#   list <json> <gt-version> | summary <json> | onfiles <json> | names <json>
+#   remove <json> <home> <src> <cache-root> <marketplace> <installed> <settings> <hooks>
+MODPY=$(cat <<'PYEOF'
+import json, os, re, shutil, subprocess, sys, tempfile, time
+
+NAME = re.compile(r"^[a-z][a-z0-9-]*$")
+MARKET = "golden-thread-plugin"
+
+
+def vkey(v):
+    return tuple(int(x) for x in v.split("."))
+
+
+def admits(spec, ver):
+    """True / False, or None when the spec cannot be read."""
+    spec = (spec or "").strip()
+    if not spec:
+        return True
+    try:
+        have = vkey(ver)
+    except ValueError:
+        return None
+    for clause in spec.split(","):
+        m = re.fullmatch(r"\s*(>=|<=|==|>|<)\s*(\d+\.\d+\.\d+)\s*", clause)
+        if not m:
+            return None
+        op, want = m.group(1), vkey(m.group(2))
+        if not {">=": have >= want, "<=": have <= want, "==": have == want,
+                ">": have > want, "<": have < want}[op]:
+            return False
+    return True
+
+
+def choices_path(home):
+    return os.path.join(home, ".claude", "golden-thread", "install-choices.json")
+
+
+def read_choices(home):
+    try:
+        with open(choices_path(home), encoding="utf-8") as fh:
+            d = json.load(fh)
+    except (OSError, ValueError):
+        return {}
+    c = d.get("choices") if isinstance(d, dict) else None
+    return {k: v for k, v in c.items() if v in ("on", "off")} if isinstance(c, dict) else {}
+
+
+def atomic(path, data):
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+    fd, tmp = tempfile.mkstemp(dir=os.path.dirname(path), prefix=".gt-")
+    with os.fdopen(fd, "w", encoding="utf-8") as fh:
+        fh.write(json.dumps(data, indent=2) + "\n")
+        fh.flush()
+        os.fsync(fh.fileno())
+    os.replace(tmp, path)
+
+
+def load(path):
+    with open(path, encoding="utf-8") as fh:
+        return json.load(fh)
+
+
+def cmd_scan(a):
+    root, gtver, rest = a[0], a[1], a[2:]
+    mods, seen = [], {}
+    for d, ver, plugin in zip(rest[0::3], rest[1::3], rest[2::3]):
+        vdir = os.path.join(root, d, ver)
+        mj = os.path.join(vdir, "module.json")
+        if not os.path.isfile(mj):
+            continue
+        try:
+            m = load(mj)
+            assert isinstance(m, dict), "not a JSON object"
+        except (OSError, ValueError, AssertionError) as exc:
+            print("✗ %s is unreadable: %s" % (mj, exc), file=sys.stderr)
+            return 3
+        name = m.get("name")
+        if not isinstance(name, str) or not NAME.match(name) or name == "gt":
+            print("✗ %s: unusable module name %r" % (mj, name), file=sys.stderr)
+            return 3
+        if m.get("plugin") != plugin or m.get("version") != ver:
+            print("✗ %s: plugin/version (%r %r) disagree with plugin.json and the directory "
+                  "(%s %s)" % (mj, m.get("plugin"), m.get("version"), plugin, ver),
+                  file=sys.stderr)
+            return 3
+        if name in seen:
+            print("✗ two plugins declare module '%s': %s and %s" % (name, seen[name], d),
+                  file=sys.stderr)
+            return 3
+        seen[name] = d
+        hook_scripts = []
+        for h in m.get("hooks") or []:
+            s = h.get("script") if isinstance(h, dict) else None
+            if not s:
+                continue
+            src = next((p for p in (os.path.join(vdir, "hooks", s), os.path.join(vdir, "scripts", s))
+                        if os.path.isfile(p)), None)
+            hook_scripts.append({"event": h.get("event"), "script": s, "src": src})
+        mods.append({
+            "name": name, "plugin": plugin, "dir": d, "version": ver,
+            "default": "on" if m.get("default") == "on" else "off",
+            "requires_gt": m.get("requires_gt") or "",
+            "admits": admits(m.get("requires_gt"), gtver),
+            "hookdir_scripts": [os.path.join(vdir, "scripts", s)
+                                for s in (m.get("hookdir_scripts") or [])],
+            "hook_scripts": hook_scripts,
+        })
+    print(json.dumps(mods, indent=1))
+    return 0
+
+
+def cmd_resolve(a):
+    src, out, home, states_raw, flags = a[0], a[1], a[2], a[3], a[4:]
+    mods = load(src)
+    flag = {}
+    for f in flags:
+        kind, _, n = f.partition(":")
+        flag[n] = "on" if kind == "with" else "off"
+    try:
+        states = json.loads(states_raw) if states_raw not in ("", "-") else {}
+        if not isinstance(states, dict):
+            states = {}
+    except ValueError:
+        states = {}
+    recorded = read_choices(home)
+    for m in mods:
+        n = m["name"]
+        why = "flag" if n in flag else "recorded" if n in recorded else "default"
+        state = flag.get(n) or recorded.get(n) or m["default"]
+        m["reason"] = ""
+        got = states.get(n)
+        if isinstance(got, dict):              # module-states --detail
+            if got.get("state") in ("on", "off"):
+                state = got["state"]
+            if str(got.get("reason", "")).startswith("invalid"):
+                why, m["reason"] = "invalid", got["reason"]
+        elif got in ("on", "off"):
+            state = got
+        if m["admits"] is not True:
+            state, why = "off", "requires"
+        elif why == "invalid":
+            state = "off"
+        m["state"], m["why"] = state, why
+    atomic(out, mods)
+    for m in mods:
+        print("%s\t%s\t%s\t%s" % (m["name"], m["state"], m["why"], m["plugin"]))
+    return 0
+
+
+def cmd_record(a):
+    home, name, state = a
+    p = choices_path(home)
+    try:
+        d = load(p)
+    except FileNotFoundError:
+        d = {}
+    if not isinstance(d, dict) or not isinstance(d.get("choices", {}), dict):
+        print("✗ %s is not in the expected shape; choice not recorded" % p, file=sys.stderr)
+        return 1
+    d.setdefault("version", 1)
+    d.setdefault("choices", {})[name] = state
+    atomic(p, d)
+    return 0
+
+
+def why_text(m, gtver=None):
+    return {"flag": "--with this run" if m["state"] == "on" else "--without this run",
+            "recorded": "your recorded choice",
+            "default": "module default",
+            "requires": "skipped: needs gt %s%s" % (m["requires_gt"],
+                                                    ", installing %s" % gtver if gtver else ""),
+            "invalid": "skipped: %s" % m.get("reason", "invalid module.json"),
+            }[m["why"]]
+
+
+def cmd_list(a):
+    mods, gtver = load(a[0]), a[1]
+    if not mods:
+        print("No modules in this tree.")
+        return 0
+    print("Modules (for gt %s):" % gtver)
+    for m in mods:
+        print("  %-10s %-12s %-8s %-4s %s" % (m["name"], m["plugin"], m["version"], m["state"],
+                                              why_text(m, gtver)))
+    print("Change with: ./install.sh --with NAME | --without NAME  (the choice is remembered)")
+    return 0
+
+
+def cmd_summary(a):
+    mods = load(a[0])
+    parts = []
+    for m in mods:
+        s = "%s %s" % (m["name"], m["state"])
+        if m["why"] == "requires":
+            s += " (needs gt %s)" % m["requires_gt"]
+        elif m["why"] == "invalid":
+            s += " (invalid module.json)"
+        elif m["why"] in ("flag", "recorded") and m["state"] != m["default"]:
+            s += " (by your choice)"
+        elif m["why"] == "default" and m["state"] == "off":
+            s += " (off by default)"
+        parts.append(s)
+    if parts:
+        print("Modules: " + ", ".join(parts))
+    return 0
+
+
+def cmd_onfiles(a):
+    for m in load(a[0]):
+        if m["state"] != "on":
+            continue
+        for p in m["hookdir_scripts"] + [h["src"] for h in m["hook_scripts"] if h["src"]]:
+            if os.path.isfile(p):
+                print(p)
+    return 0
+
+
+def cmd_names(a):
+    print(", ".join(m["name"] for m in load(a[0])))
+    return 0
+
+
+def cmd_remove(a):
+    modjson, home, src, cache_root, marketplace, installed, settings, hooks = a
+    mods = load(modjson)
+    off = [m for m in mods if m["state"] == "off"]
+    if not off:
+        return 0
+    stamp = time.strftime("%Y%m%d_%H%M%S")
+    backups = os.path.join(home, ".claude", "golden-thread", "backups")
+    lines = {m["name"]: [] for m in off}
+
+    def backup(path):
+        os.makedirs(backups, exist_ok=True)
+        bak = os.path.join(backups, "%s.%s.module-off" % (os.path.basename(path), stamp))
+        if not os.path.exists(bak):
+            shutil.copy2(path, bak)
+
+    # Plugin copies (cache every version, marketplace dir). These are copies of the source
+    # tree install.sh would lay down again with --with; the JSON registries and hook files
+    # below are what get backed up.
+    for m in off:
+        base = os.path.join(cache_root, m["plugin"])
+        if os.path.isdir(base):
+            for v in sorted(os.listdir(base)):
+                shutil.rmtree(os.path.join(base, v), ignore_errors=True)
+                lines[m["name"]].append("removed cache %s" % os.path.join(base, v))
+            shutil.rmtree(base, ignore_errors=True)
+        mdir = os.path.join(marketplace, "plugins", m["plugin"])
+        if os.path.isdir(mdir):
+            shutil.rmtree(mdir, ignore_errors=True)
+            lines[m["name"]].append("removed marketplace dir %s" % mdir)
+
+    keys = {"%s@%s" % (m["plugin"], MARKET): m["name"] for m in off}
+    mj = os.path.join(marketplace, ".claude-plugin", "marketplace.json")
+    for path, what in ((mj, "marketplace"), (installed, "installed"), (settings, "settings")):
+        if not os.path.isfile(path):
+            continue
+        try:
+            d = load(path)
+        except (OSError, ValueError) as exc:
+            print("⚠ %s unreadable (%s) — module entries not removed from it" % (path, exc))
+            continue
+        changed = False
+        if what == "marketplace" and isinstance(d.get("plugins"), list):
+            plugins = {"%s@%s" % (m["plugin"], MARKET): m["name"] for m in off}
+            keep = []
+            for e in d["plugins"]:
+                k = "%s@%s" % (e.get("name"), MARKET) if isinstance(e, dict) else None
+                if k in plugins:
+                    lines[plugins[k]].append("removed marketplace entry %s" % e.get("name"))
+                    changed = True
+                else:
+                    keep.append(e)
+            d["plugins"] = keep
+        elif what == "installed" and isinstance(d.get("plugins"), dict):
+            for k, n in keys.items():
+                if k in d["plugins"]:
+                    del d["plugins"][k]
+                    lines[n].append("removed installed_plugins.json entry %s" % k)
+                    changed = True
+        elif what == "settings" and isinstance(d.get("enabledPlugins"), dict):
+            for k, n in keys.items():
+                if k in d["enabledPlugins"]:
+                    del d["enabledPlugins"][k]
+                    lines[n].append("removed settings.json enabledPlugins %s" % k)
+                    changed = True
+        if changed:
+            backup(path)
+            atomic(path, d)
+
+    # Hook-dir files the off module installed, unless gt or an on module ships that name.
+    shipped = {"gt_paths.py"}
+    if os.path.isdir(os.path.join(src, "hooks")):
+        shipped |= set(os.listdir(os.path.join(src, "hooks")))
+    try:
+        shipped |= set(subprocess.check_output(
+            ["python3", os.path.join(src, "scripts", "gt_components.py"), "hookdir-scripts",
+             "--home", home],
+            text=True, stderr=subprocess.DEVNULL).split())
+    except (OSError, subprocess.SubprocessError):
+        pass
+    for m in mods:
+        if m["state"] == "on":
+            shipped |= {os.path.basename(p) for p in m["hookdir_scripts"]}
+            shipped |= {h["script"] for h in m["hook_scripts"]}
+    hook_bak = os.path.join(backups, "hooks-module-off.%s" % stamp)
+    for m in off:
+        names = {os.path.basename(p) for p in m["hookdir_scripts"]} | {h["script"] for h in m["hook_scripts"]}
+        for n in sorted(names - shipped):
+            p = os.path.join(hooks, n)
+            if os.sep in n or not os.path.isfile(p):
+                continue
+            os.makedirs(hook_bak, exist_ok=True)
+            shutil.copy2(p, os.path.join(hook_bak, n))
+            os.remove(p)
+            lines[m["name"]].append("removed hooks-dir file %s (backup: %s)" % (n, hook_bak))
+
+    for m in off:
+        if lines[m["name"]]:
+            print("Module %s is off (%s) — removing what an earlier install left:"
+                  % (m["name"], why_text(m)))
+            for l in lines[m["name"]]:
+                print("  %s" % l)
+    return 0
+
+
+CMDS = {"scan": cmd_scan, "resolve": cmd_resolve, "record": cmd_record, "list": cmd_list,
+        "summary": cmd_summary, "onfiles": cmd_onfiles, "names": cmd_names,
+        "remove": cmd_remove}
+sys.exit(CMDS[sys.argv[1]](sys.argv[2:]))
+PYEOF
+)
+modpy() { python3 -c "$MODPY" "$@"; }
+
 # The directory name decides what gets copied; plugin.json's version field is what
 # every consumer reads back afterwards. If they disagree one of them is lying, and
 # guessing which would defeat the point of detecting it.
@@ -85,25 +466,50 @@ assert_manifest_version() {
 VAULT_ARG="${GT_VAULT:-}"
 FORCE_MANIFEST=no
 NO_VAULT=no
+LIST_PLUGINS=no
+LIST_MODULES=no
+MODULE_FLAGS=()          # "with:NAME" / "without:NAME", in the order given
+ORIG_ARGS=("$@")         # kept for the re-run after a migration changes a module choice
 POSITIONAL=""
 while [ $# -gt 0 ]; do
   case "$1" in
     --force-manifest-mismatch) FORCE_MANIFEST=yes; shift ;;
+    --list-plugins) LIST_PLUGINS=yes; shift ;;
+    --list-modules) LIST_MODULES=yes; shift ;;
+    --with|--without)
+      if [ -z "${2:-}" ] || [ "${2#-}" != "$2" ]; then
+        echo "✗ $1 needs a module name (see ./install.sh --list-modules)"; exit 1
+      fi
+      MODULE_FLAGS+=("${1#--}:$2"); shift 2 ;;
+    --with=*)    MODULE_FLAGS+=("with:${1#--with=}"); shift ;;
+    --without=*) MODULE_FLAGS+=("without:${1#--without=}"); shift ;;
     --vault)    VAULT_ARG="${2:-}"; shift 2 || true ;;
     --vault=*)  VAULT_ARG="${1#--vault=}"; shift ;;
     --no-vault) NO_VAULT=yes; shift ;;
     -h|--help)
       cat <<'USAGE'
-install.sh — install the gt and gt-wiki Claude Code plugins
+install.sh — install the Golden Thread Claude Code plugins (gt and every plugin
+             shipped beside it, e.g. gt-wiki)
 
   ./install.sh                        install the newest release
-  ./install.sh 0.12.1                 install a specific release (deliberate rollback)
+  ./install.sh 0.12.1                 install a specific gt release (deliberate rollback);
+                                      the other plugins install their newest
   ./install.sh --vault <path>         install AND create or connect that vault
   ./install.sh --force-manifest-mismatch
                                       install even when shipped files disagree with
                                       MANIFEST.json (see below)
   ./install.sh --no-vault             install the plugin only, on purpose
+  ./install.sh --list-plugins         print "<dir> <version> <name>" for every plugin
+                                      this tree ships, install nothing
+  ./install.sh --with NAME            install module NAME (repeatable); remembered
+  ./install.sh --without NAME         remove module NAME and keep it off (repeatable);
+                                      remembered in ~/.claude/golden-thread/install-choices.json
+  ./install.sh --list-modules         print each module, its state and why, install nothing
   ./install.sh --help                 this text
+
+Modules are the optional plugins beside gt (e.g. wiki, demo). A module's state is, in
+order: --with/--without in this run, your recorded choice, the module's default. gt
+itself is not a module and cannot be removed this way.
 
 A vault is a plain folder of markdown where your memory lives. The Core-rule
 enforcement hooks are wired AGAINST a vault, so an install with no vault leaves them
@@ -114,19 +520,38 @@ With no vault and no --vault:
   * otherwise (an agent, a pipe, CI) the install stops with exit 4 and says what it
     needs, rather than inventing a directory and claiming ~/.claude/vault-config.json.
 
+If the release ships machine migrations, they run after the plugin files and hooks are
+in place; a failed one stops the install with exit 7 (nothing is rolled back).
+
 Environment: GT_VAULT (same as --vault), GT_VERSION (same as the version argument).
 USAGE
       exit 0 ;;
-    -*) echo "unknown option: $1"; echo "try: install.sh [version] [--vault <path>] [--no-vault]"; exit 1 ;;
+    -*) echo "unknown option: $1"; echo "try: install.sh [version] [--vault <path>] [--no-vault] [--with|--without NAME] [--list-modules]"; exit 1 ;;
     *)  POSITIONAL="$1"; shift ;;
   esac
 done
-REQUESTED="${POSITIONAL:-${GT_VERSION:-}}"
-VERSION="${REQUESTED:-$(latest_version "$SCRIPT_DIR/golden-thread")}"
-WIKI_VERSION="${GT_WIKI_VERSION:-$(latest_version "$SCRIPT_DIR/golden-thread-wiki")}"
+if [ "$LIST_PLUGINS" = yes ]; then
+  discover_plugins "$SCRIPT_DIR" | tr '\t' ' '
+  exit 0
+fi
 
-for spec in "gt:$VERSION:$SCRIPT_DIR/golden-thread" "gt-wiki:$WIKI_VERSION:$SCRIPT_DIR/golden-thread-wiki"; do
-  label="${spec%%:*}"; rest="${spec#*:}"; ver="${rest%%:*}"; root="${rest#*:}"
+REQUESTED="${POSITIONAL:-${GT_VERSION:-}}"
+CORE_DIR="golden-thread"
+VERSION="${REQUESTED:-$(latest_version "$SCRIPT_DIR/$CORE_DIR")}"
+
+# The plugin set: gt (the core, always index 0, at the pinned version when one was asked
+# for) followed by every other discovered plugin at its newest. Parallel arrays rather
+# than an associative one: macOS still ships bash 3.2.
+PLUGIN_DIRS=("$CORE_DIR"); PLUGIN_VERS=("$VERSION"); PLUGIN_NAMES=("gt")
+while IFS="$(printf '\t')" read -r _dir _ver _name; do
+  [ -n "$_dir" ] && [ "$_dir" != "$CORE_DIR" ] || continue
+  PLUGIN_DIRS+=("$_dir"); PLUGIN_VERS+=("$_ver"); PLUGIN_NAMES+=("$_name")
+done < <(discover_plugins "$SCRIPT_DIR")
+PLUGIN_COUNT=${#PLUGIN_DIRS[@]}
+
+i=0
+while [ "$i" -lt "$PLUGIN_COUNT" ]; do
+  root="$SCRIPT_DIR/${PLUGIN_DIRS[$i]}"; ver="${PLUGIN_VERS[$i]}"; label="${PLUGIN_NAMES[$i]}"
   if [ -z "$ver" ]; then
     echo "✗ No installable $label version found under $root"
     echo "  (need an N.N.N directory containing .claude-plugin/plugin.json)"
@@ -138,52 +563,159 @@ for spec in "gt:$VERSION:$SCRIPT_DIR/golden-thread" "gt-wiki:$WIKI_VERSION:$SCRI
     exit 1
   fi
   assert_manifest_version "$root/$ver" "$ver" "$label"
+  name=$(plugin_name_of "$root/$ver"); name="${name:-${PLUGIN_DIRS[$i]}}"
+  # The name becomes a path segment under ~/.claude/plugins, including one that is
+  # rm -rf'd when superseded, so it is held to a plain identifier.
+  if ! [[ "$name" =~ ^[A-Za-z0-9][A-Za-z0-9._-]*$ ]]; then
+    echo "✗ Plugin in $root/$ver has an unusable name '$name' in plugin.json."
+    exit 1
+  fi
+  j=0
+  while [ "$j" -lt "$i" ]; do
+    if [ "${PLUGIN_NAMES[$j]}" = "$name" ]; then
+      echo "✗ Two plugin directories declare the name '$name': ${PLUGIN_DIRS[$j]} and ${PLUGIN_DIRS[$i]}."
+      exit 1
+    fi
+    j=$((j + 1))
+  done
+  PLUGIN_NAMES[$i]="$name"
+  i=$((i + 1))
 done
 
-if [ -n "$REQUESTED" ]; then
-  echo "Installing gt $VERSION (pinned; newest available is $(latest_version "$SCRIPT_DIR/golden-thread"))"
-else
-  echo "Installing gt $VERSION (newest version directory), gt-wiki $WIKI_VERSION"
-fi
-
-PLUGIN_KEY="gt@golden-thread-plugin"
-WIKI_PLUGIN_KEY="gt-wiki@golden-thread-plugin"
-SRC="$SCRIPT_DIR/golden-thread/$VERSION"
-WIKI_SRC="$SCRIPT_DIR/golden-thread-wiki/$WIKI_VERSION"
-CACHE="$HOME/.claude/plugins/cache/golden-thread-plugin/gt/$VERSION"
-WIKI_CACHE="$HOME/.claude/plugins/cache/golden-thread-plugin/gt-wiki/$WIKI_VERSION"
-MARKETPLACE="$HOME/.claude/plugins/marketplaces/golden-thread-plugin"
+MARKET_NAME="golden-thread-plugin"
+PLUGIN_KEY="${PLUGIN_NAMES[0]}@$MARKET_NAME"
+SRC="$SCRIPT_DIR/$CORE_DIR/$VERSION"
+CACHE_ROOT="$HOME/.claude/plugins/cache/$MARKET_NAME"
+CACHE="$CACHE_ROOT/${PLUGIN_NAMES[0]}/$VERSION"
+MARKETPLACE="$HOME/.claude/plugins/marketplaces/$MARKET_NAME"
 SETTINGS="$HOME/.claude/settings.json"
 INSTALLED="$HOME/.claude/plugins/installed_plugins.json"
 KNOWN="$HOME/.claude/plugins/known_marketplaces.json"
 
-# 0. Remove superseded gt AND gt-wiki versions so old caches don't linger unreferenced.
+plugin_src()   { echo "$SCRIPT_DIR/${PLUGIN_DIRS[$1]}/${PLUGIN_VERS[$1]}"; }
+plugin_cache() { echo "$CACHE_ROOT/${PLUGIN_NAMES[$1]}/${PLUGIN_VERS[$1]}"; }
+
+# ── Modules: read, validate the flags, resolve each module's state ──────────────
+# Nothing here writes: an unknown name or --without gt must leave the machine untouched,
+# and --list-modules exits at the end of this block.
+GT_TMP=$(mktemp -d "${TMPDIR:-/tmp}/gt-install.XXXXXX")
+trap 'rm -rf "$GT_TMP"' EXIT
+MODJSON="$GT_TMP/modules.json"
+SCAN_ARGS=()
+i=1
+while [ "$i" -lt "$PLUGIN_COUNT" ]; do
+  SCAN_ARGS+=("${PLUGIN_DIRS[$i]}" "${PLUGIN_VERS[$i]}" "${PLUGIN_NAMES[$i]}")
+  i=$((i + 1))
+done
+if ! modpy scan "$SCRIPT_DIR" "$VERSION" ${SCAN_ARGS[@]+"${SCAN_ARGS[@]}"} > "$GT_TMP/scan.json"; then
+  echo "✗ A module's module.json is not usable (above). Nothing has been installed."
+  exit 1
+fi
+MODULE_NAMES=$(modpy names "$GT_TMP/scan.json")
+
+for f in ${MODULE_FLAGS[@]+"${MODULE_FLAGS[@]}"}; do
+  n="${f#*:}"
+  if [ "$n" = gt ]; then
+    echo "✗ --${f%%:*} gt refused: gt is the core plugin, not a module, and is always installed."
+    echo "  Modules: ${MODULE_NAMES:-none in this tree}"
+    exit 1
+  fi
+  case ", $MODULE_NAMES," in
+    *", $n,"*) ;;
+    *) echo "✗ Unknown module '$n'. Nothing has been installed."
+       echo "  Modules: ${MODULE_NAMES:-none in this tree}"
+       exit 1 ;;
+  esac
+  for g in ${MODULE_FLAGS[@]+"${MODULE_FLAGS[@]}"}; do
+    if [ "${g#*:}" = "$n" ] && [ "${g%%:*}" != "${f%%:*}" ]; then
+      echo "✗ Both --with $n and --without $n given. Nothing has been installed."
+      exit 1
+    fi
+  done
+done
+
+# -> writes $1 (the scan plus state/why per module); prints "name<TAB>state<TAB>why".
+# `module-states` of the gt being installed decides; an older gt without it (a rollback)
+# gets the same precedence computed by the helper.
+resolve_modules() {
+  local out="$1" states="-" rc=0 f
+  local -a margs=()
+  for f in ${MODULE_FLAGS[@]+"${MODULE_FLAGS[@]}"}; do margs+=("--${f%%:*}" "${f#*:}"); done
+  if [ -n "$MODULE_NAMES" ] && [ -f "$SRC/scripts/gt_components.py" ]; then
+    states=$(python3 "$SRC/scripts/gt_components.py" module-states "$SCRIPT_DIR" \
+             --home "$HOME" --gt-version "$VERSION" --detail \
+             ${margs[@]+"${margs[@]}"} 2>/dev/null) || rc=$?
+    if [ "$rc" -ne 0 ] || [ "${states#\{}" = "$states" ]; then states="-"; fi
+  fi
+  modpy resolve "$GT_TMP/scan.json" "$out" "$HOME" "$states" ${MODULE_FLAGS[@]+"${MODULE_FLAGS[@]}"}
+}
+resolve_modules "$MODJSON" > "$GT_TMP/states.tsv"
+
+if [ "$LIST_MODULES" = yes ]; then
+  modpy list "$MODJSON" "$VERSION"
+  exit 0
+fi
+
+# The plugin set to INSTALL: gt, every non-module plugin, every module that is on.
+# Modules that are off are kept apart, for removal.
+OFF_MODULES=""
+SKIP_NOTES=""
+_dirs=(); _vers=(); _names=()
+i=0
+while [ "$i" -lt "$PLUGIN_COUNT" ]; do
+  state=on
+  while IFS="$(printf '\t')" read -r _m _state _why _plugin; do
+    [ -n "$_m" ] && [ "$i" -gt 0 ] && [ "$_plugin" = "${PLUGIN_NAMES[$i]}" ] || continue
+    state="$_state"
+    if [ "$_state" = off ]; then
+      OFF_MODULES="$OFF_MODULES $_m"
+      [ "$_why" = invalid ] && SKIP_NOTES="${SKIP_NOTES}Skipping module $_m: its module.json is invalid (./install.sh --list-modules says why)
+"
+      [ "$_why" = requires ] && SKIP_NOTES="${SKIP_NOTES}Skipping module $_m (${PLUGIN_NAMES[$i]} ${PLUGIN_VERS[$i]}): its requires_gt does not admit gt $VERSION — treated as off for this run, your recorded choice unchanged
+"
+    fi
+  done < "$GT_TMP/states.tsv"
+  if [ "$state" = on ]; then
+    _dirs+=("${PLUGIN_DIRS[$i]}"); _vers+=("${PLUGIN_VERS[$i]}"); _names+=("${PLUGIN_NAMES[$i]}")
+  fi
+  i=$((i + 1))
+done
+PLUGIN_DIRS=("${_dirs[@]}"); PLUGIN_VERS=("${_vers[@]}"); PLUGIN_NAMES=("${_names[@]}")
+PLUGIN_COUNT=${#PLUGIN_DIRS[@]}
+
+OTHERS=""
+i=1
+while [ "$i" -lt "$PLUGIN_COUNT" ]; do
+  OTHERS="$OTHERS, ${PLUGIN_NAMES[$i]} ${PLUGIN_VERS[$i]}"
+  i=$((i + 1))
+done
+if [ -n "$REQUESTED" ]; then
+  echo "Installing gt $VERSION (pinned; newest available is $(latest_version "$SCRIPT_DIR/$CORE_DIR"))$OTHERS"
+else
+  echo "Installing gt $VERSION (newest version directory)$OTHERS"
+fi
+[ -n "$SKIP_NOTES" ] && printf '%s' "$SKIP_NOTES"
+
+# 0. Remove superseded versions of EVERY plugin so old caches don't linger unreferenced.
 # The cache holds only what installed_plugins.json points at; rollback reads the SOURCE
 # tree (which keeps the newest-but-one, see above), never an old cache. gt-wiki was
 # missed until 0.13.0, so its caches piled up (0.1.0 and 0.1.1 beside the current one).
-for spec in "gt:$VERSION" "gt-wiki:$WIKI_VERSION"; do
-  plugin="${spec%%:*}"; keep="${spec#*:}"
-  for old in "$HOME/.claude/plugins/cache/golden-thread-plugin/$plugin"/*; do
+i=0
+while [ "$i" -lt "$PLUGIN_COUNT" ]; do
+  plugin="${PLUGIN_NAMES[$i]}"; keep="${PLUGIN_VERS[$i]}"
+  for old in "$CACHE_ROOT/$plugin"/*; do
     [ -d "$old" ] || continue
     if [ "$(basename "$old")" != "$keep" ]; then
       rm -rf "$old"
       echo "Removed superseded $plugin cache → $old"
     fi
   done
+  i=$((i + 1))
 done
 
-# Read install_demo setting (default: yes). A user who has set install_demo=no
-# in vault-config.json gets the plugin without the demo skill, script, and templates.
-VAULT_CONFIG="$HOME/.claude/vault-config.json"
-INSTALL_DEMO="yes"
-if [ -f "$VAULT_CONFIG" ]; then
-  _val=$(python3 -c "import json,sys; d=json.load(open(sys.argv[1])); print(str(d.get('install_demo') or 'yes').strip().lower())" \
-    "$VAULT_CONFIG" 2>/dev/null || echo "yes")
-  [ "$_val" = "no" ] && INSTALL_DEMO="no"
-fi
-if [ "$INSTALL_DEMO" = "no" ]; then
-  echo "install_demo=no — skipping demo skill, script, and templates"
-fi
+# (Until 0.14.0 an install_demo=no in vault-config.json stripped the demo out of the gt
+# plugin here. The demo is now module `demo` (plugin gt-demo); the 0.14.0 machine
+# migration records that setting as the module choice, and step 1a below applies it.)
 
 # Do the files about to be installed match the manifest shipping beside them?
 #
@@ -245,17 +777,46 @@ verify_source_tree() {
 }
 verify_source_tree
 
-# 1. Install plugin files into cache
-mkdir -p "$CACHE"
-for dir in .claude-plugin skills scripts templates commands hooks; do
-  [ -d "$SRC/$dir" ] && cp -r "$SRC/$dir" "$CACHE/"
+# 1a. Module choices. --with / --without are recorded now -- after every refusal above,
+# so a refused install records nothing -- through the gt being installed
+# (`gt_components.py record-choice`), or the helper when that gt predates it.
+for f in ${MODULE_FLAGS[@]+"${MODULE_FLAGS[@]}"}; do
+  _n="${f#*:}"; _s=on; [ "${f%%:*}" = without ] && _s=off
+  if ! python3 "$SRC/scripts/gt_components.py" record-choice "$HOME" "$_n" "$_s" \
+       --plugin-root "$SCRIPT_DIR" >/dev/null 2>&1; then
+    modpy record "$HOME" "$_n" "$_s" || echo "⚠ could not record the choice $_n=$_s"
+  fi
+  echo "Recorded module choice: $_n $_s  (~/.claude/golden-thread/install-choices.json)"
 done
-# The demo is removed AFTER the copy rather than filtered during it: a filter has to
-# know every file type it lets through, and one that copied only *.md and *.json
-# silently dropped the rest. Removing afterwards also clears a demo left behind by an
-# earlier install_demo=yes run.
-[ "$INSTALL_DEMO" = "no" ] && rm -rf "$CACHE/skills/gt-demo" "$CACHE/scripts/gt_demo.sh" "$CACHE/templates/demo-pizzabot"
-echo "Installed gt plugin files → $CACHE"
+
+# A module that is off leaves nothing behind: every cache version, its marketplace entry
+# and dir, its installed_plugins entry, its enabledPlugins key and its hooks-dir files
+# (JSON files and hook files backed up first; each removal printed). Its hook entries in
+# settings.json are removed with the hook registrations in step 6. Only
+# <plugin>@golden-thread-plugin keys are touched; nothing of anyone else's.
+modpy remove "$MODJSON" "$HOME" "$SRC" "$CACHE_ROOT" "$MARKETPLACE" "$INSTALLED" "$SETTINGS" \
+  "$HOME/.claude/golden-thread/hooks"
+
+# 1. Install every plugin's files into the cache.
+#
+# Each directory is REPLACED, not merged into: a cache of the same version from an earlier
+# install otherwise keeps files the release no longer ships -- which is how the gt plugin
+# would go on carrying the demo after 0.14.0 moved it into the gt-demo module.
+i=0
+while [ "$i" -lt "$PLUGIN_COUNT" ]; do
+  p_src=$(plugin_src "$i"); p_cache=$(plugin_cache "$i")
+  mkdir -p "$p_cache"
+  # module.json and demo/ travel too: gt-demo reads module.json and the module's tour act
+  # (demo/act.md) from the CACHE to assemble the tour for whatever is installed (0.14.0).
+  for dir in .claude-plugin skills scripts templates commands hooks demo; do
+    rm -rf "${p_cache:?}/$dir"
+    [ -d "$p_src/$dir" ] && cp -r "$p_src/$dir" "$p_cache/"
+  done
+  rm -f "${p_cache:?}/module.json"
+  [ -f "$p_src/module.json" ] && cp "$p_src/module.json" "$p_cache/module.json"
+  echo "Installed ${PLUGIN_NAMES[$i]} plugin files → $p_cache"
+  i=$((i + 1))
+done
 
 # 1b. Install the Core-rule hooks to a STABLE location outside the vault.
 # settings.json references these by absolute path, so the path must survive project
@@ -270,9 +831,14 @@ if [ -d "$SRC/hooks" ]; then
   # absolute path, so the path must survive a vault move or a project rename.
   # The list lives in gt_components.HOOK_DIR_SCRIPTS, which also maps these files
   # for drift checking -- a second copy here would be a copy that drifts.
-  for extra in $(python3 "$SRC/scripts/gt_components.py" hookdir-scripts); do
+  for extra in $(python3 "$SRC/scripts/gt_components.py" hookdir-scripts --home "$HOME"); do
     [ -f "$SRC/scripts/$extra" ] && cp "$SRC/scripts/$extra" "$GT_HOOKS/$extra"
   done
+  # Modules that are on: their hookdir_scripts, and the scripts their hooks run (declared
+  # in module.json, registered in step 6 exactly like gt's own).
+  while IFS= read -r extra; do
+    [ -n "$extra" ] && cp "$extra" "$GT_HOOKS/$(basename "$extra")"
+  done < <(modpy onfiles "$MODJSON")
   chmod +x "$GT_HOOKS"/*.sh 2>/dev/null || true
   chmod +x "$GT_HOOKS"/*.py 2>/dev/null || true
   echo "Installed Core-rule hooks → $GT_HOOKS"
@@ -287,17 +853,21 @@ if [ -d "$SRC/hooks" ]; then
   #   * anything else not shipped -> "unknown file, left in place".
   # retired.json ships IN the release because install.sh runs from gt-src, which has no
   # git history to ask. If the shipped set cannot be established, nothing is removed.
-  python3 - "$SRC" "$GT_HOOKS" <<'EOF' || true
+  python3 - "$SRC" "$GT_HOOKS" "$MODJSON" <<'EOF' || true
 import json, os, shutil, subprocess, sys, time
-src, hooks = sys.argv[1:3]
+src, hooks, modjson = sys.argv[1:4]
 shipped = {"gt_paths.py"}
+for m in json.load(open(modjson, encoding="utf-8")):
+    if m["state"] == "on":
+        shipped |= {os.path.basename(p) for p in m["hookdir_scripts"]}
+        shipped |= {h["script"] for h in m["hook_scripts"]}
 hdir = os.path.join(src, "hooks")
 shipped |= {n for n in os.listdir(hdir) if os.path.isfile(os.path.join(hdir, n))}
 certain = True
 try:
     out = subprocess.check_output(
-        ["python3", os.path.join(src, "scripts", "gt_components.py"), "hookdir-scripts"],
-        text=True)
+        ["python3", os.path.join(src, "scripts", "gt_components.py"), "hookdir-scripts",
+         "--home", os.path.expanduser("~")], text=True)
     shipped |= {n for n in out.split()
                 if os.path.isfile(os.path.join(src, "scripts", n))}
 except (OSError, subprocess.SubprocessError):
@@ -363,58 +933,57 @@ if [ -f "$SRC/scripts/gt_components.py" ]; then
 
 fi
 
-mkdir -p "$WIKI_CACHE"
-for dir in .claude-plugin skills scripts templates commands; do
-  [ -d "$WIKI_SRC/$dir" ] && cp -r "$WIKI_SRC/$dir" "$WIKI_CACHE/"
-done
-echo "Installed gt-wiki plugin files → $WIKI_CACHE"
-
-# 2. Create marketplace directory structure
+# 2. Create marketplace directory structure: one entry per plugin.
+#
+# Each entry's description is read from that plugin's own plugin.json. Until 0.14.0
+# marketplace.json carried hand-typed descriptions for gt and gt-wiki, which had already
+# drifted from the manifests -- and a third plugin would have had no entry at all.
 mkdir -p "$MARKETPLACE/.claude-plugin"
-mkdir -p "$MARKETPLACE/plugins/gt/.claude-plugin"
-mkdir -p "$MARKETPLACE/plugins/gt-wiki/.claude-plugin"
-
-cat > "$MARKETPLACE/.claude-plugin/marketplace.json" <<JSON
-{
-  "name": "golden-thread-plugin",
-  "owner": {
-    "name": "Stacy Haven",
-    "email": "shaven@shavenconsulting.com"
-  },
-  "plugins": [
-    {
-      "name": "gt",
-      "source": "./plugins/gt",
-      "description": "Vault-based AI memory system. Turns an Obsidian vault into the single source of truth for all Claude Code sessions across projects."
-    },
-    {
-      "name": "gt-wiki",
-      "source": "./plugins/gt-wiki",
-      "description": "LLM-powered knowledge base with immutable sources, interlinked pages, and a maintenance loop."
-    }
-  ]
-}
-JSON
+MARKET_ARGS=()
+i=0
+while [ "$i" -lt "$PLUGIN_COUNT" ]; do
+  mkdir -p "$MARKETPLACE/plugins/${PLUGIN_NAMES[$i]}/.claude-plugin"
+  MARKET_ARGS+=("${PLUGIN_NAMES[$i]}" "$(plugin_src "$i")/.claude-plugin/plugin.json")
+  i=$((i + 1))
+done
+python3 - "$MARKETPLACE/.claude-plugin/marketplace.json" "$MARKET_NAME" "${MARKET_ARGS[@]}" <<'EOF'
+import json, sys
+out, market, rest = sys.argv[1], sys.argv[2], sys.argv[3:]
+plugins = []
+for name, manifest in zip(rest[0::2], rest[1::2]):
+    try:
+        desc = json.load(open(manifest, encoding="utf-8")).get("description") or ""
+    except (OSError, ValueError, AttributeError):
+        desc = ""
+    plugins.append({"name": name, "source": "./plugins/%s" % name, "description": desc})
+with open(out, "w", encoding="utf-8") as fh:
+    fh.write(json.dumps({"name": market,
+                         "owner": {"name": "Stacy Haven",
+                                   "email": "shaven@shavenconsulting.com"},
+                         "plugins": plugins}, indent=2) + "\n")
+EOF
 
 # The plugin manifests are copied from source, not regenerated here. Two
 # hand-maintained copies of the same manifest drift - the descriptions had
 # already diverged once.
-cp "$SRC/.claude-plugin/plugin.json" "$MARKETPLACE/plugins/gt/.claude-plugin/plugin.json"
-cp "$WIKI_SRC/.claude-plugin/plugin.json" "$MARKETPLACE/plugins/gt-wiki/.claude-plugin/plugin.json"
-
+#
 # 2b. Populate the marketplace's plugin directories with the ACTUAL plugin.
 # marketplace.json declares "source": "./plugins/gt", so that path must hold a
 # loadable plugin - not just a manifest. Without this, anything that resolves the
 # plugin from the marketplace (rather than from the installed cache) finds zero
 # skills, and no /gt: commands appear.
-for dir in skills scripts templates commands hooks; do
-  rm -rf "$MARKETPLACE/plugins/gt/$dir"
-  [ -d "$SRC/$dir" ] && cp -r "$SRC/$dir" "$MARKETPLACE/plugins/gt/$dir"
-  rm -rf "$MARKETPLACE/plugins/gt-wiki/$dir"
-  [ -d "$WIKI_SRC/$dir" ] && cp -r "$WIKI_SRC/$dir" "$MARKETPLACE/plugins/gt-wiki/$dir"
+i=0
+while [ "$i" -lt "$PLUGIN_COUNT" ]; do
+  p_src=$(plugin_src "$i"); p_market="$MARKETPLACE/plugins/${PLUGIN_NAMES[$i]}"
+  cp "$p_src/.claude-plugin/plugin.json" "$p_market/.claude-plugin/plugin.json"
+  for dir in skills scripts templates commands hooks demo; do
+    rm -rf "$p_market/$dir"
+    [ -d "$p_src/$dir" ] && cp -r "$p_src/$dir" "$p_market/$dir"
+  done
+  rm -f "$p_market/module.json"
+  [ -f "$p_src/module.json" ] && cp "$p_src/module.json" "$p_market/module.json"
+  i=$((i + 1))
 done
-[ "$INSTALL_DEMO" = "no" ] && rm -rf "$MARKETPLACE/plugins/gt/skills/gt-demo" \
-  "$MARKETPLACE/plugins/gt/scripts/gt_demo.sh" "$MARKETPLACE/plugins/gt/templates/demo-pizzabot"
 echo "Populated marketplace plugin directories with skills/scripts/templates"
 
 echo "Created marketplace entries → $MARKETPLACE"
@@ -432,11 +1001,18 @@ echo "Created marketplace entries → $MARKETPLACE"
 # Each file is written to a sibling temp file and renamed into place, and the
 # original is backed up once per install under ~/.claude/golden-thread/backups/.
 # A crash mid-write used to leave settings.json truncated.
-python3 - "$KNOWN" "$MARKETPLACE" "$INSTALLED" "$CACHE" "$VERSION" "$WIKI_CACHE" "$WIKI_VERSION" "$SETTINGS" "$PLUGIN_KEY" "$WIKI_PLUGIN_KEY" <<'EOF'
+REG_ARGS=()
+i=0
+while [ "$i" -lt "$PLUGIN_COUNT" ]; do
+  REG_ARGS+=("${PLUGIN_NAMES[$i]}@$MARKET_NAME" "$(plugin_cache "$i")" "${PLUGIN_VERS[$i]}")
+  i=$((i + 1))
+done
+python3 - "$KNOWN" "$MARKETPLACE" "$INSTALLED" "$SETTINGS" "${REG_ARGS[@]}" <<'EOF'
 import json, os, sys, tempfile, time
 from datetime import datetime, timezone
-(known, marketplace, installed, cache, version, wiki_cache, wiki_version,
- settings, plugin_key, wiki_plugin_key) = sys.argv[1:11]
+known, marketplace, installed, settings = sys.argv[1:5]
+_reg = sys.argv[5:]
+PLUGINS = list(zip(_reg[0::3], _reg[1::3], _reg[2::3]))    # (key, cache path, version)
 STAMP = time.strftime("%Y%m%d_%H%M%S")
 BACKUPS = os.path.expanduser("~/.claude/golden-thread/backups")
 
@@ -472,7 +1048,7 @@ print("Registered in known_marketplaces.json")
 
 d = load(installed, {"version": 2, "plugins": {}})
 now = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%S.000Z")
-for key, path, ver in ((plugin_key, cache, version), (wiki_plugin_key, wiki_cache, wiki_version)):
+for key, path, ver in PLUGINS:
     d.setdefault("plugins", {})[key] = [{
         "scope": "user", "installPath": path, "version": ver,
         "installedAt": now, "lastUpdated": now, "gitCommitSha": "local",
@@ -481,8 +1057,8 @@ save(installed, d)
 print("Registered in installed_plugins.json")
 
 d = load(settings, {})
-d.setdefault("enabledPlugins", {})[plugin_key] = True
-d["enabledPlugins"][wiki_plugin_key] = True
+for key, _path, _ver in PLUGINS:
+    d.setdefault("enabledPlugins", {})[key] = True
 save(settings, d)
 print("Registered in settings.json  (backups in %s)" % BACKUPS)
 EOF
@@ -500,9 +1076,9 @@ EOF
 #                  a report card produced at the very end of a session competes for
 #                  the context it needs to be written.
 # SessionEnd    -> gt_report_card.py        : backstop for sessions that never compact.
-python3 - "$SRC" "$SCRIPT_DIR" <<'EOF'
+python3 - "$SRC" "$SCRIPT_DIR" "$MODJSON" <<'EOF'
 import json, os, subprocess, sys, tempfile
-src, script_dir = sys.argv[1:3]
+src, script_dir, modjson = sys.argv[1:4]
 p = os.path.expanduser('~/.claude/settings.json')
 d = json.load(open(p)) if os.path.exists(p) else {}
 hooks = d.setdefault('hooks', {})
@@ -520,7 +1096,18 @@ hooks = d.setdefault('hooks', {})
 # known, so an UPGRADE registers a newly shipped hook instead of leaving it inert.
 regs = json.loads(subprocess.check_output(
     ['python3', os.path.join(src, 'scripts', 'gt_components.py'),
-     'hook-registrations', src, script_dir], text=True))
+     'hook-registrations', src, script_dir, '--home', os.path.expanduser('~')], text=True))
+# Module hooks arrive in the same list, tagged "module". One whose module is off in THIS
+# run (by choice, or skipped for requires_gt) is not wired, and its entries are removed
+# below -- as are entries for any hook an off module declares in module.json.
+mods = json.load(open(modjson, encoding='utf-8'))
+off_mods = {m['name'] for m in mods if m['state'] == 'off'}
+off_scripts = {h['script']: m['name'] for m in mods if m['state'] == 'off'
+               for h in m['hook_scripts']}
+for r in regs:
+    if r.get('module') in off_mods:
+        off_scripts.setdefault(r['script'], r['module'])
+regs = [r for r in regs if r.get('module') not in off_mods]
 want = [(r['event'], r['script'], r['command'])
         for r in regs if r.get('owner') == 'install.sh']
 
@@ -561,6 +1148,7 @@ except FileNotFoundError:
 except (OSError, ValueError, AttributeError) as exc:
     print('⚠ retired.json unreadable (%s) — no retired hook entries removed' % exc)
     retired = set()
+off_scripts = {k: v for k, v in off_scripts.items() if k not in known}
 
 def gt_script(command):
     """-> basename of the gt-hooks-dir script this command runs, or None."""
@@ -577,17 +1165,20 @@ def gt_script(command):
             return os.path.basename(t)
     return None
 
-removed, unknown, bak = [], [], None
+removed, unknown, bak, mod_removed = [], [], None, []
 for event, blocks in list(hooks.items()):
     if not isinstance(blocks, list):
         continue
-    before = len(removed)
+    before = len(removed) + len(mod_removed)
     for b in blocks:
         if not isinstance(b, dict) or not isinstance(b.get('hooks'), list):
             continue
         keep = []
         for h in b['hooks']:
             s = gt_script(h.get('command') if isinstance(h, dict) else None)
+            if s is not None and s in off_scripts:
+                mod_removed.append((off_scripts[s], '%s/%s' % (event, s)))
+                continue
             if s is not None and (s in retired
                                   or (s in known and (event, s) not in pairs)):
                 removed.append('%s/%s' % (event, s))
@@ -600,9 +1191,9 @@ for event, blocks in list(hooks.items()):
     blocks[:] = [b for b in blocks
                  if not (isinstance(b, dict) and isinstance(b.get('hooks'), list)
                          and not b['hooks'])]
-    if not blocks and len(removed) > before:
+    if not blocks and len(removed) + len(mod_removed) > before:
         del hooks[event]
-if removed and os.path.exists(p):
+if (removed or mod_removed) and os.path.exists(p):
     backups = os.path.expanduser('~/.claude/golden-thread/backups')
     os.makedirs(backups, exist_ok=True)
     bak = os.path.join(backups, 'settings.json.%s.pre-prune' % time.strftime('%Y%m%d_%H%M%S'))
@@ -632,6 +1223,8 @@ if removed:
           % (len(removed), 'y' if len(removed) == 1 else 'ies', bak))
     for r in sorted(removed):
         print('  %s' % r)
+for mod, r in sorted(mod_removed):
+    print('Module %s is off: removed hook entry %s (backup: %s)' % (mod, r, bak))
 if unknown:
     print('Unknown hook entr%s pointing into the gt hooks dir, left in place:'
           % ('y' if len(unknown) == 1 else 'ies'))
@@ -655,12 +1248,72 @@ EOF
 # wiring problem would abort the install at the last step -- turning a warning
 # about hooks into a failure to install them.
 if [ -f "$SRC/scripts/gt_components.py" ]; then
-  if python3 "$SRC/scripts/gt_components.py" wiring "$SRC" --owner install.sh >/dev/null 2>&1; then
+  if python3 "$SRC/scripts/gt_components.py" wiring "$SRC" --owner install.sh --home "$HOME" >/dev/null 2>&1; then
     echo "Verified hook wiring → every hook this installer owns is connected"
   else
     echo "⚠ Hook wiring INCOMPLETE after install — these will NEVER RUN:"
-    python3 "$SRC/scripts/gt_components.py" wiring "$SRC" --owner install.sh 2>&1 | sed 's/^/    /' || true
+    python3 "$SRC/scripts/gt_components.py" wiring "$SRC" --owner install.sh --home "$HOME" 2>&1 | sed 's/^/    /' || true
   fi
+fi
+
+# 6b. Machine migrations (0.14.0, Requirement R1: upgrades converge).
+#
+# gt_upgrade migrations are stamped in a VAULT; some changes a release makes belong to the
+# MACHINE (~/.claude) instead, and someone jumping several releases in one install must
+# still get each of them. The release ships gt_machine_migrate.py to apply exactly those.
+#
+# Placed here: after the plugin files and hooks are installed and wired, because a
+# migration may rely on them; BEFORE the vault step, so a vault is never set up on a
+# machine left half-migrated.
+#
+# A failure STOPS the install, loudly and after printing what the migrator said. Nothing
+# is rolled back -- the files above are the new release's and are correct -- but carrying
+# on to "installed." would report success over a machine that is not in the state the
+# release assumes. Exit 7 is this case and only this case (4 = no vault, 6 = manifest).
+#
+# Absent script = an older release being installed as a rollback: say nothing.
+run_machine_migrations() {
+  local mig="$SRC/scripts/gt_machine_migrate.py" out rc=0
+  [ -f "$mig" ] || return 0
+  out=$(python3 "$mig" --home "$HOME" run --release "$SRC" 2>&1) || rc=$?
+  echo ""
+  echo "Machine migrations:"
+  if [ -n "$out" ]; then
+    printf '%s\n' "$out" | sed 's/^/  /'
+  elif [ "$rc" -eq 0 ]; then
+    echo "  nothing to apply"
+  fi
+  if [ "$rc" -ne 0 ]; then
+    echo ""
+    echo "════════════════════════════════════════════════════════════════════════"
+    echo "INSTALL INCOMPLETE — machine migration failed; nothing was rolled back; fix and re-run install.sh"
+    echo "════════════════════════════════════════════════════════════════════════"
+    echo "The migrator exited $rc ($( [ "$rc" -eq 2 ] && echo "could not evaluate" || echo "a migration failed" ))."
+    echo "Plugin files and hooks for gt $VERSION are in place; the vault step did not run."
+    echo "  Status:  python3 \"$mig\" status --release \"$SRC\""
+    exit 7
+  fi
+  return 0
+}
+run_machine_migrations
+
+# A migration may have recorded a module choice (0.14.0: install_demo=no in
+# vault-config.json becomes demo=off). The plugin set above was chosen before it ran, so
+# if any module's state now differs, run the install once more from the top: the second
+# run finds nothing to migrate and lays the machine down in the converged state.
+# GT_INSTALL_RERUN stops a second re-run if a migration kept flipping a choice.
+resolve_modules "$GT_TMP/after.json" > "$GT_TMP/after.tsv"
+if [ "$(cut -f1,2 "$GT_TMP/states.tsv")" != "$(cut -f1,2 "$GT_TMP/after.tsv")" ]; then
+  if [ -z "${GT_INSTALL_RERUN:-}" ]; then
+    echo ""
+    echo "Machine migrations changed a module choice — running the install steps again to apply it:"
+    cut -f1,2 "$GT_TMP/after.tsv" | awk -F'\t' '{print "  " $1 " " $2}' || true
+    echo ""
+    rm -rf "$GT_TMP"
+    export GT_INSTALL_RERUN=1
+    exec bash "$SCRIPT_DIR/install.sh" ${ORIG_ARGS[@]+"${ORIG_ARGS[@]}"}
+  fi
+  echo "⚠ Module choices changed again after a re-run; left as they are. Re-run install.sh to converge."
 fi
 
 # 7. Wire the VAULT's git repo for per-edit attribution, if it is one.
@@ -673,9 +1326,39 @@ fi
 # script picks on its own: an installer that invents a directory and claims the global
 # vault-config.json without being asked is how people learn not to trust installers.
 DEFAULT_VAULT="$HOME/Documents/GoldenThread"
+# Set by setup_vault only when `vault_init fresh` ran in THIS run: the resolved vault path,
+# and whether it was already inside a git repo beforehand. Never inferred from contents.
+VAULT_CREATED_NOW=""
+VAULT_GIT_PREEXISTED=""
+# The vault's git state BEFORE this install touched it (connect, core-rule seeding, the
+# githooks and vault-tool refresh below all write into it). The upgrade step decides
+# "clean" from this snapshot, so the install's OWN refreshes never block an upgrade, while
+# the owner's uncommitted work still does. One vault only: the first path snapshotted
+# wins unless a different path is snapshotted before it is touched.
+VAULT_SNAP_PATH=""
+VAULT_SNAP_STATE=""      # clean | dirty | nogit | absent | unreadable
+
+real_path() { python3 -c 'import os,sys;print(os.path.realpath(sys.argv[1]))' "$1" 2>/dev/null || printf '%s\n' "$1"; }
+
+snapshot_vault_state() {  # $1 = vault path, before anything writes into it
+  local real porcelain
+  real=$(real_path "$1")
+  [ "$real" = "$VAULT_SNAP_PATH" ] && return 0
+  VAULT_SNAP_PATH="$real"
+  if [ ! -d "$real" ]; then
+    VAULT_SNAP_STATE=absent
+  elif ! git -C "$real" rev-parse --git-dir >/dev/null 2>&1; then
+    VAULT_SNAP_STATE=nogit
+  elif porcelain=$(git -C "$real" status --porcelain 2>/dev/null); then
+    if [ -z "$porcelain" ]; then VAULT_SNAP_STATE=clean; else VAULT_SNAP_STATE=dirty; fi
+  else
+    VAULT_SNAP_STATE=unreadable
+  fi
+}
 
 setup_vault() {  # $1 = path to create or connect
   local target="$1" mode
+  snapshot_vault_state "$target"
   if [ -d "$target/Projects" ] || [ -f "$target/index.md" ]; then
     mode=connect
   else
@@ -684,8 +1367,14 @@ setup_vault() {  # $1 = path to create or connect
   echo ""
   if [ "$mode" = fresh ]; then
     echo "Creating a vault at $target"
+    # Was the target already inside a git repo? Only a repo THIS run created may be given
+    # an initial commit by the vault-upgrade step (see apply_vault_upgrades).
+    local git_before=no
+    git -C "$target" rev-parse --git-dir >/dev/null 2>&1 && git_before=yes
     python3 "$SRC/scripts/vault_init.py" fresh --vault "$target" --domain "Personal" \
       >/dev/null 2>&1 || { echo "⚠ could not create the vault at $target"; return 1; }
+    VAULT_CREATED_NOW=$(real_path "$target")
+    VAULT_GIT_PREEXISTED="$git_before"
   else
     echo "Connecting the existing vault at $target"
     python3 "$SRC/scripts/vault_init.py" connect --vault "$target" \
@@ -736,6 +1425,7 @@ wire_enforcement_hooks() {  # $1 = vault path
 }
 
 if [ -n "$VAULT_PATH" ] && [ -d "$VAULT_PATH" ]; then
+  snapshot_vault_state "$VAULT_PATH"
   wire_enforcement_hooks "$VAULT_PATH"
 fi
 
@@ -875,9 +1565,8 @@ echo ""
 # the same fix -- read what is on disk.
 #
 # Reads the installed CACHE rather than the source, so what is listed is what the
-# user actually got: with install_demo=no, gt-demo has already been removed from the
-# cache by then and drops out of the list for free, with no second condition to keep
-# in step.
+# user actually got: a module that is off has no cache and no entry in the plugin set,
+# so its skills drop out of the list for free, with no second condition to keep in step.
 list_skills() {  # $1 = skills dir, $2 = command prefix
   local d="$1" prefix="$2" name desc
   [ -d "$d" ] || return 0
@@ -916,16 +1605,19 @@ PYEOF
   done
 }
 
-echo "gt skills:"
-list_skills "$CACHE/skills" "/gt:"
-echo ""
-echo "gt-wiki skills:"
-list_skills "$WIKI_CACHE/skills" "/gt-wiki:"
-echo ""
-if [ "$INSTALL_DEMO" = "no" ]; then
-echo "Demo not installed (install_demo=no in vault-config.json)."
-echo "Set install_demo=yes and re-run install.sh to add /gt:gt-demo."
-echo ""
+i=0
+while [ "$i" -lt "$PLUGIN_COUNT" ]; do
+  echo "${PLUGIN_NAMES[$i]} skills:"
+  list_skills "$(plugin_cache "$i")/skills" "/${PLUGIN_NAMES[$i]}:"
+  echo ""
+  i=$((i + 1))
+done
+# One line for the modules: what is on, what is off and why. Off modules are absent from
+# the skill lists above because they are absent from the cache.
+if [ -n "$MODULE_NAMES" ]; then
+  modpy summary "$MODJSON"
+  echo "  (change with ./install.sh --with NAME / --without NAME; see --list-modules)"
+  echo ""
 fi
 # Measure this machine, so `parallel_max: auto` means THIS machine.
 #
@@ -944,35 +1636,160 @@ if [ -f "$HOME/.claude/vault-config.json" ]; then
     | sed 's/^/  /' || true
 fi
 
-# Pending vault upgrades. install.sh never ran gt_upgrade, so a release's migrations
-# were only ever applied by someone remembering /gt:gt-upgrade -- and one vault sat with
-# a step pending from 0.12.0 onward, reported nowhere an installer's reader looks.
-# `status` is READ-ONLY; `run` is never called from here, because applying a migration
-# is a change to the owner's vault and wants a clean tree and a person's go-ahead.
-# Re-read the config: an interactive install may have created the vault after
-# VAULT_PATH was first read. A failed check is reported, never fatal.
-report_vault_upgrades() {
-  local vault out rc=0
+# Vault upgrades (0.14.0, Requirement R1: an install from any older release equals a fresh
+# install of the newest). Until 0.14.0 this only REPORTED, so a release's migrations were
+# applied only by someone remembering /gt:gt-upgrade.
+#
+# Owner decision 2026-09-14, "Apply when clean":
+#   * a vault THIS run created gets an initial commit first (only when this run's
+#     vault_init also created its git repo, the repo root is the vault, and there is no
+#     commit yet -- `git add -A` must never sweep up anything that was already there);
+#   * a git vault that was clean BEFORE this install touched it (VAULT_SNAP_*): `gt_upgrade
+#     run` (it backs the vault up first), with --allow-dirty when the only uncommitted
+#     files are this install's own refreshes. Those refreshes and the upgrade results are
+#     left UNCOMMITTED, never staged, for the owner to review. A step needing a person is
+#     left as gt_upgrade leaves it and reported;
+#   * a vault that already had uncommitted changes, or is not a git repo: nothing applied,
+#     pending steps reported with the exact command. The owner's work is never touched.
+#   * "needs a person" items (a document with no merge base gt recorded) are never
+#     pending steps and never applied here; they are reported on every install.
+# `status` is asked first and `run` only when something is pending: `run` stamps the vault
+# even when nothing is pending, which would dirty a clean vault on every install.
+# Re-read the config: an interactive install may have created the vault after VAULT_PATH
+# was first read. Nothing here fails the install.
+upgrade_pending_list() {  # stdin = `gt_upgrade status` output: just the pending steps
+  sed -n '/pending step(s):/,$p' | sed '/^needs a person (/,$d' | grep -v '^Rehearse:' \
+    | sed '/^[[:space:]]*$/d' | sed 's/^/  /' || true
+}
+
+upgrade_attention_list() {  # stdin = gt_upgrade output: the "needs a person" items
+  grep '^  needs a person: ' || true
+}
+
+commit_created_vault() {  # $1 = vault (resolved)
+  local vault="$1" top out rc=0
+  local -a id=()
+  git -C "$vault" rev-parse --git-dir >/dev/null 2>&1 || return 0
+  if [ "$VAULT_GIT_PREEXISTED" = yes ]; then
+    echo "New vault is inside a git repository that already existed — not committed on your behalf."
+    return 0
+  fi
+  top=$(git -C "$vault" rev-parse --show-toplevel 2>/dev/null) || top=""
+  [ -n "$top" ] && [ "$(real_path "$top")" = "$vault" ] || return 0
+  git -C "$vault" rev-parse --verify -q HEAD >/dev/null 2>&1 && return 0
+  # Identity for this one commit only (-c), when none is configured. Global config untouched.
+  [ -n "$(git -C "$vault" config user.name 2>/dev/null)" ] || id+=(-c "user.name=Golden Thread install")
+  [ -n "$(git -C "$vault" config user.email 2>/dev/null)" ] || id+=(-c "user.email=golden-thread@localhost")
+  out=$( { git -C "$vault" add -A && \
+           git ${id[@]+"${id[@]}"} -C "$vault" commit -q -m "Golden Thread vault created by install.sh $VERSION"; } 2>&1) || rc=$?
+  if [ "$rc" -eq 0 ]; then
+    echo "Committed the new vault → $(git -C "$vault" rev-parse --short HEAD 2>/dev/null) (Golden Thread vault created by install.sh $VERSION)"
+  else
+    echo "⚠ Could not make the new vault's initial commit: $(printf '%s\n' "$out" | tail -1)"
+  fi
+}
+
+apply_vault_upgrades() {
+  local vault real up out rc=0 porcelain run_out run_rc=0 backup attn ours=no
+  local -a allow=()
   vault=$(python3 -c "import json,os;p=os.path.expanduser('~/.claude/vault-config.json');print(json.load(open(p)).get('vault_path','')) if os.path.exists(p) else print('')" 2>/dev/null) || vault=""
   [ -n "$vault" ] && [ -d "$vault" ] || return 0
-  [ -f "$SRC/scripts/gt_upgrade.py" ] || { echo "Vault upgrades: check could not run (gt_upgrade.py not shipped)"; return 0; }
-  out=$(python3 "$SRC/scripts/gt_upgrade.py" status --vault "$vault" 2>&1) || rc=$?
+  real=$(real_path "$vault")
+  if [ -n "$VAULT_CREATED_NOW" ] && [ "$VAULT_CREATED_NOW" = "$real" ]; then
+    commit_created_vault "$real"
+  fi
+  up="$SRC/scripts/gt_upgrade.py"
+  [ -f "$up" ] || { echo "Vault upgrades: check could not run (gt_upgrade.py not shipped)"; echo ""; return 0; }
+
+  out=$(python3 "$up" status --vault "$vault" 2>&1) || rc=$?
   if [ "$rc" -ne 0 ]; then
     echo "⚠ Vault upgrades: the check could not run (exit $rc) — run /gt:gt-upgrade to look"
-  elif printf '%s\n' "$out" | grep -q 'pending step(s):'; then
-    echo "⚠ Vault upgrades pending for $vault:"
-    # From the "N pending step(s):" line through the step list; the rehearsal hint is
-    # dropped because the skill is the supported way in.
-    printf '%s\n' "$out" | sed -n '/pending step(s):/,$p' | grep -v '^Rehearse:' \
-      | sed '/^[[:space:]]*$/d' | sed 's/^/  /' || true
+    echo ""; return 0
+  fi
+  attn=$(printf '%s\n' "$out" | upgrade_attention_list)
+  if printf '%s\n' "$out" | grep -q 'nothing pending'; then
+    echo "Vault upgrades: none pending"
+    [ -n "$attn" ] && printf '%s\n' "$attn"
+    echo ""; return 0
+  fi
+  if ! printf '%s\n' "$out" | grep -q 'pending step(s):'; then
+    echo "⚠ Vault upgrades: the check could not run (unrecognised output) — run /gt:gt-upgrade to look"
+    echo ""; return 0
+  fi
+
+  if ! git -C "$vault" rev-parse --git-dir >/dev/null 2>&1; then
+    echo "⚠ Vault upgrades pending, not applied — the vault is not a git repository, so an"
+    echo "  applied upgrade could not be reviewed or undone with git."
+    printf '%s\n' "$out" | upgrade_pending_list
+    [ -n "$attn" ] && printf '%s\n' "$attn"
+    echo "  To apply (it backs the vault up first): /gt:gt-upgrade"
+    echo "    or: python3 \"$up\" --vault \"$vault\" run"
+    echo ""; return 0
+  fi
+  porcelain=$(git -C "$vault" status --porcelain 2>&1) || {
+    echo "⚠ Vault upgrades pending, not applied — git could not read the vault's status:"
+    printf '%s\n' "$porcelain" | tail -1 | sed 's/^/  /'
+    printf '%s\n' "$out" | upgrade_pending_list
+    [ -n "$attn" ] && printf '%s\n' "$attn"
     echo "  Run /gt:gt-upgrade to apply"
+    echo ""; return 0; }
+  if [ -n "$porcelain" ]; then
+    # Uncommitted now. Whose? Only a snapshot taken before this install wrote into the
+    # vault can say. Clean then = every change is the install's own refresh.
+    if [ "$VAULT_SNAP_PATH" = "$real" ] && [ "$VAULT_SNAP_STATE" = clean ]; then
+      ours=yes
+      allow=(--allow-dirty)
+    else
+      echo "⚠ Vault upgrades pending, not applied — the vault has uncommitted changes (yours are never touched)."
+      printf '%s\n' "$out" | upgrade_pending_list
+      [ -n "$attn" ] && printf '%s\n' "$attn"
+      echo "  Commit or stash your changes, then run /gt:gt-upgrade"
+      echo "    or: python3 \"$up\" --vault \"$vault\" run"
+      echo ""; return 0
+    fi
+  fi
+
+  echo "Vault upgrades — applying to $vault:"
+  if [ "$ours" = yes ]; then
+    echo "  (the vault was clean before this install; its uncommitted files are this install's own refreshes:)"
+    printf '%s\n' "$porcelain" | sed 's/^/    /'
+  fi
+  run_out=$(python3 "$up" --vault "$vault" run ${allow[@]+"${allow[@]}"} 2>&1) || run_rc=$?
+  # The attention section is printed once, from the follow-up status below.
+  printf '%s\n' "$run_out" | sed '/^needs a person (/,$d' | sed '/^[[:space:]]*$/d' | sed 's/^/  /' || true
+  backup=$(printf '%s\n' "$run_out" | sed -n 's/^backup: //p' | head -1)
+  if [ "$run_rc" -eq 1 ] && printf '%s\n' "$run_out" | grep -q 'need a person:'; then
+    echo "  Left for you: the step(s) above that need a person. Run /gt:gt-upgrade to finish"
+  elif [ "$run_rc" -eq 2 ] && printf '%s\n' "$run_out" | grep -q 'REFUSED'; then
+    echo "⚠ Vault upgrades not applied — gt_upgrade refused (see above). Run /gt:gt-upgrade"
+  elif [ "$run_rc" -ne 0 ]; then
+    echo "⚠ Vault upgrade stopped (exit $run_rc): $(printf '%s\n' "$run_out" | sed '/^[[:space:]]*$/d' | tail -1)"
+    [ -n "$backup" ] && echo "  The vault was backed up before anything changed: $backup"
+    echo "  Run /gt:gt-upgrade to look"
+  fi
+
+  rc=0
+  out=$(python3 "$up" status --vault "$vault" 2>&1) || rc=$?
+  if [ "$rc" -ne 0 ]; then
+    echo "⚠ Vault upgrades: the follow-up check could not run (exit $rc) — run /gt:gt-upgrade to look"
   elif printf '%s\n' "$out" | grep -q 'nothing pending'; then
     echo "Vault upgrades: none pending"
-  else
-    echo "⚠ Vault upgrades: the check could not run (unrecognised output) — run /gt:gt-upgrade to look"
+  elif printf '%s\n' "$out" | grep -q 'pending step(s):'; then
+    echo "⚠ Vault upgrades still pending:"
+    printf '%s\n' "$out" | upgrade_pending_list
+    echo "  Run /gt:gt-upgrade to finish"
+  fi
+  [ "$rc" -eq 0 ] && printf '%s\n' "$out" | upgrade_attention_list
+  if [ -n "$(git -C "$vault" status --porcelain 2>/dev/null)" ]; then
+    if [ "$ours" = yes ]; then
+      echo "Uncommitted for your review: this install's vault file refreshes AND the applied upgrades (nothing was staged or committed)."
+    else
+      echo "Uncommitted for your review: the applied upgrades (nothing was staged or committed)."
+    fi
+    echo "Review and commit the vault: git -C \"$vault\" status"
   fi
   echo ""
 }
-report_vault_upgrades || true
+apply_vault_upgrades || true
 
 echo "Restart Claude Code to load the plugins."

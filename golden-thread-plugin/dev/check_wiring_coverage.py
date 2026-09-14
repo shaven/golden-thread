@@ -34,6 +34,10 @@ each shipped item where it ended up.
   templates/tools/  -> seeded into <vault>/Projects/golden-thread/tools/
   core-rules/*.md   -> installed into the vault's core-rules/
   scripts/*.py      -> present in the cache (what the skills invoke)
+  module hooks      -> (0.14.0) an ON module's declared hooks wired and its hookdir_scripts
+                       in the hooks dir; an OFF module's hooks NOT wired and its hook-dir
+                       files absent. On/off is the module's effective state in the
+                       sandbox home, read by the release's own gt_components.
 
 Nothing here is a hand-maintained list of expected files: each set is read from the
 release being tested, so a new file is covered the moment it ships. A file that ships
@@ -109,6 +113,69 @@ def strip_enforcement(home, comp):
                               if not any(n in (h.get("command") or "") for n in names)]
     f.write_text(json.dumps(data, indent=2) + "\n", encoding="utf-8")
     return names
+
+
+def module_findings(repo, home, comp, gt_version=None):
+    """Problems with module hooks after an install into `home` from plugin root `repo`.
+
+    ON  -> every declared hook wired under its event; every hookdir_scripts file and
+           hook script present in the hooks dir; every file in the module's hooks/ is
+           declared (a .py beside a declared .sh of the same stem is its helper).
+    OFF -> none of its hooks wired and none of its hook-dir files installed -- "off"
+           means absent, and a leftover registration runs a module the user declined.
+    A release without the module reader (before 0.14.0) has no modules: [].
+    """
+    if not hasattr(comp, "module_detail"):
+        return []
+    problems = []
+    try:
+        det = comp.module_detail(str(repo), str(home), gt_version=gt_version)
+    except Exception as exc:
+        return ["module states could not be read: %s" % exc]
+    wired = settings_commands(home)
+    hooks_dir = Path(home) / ".claude" / "golden-thread" / "hooks"
+    gt_names = set(getattr(comp, "HOOK_DIR_SCRIPTS", ())) | {
+        r["script"] for r in comp.HOOK_REGISTRATIONS}
+    for m in comp.discover_modules(str(repo)):
+        name, data, vd = m["name"], m["data"], Path(m["version_dir"])
+        if m["reasons"]:
+            problems.append("module %s has an invalid module.json: %s"
+                            % (name, "; ".join(m["reasons"])))
+            continue
+        state = det.get(name, {}).get("state")
+        hooks = data.get("hooks") or []
+        files = {h["script"] for h in hooks} | set(data.get("hookdir_scripts") or [])
+        if state == "on":
+            for h in hooks:
+                if not any(e == h["event"] and h["script"] in c for e, c in wired):
+                    problems.append("module %s: hook %s is declared for %s but NOT wired in "
+                                    "settings.json after a full install — it ships inert"
+                                    % (name, h["script"], h["event"]))
+            for fname in sorted(files):
+                if not (hooks_dir / fname).is_file():
+                    problems.append("module %s: %s was not installed to "
+                                    "~/.claude/golden-thread/hooks/" % (name, fname))
+            declared = {h["script"] for h in hooks}
+            stems = {Path(s).stem for s in declared if s.endswith(".sh")}
+            for fp in sorted((vd / "hooks").glob("*")) if (vd / "hooks").is_dir() else []:
+                if not fp.is_file() or fp.name.startswith("."):
+                    continue
+                if fp.name in declared or (fp.suffix == ".py" and fp.stem in stems):
+                    continue
+                problems.append("module %s: hooks/%s ships but is declared in NO hook of its "
+                                "module.json — it can never run" % (name, fp.name))
+        else:
+            for h in hooks:
+                if h["script"] in gt_names:
+                    continue
+                if any(h["script"] in c for _e, c in wired):
+                    problems.append("module %s is OFF but its hook %s is still wired in "
+                                    "settings.json" % (name, h["script"]))
+            for fname in sorted(files - gt_names):
+                if (hooks_dir / fname).exists():
+                    problems.append("module %s is OFF but %s is still in "
+                                    "~/.claude/golden-thread/hooks/" % (name, fname))
+    return problems
 
 
 def run_upgrade(repo, home):
@@ -270,6 +337,9 @@ def check(version_dir, keep=False):
                 problems.append("%s declares enforcement: validated but no enforcement "
                                 "event is wired at all" % r.name)
                 break
+
+        # ---- 9. module hooks: wired when on, absent when off ------------------
+        problems.extend(module_findings(repo, home, comp, gt_version=version_dir.name))
     finally:
         if keep:
             print("sandbox kept at %s" % sandbox, file=sys.stderr)

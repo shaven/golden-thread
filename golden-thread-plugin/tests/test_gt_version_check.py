@@ -104,6 +104,58 @@ class VersionCheck(Sandbox):
         self.assertRegex(out, r"gt-wiki\s+0\.3\.0 installed, 0\.3\.2 available")
         self.assertNotRegex(out, r"\bgt\s+0\.9\.14")
 
+    # -- module install choices (0.14.0) ------------------------------------------
+    def choices(self, **modules):
+        p = self.home / ".claude" / "golden-thread" / "install-choices.json"
+        p.parent.mkdir(parents=True, exist_ok=True)
+        p.write_text(json.dumps({"version": 1, "choices": modules}))
+        return p
+
+    def _needs_choices(self):
+        if "install_choices" not in TOOL.read_text():
+            self.skipTest("gt release under test predates module install choices")
+
+    def test_wiki_off_by_choice_is_reported_not_missing(self):
+        self._needs_choices()
+        self.release("0.14.0")
+        self.release("0.2.0", sub="golden-thread-wiki")
+        self.installed(gt="0.14.0")
+        self.choices(wiki="off")
+        out = self.check()
+        self.assertIn("current", out)
+        self.assertRegex(out, r"gt-wiki\s+not installed by choice")
+        self.assertIn("--with wiki", out)
+        self.assertNotIn("install with:", out)
+
+    def test_wiki_off_but_still_installed_is_not_offered_an_upgrade(self):
+        self._needs_choices()
+        self.release("0.14.0")
+        self.release("0.2.0", sub="golden-thread-wiki")
+        self.installed(gt="0.14.0", wiki="0.1.3")
+        self.choices(wiki="off")
+        out = self.check()
+        self.assertNotRegex(out, r"0\.1\.3 installed, 0\.2\.0 available")
+        self.assertIn("has wiki off", out)
+        self.assertNotIn("install with:", out)
+
+    def test_wiki_on_by_choice_behaves_as_before(self):
+        self._needs_choices()
+        self.release("0.14.0")
+        self.release("0.2.0", sub="golden-thread-wiki")
+        self.installed(gt="0.14.0", wiki="0.1.3")
+        self.choices(wiki="on", demo="off")
+        out = self.check()
+        self.assertRegex(out, r"gt-wiki\s+0\.1\.3 installed, 0\.2\.0 available")
+        self.assertNotIn("by choice", out)
+
+    def test_no_choices_file_wiki_absent_stays_silent_about_it(self):
+        self.release("0.14.0")
+        self.release("0.2.0", sub="golden-thread-wiki")
+        self.installed(gt="0.14.0")
+        out = self.check()
+        self.assertIn("current", out)
+        self.assertNotIn("gt-wiki", out)
+
     # -- degraded inputs -----------------------------------------------------------
     def test_source_root_missing_is_said_out_loud(self):
         self.installed(gt="0.9.13")

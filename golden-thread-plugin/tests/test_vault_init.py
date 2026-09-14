@@ -10,7 +10,7 @@ import shutil
 import unittest
 from pathlib import Path
 
-from _harness import Sandbox, SCRIPTS, ENFORCEMENT_HOOKS
+from _harness import Sandbox, SCRIPTS, ENFORCEMENT_HOOKS, TEMPLATES
 
 VI = SCRIPTS / "vault_init.py"
 HOOK_NAMES = ENFORCEMENT_HOOKS
@@ -73,6 +73,41 @@ class FreshTest(VaultInitBase):
         if shutil.which("git"):
             hp = self.run_cmd(["git", "-C", v, "config", "--get", "core.hooksPath"])
             self.assertEqual(hp.stdout.strip(), ".githooks")
+
+    def test_fresh_vault_is_born_current(self):
+        """Regression 2026-09-14: `fresh` wrote a plain log.md, so every new vault had the
+        0.11.0 log-spool migration pending and install.sh migrated it straight away."""
+        v = self.make_vault()
+        up = self.py(SCRIPTS / "gt_upgrade.py", "status", "--vault", v)
+        self.assertEqual(up.returncode, 0, up.stdout + up.stderr)
+        self.assertIn("nothing pending", up.stdout)
+        self.assertNotIn("pending step(s)", up.stdout)
+        release = json.loads((SCRIPTS.parent / ".claude-plugin" / "plugin.json").read_text())["version"]
+        stamp = json.loads((v / "Projects/golden-thread/.vault-version.json").read_text())
+        self.assertEqual(stamp["gt"], release)
+        # log.md is generated, and exactly as `gt_log.py migrate` would have produced it
+        base = v / "Projects/golden-thread/spool/log/0000-baseline.md"
+        self.assertTrue(base.is_file(), "no log spool baseline")
+        tools = v / "Projects/golden-thread/tools"
+        log = v / "log.md"
+        self.assertTrue(log.read_text().rstrip("\n").endswith(base.read_text().rstrip("\n")))
+        before = log.read_bytes()
+        self.assertOk(self.py(tools / "gt_log.py", "--vault", v, "merge"))
+        self.assertEqual(log.read_bytes(), before, "fresh log.md is not what merge renders")
+        self.assertOk(self.py(tools / "gt_log.py", "--vault", v, "--id", "t", "add",
+                              "2026-09-14 10:00 CDT [work] x — first entry"))
+        self.assertIn("[work] x — first entry", log.read_text())
+        # and a second `fresh` over it neither re-migrates nor refuses
+        self.vi_json("fresh", "--vault", v, "--domain", "Test")
+        self.assertIn("[work] x — first entry", log.read_text())
+        self.assertIn("nothing pending",
+                      self.py(SCRIPTS / "gt_upgrade.py", "status", "--vault", v).stdout)
+
+    def test_fresh_dry_run_does_not_generate_the_log(self):
+        v = self.tmp / "dry"
+        res = self.vi_json("fresh", "--vault", v, "--domain", "Test", "--no-config", "--dry-run")
+        self.assertTrue(any(r["action"] == "would-migrate" for r in res))
+        self.assertFalse(v.exists())
 
     def test_fresh_is_idempotent_and_preserves_edits(self):
         v = self.make_vault()
@@ -150,6 +185,47 @@ class ConnectTest(VaultInitBase):
                          "connect refused to switch vaults -- it hits the same exit-3 conflict "
                          "that tells the user to use connect to switch:\n" + proc.stdout)
         self.assertEqual(self.cfg()["vault_path"], str(b.resolve()))
+
+
+class ConnectMergeBaseTest(VaultInitBase):
+    """connect records a merge base only when there is nothing to review (0.14.0).
+
+    Recording the shipped template as the base of an EDITED document told gt_upgrade the
+    owner had reviewed it against the release -- and since install.sh applies upgrades
+    unattended, the next install would merge over edits nobody had looked at."""
+    BASE = Path("Projects") / "golden-thread" / ".templates"
+
+    def existing(self, protocol):
+        v = self.tmp / "existing"
+        (v / "Projects").mkdir(parents=True)
+        (v / "Projects" / "PROTOCOL.md").write_bytes(protocol)
+        return v
+
+    def status(self, v):
+        return self.py(SCRIPTS / "gt_upgrade.py", "status", "--vault", v)
+
+    def test_connect_to_an_edited_document_records_no_base(self):
+        v = self.existing((TEMPLATES / "PROTOCOL.md").read_bytes() + b"\n## Owner's section\n")
+        self.vi_json("connect", "--vault", v)
+        self.assertFalse((v / self.BASE / "PROTOCOL.md").exists(),
+                         "connect recorded a base for a document nobody reviewed")
+        st = self.status(v)
+        self.assertEqual(st.returncode, 0, st.stdout + st.stderr)
+        self.assertIn("needs a person: no merge base — review %s against the shipped template"
+                      % (v / "Projects" / "PROTOCOL.md"), st.stdout)
+
+    def test_connect_to_an_untouched_copy_records_the_base(self):
+        shipped = (TEMPLATES / "PROTOCOL.md").read_bytes()
+        v = self.existing(shipped)
+        self.vi_json("connect", "--vault", v)
+        self.assertEqual((v / self.BASE / "PROTOCOL.md").read_bytes(), shipped)
+        self.assertNotIn("needs a person", self.status(v).stdout)
+
+    def test_fresh_records_the_base(self):
+        v = self.make_vault()
+        for name in ("PROTOCOL.md", "CONVENTIONS.md"):
+            self.assertEqual((v / self.BASE / name).read_bytes(),
+                             (TEMPLATES / name).read_bytes(), name)
 
 
 # ---------------------------------------------------------------------------- core rules
@@ -242,6 +318,49 @@ class CreateProjectTest(VaultInitBase):
         self.assertIn("# Alpha Thing", readme)
         self.assertIn("**Topology:** local", (p / "source.md").read_text())
         self.assertNotIn("{{", (p / "CLAUDE.md").read_text())
+
+    def test_new_project_is_born_current(self):
+        """Regression 2026-09-14: create-project wrote a plain decisions.md, so
+        `decisions-spool` was pending as soon as a project existed."""
+        v = self.make_vault()
+        res = self.project(v, "alpha", "--title", "Alpha", "--domain", "tools")
+        self.project(v, "beta", "--parent", "alpha", "--domain", "tools")
+        self.assertFalse(self.actions(res, "error"), res)
+        up = self.py(SCRIPTS / "gt_upgrade.py", "status", "--vault", v)
+        self.assertEqual(up.returncode, 0, up.stdout + up.stderr)
+        self.assertIn("nothing pending", up.stdout, up.stdout)
+        spool = v / "Projects/golden-thread/spool/decisions"
+        for rel in ("alpha", "alpha/beta"):
+            self.assertTrue((spool / rel / "0000-baseline.md").is_file(), rel)
+        tool = v / "Projects/golden-thread/tools/gt_adr.py"
+        dec = v / "Projects/alpha/decisions.md"
+        before = dec.read_bytes()
+        self.assertOk(self.py(tool, "--vault", v, "merge", "alpha"))
+        self.assertEqual(dec.read_bytes(), before, "decisions.md is not what merge renders")
+        self.assertOk(self.py(tool, "--vault", v, "allocate", "alpha", "--title", "Pick X"))
+        self.assertOk(self.py(tool, "--vault", v, "merge", "alpha"))
+        self.assertIn("## ADR-1: Pick X", dec.read_text())
+        self.assertIn("# Alpha Decisions", dec.read_text())
+
+    def test_existing_decisions_md_is_never_migrated(self):
+        """An existing decisions.md is the owner's ADR history; it belongs to gt_upgrade."""
+        v = self.make_vault()
+        p = v / "Projects" / "legacy"
+        p.mkdir(parents=True)
+        (p / "decisions.md").write_text("# Legacy\n\n## ADR-1: kept as is\n")
+        before = (p / "decisions.md").read_bytes()
+        res = self.project(v, "legacy")
+        self.assertEqual((p / "decisions.md").read_bytes(), before)
+        self.assertFalse((v / "Projects/golden-thread/spool/decisions/legacy").exists())
+        self.assertFalse([r for r in res if r["path"].endswith("decisions.md")
+                          and r["action"] != "skipped"], res)
+        # and a re-run over a project this command created does not re-migrate it
+        self.project(v, "alpha")
+        dec = v / "Projects/alpha/decisions.md"
+        dec_before = dec.read_bytes()
+        res = self.project(v, "alpha")
+        self.assertEqual(dec.read_bytes(), dec_before)
+        self.assertFalse(self.actions(res, "error"), res)
 
     def test_row_lands_inside_master_index_table(self):
         v = self.make_vault()
@@ -337,6 +456,30 @@ class RenameTest(VaultInitBase):
         self.assertIn("Projects/gamma/design.md", page)
         self.assertIn("`gamma`", page)
 
+    def test_rename_moves_the_decisions_spool(self):
+        """Regression 2026-09-14: the spool stayed under the old name, so the renamed
+        project read as unmigrated and its next ADR restarted at 1."""
+        v = self.make_vault()
+        self.project(v, "alpha", "--domain", "tools")
+        self.project(v, "beta", "--parent", "alpha", "--domain", "tools")
+        tool = v / "Projects/golden-thread/tools/gt_adr.py"
+        for rel in ("alpha", "alpha", "alpha/beta"):
+            self.assertOk(self.py(tool, "--vault", v, "allocate", rel, "--title", "x"))
+        self.assertOk(self.py(tool, "--vault", v, "merge", "alpha"))
+        res = self.vi_json("rename-project", "--vault", v, "--from", "alpha", "--to", "gamma")
+        self.assertFalse(self.actions(res, "error"), res)
+        spool = v / "Projects/golden-thread/spool/decisions"
+        self.assertFalse((spool / "alpha").exists())
+        self.assertTrue((spool / "gamma/0002.md").is_file())
+        self.assertTrue((spool / "gamma/beta/0001.md").is_file())
+        up = self.py(SCRIPTS / "gt_upgrade.py", "status", "--vault", v)
+        self.assertIn("nothing pending", up.stdout, up.stdout)
+        n = self.py(tool, "--vault", v, "allocate", "gamma", "--title", "next")
+        self.assertEqual(n.stdout.strip(), "3")
+        dec = v / "Projects/gamma/decisions.md"
+        self.assertOk(self.py(tool, "--vault", v, "merge", "gamma"))
+        self.assertEqual(len(re.findall(r"^## ADR-", dec.read_text(), re.M)), 3)
+
     def test_rename_rerecords_core_rules_path(self):
         v = self.make_vault()
         self.vi_json("rename-project", "--vault", v, "--from", "golden-thread", "--to", "gt-meta")
@@ -349,6 +492,20 @@ class RenameTest(VaultInitBase):
         res = self.vi_json("rename-project", "--vault", v, "--from", "alpha", "--to", "beta")
         self.assertTrue(self.actions(res, "conflict"))
         self.assertTrue((v / "Projects" / "alpha" / "idea.md").is_file())
+
+    def test_rename_dry_run_changes_nothing(self):
+        """Until 0.14.0 `rename-project --dry-run` really renamed the folder."""
+        v = self.make_vault()
+        self.project(v, "alpha", "--domain", "tools")
+        (v / "Knowledge" / "Page.md").write_text("see Projects/alpha/design.md\n")
+        def snapshot():
+            return {str(f.relative_to(v)): f.read_bytes() for f in v.rglob("*") if f.is_file() and ".git" not in f.parts}
+        before = snapshot()
+        res = self.vi_json("rename-project", "--vault", v, "--from", "alpha", "--to", "gamma", "--dry-run")
+        self.assertTrue(self.actions(res, "would-rename"), res)
+        self.assertEqual(snapshot(), before, "a dry-run rename changed the vault")
+        self.assertTrue((v / "Projects" / "alpha").is_dir())
+        self.assertFalse((v / "Projects" / "gamma").exists())
 
     def test_rename_unknown_project_is_error(self):
         v = self.make_vault()
@@ -366,6 +523,8 @@ class MergeTest(VaultInitBase):
         a, b = v / "Projects" / "alpha", v / "Projects" / "beta"
         (a / "decisions.md").write_text("# alpha Decisions\n\n## ADR-1: First\n\nx\n\n## ADR-2: Second\n\ny\n")
         (b / "decisions.md").write_text("# beta Decisions\n\n## ADR-1: Use widgets\n\nbecause\n")
+        # hand-written decisions.md files stand in for PRE-0.11 (unmigrated) projects
+        shutil.rmtree(v / "Projects/golden-thread/spool/decisions")
         (b / "research.md").write_text("# beta Research\n\n## 2026-01-01: found a thing\n\nbeta-finding\n")
         (b / "design.md").write_text("# beta Design\n\nbeta architecture\n")
         (b / "idea.md").write_text("# beta\n\nthe original beta idea\n")
@@ -421,6 +580,127 @@ class MergeTest(VaultInitBase):
         lost = [s for s in ("ship-the-beta-widget", "UNIQUE-EXTRA-CONTENT") if s not in corpus]
         self.assertEqual(lost, [], "merge-project deleted source content it did not carry over: "
                          + ", ".join(lost))
+
+    # -- decisions spool (0.11.0): regression 2026-09-14, merged ADRs were deleted by
+    #    the next `gt_adr.py merge` because they were appended to the RENDERED file.
+    def spooled_pair(self):
+        v = self.make_vault()
+        self.project(v, "alpha", "--domain", "tools")
+        self.project(v, "beta", "--domain", "tools")
+        tool = v / "Projects/golden-thread/tools/gt_adr.py"
+        for slug in ("alpha", "beta"):
+            for i in (1, 2):
+                n = self.py(tool, "--vault", v, "allocate", slug, "--title", f"{slug} choice {i}")
+                self.assertOk(n)
+                slot = v / f"Projects/golden-thread/spool/decisions/{slug}/{int(n.stdout):04d}.md"
+                slot.write_text(slot.read_text() + f"\n{slug}-body-{i}\n")
+            self.assertOk(self.py(tool, "--vault", v, "merge", slug))
+        return v, tool
+
+    def adrs(self, path):
+        return [int(n) for n in re.findall(r"^## ADR-(\d+)(?!\s*amendment)", path.read_text(), re.M)]
+
+    def assertCurrent(self, v):
+        up = self.py(SCRIPTS / "gt_upgrade.py", "status", "--vault", v)
+        self.assertOk(up)
+        self.assertIn("nothing pending", up.stdout, up.stdout)
+
+    def test_merged_adrs_survive_the_next_render(self):
+        v, tool = self.spooled_pair()
+        res = self.vi_json("merge-project", "--vault", v, "--from", "beta", "--into", "alpha",
+                           "--date", "2026-09-14")
+        self.assertFalse(self.actions(res, "error"), res)
+        dec = v / "Projects/alpha/decisions.md"
+        self.assertEqual(self.adrs(dec), [1, 2, 3, 4])
+        self.assertOk(self.py(tool, "--vault", v, "merge", "alpha"))
+        text = dec.read_text()
+        self.assertEqual(self.adrs(dec), [1, 2, 3, 4], "re-render lost the merged ADRs:\n" + text)
+        for s in ("alpha choice 1", "alpha-body-2", "## ADR-3: beta choice 1 *(was beta ADR-1)*",
+                  "## ADR-4: beta choice 2 *(was beta ADR-2)*", "beta-body-2"):
+            self.assertIn(s, text)
+        spool = v / "Projects/golden-thread/spool/decisions"
+        self.assertFalse((spool / "beta").exists(), "beta's spool left behind")
+        self.assertIn("merged_into: alpha", (v / "Projects/beta/README.md").read_text())
+        self.assertCurrent(v)
+        n = self.py(tool, "--vault", v, "allocate", "alpha", "--title", "after")
+        self.assertEqual(n.stdout.strip(), "5")
+
+    def test_legacy_source_merges_without_loss(self):
+        v, a, b = self.two_projects()          # both unmigrated
+        tool = v / "Projects/golden-thread/tools/gt_adr.py"
+        res = self.vi_json("merge-project", "--vault", v, "--from", "beta", "--into", "alpha",
+                           "--date", "2026-09-11")
+        self.assertFalse(self.actions(res, "error"), res)
+        self.assertOk(self.py(tool, "--vault", v, "merge", "alpha"))
+        text = (a / "decisions.md").read_text()
+        self.assertEqual(self.adrs(a / "decisions.md"), [1, 2, 3])
+        self.assertIn("## ADR-3: Use widgets *(was beta ADR-1)*", text)
+        self.assertIn("because", text)
+        self.assertFalse((v / "Projects/golden-thread/spool/decisions/beta").exists())
+        self.assertCurrent(v)
+
+    def test_legacy_source_into_migrated_destination(self):
+        v, tool = self.spooled_pair()
+        b = v / "Projects/beta"
+        shutil.rmtree(v / "Projects/golden-thread/spool/decisions/beta")
+        (b / "decisions.md").write_text("# beta\n\n## ADR-1: Old one\n\nold-body\n\n"
+                                        "## ADR-1 amendment: tweak\n\ntweak-body\n")
+        res = self.vi_json("merge-project", "--vault", v, "--from", "beta", "--into", "alpha")
+        self.assertFalse(self.actions(res, "error"), res)
+        self.assertOk(self.py(tool, "--vault", v, "merge", "alpha"))
+        text = (v / "Projects/alpha/decisions.md").read_text()
+        self.assertEqual(self.adrs(v / "Projects/alpha/decisions.md"), [1, 2, 3])
+        for s in ("## ADR-3: Old one *(was beta ADR-1)*", "old-body", "tweak-body"):
+            self.assertIn(s, text)
+        self.assertCurrent(v)
+
+    def test_failure_midway_leaves_both_projects_intact(self):
+        v, tool = self.spooled_pair()
+        spool = v / "Projects/golden-thread/spool/decisions"
+
+        def snap():
+            return {str(p.relative_to(v)): p.read_bytes() for p in
+                    list((v / "Projects/alpha").rglob("*")) + list((v / "Projects/beta").rglob("*"))
+                    + list(spool.rglob("*")) if p.is_file() and p.name != ".highwater"}
+        before = snap()
+        proc = self.py(VI, "merge-project", "--vault", v, "--from", "beta", "--into", "alpha",
+                       env={"GT_TEST_FAULT": "merge-decisions"})
+        self.assertEqual(proc.returncode, 0, proc.stderr)
+        res = json.loads(proc.stdout)
+        self.assertTrue(self.actions(res, "error"), res)
+        self.assertEqual(snap(), before, "a failed merge changed the projects")
+        self.assertOk(self.py(tool, "--vault", v, "merge", "alpha"))
+        self.assertEqual(self.adrs(v / "Projects/alpha/decisions.md"), [1, 2])
+
+    def test_merge_dry_run_and_legacy_failure_change_nothing(self):
+        """Regression 2026-09-14: `merge-project --dry-run` really moved memory notes and
+        deleted the source's decisions.md. And a failed merge into an UNMIGRATED
+        destination must undo the destination's migration too."""
+        v, a, b = self.two_projects()
+
+        def snap():
+            return {str(p.relative_to(v)): p.read_bytes() for p in (v / "Projects").rglob("*")
+                    if p.is_file() and "__pycache__" not in p.parts}
+        before = snap()
+        res = self.vi_json("merge-project", "--vault", v, "--from", "beta", "--into", "alpha",
+                           "--dry-run")
+        self.assertFalse(self.actions(res, "error"), res)
+        self.assertEqual(snap(), before, "a dry-run merge changed the vault")
+        proc = self.py(VI, "merge-project", "--vault", v, "--from", "beta", "--into", "alpha",
+                       env={"GT_TEST_FAULT": "merge-decisions"})
+        self.assertTrue(self.actions(json.loads(proc.stdout), "error"), proc.stdout)
+        self.assertEqual(snap(), before, "a failed merge changed the vault")
+
+    def test_merge_moves_sub_project_spools(self):
+        v, tool = self.spooled_pair()
+        self.project(v, "kid", "--parent", "beta", "--domain", "tools")
+        self.assertOk(self.py(tool, "--vault", v, "allocate", "beta/kid", "--title", "kid one"))
+        res = self.vi_json("merge-project", "--vault", v, "--from", "beta", "--into", "alpha")
+        self.assertFalse(self.actions(res, "error"), res)
+        spool = v / "Projects/golden-thread/spool/decisions"
+        self.assertTrue((spool / "alpha/kid/0001.md").is_file())
+        self.assertFalse((spool / "beta").exists())
+        self.assertCurrent(v)
 
     def test_merge_into_itself_or_missing_is_error(self):
         v = self.make_vault()
@@ -490,6 +770,11 @@ class DryRunTest(Sandbox):
         self.assertEqual(self.snapshot(v), before,
                          "--dry-run modified the vault; compare the reported paths")
         self.assertFalse((v / "Projects" / "ghost").exists())
+        self.assertFalse((v / "Projects/golden-thread/spool/decisions/ghost").exists())
+        self.assertTrue(any(r["action"] == "would-migrate"
+                            and r["path"].endswith("ghost/decisions.md")
+                            for r in json.loads(p.stdout)),
+                        "the dry run did not report the decisions.md migration")
 
     def test_dry_run_then_real_run_produces_the_same_paths(self):
         """The rehearsal must predict the real thing, or it is decoration."""
