@@ -6,6 +6,7 @@ schedules it is not part of this script (it is described in the golden-thread
 runbook) and is not exercised here.
 """
 import datetime
+import json
 import os
 import time
 import unittest
@@ -50,7 +51,7 @@ class WeeklyTest(WeeklyBase):
         v = self.wired_vault()
         self.seed_findings(v)
         self.run_weekly()
-        out = v / "Projects" / "golden-thread" / "lint"
+        out = v / ".gt" / "lint"
         latest = (out / "latest.md").read_text()
         self.assertEqual((out / f"{self.today}.log").read_text(), latest)
         self.assertIn(f"# Weekly vault lint — {self.today}", latest)
@@ -70,7 +71,7 @@ class WeeklyTest(WeeklyBase):
         v = self.wired_vault()
         before = (v / "INBOX.md").read_text()
         self.run_weekly()
-        self.assertIn("Findings: **0**", (v / "Projects/golden-thread/lint/latest.md").read_text())
+        self.assertIn("Findings: **0**", (v / ".gt/lint/latest.md").read_text())
         self.assertEqual((v / "INBOX.md").read_text(), before)
 
     def test_report_does_not_report_itself(self):
@@ -79,9 +80,9 @@ class WeeklyTest(WeeklyBase):
         v = self.wired_vault()
         self.seed_findings(v)
         self.run_weekly()
-        first = (v / "Projects/golden-thread/lint/latest.md").read_text()
+        first = (v / ".gt/lint/latest.md").read_text()
         self.run_weekly()
-        second = (v / "Projects/golden-thread/lint/latest.md").read_text()
+        second = (v / ".gt/lint/latest.md").read_text()
         self.assertIn("Findings: **3**", first)
         self.assertIn("Findings: **3**", second, "second run counted the first report")
 
@@ -94,7 +95,7 @@ class WeeklyTest(WeeklyBase):
         before = (v / "INBOX.md").read_text()
         self.run_weekly()
         self.assertEqual((v / "INBOX.md").read_text(), before)
-        self.assertTrue((v / "Projects/golden-thread/lint/latest.md").is_file())
+        self.assertTrue((v / ".gt/lint/latest.md").is_file())
         self.assertIn("claimed by a live session", self.log.read_text())
 
     def test_stale_session_claim_does_not_block(self):
@@ -124,10 +125,60 @@ class WeeklyTest(WeeklyBase):
         wl.parent.mkdir(parents=True)
         wl.write_text("print('fake wiki lint\\nFindings: 2')\n")
         self.run_weekly()
-        latest = (v / "Projects/golden-thread/lint/latest.md").read_text()
+        latest = (v / ".gt/lint/latest.md").read_text()
         self.assertIn("## wiki_lint.py", latest)
         self.assertIn("Findings: **2** (wiki-lint 2)", latest)
         self.assertIn("**2 findings** (wiki-lint 2)", self.inbox_lines(v)[0])
+
+    def test_wiki_lint_absent_is_reported_not_silently_skipped(self):
+        v = self.wired_vault()
+        self.run_weekly()
+        latest = (v / ".gt/lint/latest.md").read_text()
+        self.assertIn("wiki_lint: not installed", latest)
+        self.assertIn("wiki_lint: not installed", self.log.read_text())
+
+    def test_wiki_lint_from_any_marketplace_newest_version_wins(self):
+        v = self.wired_vault()
+        base = self.home / ".claude" / "plugins" / "cache" / "some-marketplace" / "gt-wiki"
+        for ver, n in (("0.9.0", 1), ("0.10.0", 4)):
+            wl = base / ver / "scripts" / "wiki_lint.py"
+            wl.parent.mkdir(parents=True)
+            wl.write_text("print('Findings: %d')\n" % n)
+        self.run_weekly()
+        self.assertIn("(wiki-lint 4)", (v / ".gt/lint/latest.md").read_text())
+
+    def test_configured_report_dir_is_used(self):
+        v = self.wired_vault()
+        self.seed_findings(v)
+        cfg = self.home / ".claude" / "vault-config.json"
+        data = json.loads(cfg.read_text())
+        data["lint_report_dir"] = "Reports/lint"
+        cfg.write_text(json.dumps(data))
+        self.run_weekly()
+        self.assertTrue((v / "Reports" / "lint" / "latest.md").is_file())
+        self.assertFalse((v / ".gt" / "lint").exists(), "the default dir was written despite config")
+        self.assertIn("`Reports/lint/latest.md`", self.inbox_lines(v)[0])
+
+    def test_upgraded_vault_keeps_its_existing_report_dir(self):
+        """Before 0.13.0 the report lived in Projects/golden-thread/lint. An upgrade must not
+        silently move it: a vault that already has that folder keeps writing there."""
+        v = self.wired_vault()
+        self.seed_findings(v)
+        legacy = v / "Projects" / "golden-thread" / "lint"
+        legacy.mkdir(parents=True, exist_ok=True)
+        self.run_weekly()
+        self.assertTrue((legacy / "latest.md").is_file())
+        self.assertFalse((v / ".gt" / "lint").exists(), "an upgraded vault's report was moved")
+
+    def test_absolute_report_dir_outside_the_vault(self):
+        v = self.wired_vault()
+        out = self.tmp / "elsewhere"
+        cfg = self.home / ".claude" / "vault-config.json"
+        data = json.loads(cfg.read_text())
+        data["lint_report_dir"] = str(out)
+        cfg.write_text(json.dumps(data))
+        self.run_weekly()
+        self.assertTrue((out / "latest.md").is_file())
 
 
 if __name__ == "__main__":

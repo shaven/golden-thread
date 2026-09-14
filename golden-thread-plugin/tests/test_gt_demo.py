@@ -144,6 +144,34 @@ class DemoTest(Sandbox):
             for s in re.findall(r"\bthe (gt-[a-z-]+) skill\b", body):
                 self.assertIn(s, skills, f"tour names a skill that does not ship: {s}")
 
+    def test_start_honours_gt_demo_vault_in_a_temp_dir(self):
+        alt = self.tmp / "alt-demo"
+        p = self.demo_cmd("start", env={"GT_DEMO_VAULT": str(alt)})
+        self.assertOk(p)
+        self.assertTrue((alt / ".demo" / "DEMO_VAULT").is_file())
+        self.assertTrue((alt / ".demo" / "secret-transcript.json").is_file(),
+                        "act 1 reads $GT_VAULT/.demo/secret-transcript.json")
+        self.assertFalse(self.demo.exists(), "GT_DEMO_VAULT was ignored")
+        self.assertIn(f'GT_VAULT="{alt}" GT_WATCH=report GT_WATCH_STATE="{alt}/.demo/watch" claude', p.stdout)
+
+    def test_tour_references_resolve_without_machine_paths(self):
+        tour = (GT / "templates" / "demo-pizzabot" / "tour.md").read_text()
+        self.assertNotIn("plugins/marketplaces", tour, "tour pins one install layout")
+        self.assertNotIn("demo-vault", tour, "tour pins the default demo vault; use $GT_VAULT")
+        scripts = re.findall(r"<scripts>/([A-Za-z0-9_.-]+)", tour)
+        self.assertTrue(scripts, "tour runs no plugin scripts")
+        for name in scripts:
+            self.assertTrue((GT / "scripts" / name).is_file(), f"tour names a missing script: {name}")
+        skill = (GT / "skills" / "gt-demo" / "SKILL.md").read_text()
+        self.assertIn("<base>/../../scripts", skill)
+        self.assertTrue((GT / "skills" / "gt-demo" / ".." / ".." / "scripts" / "gt_demo.sh").resolve().is_file())
+
+    def test_skill_launch_command_matches_what_start_prints(self):
+        skill = (GT / "skills" / "gt-demo" / "SKILL.md").read_text()
+        printed = self.demo_cmd("start").stdout
+        line = next(l.strip() for l in printed.splitlines() if l.strip().startswith("cd "))
+        self.assertIn(line.replace(str(self.demo), "<demo vault>"), skill)
+
     # -- end, clean, remove ------------------------------------------------------------------
     def test_end_lists_what_the_tour_produced(self):
         self.assertOk(self.demo_cmd("start"))

@@ -47,6 +47,9 @@ import sys
 import tempfile
 from pathlib import Path
 
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import plugins  # noqa: E402  the one plugin-discovery rule, shared with the shell gates
+
 PY = os.environ.get("GT_PYTHON", sys.executable or "python3")
 
 # A shipped hook script that is deliberately not registered on its own: it is called
@@ -154,13 +157,11 @@ def check(version_dir, keep=False):
         shutil.copy2(plugin_root / "install.sh", repo / "install.sh")
         ignore = shutil.ignore_patterns("__pycache__", "*.pyc", ".DS_Store")
         shutil.copytree(version_dir, repo / "golden-thread" / version_dir.name, ignore=ignore)
-        wiki = plugin_root / "golden-thread-wiki"
-        if wiki.is_dir():
-            newest = max((d for d in wiki.iterdir()
-                          if (d / ".claude-plugin" / "plugin.json").is_file()),
-                         key=lambda d: tuple(int(x) for x in d.name.split(".")), default=None)
-            if newest:
-                shutil.copytree(newest, repo / "golden-thread-wiki" / newest.name, ignore=ignore)
+        # Every OTHER plugin the repo ships rides along at its newest version, found by
+        # the one discovery rule (dev/plugins.py) rather than a gt-wiki named here.
+        for name, newest, _ in plugins.discover(plugin_root):
+            if name != version_dir.parent.name:
+                shutil.copytree(newest, repo / name / newest.name, ignore=ignore)
 
         # PHASE 1 — a first install that names its vault.
         rc, out = run_install(repo, home, vault)

@@ -44,6 +44,8 @@ class PackageTest(Sandbox):
         for f in TOP:
             if (REPO / f).is_file():
                 shutil.copy2(REPO / f, self.repo / f)
+        (self.repo / "dev").mkdir()
+        shutil.copy2(REPO / "dev" / "plugins.py", self.repo / "dev" / "plugins.py")
         gt, wiki = self.repo / "golden-thread", self.repo / "golden-thread-wiki"
         shutil.copytree(GT, gt / GT.name, ignore=IGNORE)
         shutil.copytree(WIKI, wiki / WIKI.name, ignore=IGNORE)

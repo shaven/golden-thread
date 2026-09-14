@@ -366,5 +366,106 @@ class SuppressionAndQueueTest(LintBase):
         self.assertFalse(q.exists())
 
 
+# ---------------------------------------------------------------------------- --json
+class JsonOutputTest(LintBase):
+    def test_json_parses_and_matches_text_mode(self):
+        self.project("alpha")
+        self.w("Knowledge/Lonely.md", "x [[Nowhere]]\n")
+        text_proc, text_findings = self.lint()
+        json_proc = self.py(LINT, self.v, "--json")
+        self.assertEqual(json_proc.returncode, text_proc.returncode)
+        data = json.loads(json_proc.stdout)
+        self.assertEqual(data["version"], 1)
+        self.assertEqual(data["vault"], str(self.v.resolve()))
+        for f in data["findings"]:
+            self.assertTrue({"kind", "path", "line", "message"} <= set(f), f)
+        text_counts = {}
+        for kind, _ in text_findings:
+            text_counts[kind] = text_counts.get(kind, 0) + 1
+        self.assertEqual(data["counts"], text_counts)
+        self.assertEqual(sorted((f["kind"], f["path"]) for f in data["findings"]),
+                         sorted(text_findings))
+
+    def test_json_clean_vault(self):
+        proc = self.py(LINT, "--vault", self.v, "--json")
+        self.assertOk(proc)
+        data = json.loads(proc.stdout)
+        self.assertEqual((data["findings"], data["counts"]), ([], {}))
+
+
+# ---------------------------------------------------------------------------- --runbooks
+SHARED = "Export AWS_PROFILE=deploy before running terraform apply in any environment"
+
+
+class RunbooksTest(LintBase):
+    def runbooks(self, *extra):
+        return self.py(LINT, "--vault", self.v, "--runbooks", *extra)
+
+    def snapshot(self):
+        return {str(p.relative_to(self.v)): p.read_bytes()
+                for p in sorted(self.v.rglob("*")) if p.is_file()}
+
+    def test_one_runbook_is_nothing_to_compare(self):
+        self.w("Projects/alpha/runbook.md", f"# Run\n\n- {SHARED}\n")
+        proc = self.runbooks()
+        self.assertOk(proc)
+        self.assertIn("nothing to compare", proc.stdout)
+        data = json.loads(self.runbooks("--json").stdout)
+        self.assertEqual(data["findings"], [])
+
+    def test_duplicate_line_reported_once_with_both_paths(self):
+        self.w("Projects/alpha/runbook.md", f"# Alpha\n\n- {SHARED}\n")
+        self.w("Projects/beta/gamma/runbook.md",
+               f"# Gamma\n\nintro line that is long enough to count here\n\n1.   {SHARED}\n")
+        proc = self.runbooks()
+        self.assertEqual(proc.returncode, 1, proc.stdout)
+        self.assertEqual(proc.stdout.count("[runbook-duplicate]"), 1, proc.stdout)
+        data = json.loads(self.runbooks("--json").stdout)
+        self.assertEqual(data["counts"], {"runbook-duplicate": 1})
+        (f,) = data["findings"]
+        self.assertEqual(f["kind"], "runbook-duplicate")
+        self.assertEqual(sorted((l["path"], l["line"]) for l in f["locations"]),
+                         [("Projects/alpha/runbook.md", 3), ("Projects/beta/gamma/runbook.md", 5)])
+
+    def test_near_identical_lines_cluster(self):
+        self.w("Projects/alpha/runbook.md", f"{SHARED}\n")
+        self.w("Projects/beta/runbook.md", f"{SHARED}.\n")
+        data = json.loads(self.runbooks("--json").stdout)
+        self.assertEqual(len(data["findings"]), 1, data)
+
+    def test_distinct_lines_and_headings_not_clustered(self):
+        self.w("Projects/alpha/runbook.md",
+               "# A heading that is long and identical in both files\n"
+               "Restart the ingest worker with systemctl after rotating keys\n"
+               "- short same line\n```\n```\n")
+        self.w("Projects/beta/runbook.md",
+               "# A heading that is long and identical in both files\n"
+               "Check the dashboard for queue depth before paging anyone\n"
+               "- short same line\n```\n```\n")
+        proc = self.runbooks()
+        self.assertOk(proc)
+        self.assertNotIn("[runbook-duplicate]", proc.stdout)
+
+    def test_detector_writes_nothing(self):
+        self.w("Projects/alpha/runbook.md", f"- {SHARED}\n")
+        self.w("Projects/beta/runbook.md", f"- {SHARED}\n")
+        before = self.snapshot()
+        self.runbooks()
+        self.runbooks("--json")
+        self.assertEqual(self.snapshot(), before)
+
+
+class RunbookSkillTest(unittest.TestCase):
+    def test_skill_lint_passes(self):
+        import subprocess
+        from _harness import GT, PYTHON
+        proc = subprocess.run([PYTHON, str(SCRIPTS / "skill_lint.py"), str(GT)],
+                              capture_output=True, text=True)
+        self.assertEqual(proc.returncode, 0, proc.stdout + proc.stderr)
+        skill = (GT / "skills" / "gt-runbook-lint" / "SKILL.md").read_text()
+        self.assertIn("gt_lint.py --vault", skill)
+        self.assertIn("--runbooks", skill)
+
+
 if __name__ == "__main__":
     unittest.main()

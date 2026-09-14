@@ -24,21 +24,25 @@ ok()   { printf 'ok    %s\n' "$1"; }
 bad()  { printf 'FAIL  %s\n' "$1"; FAILS=$((FAILS+1)); }
 step() { printf '\n== %s\n' "$1"; }
 
-newest() {  # newest installable version dir under $1, numerically
-  for d in "$1"/*/; do
-    n=$(basename "$d"); [[ "$n" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] || continue
-    [ -f "$d/.claude-plugin/plugin.json" ] && echo "$n"
-  done | sort -t. -k1,1n -k2,2n -k3,3n | tail -1
-}
-GTV=$(newest golden-thread); WV=$(newest golden-thread-wiki)
-GT="golden-thread/$GTV"; WIKI="golden-thread-wiki/$WV"
-echo "release-check: gt $GTV, gt-wiki $WV"
+# Every plugin this repo ships, by the ONE discovery rule in dev/plugins.py (shared with
+# package.sh, sync-gt-src.sh and the Python gates): "<dir> <version> <name>" per line.
+# Until 0.13.0 this file named gt and gt-wiki by hand, so a third plugin would have
+# passed the gate unchecked. gt ("golden-thread") stays named below only for the steps
+# that run gt's own tooling.
+PDIRS=(); PNAMES=(); PLABEL=""; GTV=""
+while read -r d v n; do
+  PDIRS+=("$d/$v"); PNAMES+=("$n"); PLABEL="${PLABEL:+$PLABEL, }$n $v"
+  [ "$d" = golden-thread ] && GTV="$v"
+done < <(python3 dev/plugins.py list)
+[ -n "$GTV" ] || { echo "release-check: no installable golden-thread version directory"; exit 1; }
+GT="golden-thread/$GTV"
+echo "release-check: $PLABEL"
 
 step "syntax"
 n=0; while IFS= read -r f; do n=$((n+1)); bash -n "$f" 2>/dev/null || bad "bash -n $f"; done < <(
-  { ls *.sh; find "$GT" "$WIKI" dev tests -name '*.sh'; find "$GT/templates/githooks" -type f; } 2>/dev/null | sort -u)
+  { ls *.sh; find "${PDIRS[@]}" dev tests -name '*.sh'; find "$GT/templates/githooks" -type f; } 2>/dev/null | sort -u)
 ok "bash -n on $n shell files"
-PYERR=$(python3 - "$GT" "$WIKI" dev tests . <<'PY'
+PYERR=$(python3 - "${PDIRS[@]}" dev tests . <<'PY'
 import sys, pathlib
 bad = []
 for root in sys.argv[1:]:
@@ -55,27 +59,30 @@ PY
 [ -z "$PYERR" ] && ok "python compiles" || { echo "$PYERR"; bad "python syntax"; }
 
 step "versions"
-for pair in "$GT:$GTV" "$WIKI:$WV"; do
-  d=${pair%%:*}; v=${pair##*:}
+for d in "${PDIRS[@]}"; do
+  v=${d##*/}
   pv=$(python3 -c "import json,sys;print(json.load(open(sys.argv[1]))['version'])" "$d/.claude-plugin/plugin.json")
   [ "$pv" = "$v" ] && ok "$d plugin.json says $pv" || bad "$d plugin.json says $pv, directory says $v"
 done
 
 step "manifest"
-python3 - "$GT" <<'PY' && ok "MANIFEST.json files map matches the tree" || bad "MANIFEST.json is stale — run: python3 $GT/scripts/gt_components.py manifest $GT"
-import json, sys, importlib.util, pathlib
-d = sys.argv[1]
-spec = importlib.util.spec_from_file_location("c", f"{d}/scripts/gt_components.py"); m = importlib.util.module_from_spec(spec); spec.loader.exec_module(m)
-have = json.load(open(f"{d}/MANIFEST.json"))
-want = m.build_manifest(d)
-sys.exit(0 if have["files"] == want["files"] and have.get("hooks") == want["hooks"] else 1)
-PY
+# EVERY plugin ships a MANIFEST.json and it must match its tree. A plugin without one
+# fails (dev/plugins.py manifest-check exits 2): until 0.13.0 only gt had hash trust, and
+# gt-wiki shipped whatever sat on disk with nothing to compare it against.
+for d in "${PDIRS[@]}"; do
+  OUT=$(python3 dev/plugins.py manifest-check "$d" 2>&1); rc=$?
+  case $rc in
+    0) ok "$d MANIFEST.json files map matches the tree";;
+    2) echo "  $OUT"; bad "$d ships no MANIFEST.json";;
+    *) echo "  $OUT"; bad "$d MANIFEST.json is stale";;
+  esac
+done
 
 step "skills"
-OUT=$(python3 "$GT/scripts/skill_lint.py" "$GT" 2>&1); rc=$?
-[ $rc -eq 0 ] && ok "skill_lint (gt)" || { echo "$OUT" | tail -15; bad "skill_lint (gt)"; }
-OUT=$(python3 "$GT/scripts/skill_lint.py" "$WIKI" 2>&1); rc=$?
-[ $rc -eq 0 ] && ok "skill_lint (gt-wiki)" || { echo "$OUT" | tail -15; bad "skill_lint (gt-wiki)"; }
+for i in "${!PDIRS[@]}"; do
+  OUT=$(python3 "$GT/scripts/skill_lint.py" "${PDIRS[$i]}" 2>&1); rc=$?
+  [ $rc -eq 0 ] && ok "skill_lint (${PNAMES[$i]})" || { echo "$OUT" | tail -15; bad "skill_lint (${PNAMES[$i]})"; }
+done
 
 step "cli contract"
 # core_explicit_vault_target requires the CALLER to name the vault. This step asserts
@@ -83,6 +90,17 @@ step "cli contract"
 # nobody implements is unfollowable. The incident is in dev/check_cli_contract.py.
 OUT=$(python3 dev/check_cli_contract.py "$GT" 2>&1); rc=$?
 [ $rc -eq 0 ] && ok "$OUT" || { echo "$OUT" | tail -20; bad "a vault tool can write without being told which vault"; }
+
+step "retired"
+# An upgrade from ANY older release must converge on a fresh install (owner requirement,
+# 2026-09-14). install.sh can only remove what an older release left behind if the new
+# release lists it in retired.json, because gt-src carries no history. Compared against the
+# newest-but-one gt release on disk.
+PREV=$(ls -d golden-thread/*/ 2>/dev/null | xargs -n1 basename | grep -E '^[0-9]+\.[0-9]+\.[0-9]+$' | grep -vx "$GTV" | sort -t. -k1,1n -k2,2n -k3,3n | tail -1)
+if [ -z "$PREV" ]; then ok "no earlier release on disk to compare against"; else
+  OUT=$(python3 dev/check_retired.py "$GT" "golden-thread/$PREV" 2>&1); rc=$?
+  [ $rc -eq 0 ] && ok "$OUT" || { echo "$OUT" | tail -20; bad "a removal since $PREV is not recorded in retired.json"; }
+fi
 
 step "installer version"
 # install.sh is what a user RUNS and it is NOT covered by MANIFEST.json, which hashes
@@ -173,7 +191,7 @@ for pdf in *.pdf; do
   done
 done
 [ -z "$STALEPDF" ] && ok "every PDF is newer than its sources" || { echo "  stale:$STALEPDF"; bad "PDFs a render behind — run dev/render-pdfs.sh"; }
-REFS=$(python3 - "$GT" "$WIKI" <<'PY2'
+REFS=$(python3 - "${PDIRS[@]}" <<'PY2'
 import sys, re, pathlib
 out = []
 for root in map(pathlib.Path, sys.argv[1:]):
@@ -236,7 +254,7 @@ fi
 
 printf '\n'
 if [ $FAILS -eq 0 ]; then
-  echo "RELEASE CHECK PASSED — gt $GTV, gt-wiki $WV"
+  echo "RELEASE CHECK PASSED — $PLABEL"
   # The receipt core_test_before_commit reads. A --quick pass skipped the tests and the
   # selftest, so it is deliberately NOT evidence: recording one would let a commit
   # through on the strength of a check that never ran the suite.

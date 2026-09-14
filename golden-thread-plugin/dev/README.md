@@ -26,6 +26,7 @@ shipped broken while everything looked fine.
 | skills | `skill_lint.py` | two skills sharing a trigger phrase |
 | cli contract | `check_cli_contract.py` | a vault tool that writes without accepting `--vault` and `--dry-run` |
 | installer version | `check_installer_version.py` | `install.sh` or `selftest.sh` changed since the newest release was cut |
+| retired | `check_retired.py` | a release that stops installing a hook-dir file or registering a hook without listing it in `retired.json`, so upgrades from older releases would leave it behind |
 | wiring coverage | `check_wiring_coverage.py` | a shipped hook, script, skill, tool or Core rule that does not reach its destination in a real install |
 | docs | *(inline)* + `build-docs.py` | a skill, vault tool, setting or `dev/` script documented nowhere; HTML drifted from its `.md`; a PDF older than its source; docs that never name the current version |
 | scrub | `scrub_check.py` | an employer or machine-specific string in anything shipped |
@@ -84,7 +85,9 @@ since everything here was correct and only the copy the other machine reads was 
 | `render-pdfs.sh` | re-renders the PDFs after a docs change, in parallel — one Chrome per document, each with its own `--user-data-dir`; workers from `gt_settings.py jobs`, `GT_RENDER_JOBS=1` for serial |
 | `feature_requests.py` | validates the cross-machine feature-request queue |
 | `publish.sh` | runs every publish requirement in order; `--list` prints them, `--dry-run` rehearses |
-| `scrub_check.py` | scans for employer and machine-specific strings; exit 1 = hits, other = could not scan (also a failure — an unscanned file is not a clean file) |
+| `scrub_check.py` | scans for employer and machine-specific strings; exit 1 = hits, other = could not scan (also a failure — an unscanned file is not a clean file)  `--repo <dir>` scans everything a push publishes (tracked + untracked-not-ignored) |
+| `plugins.py` | the ONE rule for which plugins this repo ships: `list` prints `dir version name` for the newest release of every plugin; `manifest-check` / `manifest` verify or write a plugin's `MANIFEST.json`. The gate, `package.sh` and `sync-gt-src.sh` all read it, so a new plugin is picked up everywhere at once |
+| `check_retired.py` | compares a release with the one before it and fails when something stopped being installed or registered without a `retired.json` entry — the record `install.sh` uses to remove what older releases left behind |
 
 ## Tests
 

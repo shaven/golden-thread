@@ -94,21 +94,11 @@ def _unquote(s):
 
 
 # -- source resolution ----------------------------------------------------------------
-def _newest(root):
-    if not root.is_dir():
-        return None
-    c = [d for d in root.iterdir() if d.is_dir() and re.fullmatch(r"\d+\.\d+\.\d+", d.name)
-         and (d / ".claude-plugin" / "plugin.json").is_file()]
-    return max(c, key=lambda d: tuple(map(int, d.name.split(".")))) if c else None
-
-
 def resolve_roots(src):
-    roots = [src]
-    for sub in ("golden-thread", "golden-thread-wiki"):
-        v = _newest(src / sub)
-        if v:
-            roots.append(v)
-    return roots
+    """-> [src, newest release of every plugin under src] — dev/plugins.py decides which."""
+    sys.path.insert(0, str(Path(__file__).resolve().parent))
+    import plugins
+    return [src] + ([v for _, v, _ in plugins.discover(src)] if src.is_dir() else [])
 
 
 def new_component(comp):

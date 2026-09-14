@@ -157,13 +157,19 @@ SETTINGS="$HOME/.claude/settings.json"
 INSTALLED="$HOME/.claude/plugins/installed_plugins.json"
 KNOWN="$HOME/.claude/plugins/known_marketplaces.json"
 
-# 0. Remove superseded gt versions so old caches don't linger unreferenced
-for old in "$HOME/.claude/plugins/cache/golden-thread-plugin/gt"/*; do
-  [ -d "$old" ] || continue
-  if [ "$(basename "$old")" != "$VERSION" ]; then
-    rm -rf "$old"
-    echo "Removed superseded gt cache → $old"
-  fi
+# 0. Remove superseded gt AND gt-wiki versions so old caches don't linger unreferenced.
+# The cache holds only what installed_plugins.json points at; rollback reads the SOURCE
+# tree (which keeps the newest-but-one, see above), never an old cache. gt-wiki was
+# missed until 0.13.0, so its caches piled up (0.1.0 and 0.1.1 beside the current one).
+for spec in "gt:$VERSION" "gt-wiki:$WIKI_VERSION"; do
+  plugin="${spec%%:*}"; keep="${spec#*:}"
+  for old in "$HOME/.claude/plugins/cache/golden-thread-plugin/$plugin"/*; do
+    [ -d "$old" ] || continue
+    if [ "$(basename "$old")" != "$keep" ]; then
+      rm -rf "$old"
+      echo "Removed superseded $plugin cache → $old"
+    fi
+  done
 done
 
 # Read install_demo setting (default: yes). A user who has set install_demo=no
@@ -270,6 +276,62 @@ if [ -d "$SRC/hooks" ]; then
   chmod +x "$GT_HOOKS"/*.sh 2>/dev/null || true
   chmod +x "$GT_HOOKS"/*.py 2>/dev/null || true
   echo "Installed Core-rule hooks → $GT_HOOKS"
+
+  # Files an OLDER release put in the hooks dir that this one no longer ships (0.13.0).
+  # An upgrade must CONVERGE on what a fresh install of this release leaves, so legacy
+  # files cannot just accumulate -- but the hooks dir has also held a file that existed
+  # NOWHERE else (2026-08-29: guard_session_claims.sh, installed but absent from source),
+  # so "not shipped" alone is never grounds to delete. The rule:
+  #   * listed in this release's retired.json AND not shipped now -> removed, after a
+  #     copy to ~/.claude/golden-thread/backups/hooks-retired.<stamp>/;
+  #   * anything else not shipped -> "unknown file, left in place".
+  # retired.json ships IN the release because install.sh runs from gt-src, which has no
+  # git history to ask. If the shipped set cannot be established, nothing is removed.
+  python3 - "$SRC" "$GT_HOOKS" <<'EOF' || true
+import json, os, shutil, subprocess, sys, time
+src, hooks = sys.argv[1:3]
+shipped = {"gt_paths.py"}
+hdir = os.path.join(src, "hooks")
+shipped |= {n for n in os.listdir(hdir) if os.path.isfile(os.path.join(hdir, n))}
+certain = True
+try:
+    out = subprocess.check_output(
+        ["python3", os.path.join(src, "scripts", "gt_components.py"), "hookdir-scripts"],
+        text=True)
+    shipped |= {n for n in out.split()
+                if os.path.isfile(os.path.join(src, "scripts", n))}
+except (OSError, subprocess.SubprocessError):
+    certain = False
+retired = set()
+try:
+    with open(os.path.join(src, "retired.json"), encoding="utf-8") as fh:
+        retired = {e["installed_as"] for e in json.load(fh).get("hook_files", [])
+                   if isinstance(e, dict) and e.get("installed_as")}
+except FileNotFoundError:
+    pass
+except (OSError, ValueError, KeyError, TypeError) as exc:
+    print("⚠ retired.json unreadable (%s) — no hook files removed" % exc)
+    certain = False
+present = sorted(n for n in os.listdir(hooks)
+                 if os.path.isfile(os.path.join(hooks, n)) and not n.startswith(".")
+                 and not n.endswith(".pyc") and n not in shipped)
+gone = [n for n in present if certain and n in retired and os.sep not in n]
+unknown = [n for n in present if n not in gone]
+if gone:
+    bak = os.path.expanduser("~/.claude/golden-thread/backups/hooks-retired.%s"
+                             % time.strftime("%Y%m%d_%H%M%S"))
+    os.makedirs(bak, exist_ok=True)
+    print("Hooks dir: removed %d file(s) this release retired (backup: %s):" % (len(gone), bak))
+    for n in gone:
+        shutil.copy2(os.path.join(hooks, n), os.path.join(bak, n))
+        os.remove(os.path.join(hooks, n))
+        print("  %s" % n)
+if unknown:
+    print("Hooks dir: %d unknown file(s), not shipped by this release, left in place:"
+          % len(unknown))
+    for n in unknown:
+        print("  %s" % n)
+EOF
 fi
 
 # 1c. Component MANIFEST. gt_components.py compares what is INSTALLED against
@@ -473,6 +535,80 @@ for event, script, cmd in want:
                          for h in e.get('hooks', []))]
     arr.append({'hooks': [{'type': 'command', 'command': cmd}]})
     changed.append('%s/%s' % (event, script))
+
+# Prune entries an OLDER release wired and this one dropped (0.13.0). Until now the
+# installer only ever added, so a hook removed from HOOK_REGISTRATIONS stayed in
+# settings.json pointing at a file nothing maintains, and an upgrade never converged
+# on what a fresh install leaves. The rule is narrow on purpose:
+#   * only a command that points INTO the gt hooks dir is a candidate -- a user's own
+#     hooks are never ours to judge, whatever they run;
+#   * a script this release registers (under ANY owner, so the enforcement hooks
+#     vault_init wires later are not stripped here) survives under the events it is
+#     registered for, and is removed from any other event -- gt owns that script;
+#   * a script in retired.json's hook_registrations is removed;
+#   * anything else in the hooks dir is UNKNOWN and left in place, reported. Same rule
+#     as hooks-dir files: gt deletes only what it knows it once shipped.
+import shlex, time
+HOOKS_DIR = os.path.realpath(os.path.expanduser('~/.claude/golden-thread/hooks'))
+known = {r['script'] for r in regs}
+pairs = {(r['event'], r['script']) for r in regs}
+try:
+    with open(os.path.join(src, 'retired.json'), encoding='utf-8') as fh:
+        retired = {x for x in json.load(fh).get('hook_registrations', [])
+                   if isinstance(x, str)} - known
+except FileNotFoundError:
+    retired = set()
+except (OSError, ValueError, AttributeError) as exc:
+    print('⚠ retired.json unreadable (%s) — no retired hook entries removed' % exc)
+    retired = set()
+
+def gt_script(command):
+    """-> basename of the gt-hooks-dir script this command runs, or None."""
+    try:
+        tokens = shlex.split(command or '')
+    except ValueError:
+        tokens = (command or '').split()
+    for tok in tokens:
+        t = os.path.expanduser(tok.replace('${HOME}', '~').replace('$HOME', '~'))
+        if not os.path.isabs(t):
+            continue
+        parent = os.path.realpath(os.path.dirname(t))
+        if parent == HOOKS_DIR:
+            return os.path.basename(t)
+    return None
+
+removed, unknown, bak = [], [], None
+for event, blocks in list(hooks.items()):
+    if not isinstance(blocks, list):
+        continue
+    before = len(removed)
+    for b in blocks:
+        if not isinstance(b, dict) or not isinstance(b.get('hooks'), list):
+            continue
+        keep = []
+        for h in b['hooks']:
+            s = gt_script(h.get('command') if isinstance(h, dict) else None)
+            if s is not None and (s in retired
+                                  or (s in known and (event, s) not in pairs)):
+                removed.append('%s/%s' % (event, s))
+                continue
+            if s is not None and s not in known:
+                unknown.append('%s/%s' % (event, s))
+            keep.append(h)
+        b['hooks'] = keep
+    # A block emptied by the prune goes too; one that still holds a user's hook stays.
+    blocks[:] = [b for b in blocks
+                 if not (isinstance(b, dict) and isinstance(b.get('hooks'), list)
+                         and not b['hooks'])]
+    if not blocks and len(removed) > before:
+        del hooks[event]
+if removed and os.path.exists(p):
+    backups = os.path.expanduser('~/.claude/golden-thread/backups')
+    os.makedirs(backups, exist_ok=True)
+    bak = os.path.join(backups, 'settings.json.%s.pre-prune' % time.strftime('%Y%m%d_%H%M%S'))
+    with open(p, 'rb') as s_in, open(bak, 'wb') as s_out:
+        s_out.write(s_in.read())
+
 fd, tmp = tempfile.mkstemp(dir=os.path.dirname(p), prefix='.gt-')
 with os.fdopen(fd, 'w') as fh:
     fh.write(json.dumps(d, indent=2) + '\n')
@@ -491,6 +627,16 @@ for c in changed:
 print('Registered %d hooks in ~/.claude/settings.json:' % len(changed))
 for ev in sorted(by_event):
     print('  %-16s %s' % (ev, ', '.join(sorted(by_event[ev]))))
+if removed:
+    print('Removed %d hook entr%s this release no longer ships (backup: %s):'
+          % (len(removed), 'y' if len(removed) == 1 else 'ies', bak))
+    for r in sorted(removed):
+        print('  %s' % r)
+if unknown:
+    print('Unknown hook entr%s pointing into the gt hooks dir, left in place:'
+          % ('y' if len(unknown) == 1 else 'ies'))
+    for r in sorted(unknown):
+        print('  %s' % r)
 EOF
 
 # Verify the wiring took, rather than trusting that it did. This is the one place
@@ -797,5 +943,36 @@ if [ -f "$HOME/.claude/vault-config.json" ]; then
   python3 "$SRC/scripts/gt_settings.py" detect-machine --write 2>/dev/null \
     | sed 's/^/  /' || true
 fi
+
+# Pending vault upgrades. install.sh never ran gt_upgrade, so a release's migrations
+# were only ever applied by someone remembering /gt:gt-upgrade -- and one vault sat with
+# a step pending from 0.12.0 onward, reported nowhere an installer's reader looks.
+# `status` is READ-ONLY; `run` is never called from here, because applying a migration
+# is a change to the owner's vault and wants a clean tree and a person's go-ahead.
+# Re-read the config: an interactive install may have created the vault after
+# VAULT_PATH was first read. A failed check is reported, never fatal.
+report_vault_upgrades() {
+  local vault out rc=0
+  vault=$(python3 -c "import json,os;p=os.path.expanduser('~/.claude/vault-config.json');print(json.load(open(p)).get('vault_path','')) if os.path.exists(p) else print('')" 2>/dev/null) || vault=""
+  [ -n "$vault" ] && [ -d "$vault" ] || return 0
+  [ -f "$SRC/scripts/gt_upgrade.py" ] || { echo "Vault upgrades: check could not run (gt_upgrade.py not shipped)"; return 0; }
+  out=$(python3 "$SRC/scripts/gt_upgrade.py" status --vault "$vault" 2>&1) || rc=$?
+  if [ "$rc" -ne 0 ]; then
+    echo "⚠ Vault upgrades: the check could not run (exit $rc) — run /gt:gt-upgrade to look"
+  elif printf '%s\n' "$out" | grep -q 'pending step(s):'; then
+    echo "⚠ Vault upgrades pending for $vault:"
+    # From the "N pending step(s):" line through the step list; the rehearsal hint is
+    # dropped because the skill is the supported way in.
+    printf '%s\n' "$out" | sed -n '/pending step(s):/,$p' | grep -v '^Rehearse:' \
+      | sed '/^[[:space:]]*$/d' | sed 's/^/  /' || true
+    echo "  Run /gt:gt-upgrade to apply"
+  elif printf '%s\n' "$out" | grep -q 'nothing pending'; then
+    echo "Vault upgrades: none pending"
+  else
+    echo "⚠ Vault upgrades: the check could not run (unrecognised output) — run /gt:gt-upgrade to look"
+  fi
+  echo ""
+}
+report_vault_upgrades || true
 
 echo "Restart Claude Code to load the plugins."

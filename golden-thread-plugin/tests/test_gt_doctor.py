@@ -29,8 +29,8 @@ class DoctorBase(Sandbox):
         self.hooks.mkdir(parents=True)
         self.env["PYTHONDONTWRITEBYTECODE"] = "1"
         self.env.pop("GT_VAULT", None)
-        # Nothing on this machine should reach the real publish destination.
-        self.env["GT_SRC"] = str(self.tmp / "no-such-gt-src")
+        # No publish destination unless a test configures one.
+        self.env.pop("GT_SRC", None)
 
     def doctor(self, *args, **kw):
         return self.py(DOCTOR, *args, env=kw.pop("env", self.env), **kw)
@@ -120,10 +120,36 @@ class DoctorGtSrcCheck(DoctorBase):
         self.env["GT_SRC"] = str(d)
         return d
 
-    def test_no_destination_is_not_a_problem(self):
-        """Most machines never publish; the check must be silent there."""
+    def test_no_destination_configured_is_skipped_not_failed(self):
+        """Most machines never publish: no $GT_SRC and no gt_src key -> skipped, exit 0,
+        and no guessed path anywhere in the report."""
         p = self.doctor("--json", "--only", "gt-src")
-        self.assertEqual(json.loads(p.stdout)["checks"][0]["state"], "ok")
+        data = json.loads(p.stdout)
+        row = data["checks"][0]
+        self.assertEqual(row["state"], "skipped")
+        self.assertIn("not configured", row["summary"])
+        self.assertEqual(p.returncode, 0, "an unconfigured destination is not a finding")
+        self.assertNotIn("/", row["summary"] + row["detail"] + row["fix"],
+                         "the skipped row must not name a guessed destination path")
+        human = self.doctor("--only", "gt-src")
+        self.assertIn("not configured", human.stdout)
+        self.assertNotIn("FAIL", human.stdout)
+
+    def test_gt_src_from_vault_config_is_checked(self):
+        d = self.tmp / "configured-dest"
+        d.mkdir()
+        (d / "SOURCE.json").write_text(json.dumps({"commit": "0123456789ab", "gt": "0.13.0"}))
+        (self.home / ".claude").mkdir(parents=True, exist_ok=True)
+        (self.home / ".claude" / "vault-config.json").write_text(json.dumps({"gt_src": str(d)}))
+        row = json.loads(self.doctor("--json", "--only", "gt-src").stdout)["checks"][0]
+        self.assertEqual(row["state"], "ok")
+        self.assertIn("012345678", row["summary"])
+
+    def test_configured_destination_that_is_missing_is_a_warning(self):
+        self.env["GT_SRC"] = str(self.tmp / "ghost-dest")
+        row = json.loads(self.doctor("--json", "--only", "gt-src").stdout)["checks"][0]
+        self.assertEqual(row["state"], "warn")
+        self.assertIn("does not exist", row["summary"])
 
     def test_foreign_top_level_directory_is_named(self):
         """The 2026-09-11 shape: a flat scripts/ nobody's publisher wrote."""
