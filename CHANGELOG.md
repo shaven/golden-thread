@@ -11,7 +11,7 @@ release's own summary line, kept short rather than reconstructed after the fact.
 
 ---
 
-## gt 0.14.0 — in progress (branch `release/0.14.0`, not released)
+## gt 0.14.0 · gt-demo 0.14.0 · gt-wiki 0.2.0 — 2026-09-14
 
 **An upgrade now finishes the job without you.** 0.13.0 removed what older releases left
 behind; this release adds the other two pieces an upgrade from any older release needs.
