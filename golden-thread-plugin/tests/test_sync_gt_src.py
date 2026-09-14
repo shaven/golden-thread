@@ -1,4 +1,4 @@
-"""dev/sync-gt-src.sh — gt-src gets exactly the checked-in files of the newest release.
+"""dev/sync-gt-src.sh — gt-src gets exactly the checked-in files of the newest release and the one before.
 
 Runs against a throwaway git repo shaped like the plugin root, never the real one.
 """
@@ -28,8 +28,8 @@ class SyncGtSrcTest(Sandbox):
         shutil.copy(SCRUB, r / "dev" / "scrub_check.py")
         shutil.copy(PLUGINS, r / "dev" / "plugins.py")
         # A third plugin proves the sync iterates over what is discovered, not a named pair.
-        for plugin, name, versions in (("golden-thread", "gt", ("0.9.9", "0.10.0")),
-                                       ("golden-thread-wiki", "gt-wiki", ("0.1.0", "0.1.1")),
+        for plugin, name, versions in (("golden-thread", "gt", ("0.9.8", "0.9.9", "0.10.0")),
+                                       ("golden-thread-wiki", "gt-wiki", ("0.1.0", "0.1.1", "0.1.2")),
                                        ("gt-extra", "gt-extra", ("1.0.0", "1.2.0"))):
             for v in versions:
                 d = r / plugin / v
@@ -53,19 +53,23 @@ class SyncGtSrcTest(Sandbox):
     def files(self):
         return sorted(str(p.relative_to(self.dest)) for p in self.dest.rglob("*") if p.is_file())
 
-    def test_publishes_only_tracked_files_of_the_newest_release(self):
+    def test_publishes_tracked_files_of_the_newest_release_and_the_one_before(self):
+        # Newest + previous travel, so a machine installing from gt-src can roll back with
+        # `install.sh <previous>` (owner decision, 2026-09-14). Anything older stays home.
         self.assertOk(self.sync())
         got = self.files()
         self.assertIn("golden-thread/0.10.0/skills/note.md", got, "0.10.0 must beat 0.9.9 numerically")
-        self.assertNotIn("golden-thread/0.9.9/skills/note.md", got)
+        self.assertIn("golden-thread/0.9.9/skills/note.md", got, "the release before the newest must travel")
+        self.assertNotIn("golden-thread/0.9.8/skills/note.md", got, "two releases back stays home")
+        self.assertIn("golden-thread-wiki/0.1.2/skills/note.md", got)
         self.assertIn("golden-thread-wiki/0.1.1/skills/note.md", got)
         self.assertNotIn("golden-thread-wiki/0.1.0/skills/note.md", got)
         self.assertIn("gt-extra/1.2.0/skills/note.md", got, "a third plugin must publish too")
-        self.assertNotIn("gt-extra/1.0.0/skills/note.md", got)
+        self.assertIn("gt-extra/1.0.0/skills/note.md", got, "a plugin with two releases ships both")
         self.assertIn("install.sh", got)
         self.assertNotIn("golden-thread-plugin.zip", got, "untracked build artifacts must not publish")
         src = json.loads((self.dest / "SOURCE.json").read_text())
-        self.assertEqual((src["gt"], src["gt_wiki"], src["gt_extra"]), ("0.10.0", "0.1.1", "1.2.0"))
+        self.assertEqual((src["gt"], src["gt_wiki"], src["gt_extra"]), ("0.10.0", "0.1.2", "1.2.0"))
 
     def test_refuses_dirty_tree(self):
         (self.repo / "MANUAL.md").write_text("# edited\n")

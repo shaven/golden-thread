@@ -49,6 +49,22 @@ def newest(plugin_dir):
     return max(cands, key=lambda d: _key(d.name)) if cands else None
 
 
+def releases(plugin_dir, keep=2):
+    """-> up to `keep` installable version directories under plugin_dir, newest first.
+
+    gt-src carries the newest release AND the one before it (owner decision, 2026-09-14):
+    a machine that installs from gt-src must be able to roll back with
+    `install.sh <previous>`, and with only the newest copied it had nothing to roll back to.
+    """
+    plugin_dir = Path(plugin_dir)
+    if not plugin_dir.is_dir():
+        return []
+    cands = [d for d in plugin_dir.iterdir()
+             if d.is_dir() and SEMVER.fullmatch(d.name)
+             and (d / ".claude-plugin" / "plugin.json").is_file()]
+    return sorted(cands, key=lambda d: _key(d.name), reverse=True)[:keep]
+
+
 def plugin_name(version_dir):
     try:
         name = json.loads((Path(version_dir) / ".claude-plugin" / "plugin.json")
@@ -150,11 +166,17 @@ def main(argv):
             return 1
         print(v.name)
         return 0
+    if cmd == "releases" and len(rest) in (1, 2):
+        keep = int(rest[1]) if len(rest) == 2 else 2
+        found = releases(rest[0], keep)
+        for v in found:
+            print(v.name)
+        return 0 if found else 1
     if cmd == "manifest-check" and len(rest) == 1:
         return manifest_check(rest[0])
     if cmd == "manifest" and len(rest) == 1:
         return write_manifest(rest[0])
-    print("usage: plugins.py list [ROOT] | newest DIR | manifest-check VERSION_DIR"
+    print("usage: plugins.py list [ROOT] | newest DIR | releases DIR [KEEP] | manifest-check VERSION_DIR"
           " | manifest VERSION_DIR", file=sys.stderr)
     return 2
 
