@@ -1,5 +1,5 @@
 # Golden Thread Plugin — Documentation
-## Version gt 0.13.0 / gt-wiki 0.1.3
+## Version gt 0.14.0 / gt-wiki 0.1.3
 
 ---
 
@@ -27,10 +27,10 @@ Facts move up the hierarchy as they prove themselves general. They never move ba
 
 ---
 
-## Core Rules (gt 0.13.0)
+## Core Rules (gt 0.14.0)
 
 Golden Thread defines a tiered rule model that separates rules by scope and enforcement strength.
-**Ten Core rules ship as of 0.13.0**, up from one at 0.6.0 (the count read "seven" from 0.9.10 through 0.12.3, one behind the files):
+**Ten Core rules ship as of 0.14.0**, up from one at 0.6.0 (the count read "seven" from 0.9.10 through 0.12.3, one behind the files):
 
 | # | Rule |
 |---|---|
@@ -138,7 +138,7 @@ The canonical rule definitions live in `Projects/golden-thread/core-rules/` insi
 
 | Command | What it does |
 |---|---|
-| `/gt:gt-demo` | An eleven-act guided tour on the fictional PizzaBot 3000 project, run in its own throwaway vault — `start` builds it, `tour` runs the acts one click at a time (Core rules, open, task rollup, capture, wiki, route, validate, lint, promote, watch, inbox and close), `end` shows the receipt, `clean` rebuilds, `remove` switches it off. Skipped at install when `install_demo` is `no`. |
+| `/gt-demo:gt-demo` (module `demo`) | An eleven-act guided tour on the fictional PizzaBot 3000 project, run in its own throwaway vault — `start` builds it, `tour` runs the acts one click at a time (Core rules, open, task rollup, capture, wiki, route, validate, lint, promote, watch, inbox and close), `end` shows the receipt, `clean` rebuilds, `remove` deletes the demo vault. Removed with `bash install.sh --without demo`. |
 
 ### Concurrent sessions stop colliding (0.12.3)
 
@@ -308,7 +308,7 @@ bash install.sh
 # Restart Claude Code
 ```
 
-Installs both `gt` (v0.13.0) and `gt-wiki` (v0.1.3) as separate plugins under the `golden-thread-plugin` marketplace. Requires Python 3.8+.
+Installs both `gt` (v0.14.0) and `gt-wiki` (v0.1.3) as separate plugins under the `golden-thread-plugin` marketplace. Requires Python 3.8+.
 
 `install.sh` installs the **newest version directory** present, not a hardcoded constant — pass an argument only to roll back deliberately (`./install.sh 0.9.3`). Never pipe it to `head`: `set -o pipefail` turns the closed pipe into an abort partway through, leaving the cache updated and registration undone.
 

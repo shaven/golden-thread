@@ -1,0 +1,18 @@
+{
+  "schema": 1,
+  "name": "wiki",
+  "plugin": "gt-wiki",
+  "version": "0.2.0",
+  "requires_gt": ">=0.14.0,<0.15.0",
+  "summary": "LLM Wiki: immutable sources, interlinked Knowledge pages, and ingest, lint and refresh loops",
+  "default": "on",
+  "skills": ["gt-wiki", "gt-wiki-ingest", "gt-wiki-init", "gt-wiki-lint", "gt-wiki-refresh"],
+  "scripts": ["vault_init.py", "wiki_lint.py", "wiki_log.py", "wiki_refresh.py"],
+  "templates": ["wiki-CLAUDE.md", "wiki-knowledge-template.md"],
+  "hooks": [],
+  "hookdir_scripts": [],
+  "settings": [],
+  "requires_modules": [],
+  "replaces_core": [],
+  "demo": "demo/act.md"
+}

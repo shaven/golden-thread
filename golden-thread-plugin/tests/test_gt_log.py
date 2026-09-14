@@ -6,6 +6,7 @@ lines verbatim. A test that only checked "the line is present somewhere" would p
 while closeout quietly stopped finding it.
 """
 import re
+import shutil
 import unittest
 from _harness import Sandbox, TOOLS, SCRIPTS
 
@@ -18,6 +19,14 @@ class GtLog(Sandbox):
         super().setUp()
         self.vault = self.make_vault()
         self.log = self.vault / "log.md"
+        # Since 0.14.0 `vault_init fresh` creates a vault that is already migrated. These
+        # tests exercise the MIGRATION itself, so put the vault back into the pre-0.11 shape
+        # an upgraded vault arrives in: log.md holds the lines, and there is no spool.
+        spool = self.vault / "Projects" / "golden-thread" / "spool" / "log"
+        baseline = spool / "0000-baseline.md"
+        if baseline.is_file():
+            self.log.write_bytes(baseline.read_bytes())
+            shutil.rmtree(spool)
 
     def tool(self, *args, **kw):
         return self.py(TOOLS / "gt_log.py", "--vault", self.vault, *args, **kw)

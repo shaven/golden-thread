@@ -16,6 +16,11 @@ from _harness import Sandbox, REPO, GT
 CHECK = REPO / "dev" / "check_cli_contract.py"
 
 
+# Other tests import scripts from the source tree in parallel and write __pycache__ into it;
+# copying a half-written .pyc makes copytree fail. Caches are never part of a release.
+_NO_CACHE = shutil.ignore_patterns("__pycache__", "*.pyc", "*.pyc.*")
+
+
 class CliContract(Sandbox):
     def check(self, version_dir):
         return self.py(CHECK, str(version_dir))
@@ -23,7 +28,7 @@ class CliContract(Sandbox):
     def copy_release(self):
         """A writable copy of the release, so a test can break one tool on purpose."""
         dst = self.tmp / "release"
-        shutil.copytree(GT, dst)
+        shutil.copytree(GT, dst, ignore=_NO_CACHE)
         return dst
 
     def test_the_shipped_release_holds_the_contract(self):
