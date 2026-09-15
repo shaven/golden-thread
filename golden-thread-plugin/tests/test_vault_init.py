@@ -169,6 +169,26 @@ class ConnectTest(VaultInitBase):
         self.assertEqual((v / "notes" / "mine.md").read_text(), "hands off\n")
         self.assertFalse(self.actions(res, "error"), res)
 
+    def test_connect_keeps_an_owner_core_hooks_path(self):
+        if not shutil.which("git"):
+            self.skipTest("git not installed")
+        v = self.tmp / "hp"
+        v.mkdir()
+        self.assertOk(self.run_cmd(["git", "-C", v, "init", "-q"]))
+        self.assertOk(self.run_cmd(["git", "-C", v, "config", "core.hooksPath", "my-hooks"]))
+        res = self.vi_json("connect", "--vault", v)
+        hp = self.run_cmd(["git", "-C", v, "config", "--get", "core.hooksPath"]).stdout.strip()
+        self.assertEqual(hp, "my-hooks", "connect overwrote the owner's core.hooksPath")
+        self.assertTrue(any("yours" in (r.get("detail") or r.get("note") or "")
+                            for r in self.actions(res, "skipped")), res)
+        # and an unset one is still wired
+        w = self.tmp / "hp2"
+        w.mkdir()
+        self.assertOk(self.run_cmd(["git", "-C", w, "init", "-q"]))
+        self.vi_json("connect", "--vault", w)
+        self.assertEqual(self.run_cmd(["git", "-C", w, "config", "--get",
+                                       "core.hooksPath"]).stdout.strip(), ".githooks")
+
     def test_connect_missing_directory_exits_1(self):
         proc = self.vi("connect", "--vault", self.tmp / "nope")
         self.assertEqual(proc.returncode, 1)
@@ -299,6 +319,46 @@ class InstallCoreRulesTest(VaultInitBase):
         self.vi_json("install-core-rules", "--vault", v, "--no-hooks")
         self.assertFalse(old.exists(), "a second core-rules folder was created")
         self.assertEqual(self.cfg()["core_rules_path"], "Projects/meta/core-rules")
+
+    # 0.15.0: install.sh runs this on every install. An owner's deliberate deletion came
+    # back each time, silently. Removal is honoured when recorded in .gt-removed.
+    def test_deleted_rule_is_recreated_and_reported_by_name(self):
+        v = self.make_vault()
+        rule = v / "Projects" / "golden-thread" / "core-rules" / "core_parallel_when_beneficial.md"
+        rule.unlink()
+        res = self.vi_json("install-core-rules", "--vault", v, "--no-hooks")
+        self.assertTrue(rule.exists())
+        self.assertIn(rule.resolve(), [Path(r["path"]).resolve() for r in self.actions(res, "created")])
+
+    def test_rule_listed_in_gt_removed_stays_removed(self):
+        v = self.make_vault()
+        core = v / "Projects" / "golden-thread" / "core-rules"
+        (core / "core_parallel_when_beneficial.md").unlink()
+        (core / "core_timestamp_every_message.md").unlink()
+        (core.parent / ".gt-removed").write_text(
+            "# rules I took out\ncore_parallel_when_beneficial.md\n"
+            "core_timestamp_every_message.md   # hooked\n")
+        res = self.vi_json("install-core-rules", "--vault", v, "--no-hooks")
+        self.assertFalse((core / "core_parallel_when_beneficial.md").exists(),
+                         "a rule listed in .gt-removed was re-created")
+        self.assertFalse((core / "core_timestamp_every_message.md").exists())
+        kept = {Path(r["path"]).name: r["note"] for r in self.actions(res, "kept-removed")}
+        self.assertIn("core_parallel_when_beneficial.md", kept)
+        self.assertNotIn("WARNING", kept["core_parallel_when_beneficial.md"])
+        self.assertIn("WARNING: its hook still enforces it", kept["core_timestamp_every_message.md"])
+
+    def test_enforcement_section_listed_in_gt_removed_is_not_reinserted(self):
+        v = self.bare_vault()
+        self.vi_json("install-core-rules", "--vault", v, "--no-hooks")
+        text = (v / "CLAUDE.md").read_text()
+        start = text.index("## First: is enforcement active?")
+        end = text.index("## How to Read This")
+        (v / "CLAUDE.md").write_text(text[:start] + text[end:])
+        (v / "Projects" / "golden-thread" / ".gt-removed").write_text("claude-md-enforcement-section\n")
+        res = self.vi_json("install-core-rules", "--vault", v, "--no-hooks")
+        self.assertNotIn("## First: is enforcement active?", (v / "CLAUDE.md").read_text())
+        self.assertIn((v / "CLAUDE.md").resolve(),
+                      [Path(r["path"]).resolve() for r in self.actions(res, "kept-removed")])
 
 
 # ---------------------------------------------------------------------------- create-project
@@ -736,6 +796,67 @@ class ArchiveTest(VaultInitBase):
         v = self.make_vault()
         res = self.vi_json("archive-project", "--vault", v, "--slug", "ghost")
         self.assertTrue(self.actions(res, "error"))
+
+
+# ---------------------------------------------------------------------------- events
+class LifecycleEventsTest(VaultInitBase):
+    """Each lifecycle operation emits one gt_events event -- only when it happened."""
+
+    def events(self, v):
+        f = v / "Projects/golden-thread/events.jsonl"
+        return [json.loads(l) for l in f.read_text().splitlines()] if f.exists() else []
+
+    def kinds(self, v):
+        return [e["kind"] for e in self.events(v)]
+
+    def test_create_rename_merge_archive_each_emit_one_event(self):
+        v = self.make_vault()
+        self.project(v, "alpha")
+        self.project(v, "alpha")                       # re-run creates nothing: no event
+        self.project(v, "kid", "--parent", "alpha")
+        created = [e for e in self.events(v) if e["kind"] == "create"]
+        self.assertEqual([(e["item"], e["project"]) for e in created],
+                         [("Projects/alpha", "alpha"), ("Projects/alpha/kid", "alpha/kid")])
+        self.project(v, "beta")
+        self.vi_json("rename-project", "--vault", v, "--from", "beta", "--to", "gamma")
+        self.vi_json("merge-project", "--vault", v, "--from", "gamma", "--into", "alpha")
+        self.vi_json("archive-project", "--vault", v, "--slug", "alpha", "--reason", "done")
+        evs = {e["kind"]: e for e in self.events(v)}
+        self.assertEqual((evs["rename"]["from"], evs["rename"]["to"], evs["rename"]["project"]),
+                         ("Projects/beta", "Projects/gamma", "gamma"))
+        self.assertEqual((evs["merge"]["item"], evs["merge"]["to"], evs["merge"]["project"]),
+                         ("Projects/gamma", "Projects/alpha", "alpha"))
+        self.assertEqual((evs["archive"]["item"], evs["archive"]["note"]),
+                         ("Projects/alpha", "archive-project: done"))
+        self.assertEqual(sorted(self.kinds(v)),
+                         ["archive", "create", "create", "create", "merge", "rename"])
+
+    def test_dry_runs_and_failed_operations_emit_nothing(self):
+        v = self.make_vault()
+        self.project(v, "alpha")
+        self.project(v, "beta")
+        before = self.kinds(v)
+        for args in (("create-project", "--vault", v, "--name", "ghost"),
+                     ("rename-project", "--vault", v, "--from", "beta", "--to", "gamma"),
+                     ("merge-project", "--vault", v, "--from", "beta", "--into", "alpha"),
+                     ("archive-project", "--vault", v, "--slug", "alpha")):
+            self.vi_json(*args, "--dry-run")
+        self.vi_json("rename-project", "--vault", v, "--from", "nope", "--to", "x")
+        self.vi_json("rename-project", "--vault", v, "--from", "beta", "--to", "alpha")
+        self.vi_json("merge-project", "--vault", v, "--from", "alpha", "--into", "alpha")
+        self.vi_json("archive-project", "--vault", v, "--slug", "ghost")
+        self.assertEqual(self.kinds(v), before, "a rehearsal or a refusal emitted an event")
+
+    def test_event_failure_does_not_fail_the_operation(self):
+        v = self.make_vault()
+        spool = v / "Projects/golden-thread/spool/events"
+        spool.parent.mkdir(parents=True, exist_ok=True)
+        spool.write_text("blocks the spool directory\n")
+        proc = self.vi("create-project", "--vault", v, "--name", "alpha")
+        self.assertOk(proc)
+        json.loads(proc.stdout)                        # stdout is still the JSON report
+        self.assertIn("NOT recorded", proc.stderr)
+        self.assertTrue((v / "Projects/alpha/README.md").is_file())
 
 
 class DryRunTest(Sandbox):

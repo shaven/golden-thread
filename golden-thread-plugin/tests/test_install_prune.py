@@ -21,7 +21,7 @@ import hashlib
 import json
 import shutil
 
-from _harness import Sandbox, REPO, GT, WIKI, latest_version_dir
+from _harness import Sandbox, REPO, GT, WIKI, WATCH, REPORT_CARD, FARM, latest_version_dir
 
 INSTALL = REPO / "install.sh"
 IGNORE = shutil.ignore_patterns("__pycache__", "*.pyc", ".DS_Store")
@@ -231,6 +231,10 @@ class UpgradeConverges(Sandbox):
         if demo is not None:
             shutil.copytree(demo, self.new_repo / "golden-thread-demo" / demo.name, ignore=IGNORE)
         self.has_demo = demo is not None
+        # 0.15.0: watch, report card and farm left gt for modules; they ride along too
+        for mod in (WATCH, REPORT_CARD, FARM):
+            if mod is not None:
+                shutil.copytree(mod, self.new_repo / mod.parent.name / mod.name, ignore=IGNORE)
         self.assertOk(self.py(self.new_repo / "golden-thread" / GT.name / "scripts"
                               / "gt_components.py", "manifest",
                               self.new_repo / "golden-thread" / GT.name))
@@ -289,7 +293,10 @@ class UpgradeConverges(Sandbox):
 
         home_fresh, vault_fresh = self.tmp / "home-fresh", self.tmp / "vault-fresh"
         (home_fresh / ".claude").mkdir(parents=True)
-        self.run_install(self.new_repo, home_fresh, "--vault", vault_fresh)
+        # 0.12.8 shipped /gt:gt-farm, so the upgrader keeps the farm module (default off):
+        # the fresh install it must equal is one that chose it.
+        self.run_install(self.new_repo, home_fresh, "--vault", vault_fresh,
+                         *(("--with", "farm") if FARM is not None else ()))
 
         up, fresh = self.state(home_up, vault_up), self.state(home_fresh, vault_fresh)
         self.assertEqual(up["entries"], fresh["entries"], "gt hook entries differ")
@@ -301,6 +308,11 @@ class UpgradeConverges(Sandbox):
             self.assertIn("gt-demo", plugins, "the demo module was not installed")
             self.assertFalse([f for f in up["cache"] if f.startswith("gt/") and "demo" in f],
                              "the upgraded gt plugin still carries the demo")
+        if FARM is not None:
+            self.assertIn("gt-farm", plugins, "an upgrader from 0.12.8 lost /gt:gt-farm")
+        for mod, name in ((WATCH, "gt_watch.py"), (REPORT_CARD, "gt_report_card.py")):
+            if mod is not None:
+                self.assertIn(name, up["hook_files"])
         self.assertTrue(user_file.is_file(), "a user's file in the hooks dir was removed")
         stop = [h["command"] for b in json.loads(s.read_text())["hooks"]["Stop"]
                 for h in b["hooks"]]

@@ -273,6 +273,79 @@ class WindowTest(Sandbox):
         self.assertTrue(self.is_open(rule, dt.datetime(2026, 9, 11, 22, 0)))
 
 
+class TaskEventsTest(Sandbox):
+    """gt_tasks emits task.open/task.done by diffing README checkboxes against the event
+    stream -- only once seeded, only on change, never on --dry-run/--json, never fatally."""
+
+    def setUp(self):
+        super().setUp()
+        self.vault = self.make_vault()
+        self.tools = self.vault / "Projects" / "golden-thread" / "tools"
+        self.spool = self.vault / "Projects/golden-thread/spool/events"
+
+    project = GtTasksTest.project
+
+    def rollup(self, *args):
+        p = self.py(self.tools / "gt_tasks.py", "--vault", self.vault, *args)
+        self.assertOk(p, "gt_tasks.py failed")
+        return p
+
+    def events(self):
+        import json
+        f = self.vault / "Projects/golden-thread/events.jsonl"
+        return [json.loads(l) for l in f.read_text().splitlines()] if f.exists() else []
+
+    def seed(self):
+        self.assertOk(self.py(self.tools / "gt_events.py", "--vault", self.vault, "backfill"))
+
+    def test_unseeded_stream_emits_nothing(self):
+        self.project("alpha", tasks=["- [ ] one", "- [x] two"])
+        self.rollup()
+        self.assertFalse(self.spool.exists(), "an unseeded rollup announced every task")
+
+    def test_only_changes_are_emitted_and_an_unchanged_rerun_adds_nothing(self):
+        self.project("alpha", tasks=["- [ ] one [p:: 2]", "- [ ] two"])
+        self.seed()
+        seeded = len(self.events())
+        self.rollup()
+        self.assertEqual(len(self.events()), seeded, "an unchanged rollup emitted events")
+        self.project("alpha", tasks=["- [x] one [p:: 1]", "- [ ] two", "- [ ] three"])
+        for args in (("--dry-run",), ("--json",)):
+            self.rollup(*args)
+            self.assertEqual(len(self.events()), seeded, "%s emitted events" % args)
+        self.rollup()
+        new = self.events()[seeded:]
+        self.assertEqual(sorted((e["kind"], e["note"]) for e in new),
+                         [("task.done", "one"), ("task.open", "three")])
+        self.assertEqual({e["project"] for e in new}, {"alpha"})
+        self.assertTrue(all(e["item"].startswith("Projects/alpha/README.md#t-") for e in new))
+        count = len(self.events())
+        self.rollup()
+        self.assertEqual(len(self.events()), count, "the same flip was emitted twice")
+
+    def test_event_failure_never_stops_the_rollup(self):
+        self.project("alpha", tasks=["- [ ] one"])
+        self.seed()
+        self.project("alpha", tasks=["- [x] one"])
+        (self.tools / "gt_events.py").write_text("raise RuntimeError('broken event tool')\n")
+        (self.vault / "TASKS.md").unlink(missing_ok=True)
+        p = self.rollup()
+        self.assertIn("NOT recorded", p.stderr)
+        self.assertIn("TASKS.md written", p.stdout)
+        self.assertTrue((self.vault / "TASKS.md").is_file())
+
+    def test_unmergeable_events_file_never_stops_the_rollup(self):
+        self.project("alpha", tasks=["- [ ] one"])
+        self.seed()
+        self.project("alpha", tasks=["- [x] one"])
+        merged = self.vault / "Projects/golden-thread/events.jsonl"
+        merged.unlink()
+        merged.mkdir()                                  # cannot be replaced by a file
+        p = self.rollup()
+        self.assertIn("NOT regenerated", p.stderr)
+        self.assertIn("TASKS.md written", p.stdout)
+
+
 class CliClockTest(Sandbox):
     """GT_NOW + --json through the real CLI."""
 

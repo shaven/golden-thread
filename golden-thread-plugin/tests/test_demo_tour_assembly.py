@@ -6,6 +6,9 @@ from templates/demo-pizzabot/tour.md, then one act per INSTALLED module that shi
 ordered by module name and numbered in sequence. Installed = enabled in settings.json
 enabledPlugins AND the newest cache dir holds module.json with a valid `demo` path.
 A bad module act is skipped with a note, never fatal.
+
+0.15.0: the gt-watch act moved out of the core tour into the watch module (golden-thread-watch),
+so it is in the tour only while that module is installed.
 """
 import json
 import re
@@ -16,6 +19,7 @@ from pathlib import Path
 from _harness import Sandbox, WIKI, REPO, latest_version_dir
 
 DEMO_MODULE = latest_version_dir(REPO / "golden-thread-demo")
+WATCH = latest_version_dir(REPO / "golden-thread-watch")
 MARKET = "golden-thread-plugin"
 CORE_ACTS = len(re.findall(r"^## Act \d+ — ", (DEMO_MODULE / "templates" / "demo-pizzabot" / "tour.md")
                            .read_text(), re.M))
@@ -43,6 +47,13 @@ class TourAssembly(Sandbox):
         dest = self.cache / "gt-wiki" / WIKI.name
         shutil.copytree(WIKI, dest, ignore=_NO_CACHE)
         self.enabled["gt-wiki@" + MARKET] = enabled
+        self.write_settings()
+        return dest
+
+    def install_watch(self, enabled=True):
+        dest = self.cache / "gt-watch" / WATCH.name
+        shutil.copytree(WATCH, dest, ignore=_NO_CACHE)
+        self.enabled["gt-watch@" + MARKET] = enabled
         self.write_settings()
         return dest
 
@@ -102,6 +113,45 @@ class TourAssembly(Sandbox):
         self.assertEqual(len(titles), CORE_ACTS)
         self.assertNotIn("wiki", " ".join(titles))
 
+    def test_installed_watch_act_runs_before_the_closing_act(self):
+        self.install_watch()
+        p, titles = self.tour()
+        self.assertEqual(len(titles), CORE_ACTS + 1)
+        self.assertEqual(titles[-2], "Watch upstream (module: watch)")
+        self.assertNotIn("module:", titles[-1], "the closing core act must stay last")
+        act = p.stdout.split("## Act %d — " % CORE_ACTS)[1].split("## Act %d — " % (CORE_ACTS + 1))[0]
+        self.assertIn("gt-watch skill", act)
+        self.assertIn("<module:watch>/gt_watch.py", act)
+        self.assertNotIn("<core>/gt_watch.py", act)
+        for key in ("narration:", "do:", "point:"):
+            self.assertRegex(act, r"(?m)^%s " % key)
+
+    def test_watch_absent_or_disabled_leaves_no_act(self):
+        _, titles = self.tour()
+        self.assertNotIn("Watch upstream", " ".join(titles))
+        self.install_watch(enabled=False)
+        _, titles = self.tour()
+        self.assertEqual(len(titles), CORE_ACTS)
+        self.assertNotIn("Watch upstream", " ".join(titles))
+
+    def test_watch_and_wiki_acts_are_ordered_by_module_name(self):
+        self.install_wiki()
+        self.install_watch()
+        _, titles = self.tour()
+        self.assertEqual(titles[CORE_ACTS - 1:-1], ["Watch upstream (module: watch)",
+                                                    "The wiki (module: wiki)"])
+
+    def test_module_scripts_resolves_the_installed_watch_or_skips_with_a_reason(self):
+        p = self.sh(self.script, "module-scripts", "watch")
+        self.assertEqual(p.returncode, 3, p.stdout + p.stderr)
+        self.assertIn("not installed", p.stderr)
+        self.assertEqual(p.stdout, "")
+        dest = self.install_watch()
+        p = self.sh(self.script, "module-scripts", "watch")
+        self.assertOk(p)
+        self.assertEqual(Path(p.stdout.strip()), dest / "scripts")
+        self.assertTrue((Path(p.stdout.strip()) / "gt_watch.py").is_file())
+
     def test_newest_cache_version_is_the_one_read(self):
         self.fake_module("zeta", "demo/act.md", "Old act", version="1.2.0")
         self.fake_module("zeta", "demo/act.md", "New act", version="1.10.0")
@@ -142,6 +192,8 @@ class TourAssembly(Sandbox):
         tour = (DEMO_MODULE / "templates" / "demo-pizzabot" / "tour.md").read_text()
         self.assertNotIn("module is not installed", tour)
         self.assertNotIn("gt-wiki", tour)
+        self.assertNotIn("gt-watch", tour)
+        self.assertNotIn("gt_watch.py", tour)
 
 
 if __name__ == "__main__":

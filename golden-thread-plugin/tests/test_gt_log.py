@@ -51,6 +51,28 @@ class GtLog(Sandbox):
         self.assertTrue(spool.is_file(), "no spool file was created")
         self.assertIn("[work] x", spool.read_text())
 
+    def test_hand_written_lines_in_generated_log_survive_the_next_add(self):
+        """0.15.0 validator: a line typed into the generated log.md vanished at the next
+        render (any `add`, including install.sh's upgrade receipt), with no word."""
+        self.migrate()
+        self.add("2026-01-01 10:00 CDT [work] first — spooled", "alpha")
+        hand = "2026-01-02 09:00 CDT [note] typed straight into log.md by the owner"
+        with open(self.log, "a", encoding="utf-8") as fh:
+            fh.write(hand + "\n")
+        p = self.add("2026-01-03 10:00 CDT [work] later — spooled", "bravo")
+        self.assertOk(p)
+        body = self.log.read_text()
+        self.assertIn(hand, body, "a hand-written log.md line was deleted by the render")
+        self.assertIn("hand-written line(s) kept", p.stdout)
+        lines = body.splitlines()
+        self.assertLess(lines.index(hand), next(i for i, l in enumerate(lines) if "later" in l),
+                        "the kept line should sort by its own date")
+        # idempotent afterwards: nothing captured twice
+        p2 = self.tool("merge")
+        self.assertOk(p2)
+        self.assertNotIn("hand-written", p2.stdout)
+        self.assertEqual(self.log.read_text().count(hand), 1)
+
     def test_two_sessions_both_land(self):
         self.migrate()
         self.add("2026-01-01 10:00 CDT [work] one — from alpha", "alpha")
@@ -116,6 +138,27 @@ class GtLog(Sandbox):
         self.assertTrue(rendered.rstrip("\n").endswith(original.rstrip("\n")),
                         "merge did not reproduce the original content")
 
+    def test_non_utf8_bytes_survive_migration_and_merge(self):
+        """0.15.0: a latin-1 log.md (`\\xe9t\\xe9`) was read with errors="replace", so the
+        baseline and the generated file got U+FFFD, and the round-trip gate compared two
+        already-replaced copies and passed. Owner bytes must come through untouched."""
+        raw = self.log.read_bytes() + b"2026-01-01 [work] caf\xe9 \xe9t\xe9 \x80 -- latin-1\n"
+        self.log.write_bytes(raw)
+        self.migrate()
+        base = self.vault / "Projects/golden-thread/spool/log/0000-baseline.md"
+        self.assertEqual(base.read_bytes(), raw, "baseline bytes differ from the original")
+        self.assertNotIn(b"\xef\xbf\xbd", self.log.read_bytes(),
+                         "U+FFFD written into log.md: owner bytes were transcoded")
+        self.assertTrue(self.log.read_bytes().endswith(raw),
+                        "generated log.md does not end with the original bytes")
+        self.add("2026-02-01 10:00 CDT [work] later — after migration")
+        self.assertIn(b"caf\xe9 \xe9t\xe9 \x80", self.log.read_bytes(),
+                      "a later merge transcoded the baseline's bytes")
+        self.assertNotIn(b"\xef\xbf\xbd", self.log.read_bytes())
+        p = self.tool("merge", "--dry-run")
+        self.assertOk(p)
+        self.assertIn("unchanged", p.stdout, "dry run misreads a byte-identical file")
+
     def test_migrate_refuses_twice(self):
         self.migrate()
         before = self.log.read_bytes()
@@ -148,6 +191,71 @@ class GtLog(Sandbox):
         out = self.tool("status").stdout
         self.assertIn("alpha.md", out)
         self.assertIn("bravo.md", out)
+
+
+class GtLogEvent(Sandbox):
+    """`add --event`: one structured event beside the log line; plain add unchanged."""
+
+    def setUp(self):
+        super().setUp()
+        self.vault = self.make_vault()
+        self.events = self.vault / "Projects/golden-thread/spool/events"
+        self.log_spool = self.vault / "Projects/golden-thread/spool/log/alpha.md"
+
+    def add(self, *args):
+        return self.py(TOOLS / "gt_log.py", "--vault", self.vault, "--id", "alpha", "add", *args)
+
+    def spooled(self):
+        import json
+        f = self.events / "alpha.jsonl"
+        return [json.loads(l) for l in f.read_text().splitlines()] if f.exists() else []
+
+    LINE = "2026-09-14 10:00 CDT [graduate] Projects/a/research.md → Knowledge/x.md: up"
+    EVENT = ("--event", "promote", "--item", "Knowledge/x.md", "--from", "Projects/a/research.md",
+             "--to", "Knowledge/x.md", "--level-from", "3", "--level-to", "4", "--project", "a")
+
+    def test_plain_add_emits_nothing(self):
+        self.assertOk(self.add("2026-09-14 [work] a — plain"))
+        self.assertFalse(self.events.exists(), "plain add wrote an event")
+
+    def test_event_lands_with_the_log_line(self):
+        p = self.add(self.LINE, *self.EVENT)
+        self.assertOk(p)
+        self.assertIn("graduate", self.log_spool.read_text())
+        evs = self.spooled()
+        self.assertEqual(len(evs), 1)
+        e = evs[0]
+        self.assertEqual((e["kind"], e["item"], e["from"], e["level_from"], e["level_to"],
+                          e["project"], e["session"]),
+                         ("promote", "Knowledge/x.md", "Projects/a/research.md", 3, 4, "a", "alpha"))
+        self.assertTrue(e["note"].startswith("[graduate] Projects/a/research.md"),
+                        "the note should be the log line without its date stamp: " + e["note"])
+        self.assertTrue((self.vault / "Projects/golden-thread/events.jsonl").is_file())
+
+    def test_dry_run_writes_neither(self):
+        p = self.add(self.LINE, *self.EVENT, "--dry-run")
+        self.assertOk(p)
+        self.assertIn("would also spool the event", p.stdout)
+        self.assertFalse(self.events.exists())
+        self.assertFalse(self.log_spool.exists())
+
+    def test_event_without_item_is_refused_before_anything_is_written(self):
+        p = self.add(self.LINE, "--event", "promote")
+        self.assertEqual(p.returncode, 2, p.stdout + p.stderr)
+        self.assertFalse(self.log_spool.exists())
+        self.assertFalse(self.events.exists())
+
+    def test_a_failing_event_never_fails_the_log_line(self):
+        bad = self.add(self.LINE, "--event", "teleport", "--item", "Knowledge/x.md")
+        self.assertOk(bad, "an invalid event failed add")
+        self.assertIn("NOT recorded", bad.stderr)
+        self.assertIn("graduate", self.log_spool.read_text())
+        self.events.parent.mkdir(parents=True, exist_ok=True)
+        self.events.write_text("blocks the spool directory\n")
+        blocked = self.add("2026-09-14 [work] a — second", *self.EVENT)
+        self.assertOk(blocked, "an unwritable event spool failed add")
+        self.assertIn("NOT recorded", blocked.stderr)
+        self.assertIn("second", self.log_spool.read_text())
 
 
 if __name__ == "__main__":

@@ -7,8 +7,10 @@ and a sandbox HOME. Nothing touches the real repo or the real ~/.claude.
 Contracts pinned here:
   * gt and gt-wiki land in ~/.claude/plugins/cache/... AND the marketplace, file for
     file; both are registered and enabled;
-  * the nine hooks install.sh owns are registered in settings.json and verified, and
-    point at files that exist in the sandbox;
+  * the five hooks install.sh owns for gt are registered in settings.json and verified,
+    and point at files that exist in the sandbox; since 0.15.0 the watch and report-card
+    modules wire the other four (gt_watch.py, gt_report_card.py x3) at the same paths with
+    the same commands, tagged with their module;
   * the demo is module `demo` (plugin gt-demo) since 0.14.0: gt itself ships no demo, and
     install_demo=no in vault-config.json (recorded as the module choice by the machine
     migration) leaves gt-demo out of cache, marketplace and settings -- including a demo
@@ -21,17 +23,21 @@ import shutil
 import unittest
 from pathlib import Path
 
-from _harness import Sandbox, REPO, GT, WIKI, latest_version_dir
+from _harness import Sandbox, REPO, GT, WIKI, WATCH, REPORT_CARD, latest_version_dir
 
 INSTALL = REPO / "install.sh"
 DEMO = ("skills/gt-demo", "scripts/gt_demo.sh", "templates/demo-pizzabot")
 GT_DIRS = (".claude-plugin", "skills", "scripts", "templates", "commands", "hooks")
 WIKI_DIRS = (".claude-plugin", "skills", "scripts", "templates", "commands")
-# 0.12.9 adds two: the SessionStart report-card surface step, and the protected-path guard.
+# 0.12.9 added the protected-path guard. 0.15.0 moved gt_watch.py and gt_report_card.py
+# into the watch and report-card modules (MODULE_OWNED): gt alone now wires five.
 OWNED = {"SessionStart": {"gt_components.py", "gt_workers.py", "gt_version_check.py",
-                          "gt_push_check.py", "gt_watch.py", "gt_report_card.py"},
-         "PreCompact": {"gt_report_card.py"}, "SessionEnd": {"gt_report_card.py"},
+                          "gt_push_check.py"},
          "PreToolUse": {"guard_protected_paths.sh"}}
+MODULE_OWNED = {("SessionStart", "gt_watch.py"): ("watch", ["--hook"]),
+                ("SessionStart", "gt_report_card.py"): ("report-card", ["surface", "--hook"]),
+                ("PreCompact", "gt_report_card.py"): ("report-card", []),
+                ("SessionEnd", "gt_report_card.py"): ("report-card", [])}
 IGNORE = shutil.ignore_patterns("__pycache__", "*.pyc", ".DS_Store")
 try:
     DEMO_MODULE = latest_version_dir(REPO / "golden-thread-demo")
@@ -154,14 +160,14 @@ class InstallTest(Sandbox):
         return {ev: [h["command"] for block in blocks for h in block.get("hooks", [])]
                 for ev, blocks in hooks.items()}
 
-    def test_nine_hooks_registered_and_verified(self):
+    def test_gt_hooks_registered_and_verified(self):
         p = self.install()
         self.assertOk(p)
-        self.assertIn("Registered 9 hooks", p.stdout)
+        self.assertIn("Registered 5 hooks", p.stdout)
         self.assertIn("Verified hook wiring", p.stdout)
         self.assertNotIn("INCOMPLETE", p.stdout)
         reg = self.registered()
-        self.assertEqual(sum(len(v) for v in reg.values()), 9, reg)
+        self.assertEqual(sum(len(v) for v in reg.values()), 5, reg)
         hooks_dir = str(self.home / ".claude" / "golden-thread" / "hooks")
         for event, scripts in OWNED.items():
             cmds = reg.get(event, [])
@@ -175,6 +181,33 @@ class InstallTest(Sandbox):
         w = self.run_cmd(["python3", self.src() / "scripts" / "gt_components.py", "wiring",
                           self.src(), "--owner", "install.sh"])
         self.assertOk(w)
+
+    def test_watch_and_report_card_modules_wire_what_gt_used_to(self):
+        """0.15.0: the four entries gt wired until 0.14.0 now come from module.json, with
+        the command gt used to write -- so an existing install's entries are the module's."""
+        if WATCH is None or REPORT_CARD is None:
+            self.skipTest("watch / report-card modules not in this tree")
+        for mod in (WATCH, REPORT_CARD):
+            shutil.copytree(mod, self.repo / mod.parent.name / mod.name, ignore=IGNORE)
+        p = self.install()
+        self.assertOk(p)
+        self.assertIn("Registered 9 hooks", p.stdout)
+        self.assertIn("Verified hook wiring", p.stdout)
+        self.assertNotIn("gt-report-card skills:", p.stdout, "an empty skills heading")
+        hooks_dir = self.home / ".claude" / "golden-thread" / "hooks"
+        reg = self.registered()
+        for (event, script), (_module, args) in MODULE_OWNED.items():
+            hit = [c for c in reg.get(event, []) if script in c]
+            want = " ".join(["python3", str(hooks_dir / script)] + args)
+            self.assertEqual(hit, [want], "%s/%s: %s" % (event, script, reg.get(event)))
+            self.assertTrue((hooks_dir / script).is_file(), script)
+        self.assertFalse((self.cache() / "scripts" / "gt_watch.py").exists())
+        self.assertFalse((self.cache() / "scripts" / "gt_report_card.py").exists())
+        self.assertFalse((self.cache() / "templates" / "watch.md").exists())
+        w = self.run_cmd(["python3", self.src() / "scripts" / "gt_components.py", "wiring",
+                          self.src(), "--owner", "install.sh"])
+        self.assertOk(w)
+        self.assertIn("all 9 declared hooks are wired", w.stdout)
 
     # -- the demo module (0.14.0; until then install_demo=no stripped it out of gt) ----
     def add_demo_module(self):
@@ -226,7 +259,7 @@ class InstallTest(Sandbox):
         p = self.install()
         self.assertOk(p)
         self.assertEqual(self.settings(), s1, "second run changed settings.json")
-        self.assertEqual(sum(len(v) for v in self.registered().values()), 9, "hooks duplicated")
+        self.assertEqual(sum(len(v) for v in self.registered().values()), 5, "hooks duplicated")
         self.assertEqual(files_under(self.cache(), GT_DIRS), files1)
         vers = [d.name for d in (self.plugins / "cache" / "golden-thread-plugin" / "gt").iterdir()]
         self.assertEqual(vers, [GT.name])
@@ -246,7 +279,7 @@ class InstallTest(Sandbox):
         self.assertTrue(s["enabledPlugins"]["other@x"])
         self.assertIn("echo user-hook", self.registered()["SessionStart"])
         self.assertEqual(self.registered()["Stop"], ["echo user-hook"])
-        self.assertEqual(len(self.registered()["SessionStart"]), 7)   # user hook + 6 gt SessionStart hooks
+        self.assertEqual(len(self.registered()["SessionStart"]), 5)   # user hook + 4 gt SessionStart hooks (watch/report-card are modules since 0.15.0)
         self.assertFalse(old.exists(), "superseded gt cache left behind")
         backups = list((self.home / ".claude" / "golden-thread" / "backups").glob("settings.json.*"))
         self.assertTrue(backups, "pre-existing settings.json was not backed up")
@@ -449,6 +482,115 @@ class EnforcementHooksOnUpgrade(Sandbox):
         self.assertEqual(p.returncode, 0)
         self.assertIn("already wired", p.stdout,
                       "a repeat install should say it changed nothing, not re-report a fix")
+
+
+class UpgradeLeavesOrderAndModesAsAFreshInstall(Sandbox):
+    """Requirement R1 (0.15.0): hook ORDER and file MODES do not depend on history.
+
+    Validated 2026-09-14: an upgrade from 0.13.0/0.14.0 left guard_protected_paths.sh last
+    in PreToolUse (first on a fresh install), kept 0755 hooks and 0644 plugin.json where a
+    fresh install from an untracked 0700 source tree gave 0711 and 0700 -- `cp` keeps an
+    existing file's mode and gives a new file the source's.
+    """
+
+    def setUp(self):
+        super().setUp()
+        self.repo = self.tmp / "src" / "golden-thread-plugin"
+        self.repo.mkdir(parents=True)
+        shutil.copy2(INSTALL, self.repo / "install.sh")
+        for src, dst in ((GT, self.repo / "golden-thread" / GT.name),
+                         (WIKI, self.repo / "golden-thread-wiki" / WIKI.name)):
+            shutil.copytree(src, dst, ignore=IGNORE)
+        self.py(self.repo / "golden-thread" / GT.name / "scripts" / "gt_components.py",
+                "manifest", self.repo / "golden-thread" / GT.name)
+        # The source as an untracked OneDrive checkout leaves it: every file 0700.
+        for p in self.repo.rglob("*"):
+            if p.is_file():
+                p.chmod(0o700)
+        self.user_hook = {"hooks": [{"type": "command", "command": "echo users-own"}]}
+        settings = self.home / ".claude" / "settings.json"
+        settings.write_text(json.dumps({"hooks": {"PreToolUse": [self.user_hook]}}, indent=2))
+
+    def install(self):
+        p = self.sh(self.repo / "install.sh", timeout=600)
+        self.assertEqual(p.returncode, 0, p.stdout[-2000:] + p.stderr[-2000:])
+        return p
+
+    def hooks(self):
+        return json.loads((self.home / ".claude" / "settings.json").read_text())["hooks"]
+
+    def key_orders(self):
+        """Key ORDER, which dict equality ignores: hook events, enabledPlugins, and the
+        plugins in installed_plugins.json (0.15.0: each differed between upgrade and fresh)."""
+        claude = self.home / ".claude"
+        s = json.loads((claude / "settings.json").read_text())
+        inst = json.loads((claude / "plugins" / "installed_plugins.json").read_text())
+        return (list(s.get("hooks", {})), list(s.get("enabledPlugins", {})),
+                list(inst.get("plugins", {})))
+
+    def modes(self):
+        claude = self.home / ".claude"
+        # The whole marketplace dir, so marketplace.json itself is covered (0.15.0: an
+        # upgrade kept a 0600 copy), and no bytecode may be left in anything installed.
+        roots = [claude / "plugins" / "cache" / "golden-thread-plugin",
+                 claude / "plugins" / "marketplaces" / "golden-thread-plugin"]
+        out = {}
+        for root in roots:
+            for p in [root, *root.rglob("*")]:
+                self.assertNotIn("__pycache__", p.parts, "bytecode left in an installed tree")
+                out[str(p.relative_to(claude))] = p.stat().st_mode & 0o777
+        for p in (claude / "golden-thread" / "hooks").iterdir():
+            if p.is_file():
+                out[str(p.relative_to(claude))] = p.stat().st_mode & 0o777
+        return out
+
+    def test_order_and_modes_converge_and_follow_one_rule(self):
+        self.make_vault()
+        self.install()
+        fresh_hooks, fresh_modes, fresh_orders = self.hooks(), self.modes(), self.key_orders()
+
+        # The rule, whatever the 0700 source said.
+        for rel, mode in fresh_modes.items():
+            p = self.home / ".claude" / rel
+            want = 0o755 if (p.is_dir() or rel.endswith((".sh", ".py"))) else 0o644
+            self.assertEqual(oct(mode), oct(want), rel)
+        pre = [h["command"] for b in fresh_hooks["PreToolUse"] for h in b["hooks"]]
+        self.assertEqual(pre[0], "echo users-own", "the user's own hook stays first")
+        self.assertIn("guard_protected_paths.sh", pre[1])
+
+        # The history an older release leaves: gt's entries in another order, the user's
+        # hook moved after them, files at other modes -- and a file of the user's own.
+        settings = self.home / ".claude" / "settings.json"
+        data = json.loads(settings.read_text())
+        data["hooks"]["PreToolUse"] = list(reversed(data["hooks"]["PreToolUse"]))
+        data["hooks"]["SessionStart"] = list(reversed(data["hooks"]["SessionStart"]))
+        data["hooks"] = dict(reversed(list(data["hooks"].items())))
+        data["enabledPlugins"] = dict(reversed(list(data.get("enabledPlugins", {}).items())))
+        settings.write_text(json.dumps(data, indent=2))
+        inst_p = self.home / ".claude" / "plugins" / "installed_plugins.json"
+        inst = json.loads(inst_p.read_text())
+        inst["plugins"] = dict(reversed(list(inst["plugins"].items())))
+        inst_p.write_text(json.dumps(inst, indent=2))
+        # bytecode a python run (or an older release) left in the installed trees
+        (self.home / ".claude" / "plugins" / "cache" / "golden-thread-plugin" / "gt" / GT.name
+         / "scripts" / "__pycache__").mkdir(parents=True, exist_ok=True)
+        self.assertNotEqual(self.key_orders(), fresh_orders, "fixture must scramble key order")
+        for rel in fresh_modes:
+            p = self.home / ".claude" / rel
+            if p.is_file():
+                p.chmod(0o644 if rel.endswith((".sh", ".py")) else 0o600)
+        mine = self.home / ".claude" / "golden-thread" / "hooks" / "users_own_tool.py"
+        mine.write_text("# mine\n")
+        mine.chmod(0o600)
+        self.assertNotEqual(self.hooks(), fresh_hooks, "fixture must diverge first")
+
+        self.install()
+        self.assertEqual(self.hooks(), fresh_hooks, "hook order depends on history")
+        self.assertEqual(self.key_orders(), fresh_orders, "JSON key order depends on history")
+        now = self.modes()
+        now.pop("golden-thread/hooks/users_own_tool.py", None)
+        self.assertEqual(now, fresh_modes, "file modes depend on history")
+        self.assertEqual(mine.stat().st_mode & 0o777, 0o600, "a user's file is not ours to chmod")
 
 
 class VaultIsPartOfTheInstall(Sandbox):

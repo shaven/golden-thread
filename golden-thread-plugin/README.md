@@ -47,7 +47,7 @@ Facts move up the hierarchy as they prove themselves general. They never move ba
 
 ---
 
-## Eighteen Skills (plus modules)
+## Sixteen Skills (plus modules)
 
 ### Setup
 
@@ -78,7 +78,6 @@ Facts move up the hierarchy as they prove themselves general. They never move ba
 
 | Command | What it does |
 |---|---|
-| `/gt:gt-farm` | Route bulk, mechanical, or second-opinion tasks to an external AI service as a self-contained work packet. All four gates (Stateless, Self-contained, Checkable, Releasable) must pass before a task leaves. Results come back unverified. |
 | `/gt:gt-validate` | Verify a claim by re-deriving it with a fresh-context validator — never by reviewing the reasoning that produced it. Use before recording a finding as fact or before a production change. |
 
 ### Maintenance
@@ -89,9 +88,21 @@ Facts move up the hierarchy as they prove themselves general. They never move ba
 | `/gt:gt-doctor` | One report for the whole install: plugin version, component drift, hook wiring, pending vault migrations, stray workers, unpushed commits, publish-destination drift and a lint summary. Exit 2 means a check *could not run*, which is deliberately distinct from clean. |
 | `/gt:gt-lint` | Audit the vault for structural problems: broken wikilinks, orphaned pages, missing index entries, unlisted memory files, Knowledge pages citing superseded sources, stale pages, and Core rules that are stored but not enforced. Applies fixes with your approval. |
 | `/gt:gt-runbook-lint` | Scan all project `runbook.md` files for content that has drifted into multiple runbooks. Classifies duplicated content by type and routes it to the right shared layer (PROTOCOL.md, Knowledge page, or repo CLAUDE.md) via `gt-promote`. |
-| `/gt:gt-settings` | View and change what Golden Thread does automatically: component drift checking at session start, and the session report card at compact. Every automatic behaviour can be switched off. |
-| `/gt:gt-watch` | Watch any git repo you depend on. A cron fetch classifies each change by rules, and the next session opens with a **P0** when a watched repo ships a security fix (CVE/GHSA ids, security releases, advisories). Watches are vault notes; state stays on the machine. Off until switched on. |
-| `/gt-demo:gt-demo` (module `demo`) | An eleven-act guided tour on the fictional PizzaBot 3000 project, in its own throwaway vault so it never touches yours. `start` builds the demo vault, `tour` runs the acts one click at a time, `end` shows what the tour produced, `clean` rebuilds, `remove` deletes the demo vault; `bash install.sh --without demo` removes the module. |
+| `/gt:gt-settings` | View and change what Golden Thread does automatically: component drift checking at session start, and every setting an installed module adds (the report card, the upstream watch). Every automatic behaviour can be switched off. |
+
+### Modules
+
+Optional parts of Golden Thread, each a separate plugin in the same marketplace, installed
+by `install.sh` while it is on. Since 0.15.0 there are six.
+
+| Module (plugin) | Default | Command | What it does |
+|---|---|---|---|
+| `wiki` (`gt-wiki`) | on | `/gt-wiki:gt-wiki` and four more | A standalone LLM wiki: immutable sources, interlinked Knowledge pages, ingest, lint and refresh loops. |
+| `demo` (`gt-demo`) | on | `/gt-demo:gt-demo` | A guided tour on the fictional PizzaBot 3000 project — nine core acts plus one for each installed module that ships one (wiki, watch, flow) — in its own throwaway vault. `start`, `tour`, `end`, `clean`, `remove`, `status`. |
+| `watch` (`gt-watch`) | on | `/gt-watch:gt-watch` | Watch any git repo you depend on. A cron fetch classifies each change by rules, and the next session opens with a **P0** when a watched repo ships a security fix (CVE/GHSA ids, security releases, advisories). Reporting stays off until the `watch` setting is `report`. Was `/gt:gt-watch`. |
+| `report-card` (`gt-report-card`) | on | none | The session report card at `/compact` and session end, shown at the next session start, and the project close-out question. Settings `report_card`, `closeout_check`. |
+| `farm` (`gt-farm`) | off (kept on when upgrading from a gt that had it) | `/gt-farm:gt-farm` | Route bulk, mechanical, or second-opinion tasks to an external AI service as a self-contained work packet. All four gates (Stateless, Self-contained, Checkable, Releasable) must pass before a task leaves. Results come back unverified. Was `/gt:gt-farm`. |
+| `flow` (`gt-flow`) | on | `/gt-flow:gt-flow` | Render the vault's event stream as one offline HTML page: a lane per project, an arrow each time knowledge climbed a level. Add `--redact` before sharing it. |
 
 ---
 
@@ -231,7 +242,7 @@ See [INSTALL.md](INSTALL.md) for step-by-step instructions, including how to ins
 
 ```bash
 bash install.sh --vault <vault>     # gt plus every module that is on; then restart Claude Code
-bash install.sh --list-modules      # optional parts: wiki (gt-wiki), demo (gt-demo) — both on by default
+bash install.sh --list-modules      # the six modules, each one's state and why
 bash install.sh --without demo      # leave one out; remembered
 ```
 
@@ -271,7 +282,8 @@ tools/gt_adr.py allocate <project>      ← reserves the next ADR number atomica
 /gt:gt-review                 ← promote daily note items to tracked projects
 /gt:gt-promote                ← graduate a finding to a Knowledge page or global-memory
 /gt:gt-validate               ← verify a claim before recording it as fact
-/gt:gt-farm                   ← route bulk or external-opinion tasks out of this context
+/gt-farm:gt-farm              ← route bulk or external-opinion tasks out of this context (farm module)
+/gt-flow:gt-flow              ← draw how knowledge climbed the ladder (flow module)
 ```
 
 ---
@@ -283,29 +295,38 @@ from per-session spool files, so nothing writes them directly:
 
 ```bash
 # Record a log entry -- writes only YOUR session's spool file
-python3 <vault>/Projects/golden-thread/tools/gt_log.py add "2026-01-01 10:00 CST [work] my-project — what happened"
+python3 <vault>/Projects/golden-thread/tools/gt_log.py --vault <vault> add "2026-01-01 10:00 CST [work] my-project — what happened"
 
 # Reserve the next ADR number before writing the decision
-python3 <vault>/Projects/golden-thread/tools/gt_adr.py allocate my-project --title "The choice"
+python3 <vault>/Projects/golden-thread/tools/gt_adr.py --vault <vault> allocate my-project --title "The choice"
 
 # Regenerate either file (idempotent)
-python3 <vault>/Projects/golden-thread/tools/gt_log.py merge
-python3 <vault>/Projects/golden-thread/tools/gt_adr.py merge my-project
+python3 <vault>/Projects/golden-thread/tools/gt_log.py --vault <vault> merge
+python3 <vault>/Projects/golden-thread/tools/gt_adr.py --vault <vault> merge my-project
+
+# A log line plus one structured event (what moved where) -- gt-promote and gt-refresh
+# record their moves this way; gt-review, gt-work and gt-ingest use gt_events.py emit
+python3 <vault>/Projects/golden-thread/tools/gt_log.py --vault <vault> add "2026-01-01 [graduate] a → b" \
+  --event promote --item Knowledge/x.md --from Projects/p/research.md --to Knowledge/x.md \
+  --level-from 3 --level-to 4 --project p
+
+# Preview the event history rebuilt from git and log.md (a vault older than the events)
+python3 <vault>/Projects/golden-thread/tools/gt_events.py backfill --vault <vault> --dry-run
 
 # One-time, per vault and per project
-python3 <vault>/Projects/golden-thread/tools/gt_log.py migrate
-python3 <vault>/Projects/golden-thread/tools/gt_adr.py migrate my-project
+python3 <vault>/Projects/golden-thread/tools/gt_log.py --vault <vault> migrate
+python3 <vault>/Projects/golden-thread/tools/gt_adr.py --vault <vault> migrate my-project
 ```
 
 Python scripts can also be run directly from the command line:
 
 ```bash
 # Create a new vault
-python3 golden-thread/0.14.0/scripts/vault_init.py fresh \
+python3 golden-thread/0.15.0/scripts/vault_init.py fresh \
   --vault ~/my-vault --domain "My Team"
 
 # Scaffold a project
-python3 golden-thread/0.14.0/scripts/vault_init.py create-project \
+python3 golden-thread/0.15.0/scripts/vault_init.py create-project \
   --vault ~/my-vault \
   --name my-project \
   --title "My Project" \
@@ -316,29 +337,29 @@ python3 golden-thread/0.14.0/scripts/vault_init.py create-project \
   --project-dir ~/Projects/my-project
 
 # Scaffold a sub-project
-python3 golden-thread/0.14.0/scripts/vault_init.py create-project \
+python3 golden-thread/0.15.0/scripts/vault_init.py create-project \
   --vault ~/my-vault \
   --name sub-feature \
   --parent my-project \
   --title "Sub Feature"
 
 # Point vault-config.json at an existing vault
-python3 golden-thread/0.14.0/scripts/vault_init.py connect \
+python3 golden-thread/0.15.0/scripts/vault_init.py connect \
   --vault ~/existing-vault
 
 # Install/rewire Core-rule enforcement hooks
-python3 golden-thread/0.14.0/scripts/vault_init.py install-core-rules \
+python3 golden-thread/0.15.0/scripts/vault_init.py install-core-rules \
   --vault ~/my-vault
 
 # Scan a project directory for ingest candidates
-python3 golden-thread/0.14.0/scripts/gt_ingest.py ~/Projects/my-project --json
+python3 golden-thread/0.15.0/scripts/gt_ingest.py ~/Projects/my-project --json
 
 # Audit vault health
-python3 golden-thread/0.14.0/scripts/gt_lint.py ~/my-vault \
+python3 golden-thread/0.15.0/scripts/gt_lint.py ~/my-vault \
   --queue ~/my-vault/review-queue.md
 
 # View/change automatic behaviours
-python3 golden-thread/0.14.0/scripts/gt_settings.py show
+python3 golden-thread/0.15.0/scripts/gt_settings.py show
 ```
 
 ---

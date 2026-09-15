@@ -78,6 +78,14 @@ class CliContract(Sandbox):
             self.assertTrue(reason.strip(), f"{tool} is exempt with no reason given")
             self.assertGreater(len(reason), 20, f"{tool}'s reason is not an explanation")
 
+    def test_event_writers_are_covered(self):
+        """0.15.0: backfill writes the event spool; closeout ask/answer write records and
+        emit events. Both must be rehearsable and targetable."""
+        mod = self.load_check()
+        self.assertIn("backfill", mod.COVERED["templates/tools/gt_events.py"])
+        self.assertEqual(set(mod.COVERED["templates/tools/gt_closeout.py"]), {"ask", "answer"})
+        self.assertNotIn("templates/tools/gt_closeout.py", mod.EXEMPT)
+
     def test_no_tool_is_both_covered_and_exempt(self):
         mod = self.load_check()
         both = set(mod.COVERED) & set(mod.EXEMPT)

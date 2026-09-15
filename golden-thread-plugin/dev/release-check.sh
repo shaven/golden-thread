@@ -219,20 +219,32 @@ for root in map(pathlib.Path, sys.argv[1:]):
     # skill ran <vault>/Projects/golden-thread/gt-demo.sh, which shipped nowhere.
     have = {p.name for p in root.rglob("*") if p.is_file()} | {p.name for p in pathlib.Path(".").iterdir() if p.is_file()}
     # A MODULE requires gt (module.json requires_gt), so its skills may name gt's core
-    # scripts -- the demo tour runs vault_init.py and gt_watch.py from gt. A name that ships in
-    # neither the module nor gt still fails. (0.14.0: the demo moved out of gt.)
+    # scripts -- the demo tour runs vault_init.py from gt. Since 0.15.0 they may also name
+    # ANOTHER module's script: the tour runs gt_watch.py from the watch module, resolved at
+    # run time (`gt_demo.sh module-scripts NAME`, an act skipped when that module is absent).
+    # So a module's skills are checked against gt plus every plugin this release ships. A
+    # name that ships in none of them still fails. (0.14.0: the demo moved out of gt.)
     if (root / "module.json").is_file():
-        gt_core = sorted(pathlib.Path("golden-thread").glob("[0-9]*.[0-9]*.[0-9]*/"), key=lambda d: tuple(int(x) for x in d.name.split(".")))
+        # Real N.N.N directories only: the glob also matched golden-thread/0.1.0-archive.zip,
+        # int("0-archive") raised, and -- with the exit code unread -- the step printed ok.
+        gt_core = sorted((d for d in pathlib.Path("golden-thread").iterdir()
+                          if d.is_dir() and re.fullmatch(r"\d+\.\d+\.\d+", d.name)),
+                         key=lambda d: tuple(int(x) for x in d.name.split(".")))
         if gt_core:
             have |= {p.name for p in gt_core[-1].rglob("*") if p.is_file()}
+        for other in map(pathlib.Path, sys.argv[1:]):
+            have |= {p.name for p in other.rglob("*") if p.is_file()}
     for sk in root.glob("skills/*/SKILL.md"):
         for name in sorted(set(re.findall(r"\b([\w.-]+\.(?:py|sh))\b", sk.read_text(encoding="utf-8")))):
             if name not in have:
                 out.append(f"{sk.parent.name} names {name}, which ships nowhere in {root}")
 print("\n".join(out))
 PY2
-)
-[ -z "$REFS" ] && ok "every script/template a skill names exists in the release" || { echo "$REFS"; bad "skills reference files that do not ship"; }
+); REFS_RC=$?
+# A crash is not a clean result: before 0.15.0 a traceback here left REFS empty and printed ok.
+if [ "$REFS_RC" -ne 0 ]; then bad "skill reference check could not run (exit $REFS_RC)"
+elif [ -z "$REFS" ]; then ok "every script/template a skill names exists in the release"
+else echo "$REFS"; bad "skills reference files that do not ship"; fi
 
 step "scrub (employer and machine names)"
 # The WHOLE repository, not a list of plugin directories. Until 0.12.9 this scrubbed

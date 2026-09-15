@@ -20,6 +20,17 @@ HOOK_DIR_SCRIPTS) and which scripts it REGISTERS (HOOK_REGISTRATIONS). Anything 
 previous release installed or registered that the new one does not must appear in the new
 release's retired.json (`hook_files[].installed_as` / `hook_registrations[]`).
 
+## Moved to a module is not retired (0.15.0)
+
+gt_watch.py and gt_report_card.py left gt for the watch and report-card modules, which
+install the same file to the same path and wire the same command. Listing them in
+retired.json would make install.sh DELETE a live module file on every upgrade. So a name a
+module beside the new release declares (hookdir_scripts, or a hook's script) -- a valid
+module whose requires_gt admits the new gt -- counts as still installed. Install removes it
+only when that module is off (install.sh's module removal, after a backup), which is the
+module's business, not retired.json's. A retired.json entry naming such a file is itself
+reported, because it is exactly that deletion.
+
 Exit 0 clean, 1 unrecorded removals, 2 could not check (a check that could not look is
 not a clean result).
 """
@@ -46,6 +57,34 @@ def installs(vdir):
     return names, regs
 
 
+def module_installs(new, comp):
+    """-> (files, registered scripts, {name: module}) that modules beside `new` install.
+
+    The plugin root is two levels above the version dir. Only valid modules whose
+    requires_gt admits the new gt count: an older module release cannot take over a file.
+    """
+    root = new.parent.parent
+    files, regs, owner = set(), set(), {}
+    if not hasattr(comp, "discover_modules"):
+        return files, regs, owner
+    for m in comp.discover_modules(str(root)):
+        data = m["data"]
+        if m["reasons"]:
+            continue
+        try:
+            if not comp.requires_gt_admits(data.get("requires_gt"), new.name):
+                continue
+        except ValueError:
+            continue
+        hooks = [h for h in data.get("hooks") or [] if isinstance(h, dict) and h.get("script")]
+        names = set(data.get("hookdir_scripts") or []) | {h["script"] for h in hooks}
+        files |= names
+        regs |= {h["script"] for h in hooks}
+        for n in names:
+            owner.setdefault(n, m["name"])
+    return files, regs, owner
+
+
 def main(argv):
     if len(argv) != 3:
         print(__doc__.strip().splitlines()[2].strip())
@@ -54,6 +93,7 @@ def main(argv):
     try:
         new_files, new_regs = installs(new)
         old_files, old_regs = installs(old)
+        mod_files, mod_regs, mod_owner = module_installs(new, load_components(new))
         retired = json.loads((new / "retired.json").read_text(encoding="utf-8"))
     except Exception as e:                                   # noqa: BLE001 -- any failure is "could not check"
         print("UNCHECKED: %s" % e)
@@ -61,6 +101,14 @@ def main(argv):
     recorded_files = {e.get("installed_as") for e in retired.get("hook_files", [])}
     recorded_regs = set(retired.get("hook_registrations", []))
     problems = []
+    for name in sorted(recorded_files & mod_files):
+        problems.append("retired.json lists %s, but module %s installs it — an upgrade with the "
+                        "module on would delete a live file" % (name, mod_owner[name]))
+    for script in sorted(recorded_regs & mod_regs):
+        problems.append("retired.json lists the registration %s, but module %s registers it — "
+                        "an upgrade would unwire a live hook" % (script, mod_owner[script]))
+    new_files |= mod_files
+    new_regs |= mod_regs
     for name in sorted(old_files - new_files):
         if name not in recorded_files:
             problems.append("%s no longer installs %s into the hooks dir, and retired.json does not "

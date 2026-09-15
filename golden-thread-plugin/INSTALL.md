@@ -64,15 +64,23 @@ curl -fsSL https://github.com/shaven/golden-thread/archive/refs/heads/main.tar.g
 
 `install.sh` installs the **newest version directory present** — it detects the version
 rather than carrying a hardcoded one, so this guide does not name a version either. To
-pin an older release deliberately: `bash install.sh 0.9.3`.
+pin an older release deliberately: `bash install.sh 0.14.0`.
 
 **What gets installed.** gt itself, plus each **module** — an optional plugin that ships
-beside gt and is versioned with it. Today there are two, both on by default:
+beside gt and is versioned with it. 0.15.0 ships six:
 
-| Module | Plugin | What it adds |
-|---|---|---|
-| `wiki` | `gt-wiki` | five `/gt-wiki:*` skills for an LLM wiki (ingest, lint, refresh, init) |
-| `demo` | `gt-demo` | `/gt-demo:gt-demo`, the guided PizzaBot 3000 tour in its own throwaway vault |
+| Module | Plugin | Default | What it adds |
+|---|---|---|---|
+| `wiki` | `gt-wiki` | on | five `/gt-wiki:*` skills for an LLM wiki (query, ingest, lint, refresh, init) |
+| `demo` | `gt-demo` | on | `/gt-demo:gt-demo`, the guided PizzaBot 3000 tour in its own throwaway vault |
+| `watch` | `gt-watch` | on | `/gt-watch:gt-watch` and its session-start report; fetches nothing until the `watch` setting is `report` |
+| `report-card` | `gt-report-card` | on | the session report card and close-out question (three hooks, no command) |
+| `flow` | `gt-flow` | on | `/gt-flow:gt-flow`, an offline HTML timeline of knowledge moving up the ladder |
+| `farm` | `gt-farm` | **off** | `/gt-farm:gt-farm`, work packets for an external AI service |
+
+`farm` is off for a fresh install. A machine upgrading from a gt that shipped `/gt:gt-farm`
+keeps it on: a one-time machine migration records that choice, so nobody loses a command
+they had because it moved into a module.
 
 You do not install modules separately — one `install.sh` run installs gt and every module
 that is on. To choose:
@@ -80,12 +88,16 @@ that is on. To choose:
 ```bash
 bash install.sh --list-modules        # each module, whether it is on, and why
 bash install.sh --without demo        # remove it completely; the choice is remembered
-bash install.sh --with demo           # bring it back
+bash install.sh --with farm           # add one that is off
 ```
 
 The choice lives in `~/.claude/golden-thread/install-choices.json` and later installs keep it.
 A module that is off leaves nothing behind — no plugin cache, marketplace entry, enabled
-flag, hooks or hook scripts. gt itself cannot be removed this way.
+flag, hooks or hook scripts — and for `watch`, the crontab line it installed (only the line
+tagged `# gt-watch`, after a backup). Those lines are saved under
+`~/.claude/golden-thread/module-cron/`, and `--with watch` puts exactly them back (crontab
+backed up first, every other line untouched). gt itself cannot be removed this way. A setting
+you gave a module is kept while it is off and applies again when you turn it back on.
 
 It copies each plugin into Claude Code's plugin cache — gt's looks like this:
 
@@ -124,8 +136,9 @@ install of the newest would**, so skipping releases is fine. On each run it:
 hooks and the first `TASKS.md`. If a vault is already configured when `install.sh`
 runs, it refreshes that vault's tools to the installed templates.
 
-`install.sh` registers the nine hooks it owns in `~/.claude/settings.json` (the other five,
-the Core-rule enforcement hooks, are wired against the vault) and then
+`install.sh` registers the hooks it owns in `~/.claude/settings.json` — five for gt, plus
+each module's while it is on (`watch` one, `report-card` three); the other five, the
+Core-rule enforcement hooks, are wired against the vault — and then
 verifies them, printing either `Verified hook wiring → every hook this installer owns
 is connected` or a list of what will never run. Read that line: **a file being
 installed and a file being wired are different things**, and until 0.9.13 nothing
@@ -138,14 +151,15 @@ Then confirm enforcement is actually live, because a rule that is not wired is n
 # Are the Core rules being asserted? (the UserPromptSubmit hook)
 echo '{}' | ~/.claude/golden-thread/hooks/inject_core_rules.sh
 
-# Are ALL declared hooks wired? (14 in 0.14.0)
+# Are ALL declared hooks wired? (14 in 0.15.0 with the default modules)
 python3 ~/.claude/golden-thread/hooks/gt_components.py wiring \
   "<plugin-repo>/golden-thread/<version>"
 ```
 
 The Core rules should print. Silence or an error means they are not being asserted.
 
-The second command should print `all 14 declared hooks are wired`. It is the broader
+The second command should print `all 14 declared hooks are wired` with the default modules
+(fewer when you have turned `watch` or `report-card` off). It is the broader
 check of the two: the first proves one hook answers, while this one compares live
 settings against the list of every hook the release declares — so it can report the
 case the first cannot, which is a hook that was never registered at all. Anything it
@@ -244,8 +258,9 @@ Golden Thread adds these files/directories only if missing:
 - `global-memory/MEMORY.md` — global memory index
 - `Projects/CONVENTIONS.md`, `Projects/PROTOCOL.md`, `Projects/INFRASTRUCTURE.md`
 - `Projects/golden-thread/` — the Core rules, the vault tools (`gt_tasks.py`,
-  `gt_closeout.py`, `gt_session.py`, `gt_edits.py`, `safe_write.py`), and the
-  session and pending directories the tools create
+  `gt_closeout.py`, `gt_session.py`, `gt_edits.py`, `gt_log.py`, `gt_adr.py`,
+  `gt_events.py`, `gt_spool.py`, `safe_write.py`), and the session, spool and pending
+  directories the tools create
 - `.githooks/` and `core.hooksPath` — per-edit attribution, and `git init` if the
   vault is not yet a repo
 
@@ -272,9 +287,24 @@ superseded caches and retired files, applies machine migrations and — if your 
 committed — vault upgrades. Exactly one version of each plugin is live at a time. Commit your
 vault first so the install can apply its upgrades rather than only report them.
 
+**Upgrading from 0.14.0.** `/gt:gt-watch`, the report card and `/gt:gt-farm` moved out of gt
+into the `watch`, `report-card` and `farm` modules; the commands are now `/gt-watch:gt-watch`
+and `/gt-farm:gt-farm`. The install prints `Moved: /gt:gt-watch → /gt-watch:gt-watch` once for
+each command you had, adding `(module <name> is off: ./install.sh --with <name>)` when that
+module ends up off. One install over 0.14.0 ends where a fresh 0.15.0 install with the
+same module choices would, and your hook-dir files and your own hooks are left in place.
+
 **Rollback:** the repo (and a gt-src copy) keeps the previous release, so
-`bash install.sh <previous version> --vault <vault>` reinstalls it; your module choices and
-vault are kept.
+`bash install.sh <previous version> --vault <vault>` reinstalls it; your recorded module
+choices and vault are kept. Rolling back to 0.14.0 removes the module plugins it does not
+know (`gt-watch`, `gt-report-card`, `gt-farm`, `gt-flow`), so the older gt — which carries
+watch, the report card and farm itself — is not left with two copies of the same skill.
+Each other plugin installs the release that gt shipped with (gt-wiki 0.1.2 for 0.12.x, 0.1.3
+for 0.13.0, 0.2.0 for 0.14.0), and a demo choice of off — `install_demo=no` or
+`--without demo` — leaves the demo out of a gt that still carries it inside.
+
+An upgrade prints `Moved: /gt:<skill> → /<plugin>:<skill>` for every command that left gt
+for a module since the gt you had.
 
 ---
 

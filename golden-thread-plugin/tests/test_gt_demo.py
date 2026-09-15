@@ -7,8 +7,11 @@ pinned now is that nothing outside the demo vault changes, whatever the demo doe
 
 0.14.0: the demo is a MODULE — its own plugin `gt-demo` in `golden-thread-demo/<version>/`.
 The demo's files come from the newest module dir; gt's core scripts (vault_init.py,
-gt_watch.py, gt_lint.py) come from the gt release under test (GT_TEST_VERSION). `remove`
+gt_lint.py) come from the gt release under test (GT_TEST_VERSION). `remove`
 no longer deletes plugin files: uninstalling a module is install.sh's job.
+
+0.15.0: watch is a module too (plugin gt-watch). Its tour act lives in the watch module,
+so the core tour is nine acts, and the act runs gt_watch.py from `module-scripts watch`.
 """
 import hashlib
 import json
@@ -19,8 +22,9 @@ from pathlib import Path
 
 from _harness import Sandbox, GT, WIKI, REPO, PYTHON, latest_version_dir
 
-ACTS = 10  # core acts only; module acts (e.g. wiki's demo/act.md) are added by `tour-acts`
+ACTS = 9  # core acts only; module acts (e.g. wiki's and watch's demo/act.md) are added by `tour-acts`
 DEMO_MODULE = latest_version_dir(REPO / "golden-thread-demo")
+WATCH = latest_version_dir(REPO / "golden-thread-watch")
 MARKET = "golden-thread-plugin"
 MOVED = ("skills/gt-demo", "scripts/gt_demo.sh", "templates/demo-pizzabot")
 
@@ -60,6 +64,8 @@ class DemoTest(Sandbox):
         for d in ("scripts", "templates", "skills", "hooks"):
             shutil.copytree(GT / d, self.plugin / d, ignore=_NO_CACHE)
         self.demo_plugin = install_demo_plugin(cache / "gt-demo" / DEMO_MODULE.name)
+        self.watch_plugin = cache / "gt-watch" / WATCH.name
+        shutil.copytree(WATCH, self.watch_plugin, ignore=_NO_CACHE)
         hooks = self.home / ".claude" / "golden-thread" / "hooks"
         shutil.copytree(GT / "hooks", hooks, ignore=_NO_CACHE)
         # The user's REAL vault and config — the demo must leave both byte-identical.
@@ -104,17 +110,21 @@ class DemoTest(Sandbox):
         self.assertNotIn("/gt:gt-demo", out)
 
     def test_watch_act_reports_the_upstream_cve_as_p0(self):
-        # The gt-watch act (0.10.0), offline: add -> upstream-release -> fetch -> --hook.
+        # The watch module's act (0.10.0; a module since 0.15.0), offline:
+        # add -> upstream-release -> fetch -> --hook.
         self.assertOk(self.demo_cmd("start"))
         bare = self.demo / ".demo" / "upstream" / "widget-lib.git"
         tags = self.run_cmd(["git", "-C", bare, "tag"]).stdout.split()
         self.assertEqual(tags, ["v1.0.0"], "start seeds the upstream with v1.0.0 only")
         env = {"GT_VAULT": str(self.demo), "GT_WATCH": "report",
                "GT_WATCH_STATE": str(self.demo / ".demo" / "watch")}
-        # <core> in the tour: what `core-scripts` prints, i.e. gt's scripts, not the module's.
-        core = Path(self.demo_cmd("core-scripts").stdout.strip())
-        self.assertEqual(core, self.plugin / "scripts")
-        watch = core / "gt_watch.py"
+        # <module:watch> in the act: what `module-scripts watch` prints, the watch module's
+        # scripts -- not gt's, which no longer ship gt_watch.py.
+        mod = Path(self.demo_cmd("module-scripts", "watch").stdout.strip())
+        self.assertEqual(mod, self.watch_plugin / "scripts")
+        self.assertFalse((Path(self.demo_cmd("core-scripts").stdout.strip()) / "gt_watch.py").exists(),
+                         "gt core still ships gt_watch.py")
+        watch = mod / "gt_watch.py"
         self.assertOk(self.py(watch, "add", "file://%s" % bare, "--label", "Widget library", env=env))
         self.assertOk(self.demo_cmd("upstream-release"))
         self.assertNotEqual(self.demo_cmd("upstream-release").returncode, 0, "a second release refuses")
@@ -158,16 +168,17 @@ class DemoTest(Sandbox):
     def test_no_key_shaped_literal_in_the_shipped_plugin(self):
         pat = re.compile(r"AKIA[0-9A-Z]{16}")
         files = (list((GT / "scripts").iterdir()) + list((DEMO_MODULE / "scripts").iterdir())
+                 + list((WATCH / "scripts").iterdir())
                  + list((DEMO_MODULE / "templates").rglob("*")))
         for p in files:
             if p.is_file():
                 self.assertIsNone(pat.search(p.read_text(errors="replace")), f"key-shaped literal in {p}")
 
-    def test_core_tour_has_ten_complete_acts_naming_real_skills(self):
+    def test_core_tour_has_nine_complete_acts_naming_real_skills(self):
         tour = (DEMO_MODULE / "templates" / "demo-pizzabot" / "tour.md").read_text()
         acts = re.split(r"^## Act \d+ — ", tour, flags=re.M)[1:]
         self.assertEqual(len(acts), ACTS)
-        skills = {p.name for root in (GT, DEMO_MODULE, WIKI) for p in (root / "skills").iterdir()}
+        skills = {p.name for root in (GT, DEMO_MODULE, WIKI, WATCH) for p in (root / "skills").iterdir()}
         for body in acts:
             for key in ("narration:", "do:", "point:"):
                 self.assertIn(key, body, body[:60])
@@ -190,6 +201,29 @@ class DemoTest(Sandbox):
             self.assertRegex(act, r"(?m)^%s " % key)
         module = json.loads((DEMO_MODULE / "module.json").read_text())
         self.assertIn({"name": "wiki", "soft": True}, module["requires_modules"])
+
+    def test_the_watch_act_lives_in_the_watch_module_not_the_core_tour(self):
+        tour = (DEMO_MODULE / "templates" / "demo-pizzabot" / "tour.md").read_text()
+        self.assertNotIn("the gt-watch skill", tour)
+        self.assertNotIn("gt_watch.py", tour.split("## Act 1 — ")[1], "a core act still runs gt_watch.py")
+        watch = json.loads((WATCH / "module.json").read_text())
+        self.assertEqual(watch["demo"], "demo/act.md")
+        act = (WATCH / watch["demo"]).read_text()
+        self.assertIn("the gt-watch skill", act)
+        self.assertIn("<scripts>/gt_demo.sh upstream-release", act)
+        self.assertIn("<module:watch>/gt_watch.py fetch", act)
+        module = json.loads((DEMO_MODULE / "module.json").read_text())
+        self.assertIn({"name": "watch", "soft": True}, module["requires_modules"])
+        skill = (DEMO_MODULE / "skills" / "gt-demo" / "SKILL.md").read_text()
+        self.assertIn("gt_demo.sh module-scripts", skill)
+        self.assertIn("<module:", skill)
+
+    def test_module_scripts_missing_module_exits_3_with_a_reason(self):
+        shutil.rmtree(self.watch_plugin.parent)
+        p = self.demo_cmd("module-scripts", "watch")
+        self.assertEqual(p.returncode, 3)
+        self.assertIn("Module watch is not installed", p.stderr)
+        self.assertNotEqual(self.demo_cmd("module-scripts").returncode, 0)
 
     def test_skill_runs_the_assembled_tour_not_tour_md(self):
         skill = (DEMO_MODULE / "skills" / "gt-demo" / "SKILL.md").read_text()
@@ -215,7 +249,8 @@ class DemoTest(Sandbox):
         own = re.findall(r"<scripts>/([A-Za-z0-9_.-]+)", tour)
         core = re.findall(r"<core>/([A-Za-z0-9_.-]+)", tour)
         self.assertTrue(own, "tour runs no module scripts")
-        self.assertTrue(core, "tour runs no gt core scripts")
+        # Since 0.15.0 no core act runs a gt core script by path (gt_watch.py went to the watch
+        # module); <core> stays for `start` and future acts, and any it names must exist.
         for name in own:
             self.assertTrue((DEMO_MODULE / "scripts" / name).is_file(), f"tour names a missing module script: {name}")
         for name in core:
@@ -359,7 +394,7 @@ class DemoTest(Sandbox):
 
     # -- every skill can be pinned to the demo vault ---------------------------------------
     def test_every_skill_that_locates_the_vault_honors_gt_vault(self):
-        for root in (GT, DEMO_MODULE):
+        for root in (GT, DEMO_MODULE, WATCH):
             for p in (root / "skills").glob("*/SKILL.md"):
                 t = p.read_text()
                 if "vault-config" in t:

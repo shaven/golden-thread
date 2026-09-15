@@ -1,5 +1,8 @@
 #!/usr/bin/env bash
 set -euo pipefail
+# No bytecode from any python this installer runs (0.15.0): __pycache__ left in the plugin
+# cache and marketplace varied run to run, and running a vault tool dirtied the vault.
+export PYTHONDONTWRITEBYTECODE=1
 
 # ── Preflight ──────────────────────────────────────────────────────────────
 
@@ -166,6 +169,209 @@ def load(path):
         return json.load(fh)
 
 
+def module_requires(vdir):
+    """A version dir's requires_gt, or None when it carries no readable module.json."""
+    try:
+        m = load(os.path.join(vdir, "module.json"))
+    except (OSError, ValueError):
+        return None
+    return (m.get("requires_gt") or "") if isinstance(m, dict) else None
+
+
+# What each gt release commit carried beside it: the newest release of every other
+# plugin in the tree at the commit that added golden-thread/<gt>/ (from git history, checked
+# against it by tests/test_install_plugins.py). A rollback installs exactly this, so
+# ./install.sh 0.12.8 from a newer tree ends where the 0.12.8 installer did. Releases
+# before 0.14.0 predate module.json, so nothing else could say gt-wiki 0.1.2 belongs with
+# 0.12.8 -- without the table a rollback removed gt-wiki altogether (0.15.0).
+SHIPPED_WITH = {
+    "0.12.2": {"gt-wiki": "0.1.2"}, "0.12.3": {"gt-wiki": "0.1.2"},
+    "0.12.4": {"gt-wiki": "0.1.2"}, "0.12.5": {"gt-wiki": "0.1.2"},
+    "0.12.6": {"gt-wiki": "0.1.2"}, "0.12.7": {"gt-wiki": "0.1.2"},
+    "0.12.8": {"gt-wiki": "0.1.2"}, "0.12.9": {"gt-wiki": "0.1.2"},
+    "0.13.0": {"gt-wiki": "0.1.3"},
+    "0.14.0": {"gt-wiki": "0.2.0", "gt-demo": "0.14.0"},
+}
+FIRST_MODULE_GT = (0, 14, 0)   # the first gt whose installer read module.json
+
+
+def plugin_name(vdir):
+    try:
+        return load(os.path.join(vdir, ".claude-plugin", "plugin.json")).get("name")
+    except (OSError, ValueError, AttributeError):
+        return None
+
+
+def cmd_pick(a):
+    """The version of one plugin to install beside gt <gtver>: its newest release, unless
+    that is a module whose requires_gt refuses gtver (a pinned gt: a rollback). Then, in
+    order: the release SHIPPED_WITH records for that gt; the newest OLDER release that is a
+    module admitting it; for a gt from before modules, the newest older release with no
+    module.json (a plain plugin, which the installer of that gt installed unconditionally).
+    Prints "<version>\t<newest>\t<newest's requires_gt>"; the first two differ only when an
+    older release was chosen. Nothing fits -> the newest, which scan then skips."""
+    root, d, newest, gtver = a
+    base = os.path.join(root, d)
+    spec = module_requires(os.path.join(base, newest))
+    if spec is None or admits(spec, gtver) is True:
+        print("%s\t%s\t" % (newest, newest))
+        return 0
+    older = []
+    for v in os.listdir(base):
+        if re.fullmatch(r"\d+\.\d+\.\d+", v) and vkey(v) < vkey(newest) \
+                and os.path.isfile(os.path.join(base, v, ".claude-plugin", "plugin.json")):
+            older.append(v)
+    older.sort(key=vkey, reverse=True)
+    shipped = SHIPPED_WITH.get(gtver, {}).get(plugin_name(os.path.join(base, newest)) or "")
+    if shipped in older:
+        print("%s\t%s\t%s" % (shipped, newest, spec))
+        return 0
+    for v in older:
+        s = module_requires(os.path.join(base, v))
+        if s is not None and admits(s, gtver) is True:
+            print("%s\t%s\t%s" % (v, newest, spec))
+            return 0
+    try:
+        pre_modules = vkey(gtver) < FIRST_MODULE_GT
+    except ValueError:
+        pre_modules = False
+    for v in older if pre_modules else []:
+        if module_requires(os.path.join(base, v)) is None:
+            print("%s\t%s\t%s" % (v, newest, spec))
+            return 0
+    print("%s\t%s\t" % (newest, newest))
+    return 0
+
+
+def cmd_moved(a):
+    """Skills the previous gt had that the gt being installed no longer ships, and the
+    plugin that now provides each: "Moved: /gt:X -> /<plugin>:X" (0.15.0). For an upgrader,
+    /gt:gt-watch otherwise just stopped resolving, and nothing said where it went.
+    Args: <old gt skills dir> <new gt skills dir> <states.tsv> then <dir> <ver> <name> ...
+    of every other plugin discovered, on or off."""
+    old, new, states, rest = a[0], a[1], a[2], a[3:]
+
+    def skills(p):
+        try:
+            return {s for s in os.listdir(p) if os.path.isfile(os.path.join(p, s, "SKILL.md"))}
+        except OSError:
+            return set()
+    gone = sorted(skills(old) - skills(new))
+    if not gone:
+        return 0
+    off = {}
+    try:
+        for line in open(states, encoding="utf-8"):
+            f = line.rstrip("\n").split("\t")
+            if len(f) >= 4 and f[1] == "off":
+                off[f[3]] = f[0]
+    except OSError:
+        pass
+    for s in gone:
+        for d, ver, name in zip(rest[0::3], rest[1::3], rest[2::3]):
+            if os.path.isfile(os.path.join(d, ver, "skills", s, "SKILL.md")):
+                tail = (" (module %s is off: ./install.sh --with %s)" % (off[name], off[name])
+                        if name in off else "")
+                print("Moved: /gt:%s → /%s:%s%s" % (s, name, s, tail))
+                break
+    return 0
+
+
+def cmd_moved_annotate(a):
+    """Add the "(module X is off: ...)" tail to Moved lines from the FINAL module states.
+    Moved lines are computed before the machine migrations (the old gt cache is still on
+    disk then) with no states, so a migration that turns a module on -- farm for upgraders --
+    cannot leave a notice saying it is off. Args: <states.tsv>; lines on stdin."""
+    off = {}
+    try:
+        for line in open(a[0], encoding="utf-8"):
+            f = line.rstrip("\n").split("\t")
+            if len(f) >= 4 and f[1] == "off":
+                off[f[3]] = f[0]
+    except OSError:
+        pass
+    for line in sys.stdin.read().splitlines():
+        m = re.match(r"^Moved: /gt:\S+ → /([^:]+):\S+$", line)
+        if m and m.group(1) in off:
+            line += " (module %s is off: ./install.sh --with %s)" % (off[m.group(1)],
+                                                                      off[m.group(1)])
+        print(line)
+    return 0
+
+
+def cmd_newer_owned(a):
+    """What gt releases NEWER than the one being installed put in the hooks dir or wired,
+    for a rollback (0.15.0). Installing an older gt from a newer tree left the newer
+    release guard_protected_paths.sh wired and its files in the hooks dir, which the older
+    gt calls drift every session. Printed as JSON: {"files": {name: [sha256, ...]},
+    "registrations": [script, ...]} -- a file counts as ours only when its bytes match a
+    copy some newer release (or any module release) in the tree ships. Read, not run:
+    HOOK_REGISTRATIONS and HOOK_DIR_SCRIPTS are literals in each gt_components.py.
+    Args: <plugin root> <core dir> <version being installed>"""
+    import ast, hashlib
+    root, core, ver = a
+    files, regs = {}, set()
+
+    def add(path, name=None):
+        try:
+            h = hashlib.sha256(open(path, "rb").read()).hexdigest()
+        except OSError:
+            return
+        files.setdefault(name or os.path.basename(path), set()).add(h)
+
+    base = os.path.join(root, core)
+    for v in os.listdir(base):
+        if not re.fullmatch(r"\d+\.\d+\.\d+", v) or vkey(v) <= vkey(ver):
+            continue
+        vd = os.path.join(base, v)
+        hd = os.path.join(vd, "hooks")
+        for n in (os.listdir(hd) if os.path.isdir(hd) else []):
+            if os.path.isfile(os.path.join(hd, n)) and not n.endswith(".pyc"):
+                add(os.path.join(hd, n))
+        try:
+            tree = ast.parse(open(os.path.join(vd, "scripts", "gt_components.py"),
+                                  encoding="utf-8").read())
+        except (OSError, SyntaxError, ValueError):
+            continue
+        for node in tree.body:
+            if not isinstance(node, ast.Assign) or len(node.targets) != 1:
+                continue
+            name = getattr(node.targets[0], "id", "")
+            if name not in ("HOOK_REGISTRATIONS", "HOOK_DIR_SCRIPTS"):
+                continue
+            try:
+                val = ast.literal_eval(node.value)
+            except ValueError:
+                continue
+            if name == "HOOK_DIR_SCRIPTS":
+                for s in val:
+                    add(os.path.join(vd, "scripts", s))
+            else:
+                for r in val:
+                    if isinstance(r, dict) and r.get("script"):
+                        regs.add(r["script"])
+                        add(os.path.join(vd, "hooks", r["script"]))
+    for d in os.listdir(root):
+        if not d.startswith("golden-thread-") or not os.path.isdir(os.path.join(root, d)):
+            continue
+        for v in os.listdir(os.path.join(root, d)):
+            vd = os.path.join(root, d, v)
+            try:
+                m = load(os.path.join(vd, "module.json"))
+            except (OSError, ValueError):
+                continue
+            for h in m.get("hooks") or []:
+                if isinstance(h, dict) and h.get("script"):
+                    regs.add(h["script"])
+                    add(os.path.join(vd, "hooks", h["script"]))
+                    add(os.path.join(vd, "scripts", h["script"]))
+            for s in m.get("hookdir_scripts") or []:
+                add(os.path.join(vd, s))
+    print(json.dumps({"files": {k: sorted(v) for k, v in sorted(files.items())},
+                      "registrations": sorted(regs)}))
+    return 0
+
+
 def cmd_scan(a):
     root, gtver, rest = a[0], a[1], a[2:]
     mods, seen = [], {}
@@ -235,6 +441,12 @@ def cmd_resolve(a):
         state = flag.get(n) or recorded.get(n) or m["default"]
         m["reason"] = ""
         got = states.get(n)
+        # module-states judges each module's NEWEST release. When pick chose an older one
+        # for a pinned gt, a "requires gt" refusal is about a release not being installed,
+        # so it is not this module's state -- the precedence above stands.
+        if isinstance(got, dict) and got.get("version") not in (None, m["version"]) \
+                and str(got.get("reason", "")).startswith("requires gt"):
+            got = None
         if isinstance(got, dict):              # module-states --detail
             if got.get("state") in ("on", "off"):
                 state = got["state"]
@@ -422,6 +634,66 @@ def cmd_remove(a):
             os.remove(p)
             lines[m["name"]].append("removed hooks-dir file %s (backup: %s)" % (n, hook_bak))
 
+    # Crontab lines a module installed (0.15.0: gt_watch.py install-cron). The convention a
+    # module follows is to end its line with "# <plugin>" (gt-watch writes "# gt-watch").
+    # A line is removed only when it ends with exactly that tag AND runs something under
+    # THIS home's ~/.claude/ -- the crontab is per user, not per HOME, so a line for another
+    # home's install (or a throwaway test home's neighbour: the real one) is never ours.
+    # Every other line is written back unchanged, and the old crontab is backed up first.
+    # Only asked when this run removed something of the module (it was installed here), and
+    # skipped when the gt being installed still ships one of the module's scripts itself (a
+    # rollback to a gt from before the module existed still runs the line). No crontab
+    # binary, or `crontab -l` failing (no crontab at all), means nothing to remove.
+    have_cron = shutil.which("crontab") is not None
+    mine = os.path.join(os.path.realpath(home), ".claude") + os.sep
+    for m in off if have_cron else []:
+        if not lines[m["name"]]:
+            continue
+        names = {os.path.basename(p) for p in m["hookdir_scripts"]} | {h["script"] for h in m["hook_scripts"]}
+        if any(os.path.isfile(os.path.join(src, "scripts", n)) for n in names):
+            continue
+        tag = "# %s" % m["plugin"]
+        try:
+            cur = subprocess.run(["crontab", "-l"], capture_output=True, text=True, timeout=30)
+        except (OSError, subprocess.SubprocessError):
+            continue
+        if cur.returncode != 0:
+            continue
+        old = cur.stdout.splitlines()
+        keep = [l for l in old if not (l.rstrip().endswith(tag)
+                                       and (mine in l or os.path.join(home, ".claude") + os.sep in l))]
+        if len(keep) == len(old):
+            continue
+        os.makedirs(backups, exist_ok=True)
+        bak = os.path.join(backups, "crontab.%s.module-off" % stamp)
+        with open(bak, "w", encoding="utf-8") as fh:
+            fh.write(cur.stdout)
+        body = "\n".join(keep) + "\n" if keep else ""
+        try:
+            w = subprocess.run(["crontab", "-"], input=body, capture_output=True, text=True, timeout=30)
+            ok = w.returncode == 0
+        except (OSError, subprocess.SubprocessError):
+            ok = False
+        if ok:
+            lines[m["name"]].append("removed %d crontab line(s) tagged '%s' (backup: %s)"
+                                    % (len(old) - len(keep), tag, bak))
+            # Kept so turning the module back on puts exactly these lines back (0.15.0):
+            # until then --with watch reinstalled the module and never its cron fetch.
+            gone = [l for l in old if l not in keep]
+            state = cron_state_path(home, m["name"])
+            try:
+                prev = open(state, encoding="utf-8").read().splitlines()
+            except OSError:
+                prev = []
+            os.makedirs(os.path.dirname(state), exist_ok=True)
+            fd = os.open(state, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+            with os.fdopen(fd, "w", encoding="utf-8") as fh:
+                fh.write("".join(l + "\n" for l in prev + [g for g in gone if g not in prev]))
+            os.chmod(state, 0o600)
+        else:
+            print("⚠ crontab refused the update — the %s line(s) tagged '%s' are still there"
+                  % (m["name"], tag))
+
     for m in off:
         if lines[m["name"]]:
             print("Module %s is off (%s) — removing what an earlier install left:"
@@ -431,9 +703,63 @@ def cmd_remove(a):
     return 0
 
 
+def cron_state_path(home, name):
+    return os.path.join(home, ".claude", "golden-thread", "module-cron", "%s.lines" % name)
+
+
+def cmd_restore_cron(a):
+    """Put back the crontab lines `remove` took out of a module that is ON again.
+
+    Each line is re-added verbatim unless `crontab -l` already has it; every other line is
+    written back unchanged, the old crontab backed up first. The home rule is the removal's:
+    only a line running something under THIS home's ~/.claude/ is ever written. The state
+    file is deleted once its lines are all present, and kept (with a warning) when crontab
+    refuses, so the next install tries again."""
+    modjson, home = a
+    if shutil.which("crontab") is None:
+        return 0
+    mine = (os.path.join(os.path.realpath(home), ".claude") + os.sep,
+            os.path.join(home, ".claude") + os.sep)
+    for m in load(modjson):
+        state = cron_state_path(home, m["name"])
+        if m["state"] != "on" or not os.path.isfile(state):
+            continue
+        try:
+            want = [l for l in open(state, encoding="utf-8").read().splitlines()
+                    if l.strip() and any(p in l for p in mine)]
+            cur = subprocess.run(["crontab", "-l"], capture_output=True, text=True, timeout=30)
+        except (OSError, subprocess.SubprocessError):
+            continue
+        old = cur.stdout.splitlines() if cur.returncode == 0 else []
+        add = [l for l in want if l not in old]
+        if add:
+            stamp = time.strftime("%Y%m%d_%H%M%S")
+            backups = os.path.join(home, ".claude", "golden-thread", "backups")
+            os.makedirs(backups, exist_ok=True)
+            bak = os.path.join(backups, "crontab.%s.module-on" % stamp)
+            with open(bak, "w", encoding="utf-8") as fh:
+                fh.write(cur.stdout if cur.returncode == 0 else "")
+            try:
+                w = subprocess.run(["crontab", "-"], input="\n".join(old + add) + "\n",
+                                   capture_output=True, text=True, timeout=30)
+                ok = w.returncode == 0
+            except (OSError, subprocess.SubprocessError):
+                ok = False
+            if not ok:
+                print("⚠ crontab refused the update — module %s's %d line(s) were not put back "
+                      "(kept in %s for the next install)" % (m["name"], len(add), state))
+                continue
+            print("Module %s is on — restored %d crontab line(s) an earlier --without removed "
+                  "(backup: %s)" % (m["name"], len(add), bak))
+        os.remove(state)
+    return 0
+
+
 CMDS = {"scan": cmd_scan, "resolve": cmd_resolve, "record": cmd_record, "list": cmd_list,
         "summary": cmd_summary, "onfiles": cmd_onfiles, "names": cmd_names,
-        "remove": cmd_remove}
+        "remove": cmd_remove, "pick": cmd_pick, "restore-cron": cmd_restore_cron,
+        "moved": cmd_moved, "moved-annotate": cmd_moved_annotate,
+        "newer-owned": cmd_newer_owned}
 sys.exit(CMDS[sys.argv[1]](sys.argv[2:]))
 PYEOF
 )
@@ -507,7 +833,7 @@ install.sh — install the Golden Thread Claude Code plugins (gt and every plugi
   ./install.sh --list-modules         print each module, its state and why, install nothing
   ./install.sh --help                 this text
 
-Modules are the optional plugins beside gt (e.g. wiki, demo). A module's state is, in
+Modules are the optional plugins beside gt (wiki, demo, watch, report-card, farm, flow). State is, in
 order: --with/--without in this run, your recorded choice, the module's default. gt
 itself is not a module and cannot be removed this way.
 
@@ -542,9 +868,22 @@ VERSION="${REQUESTED:-$(latest_version "$SCRIPT_DIR/$CORE_DIR")}"
 # The plugin set: gt (the core, always index 0, at the pinned version when one was asked
 # for) followed by every other discovered plugin at its newest. Parallel arrays rather
 # than an associative one: macOS still ships bash 3.2.
+#
+# Each other plugin installs its newest release that ADMITS this gt (0.15.0): a module
+# whose newest release's requires_gt refuses $VERSION falls back to its newest older
+# release that accepts it. Only a pinned gt can meet that -- the tree's newest gt is what
+# every module's newest release is built for -- and without it a rollback skipped gt-wiki
+# and gt-demo although the tree still carried the releases that work with that gt.
 PLUGIN_DIRS=("$CORE_DIR"); PLUGIN_VERS=("$VERSION"); PLUGIN_NAMES=("gt")
+PICK_NOTES=""
 while IFS="$(printf '\t')" read -r _dir _ver _name; do
   [ -n "$_dir" ] && [ "$_dir" != "$CORE_DIR" ] || continue
+  IFS="$(printf '\t')" read -r _pick _newest _spec < <(modpy pick "$SCRIPT_DIR" "$_dir" "$_ver" "$VERSION")
+  if [ -n "$_pick" ] && [ "$_pick" != "$_ver" ]; then
+    PICK_NOTES="${PICK_NOTES}Chose $_name $_pick, not the newest $_ver: $_ver needs gt $_spec, and gt $VERSION is being installed
+"
+    _ver="$_pick"
+  fi
   PLUGIN_DIRS+=("$_dir"); PLUGIN_VERS+=("$_ver"); PLUGIN_NAMES+=("$_name")
 done < <(discover_plugins "$SCRIPT_DIR")
 PLUGIN_COUNT=${#PLUGIN_DIRS[@]}
@@ -591,6 +930,22 @@ MARKETPLACE="$HOME/.claude/plugins/marketplaces/$MARKET_NAME"
 SETTINGS="$HOME/.claude/settings.json"
 INSTALLED="$HOME/.claude/plugins/installed_plugins.json"
 KNOWN="$HOME/.claude/plugins/known_marketplaces.json"
+
+# The gt this machine had BEFORE this install, read now, before anything below rewrites
+# installed_plugins.json or prunes the old cache (0.15.0). A machine migration needs it --
+# an upgrader from a gt that shipped /gt:gt-farm keeps the farm module -- and by the time
+# migrations run the machine no longer says. Passed through the environment, not a flag,
+# so an older release's migrator (a rollback) ignores it instead of refusing an unknown
+# option. Kept across the re-run below, which would otherwise read this install's own gt.
+if [ -z "${GT_PREVIOUS_RELEASE:-}" ]; then
+  GT_PREVIOUS_RELEASE=$(python3 -c "import json,sys
+try:
+    e = json.load(open(sys.argv[1], encoding='utf-8'))['plugins']['gt@golden-thread-plugin'][0]
+    print(e.get('version') or '')
+except Exception:
+    print('')" "$INSTALLED" 2>/dev/null) || GT_PREVIOUS_RELEASE=""
+fi
+export GT_PREVIOUS_RELEASE
 
 plugin_src()   { echo "$SCRIPT_DIR/${PLUGIN_DIRS[$1]}/${PLUGIN_VERS[$1]}"; }
 plugin_cache() { echo "$CACHE_ROOT/${PLUGIN_NAMES[$1]}/${PLUGIN_VERS[$1]}"; }
@@ -656,6 +1011,27 @@ if [ "$LIST_MODULES" = yes ]; then
   exit 0
 fi
 
+# Skills the previous gt shipped that this gt does not, and where each went (0.15.0:
+# /gt:gt-watch became /gt-watch:gt-watch). Read now, while the old gt cache is still on
+# disk and every plugin -- on or off -- is still in the arrays; printed with the summary.
+# Exported so the migration re-run below keeps what the first run saw.
+if [ -z "${GT_MOVED_NOTES+set}" ]; then
+  GT_MOVED_NOTES=""
+  if [ -n "${GT_PREVIOUS_RELEASE:-}" ] && [ "$GT_PREVIOUS_RELEASE" != "$VERSION" ]; then
+    _old_skills="$CACHE_ROOT/gt/$GT_PREVIOUS_RELEASE/skills"
+    [ -d "$_old_skills" ] || _old_skills="$SCRIPT_DIR/$CORE_DIR/$GT_PREVIOUS_RELEASE/skills"
+    _margs=()
+    i=1
+    while [ "$i" -lt "$PLUGIN_COUNT" ]; do
+      _margs+=("$SCRIPT_DIR/${PLUGIN_DIRS[$i]}" "${PLUGIN_VERS[$i]}" "${PLUGIN_NAMES[$i]}")
+      i=$((i + 1))
+    done
+    GT_MOVED_NOTES=$(modpy moved "$_old_skills" "$SRC/skills" /dev/null \
+                     ${_margs[@]+"${_margs[@]}"} 2>/dev/null) || GT_MOVED_NOTES=""
+  fi
+fi
+export GT_MOVED_NOTES
+
 # The plugin set to INSTALL: gt, every non-module plugin, every module that is on.
 # Modules that are off are kept apart, for removal.
 OFF_MODULES=""
@@ -694,6 +1070,7 @@ if [ -n "$REQUESTED" ]; then
 else
   echo "Installing gt $VERSION (newest version directory)$OTHERS"
 fi
+[ -n "$PICK_NOTES" ] && printf '%s' "$PICK_NOTES"
 [ -n "$SKIP_NOTES" ] && printf '%s' "$SKIP_NOTES"
 
 # 0. Remove superseded versions of EVERY plugin so old caches don't linger unreferenced.
@@ -716,6 +1093,41 @@ done
 # (Until 0.14.0 an install_demo=no in vault-config.json stripped the demo out of the gt
 # plugin here. The demo is now module `demo` (plugin gt-demo); the 0.14.0 machine
 # migration records that setting as the module choice, and step 1a below applies it.)
+#
+# A rollback to a gt that still ships the demo INSIDE gt (before 0.14.0) must honour the
+# choice the way that release did, or `./install.sh 0.13.0` brings /gt:gt-demo back over
+# an install_demo=no (0.15.0). The choice, most specific first: --with/--without demo this
+# run, the recorded module choice, install_demo in vault-config.json. strip_gt_demo runs
+# after the cache copy (step 1) and the marketplace copy (step 2b), as 0.13.0 did.
+DEMO_IN_GT_OFF=no
+if [ -d "$SRC/skills/gt-demo" ]; then
+  DEMO_IN_GT_OFF=$(python3 - "$HOME" ${MODULE_FLAGS[@]+"${MODULE_FLAGS[@]}"} <<'PYEOF' 2>/dev/null || echo no
+import json, os, sys
+home, flags = sys.argv[1], sys.argv[2:]
+state = None
+for f in flags:
+    if f in ("with:demo", "without:demo"):
+        state = "on" if f == "with:demo" else "off"
+if state is None:
+    try:
+        state = json.load(open(os.path.join(home, ".claude", "golden-thread",
+                                            "install-choices.json")))["choices"].get("demo")
+    except Exception:
+        state = None
+if state is None:
+    try:
+        v = json.load(open(os.path.join(home, ".claude", "vault-config.json"))).get("install_demo")
+        state = "off" if str(v or "yes").strip().lower() == "no" else None
+    except Exception:
+        state = None
+print("yes" if state == "off" else "no")
+PYEOF
+)
+fi
+strip_gt_demo() {  # $1 = a gt plugin dir (cache or marketplace)
+  [ "$DEMO_IN_GT_OFF" = yes ] || return 0
+  rm -rf "${1:?}/skills/gt-demo" "$1/scripts/gt_demo.sh" "$1/templates/demo-pizzabot"
+}
 
 # Do the files about to be installed match the manifest shipping beside them?
 #
@@ -797,6 +1209,26 @@ done
 modpy remove "$MODJSON" "$HOME" "$SRC" "$CACHE_ROOT" "$MARKETPLACE" "$INSTALLED" "$SETTINGS" \
   "$HOME/.claude/golden-thread/hooks"
 
+# File modes are SET, never inherited (0.15.0, R1). `cp` gives a new file the source's mode
+# and leaves an existing file's mode alone, so a fresh install copied an untracked 0700
+# source tree as 0700 (hooks 0711 after chmod +x) while an upgrade kept the 0755/0644 the
+# older release left -- the same release, two different machines. Directories 0755,
+# *.sh and *.py 0755, every other file 0644, whatever the source or the old copy said.
+set_modes() {  # $@ = files or directory trees install.sh itself wrote
+  local p
+  for p in "$@"; do
+    [ -e "$p" ] || continue
+    if [ -d "$p" ]; then
+      find "$p" -type d -name __pycache__ -prune -exec rm -rf {} +
+      find "$p" -type d -exec chmod 755 {} +
+      find "$p" -type f \( -name '*.sh' -o -name '*.py' \) -exec chmod 755 {} +
+      find "$p" -type f ! -name '*.sh' ! -name '*.py' -exec chmod 644 {} +
+    else
+      case "$p" in *.sh|*.py) chmod 755 "$p" ;; *) chmod 644 "$p" ;; esac
+    fi
+  done
+}
+
 # 1. Install every plugin's files into the cache.
 #
 # Each directory is REPLACED, not merged into: a cache of the same version from an earlier
@@ -814,33 +1246,52 @@ while [ "$i" -lt "$PLUGIN_COUNT" ]; do
   done
   rm -f "${p_cache:?}/module.json"
   [ -f "$p_src/module.json" ] && cp "$p_src/module.json" "$p_cache/module.json"
+  set_modes "$p_cache"
   echo "Installed ${PLUGIN_NAMES[$i]} plugin files → $p_cache"
   i=$((i + 1))
 done
+strip_gt_demo "$(plugin_cache 0)"
 
 # 1b. Install the Core-rule hooks to a STABLE location outside the vault.
 # settings.json references these by absolute path, so the path must survive project
 # renames, merges and vault moves. The scripts locate the rules at run time.
 GT_HOOKS="$HOME/.claude/golden-thread/hooks"
+# Installing a gt OLDER than the newest in this tree (a rollback): what the newer releases
+# put in the hooks dir and wired is removed below when the older gt does not ship it, so
+# the rolled-back machine matches that release (0.15.0). Only bytes a release shipped count.
+GT_NEWER_OWNED=""
+if [ "$VERSION" != "$(latest_version "$SCRIPT_DIR/$CORE_DIR")" ]; then
+  GT_NEWER_OWNED="$GT_TMP/newer-owned.json"
+  modpy newer-owned "$SCRIPT_DIR" "$CORE_DIR" "$VERSION" > "$GT_NEWER_OWNED" 2>/dev/null \
+    || GT_NEWER_OWNED=""
+fi
+export GT_NEWER_OWNED
 if [ -d "$SRC/hooks" ]; then
   mkdir -p "$GT_HOOKS"
-  find "$SRC/hooks" -maxdepth 1 -type f -exec cp {} "$GT_HOOKS/" \;
-  cp "$SRC/scripts/gt_paths.py" "$GT_HOOKS/gt_paths.py"
-  # Component drift detection + the session report card run FROM the hooks dir,
+  # Each copied file is recorded so its mode can be SET below -- only these: a file of the
+  # user's own in the hooks dir is not ours to chmod.
+  GT_HOOK_FILES=()
+  for f in "$SRC/hooks"/*; do
+    [ -f "$f" ] || continue
+    cp "$f" "$GT_HOOKS/" && GT_HOOK_FILES+=("$GT_HOOKS/$(basename "$f")")
+  done
+  cp "$SRC/scripts/gt_paths.py" "$GT_HOOKS/gt_paths.py" && GT_HOOK_FILES+=("$GT_HOOKS/gt_paths.py")
+  # Component drift detection and the other session-start checks run FROM the hooks dir,
   # for the same reason the hooks themselves do: settings.json addresses them by
   # absolute path, so the path must survive a vault move or a project rename.
   # The list lives in gt_components.HOOK_DIR_SCRIPTS, which also maps these files
   # for drift checking -- a second copy here would be a copy that drifts.
   for extra in $(python3 "$SRC/scripts/gt_components.py" hookdir-scripts --home "$HOME"); do
-    [ -f "$SRC/scripts/$extra" ] && cp "$SRC/scripts/$extra" "$GT_HOOKS/$extra"
+    [ -f "$SRC/scripts/$extra" ] && cp "$SRC/scripts/$extra" "$GT_HOOKS/$extra" \
+      && GT_HOOK_FILES+=("$GT_HOOKS/$extra")
   done
   # Modules that are on: their hookdir_scripts, and the scripts their hooks run (declared
   # in module.json, registered in step 6 exactly like gt's own).
   while IFS= read -r extra; do
-    [ -n "$extra" ] && cp "$extra" "$GT_HOOKS/$(basename "$extra")"
+    [ -n "$extra" ] && cp "$extra" "$GT_HOOKS/$(basename "$extra")" \
+      && GT_HOOK_FILES+=("$GT_HOOKS/$(basename "$extra")")
   done < <(modpy onfiles "$MODJSON")
-  chmod +x "$GT_HOOKS"/*.sh 2>/dev/null || true
-  chmod +x "$GT_HOOKS"/*.py 2>/dev/null || true
+  set_modes ${GT_HOOK_FILES[@]+"${GT_HOOK_FILES[@]}"}
   echo "Installed Core-rule hooks → $GT_HOOKS"
 
   # Files an OLDER release put in the hooks dir that this one no longer ships (0.13.0).
@@ -885,6 +1336,22 @@ except (OSError, ValueError, KeyError, TypeError) as exc:
 present = sorted(n for n in os.listdir(hooks)
                  if os.path.isfile(os.path.join(hooks, n)) and not n.startswith(".")
                  and not n.endswith(".pyc") and n not in shipped)
+# A rollback: a file a NEWER release in the tree installed, byte-identical to its copy.
+newer = {}
+if os.environ.get("GT_NEWER_OWNED"):
+    try:
+        newer = json.load(open(os.environ["GT_NEWER_OWNED"], encoding="utf-8")).get("files", {})
+    except (OSError, ValueError, AttributeError):
+        newer = {}
+if newer:
+    import hashlib
+    for n in present:
+        try:
+            h = hashlib.sha256(open(os.path.join(hooks, n), "rb").read()).hexdigest()
+        except OSError:
+            continue
+        if h in set(newer.get(n, [])):
+            retired.add(n)
 gone = [n for n in present if certain and n in retired and os.sep not in n]
 unknown = [n for n in present if n not in gone]
 if gone:
@@ -962,6 +1429,10 @@ with open(out, "w", encoding="utf-8") as fh:
                                    "email": "shaven@shavenconsulting.com"},
                          "plugins": plugins}, indent=2) + "\n")
 EOF
+# Rewriting a file keeps its old mode, so marketplace.json needs set_modes like the plugin
+# dirs below (an upgrade kept a 0600 copy where a fresh install wrote 0644).
+set_modes "$MARKETPLACE/.claude-plugin"
+chmod 755 "$MARKETPLACE" "$MARKETPLACE/plugins" 2>/dev/null || true
 
 # The plugin manifests are copied from source, not regenerated here. Two
 # hand-maintained copies of the same manifest drift - the descriptions had
@@ -982,8 +1453,10 @@ while [ "$i" -lt "$PLUGIN_COUNT" ]; do
   done
   rm -f "$p_market/module.json"
   [ -f "$p_src/module.json" ] && cp "$p_src/module.json" "$p_market/module.json"
+  set_modes "$p_market"
   i=$((i + 1))
 done
+strip_gt_demo "$MARKETPLACE/plugins/gt"
 echo "Populated marketplace plugin directories with skills/scripts/templates"
 
 echo "Created marketplace entries → $MARKETPLACE"
@@ -1007,14 +1480,22 @@ while [ "$i" -lt "$PLUGIN_COUNT" ]; do
   REG_ARGS+=("${PLUGIN_NAMES[$i]}@$MARKET_NAME" "$(plugin_cache "$i")" "${PLUGIN_VERS[$i]}")
   i=$((i + 1))
 done
-python3 - "$KNOWN" "$MARKETPLACE" "$INSTALLED" "$SETTINGS" "${REG_ARGS[@]}" <<'EOF'
+python3 - "$KNOWN" "$MARKETPLACE" "$INSTALLED" "$SETTINGS" "$SRC" "$MARKET_NAME" "${REG_ARGS[@]}" <<'EOF'
 import json, os, sys, tempfile, time
 from datetime import datetime, timezone
-known, marketplace, installed, settings = sys.argv[1:5]
-_reg = sys.argv[5:]
+known, marketplace, installed, settings, src, market_name = sys.argv[1:7]
+_reg = sys.argv[7:]
 PLUGINS = list(zip(_reg[0::3], _reg[1::3], _reg[2::3]))    # (key, cache path, version)
 STAMP = time.strftime("%Y%m%d_%H%M%S")
 BACKUPS = os.path.expanduser("~/.claude/golden-thread/backups")
+# One key order whatever the history (0.15.0, R1): other marketplaces first, then this
+# install in plugin order. A gt too old to have order_plugin_keys (a rollback) appends.
+sys.path.insert(0, os.path.join(src, "scripts"))
+try:
+    from gt_components import order_plugin_keys
+except ImportError:
+    order_plugin_keys = lambda *_a: False
+ORDER = [k for k, _p, _v in PLUGINS]
 
 def load(path, default):
     if not os.path.exists(path):
@@ -1053,12 +1534,14 @@ for key, path, ver in PLUGINS:
         "scope": "user", "installPath": path, "version": ver,
         "installedAt": now, "lastUpdated": now, "gitCommitSha": "local",
     }]
+order_plugin_keys(d.get("plugins"), ORDER, market_name)
 save(installed, d)
 print("Registered in installed_plugins.json")
 
 d = load(settings, {})
 for key, _path, _ver in PLUGINS:
     d.setdefault("enabledPlugins", {})[key] = True
+order_plugin_keys(d.get("enabledPlugins"), ORDER, market_name)
 save(settings, d)
 print("Registered in settings.json  (backups in %s)" % BACKUPS)
 EOF
@@ -1071,11 +1554,8 @@ EOF
 #                  was installed but absent from the plugin source entirely, and
 #                  validate_response.sh had drifted -- two of three enforcement
 #                  mechanisms existing on one machine only.
-# PreCompact    -> gt_report_card.py        : fires on BOTH `/compact` and the
-#                  automatic compaction near the context limit, which is the point:
-#                  a report card produced at the very end of a session competes for
-#                  the context it needs to be written.
-# SessionEnd    -> gt_report_card.py        : backstop for sessions that never compact.
+# PreCompact / SessionEnd -> gt_report_card.py: since 0.15.0 declared by the report-card
+#                  module's module.json and wired here exactly like gt's own entries.
 python3 - "$SRC" "$SCRIPT_DIR" "$MODJSON" <<'EOF'
 import json, os, subprocess, sys, tempfile
 src, script_dir, modjson = sys.argv[1:4]
@@ -1148,6 +1628,13 @@ except FileNotFoundError:
 except (OSError, ValueError, AttributeError) as exc:
     print('⚠ retired.json unreadable (%s) — no retired hook entries removed' % exc)
     retired = set()
+if os.environ.get('GT_NEWER_OWNED'):
+    # A rollback: entries a newer release in the tree wired that this gt does not register.
+    try:
+        with open(os.environ['GT_NEWER_OWNED'], encoding='utf-8') as fh:
+            retired |= set(json.load(fh).get('registrations', [])) - known
+    except (OSError, ValueError, AttributeError, TypeError):
+        pass
 off_scripts = {k: v for k, v in off_scripts.items() if k not in known}
 
 def gt_script(command):
@@ -1193,6 +1680,18 @@ for event, blocks in list(hooks.items()):
                          and not b['hooks'])]
     if not blocks and len(removed) + len(mod_removed) > before:
         del hooks[event]
+
+# One canonical order for gt's entries (0.15.0, R1): the user's own blocks first, then gt's
+# in hook-registrations order. Appending made the order depend on history -- an upgrade
+# from 0.13.0/0.14.0 left guard_protected_paths.sh last in PreToolUse, a fresh install
+# first. vault_init applies the same ordering after it wires the enforcement hooks. A gt
+# too old to have order_hook_blocks (a rollback) keeps its append order.
+sys.path.insert(0, os.path.join(src, 'scripts'))
+try:
+    import gt_components as _gc
+    _gc.order_hook_blocks(hooks, [(r['event'], r['script']) for r in regs], HOOKS_DIR)
+except (ImportError, AttributeError):
+    pass
 if (removed or mod_removed) and os.path.exists(p):
     backups = os.path.expanduser('~/.claude/golden-thread/backups')
     os.makedirs(backups, exist_ok=True)
@@ -1316,6 +1815,11 @@ if [ "$(cut -f1,2 "$GT_TMP/states.tsv")" != "$(cut -f1,2 "$GT_TMP/after.tsv")" ]
   echo "⚠ Module choices changed again after a re-run; left as they are. Re-run install.sh to converge."
 fi
 
+# Crontab lines a module's earlier --without removed go back once it is on again (0.15.0).
+# After the re-run above, so they are restored against the converged module set, and after
+# step 1, so the hooks-dir script a restored line runs is already in place.
+modpy restore-cron "$MODJSON" "$HOME"
+
 # 7. Wire the VAULT's git repo for per-edit attribution, if it is one.
 #
 # .git/hooks is not tracked and does not survive a clone, so the hooks ship in a
@@ -1356,9 +1860,53 @@ snapshot_vault_state() {  # $1 = vault path, before anything writes into it
   fi
 }
 
+# Every vault file this install may write, backed up BEFORE the first write (0.15.0).
+# gt_upgrade's own vault tarball came after the core-rule, CLAUDE.md, git-hook and
+# vault-tool refreshes, so it never held the originals those replaced. One backup per
+# vault per run; pruned at the end when nothing in it changed.
+VAULT_PREWRITE_PATH=""
+VAULT_PREWRITE_BACKUP=""
+backup_vault_before_writes() {  # $1 = vault path, before anything writes into it
+  local real
+  real=$(real_path "$1")
+  [ -d "$real" ] && [ "$real" != "$VAULT_PREWRITE_PATH" ] || return 0
+  [ -f "$SRC/scripts/vault_refresh.py" ] || return 0
+  VAULT_PREWRITE_PATH="$real"
+  VAULT_PREWRITE_BACKUP="$HOME/.claude/golden-thread/backups/install-vault-files-$(date +%Y%m%d_%H%M%S).tar.gz"
+  python3 "$SRC/scripts/vault_refresh.py" backup --vault "$real" --out "$VAULT_PREWRITE_BACKUP" \
+    >/dev/null 2>&1 || { echo "⚠ could not back up the vault's files before installing — continuing"; VAULT_PREWRITE_BACKUP=""; }
+}
+
+# What install-core-rules put back, by name (0.15.0): a Core rule re-created or the
+# CLAUDE.md enforcement section re-inserted was silent, so a deliberate deletion simply
+# came back. stdin = its JSON result.
+report_core_rules() {
+  python3 -c '
+import json, os, sys
+try:
+    rows = json.load(sys.stdin)
+except ValueError:
+    sys.exit(0)
+for r in rows:
+    path, act, note = r.get("path", ""), r.get("action"), r.get("note", "")
+    name = os.path.basename(path)
+    if act == "created" and os.sep + "core-rules" + os.sep in path and name.endswith(".md"):
+        print("Added Core rule → %s (not in the vault: new in this release, or removed."
+              % name)
+        print("  To keep a rule removed, list its file name in %s)"
+              % os.path.join(os.path.dirname(os.path.dirname(path)), ".gt-removed"))
+    elif act == "updated" and name == "CLAUDE.md":
+        print("Inserted into CLAUDE.md → the \"First: is enforcement active?\" section")
+        print("  (to keep it out, add claude-md-enforcement-section to .gt-removed next to core-rules/)")
+    elif act == "kept-removed":
+        print(("⚠ " if "WARNING" in note else "") + "Left removed → %s: %s" % (name, note))
+' 2>/dev/null || true
+}
+
 setup_vault() {  # $1 = path to create or connect
-  local target="$1" mode
+  local target="$1" mode out
   snapshot_vault_state "$target"
+  backup_vault_before_writes "$target"
   if [ -d "$target/Projects" ] || [ -f "$target/index.md" ]; then
     mode=connect
   else
@@ -1380,9 +1928,14 @@ setup_vault() {  # $1 = path to create or connect
     python3 "$SRC/scripts/vault_init.py" connect --vault "$target" \
       >/dev/null 2>&1 || { echo "⚠ could not connect $target"; return 1; }
   fi
-  python3 "$SRC/scripts/vault_init.py" install-core-rules --vault "$target" >/dev/null 2>&1 \
-    && echo "Wired enforcement hooks → ~/.claude/settings.json" \
-    || echo "⚠ vault ready, but the enforcement hooks could not be wired"
+  if out=$(python3 "$SRC/scripts/vault_init.py" install-core-rules --vault "$target" 2>/dev/null); then
+    echo "Wired enforcement hooks → ~/.claude/settings.json"
+    # A vault created just now has every rule by definition; only a connected one can
+    # have had something put back.
+    [ "$mode" = fresh ] || printf '%s' "$out" | report_core_rules
+  else
+    echo "⚠ vault ready, but the enforcement hooks could not be wired"
+  fi
   echo "Vault ready: $target"
   if [ -f "$target/OPEN-IN-OBSIDIAN.md" ]; then
     echo "Obsidian is optional but recommended — see $target/OPEN-IN-OBSIDIAN.md"
@@ -1413,6 +1966,7 @@ wire_enforcement_hooks() {  # $1 = vault path
   [ -f "$SRC/scripts/vault_init.py" ] || return 0
   out=$(python3 "$SRC/scripts/vault_init.py" install-core-rules --vault "$vault" 2>&1) && rc=0 || rc=$?
   if [ "${rc:-1}" -eq 0 ]; then
+    printf '%s' "$out" | report_core_rules
     if printf '%s' "$out" | grep -q '"action": "updated"'; then
       echo "Wired enforcement hooks → ~/.claude/settings.json"
     else
@@ -1426,72 +1980,22 @@ wire_enforcement_hooks() {  # $1 = vault path
 
 if [ -n "$VAULT_PATH" ] && [ -d "$VAULT_PATH" ]; then
   snapshot_vault_state "$VAULT_PATH"
+  backup_vault_before_writes "$VAULT_PATH"
   wire_enforcement_hooks "$VAULT_PATH"
 fi
 
 # Ask git, not the filesystem: .git is a FILE for a worktree, a submodule or a
 # --separate-git-dir checkout, and `-d .git` skipped all of those silently.
 if [ -n "$VAULT_PATH" ] && git -C "$VAULT_PATH" rev-parse --git-dir >/dev/null 2>&1; then
-  mkdir -p "$VAULT_PATH/.githooks" "$VAULT_PATH/Projects/golden-thread/tools"
-  if [ -d "$SRC/templates/githooks" ]; then
-    cp "$SRC/templates/githooks/"* "$VAULT_PATH/.githooks/" 2>/dev/null || true
-    chmod +x "$VAULT_PATH/.githooks/"* 2>/dev/null || true
+  # .githooks/, the vault tools and core.hooksPath, refreshed by CONTENT (0.15.0): a copy
+  # gt shipped is replaced, the owner's own is kept (or, for a committed hook edit, backed
+  # up first). The rules and why: scripts/vault_refresh.py. Until 0.15.0 this block copied
+  # the hooks over unconditionally, replaced any tool older ON DISK than the template, and
+  # set core.hooksPath whatever it held -- three ways to lose an owner's edit.
+  if [ -f "$SRC/scripts/vault_refresh.py" ]; then
+    python3 "$SRC/scripts/vault_refresh.py" refresh --vault "$VAULT_PATH" 2>&1 \
+      || echo "⚠ the vault's git hooks and tools could not be refreshed — run install.sh again to retry"
   fi
-  # Tools are SEEDED when absent. When present, the vault's copy is compared to
-  # the template BY CONTENT, with the same rule gt_components applies to hooks:
-  #
-  #   identical            -> verified, nothing to do
-  #   differs, vault NEWER -> "ahead": a local edit. Reported, never overwritten,
-  #                           because clobbering it would repeat the mistake this
-  #                           mechanism exists to fix -- an update that silently
-  #                           reverts work only present on one machine.
-  #   differs, vault OLDER -> "stale": predates the template. Backed up OUTSIDE the
-  #                           vault, then replaced.
-  #
-  # 0.9.6 asked instead whether the file *named* one function (`grep "def X"`),
-  # which a broken draft, a commented-out sketch or a renamed helper all satisfy,
-  # and left its backup inside the git-tracked tools/ directory for the next
-  # `git add -A` to commit. A contract on a symbol is not a contract on behaviour.
-  BACKUPS="$HOME/.claude/golden-thread/backups"
-  if [ -d "$SRC/templates/tools" ]; then
-    for t in "$SRC/templates/tools/"*.py; do
-      [ -f "$t" ] || continue
-      base=$(basename "$t")
-      dest="$VAULT_PATH/Projects/golden-thread/tools/$base"
-      if [ ! -f "$dest" ]; then
-        cp "$t" "$dest"
-        echo "Seeded vault tool → $base"
-        continue
-      fi
-      state=$(python3 - "$t" "$dest" <<'EOF'
-import hashlib, os, sys
-t, d = sys.argv[1:3]
-h = lambda p: hashlib.sha256(open(p, "rb").read()).hexdigest()
-if h(t) == h(d):
-    print("same")
-elif os.path.getmtime(d) > os.path.getmtime(t):
-    print("ahead")
-else:
-    print("stale")
-EOF
-)
-      case "$state" in
-        same)  echo "Vault tool verified → $base matches the $VERSION template" ;;
-        ahead) echo "⚠ Vault tool AHEAD → $base differs from the $VERSION template and is newer;"
-               echo "  left in place. Diff it against $t"
-               echo "  and fold the change back into the plugin if it is a fix." ;;
-        *)     mkdir -p "$BACKUPS"
-               bak="$BACKUPS/$base.$(date +%Y%m%d_%H%M%S)"
-               cp "$dest" "$bak"
-               cp "$t" "$dest"
-               echo "⚠ Vault tool REPLACED → $base predates the $VERSION template."
-               echo "  Your previous copy is at $bak -- diff it if you had local edits." ;;
-      esac
-    done
-  fi
-  git -C "$VAULT_PATH" config core.hooksPath .githooks 2>/dev/null \
-    && echo "Wired vault git attribution → $VAULT_PATH (.githooks)"
-
 fi
 
 if [ -z "$VAULT_PATH" ] || [ ! -d "$VAULT_PATH" ]; then
@@ -1607,9 +2111,12 @@ PYEOF
 
 i=0
 while [ "$i" -lt "$PLUGIN_COUNT" ]; do
-  echo "${PLUGIN_NAMES[$i]} skills:"
-  list_skills "$(plugin_cache "$i")/skills" "/${PLUGIN_NAMES[$i]}:"
-  echo ""
+  # A module with no skills (gt-report-card is hooks only) gets no empty heading.
+  if ls "$(plugin_cache "$i")/skills"/*/SKILL.md >/dev/null 2>&1; then
+    echo "${PLUGIN_NAMES[$i]} skills:"
+    list_skills "$(plugin_cache "$i")/skills" "/${PLUGIN_NAMES[$i]}:"
+    echo ""
+  fi
   i=$((i + 1))
 done
 # One line for the modules: what is on, what is off and why. Off modules are absent from
@@ -1617,6 +2124,17 @@ done
 if [ -n "$MODULE_NAMES" ]; then
   modpy summary "$MODJSON"
   echo "  (change with ./install.sh --with NAME / --without NAME; see --list-modules)"
+  echo ""
+fi
+# Commands that left gt for a module since the gt this machine had (computed above).
+if [ -n "${GT_MOVED_NOTES:-}" ]; then
+  printf '%s\n' "$GT_MOVED_NOTES" | modpy moved-annotate "$GT_TMP/states.tsv" \
+    || printf '%s\n' "$GT_MOVED_NOTES"
+  echo "  (the old names no longer resolve; use the new ones)"
+  echo ""
+fi
+if [ "$DEMO_IN_GT_OFF" = yes ]; then
+  echo "Demo not installed (demo choice is off) — /gt:gt-demo left out of this gt."
   echo ""
 fi
 # Measure this machine, so `parallel_max: auto` means THIS machine.
@@ -1791,5 +2309,11 @@ apply_vault_upgrades() {
   echo ""
 }
 apply_vault_upgrades || true
+
+# The pre-write backup stays only when this run changed a file it holds (0.15.0).
+if [ -n "$VAULT_PREWRITE_BACKUP" ] && [ -f "$VAULT_PREWRITE_BACKUP" ]; then
+  python3 "$SRC/scripts/vault_refresh.py" prune --vault "$VAULT_PREWRITE_PATH" \
+    --backup "$VAULT_PREWRITE_BACKUP" 2>/dev/null || true
+fi
 
 echo "Restart Claude Code to load the plugins."

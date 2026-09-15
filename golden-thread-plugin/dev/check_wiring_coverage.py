@@ -38,6 +38,13 @@ each shipped item where it ended up.
                        in the hooks dir; an OFF module's hooks NOT wired and its hook-dir
                        files absent. On/off is the module's effective state in the
                        sandbox home, read by the release's own gt_components.
+  module matrix     -> (0.15.0) the same module checks, plus every ON module's skills and
+                       scripts in ITS plugin cache and every OFF module's cache gone, run
+                       three times: the defaults, then `--with` every module (all on),
+                       then `--without` every module (all off). watch and report card are
+                       the first modules with hooks, and farm defaults off, so the default
+                       install alone would never exercise an off module that had hooks or
+                       an on module that defaults off.
 
 Nothing here is a hand-maintained list of expected files: each set is read from the
 release being tested, so a new file is covered the moment it ships. A file that ships
@@ -178,8 +185,38 @@ def module_findings(repo, home, comp, gt_version=None):
     return problems
 
 
-def run_upgrade(repo, home):
-    """install.sh with no arguments, against a vault that already exists."""
+def module_cache_findings(repo, home, comp, gt_version=None):
+    """ON module -> its skills and scripts are in its plugin cache; OFF -> no cache at all."""
+    if not hasattr(comp, "module_detail"):
+        return []
+    try:
+        det = comp.module_detail(str(repo), str(home), gt_version=gt_version)
+    except Exception as exc:
+        return ["module states could not be read: %s" % exc]
+    cache_root = Path(home) / ".claude" / "plugins" / "cache" / "golden-thread-plugin"
+    problems = []
+    for m in comp.discover_modules(str(repo)):
+        if m["reasons"]:
+            continue
+        data, vd = m["data"], Path(m["version_dir"])
+        cache = cache_root / data["plugin"]
+        if det.get(m["name"], {}).get("state") == "on":
+            for sk in data.get("skills") or []:
+                if not (cache / vd.name / "skills" / sk / "SKILL.md").is_file():
+                    problems.append("module %s: skill %s is not in the installed cache"
+                                    % (m["name"], sk))
+            for sc in data.get("scripts") or []:
+                if not (cache / vd.name / "scripts" / sc).is_file():
+                    problems.append("module %s: scripts/%s is not in the installed cache"
+                                    % (m["name"], sc))
+        elif cache.exists():
+            problems.append("module %s is OFF but its plugin cache %s is still there"
+                            % (m["name"], cache))
+    return problems
+
+
+def run_upgrade(repo, home, *extra):
+    """install.sh against a vault that already exists (with `extra` arguments, if any)."""
     env = dict(os.environ, HOME=str(home))
     env.pop("GT_VAULT", None)
     for var in [k for k in env if k.startswith("CLAUDE")]:
@@ -190,7 +227,8 @@ def run_upgrade(repo, home):
     # disagree with its manifest, which would stop every negative case here at exit 6
     # before the thing under test could be observed. This is the one caller for which the
     # override is the correct behaviour rather than an escape hatch.
-    p = subprocess.run(["bash", str(Path(repo) / "install.sh"), "--force-manifest-mismatch"],
+    p = subprocess.run(["bash", str(Path(repo) / "install.sh"), "--force-manifest-mismatch",
+                        *extra],
                        capture_output=True, text=True, timeout=600, env=env,
                        stdin=subprocess.DEVNULL)
     return p.returncode, (p.stdout or "") + (p.stderr or "")
@@ -208,7 +246,7 @@ def run_install(repo, home, vault):
     return p.returncode, (p.stdout or "") + (p.stderr or "")
 
 
-def check(version_dir, keep=False):
+def check(version_dir, keep=False, module_matrix=True):
     version_dir = Path(version_dir).resolve()
     plugin_root = version_dir.parent.parent
     comp = load_components(version_dir)
@@ -340,6 +378,26 @@ def check(version_dir, keep=False):
 
         # ---- 9. module hooks: wired when on, absent when off ------------------
         problems.extend(module_findings(repo, home, comp, gt_version=version_dir.name))
+        problems.extend(module_cache_findings(repo, home, comp, gt_version=version_dir.name))
+
+        # ---- 10. the module matrix: every module on, then every module off -----
+        names = [m["name"] for m in comp.discover_modules(str(repo))] \
+            if hasattr(comp, "discover_modules") else []
+        # `--no-module-matrix` exists for fixture tests that break ONE non-module thing on
+        # purpose: two extra installs per fixture pushed them past the harness timeout
+        # (0.15.0 gate). The release gate itself always runs the matrix.
+        for label, flag in (("every module on", "--with"), ("every module off", "--without")):
+            if not names or not module_matrix:
+                break
+            args = [a for n in names for a in (flag, n)]
+            rc3, out3 = run_upgrade(repo, home, *args)
+            if rc3 != 0:
+                problems.append("install.sh exited %s with %s:\n%s" % (rc3, label, out3[-800:]))
+                continue
+            for finding in (module_findings(repo, home, comp, gt_version=version_dir.name)
+                            + module_cache_findings(repo, home, comp,
+                                                    gt_version=version_dir.name)):
+                problems.append("[%s] %s" % (label, finding))
     finally:
         if keep:
             print("sandbox kept at %s" % sandbox, file=sys.stderr)
@@ -360,11 +418,12 @@ def check(version_dir, keep=False):
 
 def main(argv):
     keep = "--keep" in argv
-    argv = [a for a in argv if a != "--keep"]
+    module_matrix = "--no-module-matrix" not in argv
+    argv = [a for a in argv if a not in ("--keep", "--no-module-matrix")]
     if not argv:
-        print("usage: check_wiring_coverage.py <version-dir> [--keep]", file=sys.stderr)
+        print("usage: check_wiring_coverage.py <version-dir> [--keep] [--no-module-matrix]", file=sys.stderr)
         return 2
-    problems = check(argv[0], keep=keep)
+    problems = check(argv[0], keep=keep, module_matrix=module_matrix)
     if problems:
         for p in problems:
             print("  " + p)

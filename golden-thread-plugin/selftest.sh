@@ -80,13 +80,23 @@ for e in d.get("hooks", {}).get("SessionStart", []):
 PY
   name=$(printf '%s' "$cmd" | grep -oE 'gt_[a-z_]+\.py'); out=$(echo '{}' | bash -c "$cmd" 2>/dev/null)
   if [ "$name" = "gt_watch.py" ]; then
-    # gt-watch is off by default and must then say nothing at all (0.10.0).
+    # The watch module (0.15.0; in gt before) is wired only while the module is on, and
+    # its `watch` setting defaults off, when the hook must say nothing at all (0.10.0).
     [ -z "$out" ] && ok "SessionStart $name silent while watch=off" || bad "SessionStart $name spoke while off: $out"
     continue
   fi
   printf '%s' "$out" | grep -q '"systemMessage"' && ok "SessionStart $name emits systemMessage" || bad "SessionStart $name: $out"
 done
-python3 "$HOOKS/gt_report_card.py" </dev/null >/dev/null 2>&1 && ok "report card runs" || bad "report card failed"
+# The report card is the report-card module since 0.15.0: run it only when the module
+# installed it. Absent while the module is on is a failure; the wiring check above already
+# asserts every ON module's hooks are wired.
+if [ -f "$HOOKS/gt_report_card.py" ]; then
+  python3 "$HOOKS/gt_report_card.py" </dev/null >/dev/null 2>&1 && ok "report card runs" || bad "report card failed"
+elif [ -d "$HOME/.claude/plugins/cache/golden-thread-plugin/gt-report-card" ]; then
+  bad "report-card module installed but gt_report_card.py is not in the hooks dir"
+else
+  ok "report card: module off, not installed (skipped)"
+fi
 
 # [source-todo] is a reminder that a NEW project's source.md still has blanks to fill;
 # a fresh scaffold is expected to carry it. Every other finding class is a defect.

@@ -42,9 +42,13 @@ PY = os.environ.get("GT_PYTHON", sys.executable or "python3")
 COVERED = {
     "templates/tools/gt_adr.py": ("allocate", "merge", "migrate"),
     "templates/tools/gt_log.py": ("add", "merge", "migrate"),
-    "templates/tools/gt_events.py": ("emit", "merge"),   # structured event log (0.13.0)
+    "templates/tools/gt_events.py": ("emit", "merge", "backfill"),   # event log (0.13.0; backfill 0.15.0)
+    # ask/answer append closeout-signals.jsonl and, since 0.15.0, emit events
+    "templates/tools/gt_closeout.py": ("ask", "answer"),
     "templates/tools/gt_tasks.py": (),
     "templates/tools/gt_session.py": ("register", "claim", "release"),
+    # install.sh's in-vault refreshes (0.15.0): git hooks, vault tools, pre-write backup
+    "scripts/vault_refresh.py": ("backup", "prune", "refresh"),
     "scripts/vault_init.py": ("fresh", "create-project", "connect", "rename-project",
                               "merge-project", "archive-project", "install-core-rules"),
 }
@@ -56,8 +60,6 @@ EXEMPT = {
         "per-working-tree attribution; it records into .git, never into vault files",
     "templates/tools/gt_spool.py":
         "library for gt_log/gt_adr; its CLI is diagnostic only and writes nothing",
-    "templates/tools/gt_closeout.py":
-        "reads log.md and asks questions; its only write is its own history file",
 }
 
 

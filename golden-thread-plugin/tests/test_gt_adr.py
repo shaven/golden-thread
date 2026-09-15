@@ -192,6 +192,42 @@ class GtAdrFaithfulnessAndDryRun(GtAdr):
                          "the baseline is the only copy of the pre-migration file; it "
                          "must be byte-exact whatever the rendering does")
 
+    def test_non_utf8_bytes_survive_migration_and_merge(self):
+        """0.15.0: errors="replace" turned latin-1 bytes into U+FFFD in the baseline and
+        in decisions.md while the round-trip gate passed."""
+        raw = b"# D\n\n## ADR-1: caf\xe9\n\n\xe9t\xe9 body.\n"
+        (self.vault / "Projects/golden-thread/spool/decisions/demo"
+         / "0000-baseline.md").unlink(missing_ok=True)
+        self.dec.write_bytes(raw)
+        self.assertOk(self.tool("migrate", "demo"))
+        base = (self.vault / "Projects/golden-thread/spool/decisions/demo/0000-baseline.md")
+        self.assertEqual(base.read_bytes(), raw, "baseline bytes differ from the original")
+        self.assertNotIn(b"\xef\xbf\xbd", self.dec.read_bytes(),
+                         "U+FFFD written into decisions.md: owner bytes were transcoded")
+        self.assertTrue(self.dec.read_bytes().endswith(raw))
+        self.allocate("later")
+        self.assertOk(self.tool("merge", "demo"))
+        self.assertIn(b"## ADR-2: later", self.dec.read_bytes(), "the merge did not run")
+        self.assertIn(b"caf\xe9", self.dec.read_bytes())
+        self.assertNotIn(b"\xef\xbf\xbd", self.dec.read_bytes())
+        p = self.tool("merge", "demo", "--dry-run")
+        self.assertOk(p)
+        self.assertIn("unchanged", p.stdout)
+
+    def test_hand_written_lines_in_decisions_md_are_never_rendered_away(self):
+        """0.15.0 validator: rendering deleted lines typed into the generated file."""
+        self.seed("# D\n\n## ADR-1: one\n")
+        self.assertOk(self.tool("migrate", "demo"))
+        with open(self.dec, "a", encoding="utf-8") as fh:
+            fh.write("\nA note the owner typed under ADR-1.\n")
+        before = self.dec.read_bytes()
+        self.allocate("later")
+        p = self.tool("merge", "demo")
+        self.assertEqual(p.returncode, 3, p.stdout + p.stderr)
+        self.assertIn("hand-written", p.stderr)
+        self.assertIn("A note the owner typed", p.stderr)
+        self.assertEqual(self.dec.read_bytes(), before, "decisions.md was rewritten anyway")
+
     def test_real_content_difference_still_refuses(self):
         """Tolerating trailing newlines must not have loosened the gate itself."""
         self.seed("# D\n\n## ADR-1: one\n")
@@ -238,6 +274,50 @@ class GtAdrFaithfulnessAndDryRun(GtAdr):
         before = self.dec.read_bytes()
         self.assertOk(self.tool("migrate", "demo", "-n"), "-n is the documented short form")
         self.assertEqual(self.dec.read_bytes(), before)
+
+
+class GtAdrEvent(Sandbox):
+    """`allocate` emits one `adr` event; a dry run and a broken event log change nothing."""
+
+    def setUp(self):
+        super().setUp()
+        self.vault = self.make_vault()
+        self.assertOk(self.py(SCRIPTS / "vault_init.py", "create-project", "--vault", self.vault,
+                              "--name", "demo", "--domain", "test"))
+        self.spool = self.vault / "Projects/golden-thread/spool/events"
+
+    def tool(self, *args):
+        return self.py(TOOLS / "gt_adr.py", "--vault", self.vault, "--id", "alpha", *args)
+
+    def adr_events(self):
+        import json
+        f = self.spool / "alpha.jsonl"
+        rows = [json.loads(l) for l in f.read_text().splitlines()] if f.exists() else []
+        return [r for r in rows if r["kind"] == "adr"]
+
+    def test_allocate_emits_adr(self):
+        p = self.tool("allocate", "demo", "--title", "Use widgets")
+        self.assertOk(p)
+        self.assertEqual(p.stdout.strip(), "1", "the number must stay alone on stdout")
+        evs = self.adr_events()
+        self.assertEqual(len(evs), 1)
+        self.assertEqual((evs[0]["item"], evs[0]["to"], evs[0]["level_to"], evs[0]["project"],
+                          evs[0]["note"]),
+                         ("Projects/demo/decisions.md#ADR-1", "Projects/demo/decisions.md", 3,
+                          "demo", "ADR-1: Use widgets"))
+
+    def test_dry_run_emits_nothing(self):
+        self.assertOk(self.tool("allocate", "demo", "--title", "t", "--dry-run"))
+        self.assertEqual(self.adr_events(), [])
+
+    def test_event_failure_does_not_fail_allocate(self):
+        import shutil
+        shutil.rmtree(self.spool, ignore_errors=True)
+        self.spool.write_text("blocks the spool directory\n")
+        p = self.tool("allocate", "demo", "--title", "t")
+        self.assertOk(p, "allocate failed because its event could not be written")
+        self.assertEqual(p.stdout.strip(), "1")
+        self.assertIn("NOT recorded", p.stderr)
 
 
 if __name__ == "__main__":

@@ -196,6 +196,33 @@ class GtCloseoutTest(Sandbox):
         self.assertOk(proc)
         self.assertIn("no close-out history yet", proc.stdout)
 
+    # -- events ----------------------------------------------------------------
+    def closeout_events(self):
+        f = self.vault / "Projects/golden-thread/events.jsonl"
+        return [json.loads(l) for l in f.read_text().splitlines()] if f.exists() else []
+
+    def test_no_answer_emits_an_event(self):
+        # A close-out "yes" is a decision, not the move: only `vault_init.py
+        # archive-project` emits `archive`, so a closed-and-archived project has one.
+        self.project("done", ["- [x] a"])
+        for ans in (("no",), ("later",), ("yes", "shipped")):
+            p = self.gc("answer", "done", *ans)
+            self.assertOk(p)
+            self.assertNotIn("NOT recorded", p.stderr)
+        self.assertEqual(self.closeout_events(), [])
+        self.assertFalse((self.vault / "Projects/golden-thread/spool/events").exists())
+        self.assertEqual([json.loads(l)["answer"] for l in self.records.read_text().splitlines()],
+                         ["no", "later", "yes"])
+
+    def test_dry_run_records_and_emits_nothing(self):
+        self.project("done", ["- [x] a"])
+        for args in (("ask", "done", "--dry-run"), ("answer", "done", "yes", "--dry-run")):
+            p = self.gc(*args)
+            self.assertOk(p)
+            self.assertIn("dry run", p.stdout)
+        self.assertFalse(self.records.exists())
+        self.assertFalse((self.vault / "Projects/golden-thread/spool/events").exists())
+
 
 if __name__ == "__main__":
     unittest.main()

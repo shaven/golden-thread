@@ -2,7 +2,7 @@
 
 A guided walkthrough for your first session. Six steps, ~15 minutes.
 
-**Requirements:** Python 3.8+, Claude Code installed. Written against **gt v0.14.0**.
+**Requirements:** Python 3.8+, Claude Code installed. Written against **gt v0.15.0**.
 
 ---
 
@@ -27,9 +27,18 @@ running it — an agent, CI — it stops with exit 4 and asks for the decision r
 choosing a directory for you. `bash install.sh --no-vault` installs the plugin alone,
 deliberately.
 
-The installer sets up two plugins:
-- **`gt`** — memory, projects, session workflow, and enforcement hooks
+The installer sets up **`gt`** — memory, projects, session workflow, and enforcement hooks —
+plus each optional **module** that is on:
 - **`gt-wiki`** — knowledge base with immutable sources
+- **`gt-demo`** — the guided tour, in its own throwaway vault
+- **`gt-watch`** — follow git repos you depend on (`/gt-watch:gt-watch`)
+- **`gt-report-card`** — the session report card at `/compact`
+- **`gt-flow`** — a picture of how your knowledge moved (`/gt-flow:gt-flow`)
+- **`gt-farm`** — work packets for an external AI; **off** unless you add it with
+  `bash install.sh --with farm` (or had `/gt:gt-farm` before upgrading)
+
+`bash install.sh --list-modules` shows each one and why it is on or off;
+`--without <name>` leaves one out, and the choice is remembered.
 
 ---
 
@@ -157,7 +166,7 @@ you; `waiting:: agent` is what the next session should pick up.
 That is the loop: capture without switching, sweep to file, regenerate to decide.
 
 **Close what is finished.** The rollup's *Review* section, the `/compact` report card
-and `gt-work` all ask the same question when a project's signals say it may be done:
+(report-card module) and `gt-work` all ask the same question when a project's signals say it may be done:
 most tasks past due, most tasks checked, three quiet weeks, or nothing open. Answer
 yes, no or later; every answer is recorded so the question learns your pattern. Closing
 sets `stage: complete` and shelves leftover tasks at `p:: 7` — they stay in the README,
@@ -188,10 +197,13 @@ they just stop outranking live work.
 /gt:gt-refresh             ← check if any source documents changed upstream
 /gt:gt-review              ← file the inbox (INBOX.md, plus daily notes if you keep them)
 /gt:gt-settings            ← view and toggle what Golden Thread does automatically
-/gt:gt-farm                ← route bulk or mechanical tasks to an external AI service as a work packet
 /gt:gt-validate            ← independently verify a claim before recording it as fact
-/gt:gt-watch               ← watch a git repo you depend on; a security fix upstream opens your next session as a P0
-/gt-demo:gt-demo           ← guided eleven-act tour in a throwaway demo vault: start / tour / end / clean / remove
+
+# from modules
+/gt-watch:gt-watch         ← watch a git repo you depend on; a security fix upstream opens your next session as a P0
+/gt-flow:gt-flow           ← draw how knowledge climbed the ladder, one offline HTML file (--redact before sharing)
+/gt-farm:gt-farm           ← route bulk or mechanical tasks to an external AI service as a work packet (farm module, off by default)
+/gt-demo:gt-demo           ← guided tour in a throwaway demo vault, nine acts plus one per module: start / tour / end / clean / remove
 ```
 
 ---
@@ -201,25 +213,25 @@ they just stop outranking live work.
 If you want a structured wiki alongside your project memory:
 
 ```
-/gt:gt-wiki-init
+/gt-wiki:gt-wiki-init
 ```
 
 Then add sources:
 
 ```
-/gt:gt-wiki-ingest <url or file path>
+/gt-wiki:gt-wiki-ingest <url or file path>
 ```
 
 Query it:
 
 ```
-/gt:gt-wiki
+/gt-wiki:gt-wiki
 ```
 
 Check its sources for upstream changes:
 
 ```
-/gt:gt-wiki-refresh
+/gt-wiki:gt-wiki-refresh
 ```
 
 The wiki uses immutable sources — every ingested document is stored verbatim and never modified. Knowledge pages are synthesized summaries that link to the originals. When a source changes upstream, refresh adds a new source that supersedes the old one; for sources in a local git repo the change is detected by `git diff`, not by eye.
@@ -247,7 +259,7 @@ The vault is organized by **how widely a fact applies**. Session findings go in 
 python3 <plugin>/scripts/vault_init.py install-core-rules --vault <vault>
 ```
 
-**I want to turn off the automatic session report** — run `/gt:gt-settings set report_card off`.
+**I want to turn off the automatic session report** — run `/gt:gt-settings set report_card off`, or remove the module with `bash install.sh --without report-card`.
 
 **Timestamp missing from responses** — the enforcement hook is unwired. Run `/hooks` in Claude Code or restart. If it persists, re-run `install.sh`.
 

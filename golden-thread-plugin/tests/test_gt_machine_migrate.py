@@ -10,6 +10,11 @@ Contract:
   * State is written atomically; files are backed up before they change.
   * install-choices-from-vault-config records the demo choice and leaves
     vault-config.json's install_demo untouched.
+  * farm-kept-for-upgraders (0.15.0) records farm=on only for a machine whose previous gt
+    shipped /gt:gt-farm (0.9.4 .. 0.14.x) and has no farm choice; the previous release comes
+    from --previous-release / GT_PREVIOUS_RELEASE, else installed_plugins.json naming
+    another gt, else machine-state.json last_release. A `watch` or `report_card` setting is
+    never turned into a module choice.
 """
 import json
 import textwrap
@@ -70,6 +75,22 @@ class RealMigration(MachineBase):
         # No temp files from the atomic write.
         self.assertEqual([f.name for f in self.gt.iterdir() if f.name.endswith(".tmp")], [])
 
+    def test_install_choices_bytes_and_mode_match_record_choice(self):
+        # R1 (0.15.0): the migration wrote unsorted keys; record-choice sorted ones and
+        # a different mode. One writer's output must equal the other's.
+        self.config(install_demo="no")
+        self.assertOk(self.mm("run"))
+        doc = {"version": 1, "choices": {"demo": "off"}}
+        self.assertEqual(self.choices.read_text(),
+                         json.dumps(doc, indent=2, sort_keys=True) + "\n")
+        self.assertEqual(oct(self.choices.stat().st_mode & 0o777), oct(0o600))
+        via = self.tmp / "other"
+        (via / ".claude").mkdir(parents=True)
+        self.assertOk(self.py(SCRIPTS / "gt_components.py", "record-choice", via, "demo", "off"))
+        other = via / ".claude" / "golden-thread" / "install-choices.json"
+        self.assertEqual(other.read_bytes(), self.choices.read_bytes())
+        self.assertEqual(other.stat().st_mode & 0o777, self.choices.stat().st_mode & 0o777)
+
     def test_install_demo_yes_becomes_on(self):
         self.config(install_demo="yes")
         self.assertOk(self.mm("run"))
@@ -117,6 +138,77 @@ class RealMigration(MachineBase):
     def test_unreadable_state_is_exit_2(self):
         self.state_path.write_text("{not json")
         self.assertEqual(self.mm("status").returncode, 2)
+
+
+FARM_ID = "farm-kept-for-upgraders"
+
+
+class FarmKeptForUpgraders(MachineBase):
+    def choices_now(self):
+        return json.loads(self.choices.read_text())["choices"] if self.choices.exists() else {}
+
+    def installed(self, version):
+        p = self.home / ".claude" / "plugins" / "installed_plugins.json"
+        p.parent.mkdir(parents=True, exist_ok=True)
+        p.write_text(json.dumps({"version": 2, "plugins": {
+            "gt@golden-thread-plugin": [{"version": version}]}}))
+
+    def test_an_upgrader_from_0_14_keeps_farm(self):
+        p = self.mm("run", "--previous-release", "0.14.0")
+        self.assertOk(p)
+        self.assertIn("applied %s" % FARM_ID, p.stdout)
+        self.assertEqual(self.choices_now(), {"farm": "on"})
+        self.assertIn("none pending", self.mm("status", "--previous-release", "0.14.0").stdout)
+
+    def test_the_environment_carries_it_too(self):
+        self.assertOk(self.mm("run", env={"GT_PREVIOUS_RELEASE": "0.12.8"}))
+        self.assertEqual(self.choices_now(), {"farm": "on"})
+
+    def test_a_fresh_install_gets_the_default(self):
+        p = self.mm("run")
+        self.assertOk(p)
+        self.assertNotIn(FARM_ID, p.stdout)
+        self.assertEqual(self.choices_now(), {})
+
+    def test_releases_that_never_had_farm_or_already_moved_it(self):
+        for prev in ("0.9.3", "0.15.0", "0.16.2", "not-a-version"):
+            with self.subTest(prev=prev):
+                p = self.mm("status", "--previous-release", prev)
+                self.assertNotIn(FARM_ID, p.stdout)
+        self.assertIn(FARM_ID, self.mm("status", "--previous-release", "0.9.4").stdout)
+
+    def test_a_recorded_choice_is_never_overridden(self):
+        for state in ("off", "on"):
+            with self.subTest(state=state):
+                self.choices.write_text(json.dumps({"version": 1, "choices": {"farm": state}}))
+                self.assertOk(self.mm("run", "--previous-release", "0.14.0"))
+                self.assertEqual(self.choices_now(), {"farm": state})
+
+    def test_merges_and_backs_up(self):
+        self.choices.write_text(json.dumps({"version": 1, "choices": {"demo": "off"}}))
+        self.assertOk(self.mm("run", "--previous-release", "0.13.0"))
+        self.assertEqual(self.choices_now(), {"demo": "off", "farm": "on"})
+        self.assertTrue(list((self.gt / "backups").glob("machine-%s-*" % FARM_ID)))
+
+    def test_read_from_the_machine_without_the_flag(self):
+        # installed_plugins.json still naming the old gt: the migrator run by hand pre-install
+        self.installed("0.14.0")
+        self.assertIn(FARM_ID, self.mm("status").stdout)
+        # ...naming THIS release (install.sh already rewrote it): last_release decides
+        self.installed(GT.name)
+        self.assertNotIn(FARM_ID, self.mm("status").stdout)
+        self.state_path.write_text(json.dumps({"version": 1, "applied": {},
+                                               "last_release": "0.14.0"}))
+        p = self.mm("run")
+        self.assertOk(p)
+        self.assertIn("applied %s" % FARM_ID, p.stdout)
+        self.assertEqual(self.state()["last_release"], GT.name)
+
+    def test_settings_off_are_not_module_choices(self):
+        self.config(vault_path="/v", watch="off", report_card="off", closeout_check="off")
+        self.assertOk(self.mm("run", "--previous-release", "0.14.0"))
+        self.assertEqual(self.choices_now(), {"farm": "on"},
+                         "a setting switched off was turned into a module choice")
 
 
 FIXTURE = textwrap.dedent('''

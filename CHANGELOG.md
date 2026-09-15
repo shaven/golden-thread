@@ -11,6 +11,191 @@ release's own summary line, kept short rather than reconstructed after the fact.
 
 ---
 
+## gt 0.15.0 · gt-demo 0.15.0 · gt-wiki 0.2.1 · gt-watch · gt-report-card · gt-farm · gt-flow 0.15.0 — 2026-09-14
+
+**Three parts of gt become modules, and one new module draws the vault's history.** gt now
+has sixteen skills; everything optional ships as one of six modules, each removable with
+`bash install.sh --without <name>`.
+
+- **`watch`** (plugin `gt-watch`, on): the upstream watch. The command is now
+  `/gt-watch:gt-watch` (was `/gt:gt-watch`); its SessionStart hook, `gt_watch.py` and the
+  `watch` setting moved with it. `--without watch` also removes the crontab line it
+  installed — only the line tagged for it, after a backup.
+- **`report-card`** (plugin `gt-report-card`, on): the session report card and the
+  close-out question. No command; its PreCompact, SessionEnd and SessionStart hooks and the
+  `report_card` and `closeout_check` settings moved with it.
+- **`farm`** (plugin `gt-farm`): work packets for an external AI service, now
+  `/gt-farm:gt-farm` (was `/gt:gt-farm`). **Off for a fresh install; kept on for upgraders** —
+  a machine migration records `farm` as on for a machine upgrading from a gt that shipped
+  `/gt:gt-farm`, unless a choice is already recorded. It names no particular AI service and
+  its packet directory is configurable (`farm_packet_dir`).
+- **`flow`** (plugin `gt-flow`, on, new): `/gt-flow:gt-flow` renders `events.jsonl` as one
+  self-contained, offline HTML file — a lane per project, an arrow each time an item climbed
+  a level. `--redact` replaces every name with a per-render salted hash and writes nothing if
+  its self-check fails; `task.*` events are hidden until clicked or `--tasks`; `--project`,
+  `--since`; an `--out` inside the vault is refused.
+
+**Upgrading from 0.14.0 converges.** One install over 0.14.0 ends where a fresh 0.15.0
+install made with the same module choices would: no SessionStart, PreCompact or SessionEnd
+entry is left pointing at a gt path, your `watch`, `report_card` and `closeout_check` values
+are kept, and rolling back to 0.14.0 removes the module plugins it does not know, so it is
+not left with two copies of a skill.
+
+**Module format extensions.**
+- A module may declare **reporter hooks** and **hook-directory scripts** in `module.json`;
+  they are tagged with the module's name, wired only while it is on, and removed when it is
+  switched off. A Core-rule enforcement hook can still never belong to a module.
+- **Module settings** may carry a long `detail`, printed by `gt_settings.py explain`. A value
+  set for a module that is later switched off is kept and shown as not in effect.
+- A module's skills may name another module's script; the demo resolves it at run time with
+  `gt_demo.sh module-scripts NAME` and skips the act when that module is absent. The watch
+  act moved from the core tour into the watch module: nine core acts, plus the wiki, watch
+  and flow acts with the default modules.
+- `gt_components.py module-states --detail` explains each module's state.
+- `dev/check_retired.py` treats a hook script now provided by a module beside the release as
+  **moved, not retired**, so install never deletes a live module file, and reports a
+  `retired.json` entry naming such a file.
+
+**Operations record movement events as they happen.** `gt_events.py` shipped in 0.13.0 with
+nothing calling it; now:
+- `gt_log.py add "<line>" --event <kind> --item <path> …` spools a log line and its event in
+  one command (`/gt:gt-promote`, `/gt:gt-refresh`); `/gt:gt-review`, `/gt:gt-work` and
+  `/gt:gt-ingest` call `gt_events.py emit`.
+- `gt_adr.py allocate` emits `adr`; `vault_init.py` emits `create`, `rename`, `merge` and
+  `archive` when the operation does something (never under `--dry-run`). `archive` comes only
+  from `archive-project` — `gt_closeout.py answer <slug> yes` records a decision, not a move.
+- `gt_tasks.py` emits `task.open` / `task.done` for changed checkboxes once the stream has
+  been seeded.
+- An event can never fail the operation it describes.
+- **`gt_events.py backfill`** rebuilds a vault's history from git and `log.md` as
+  `actor: backfill` events. `--dry-run` previews with samples; a second run adds nothing.
+
+**Core rule `core_parallel_when_beneficial` reworded:** independent units run concurrently
+*within one machine-wide budget shared by every session*, not a budget per session.
+
+**Fixed**
+- **Every vault-writing command in a shipped skill names its vault**, so following a skill
+  never runs into the vault-write guard's denial. A test feeds every command in every shipped
+  `SKILL.md` to the guard itself.
+- The release gate's skill-reference step crashed on `golden-thread/0.1.0-archive.zip` and,
+  with the exit code unread, printed ok. It now fails when it cannot run.
+- The README and MANUAL examples for `gt_log.py` and `gt_adr.py` now pass `--vault`.
+- **`--with <module>` puts back the crontab lines `--without` removed.** Turning `watch` off
+  and on again reinstalled the module but never its hourly fetch, so the watch report stayed
+  on and never changed, silently. The removed lines are now kept (mode 600, under
+  `~/.claude/golden-thread/module-cron/`) and restored verbatim once the module is on, after
+  a crontab backup. The watch hook also says so when watches exist but no gt-watch cron entry
+  does.
+- **Rolling back keeps gt-wiki and gt-demo.** `./install.sh 0.14.0` from a 0.15.0 tree skipped
+  them, because only each plugin's newest release (built for 0.15.0) was considered. Each
+  plugin now installs its newest release whose `requires_gt` admits the gt being installed,
+  and the install banner names the release it chose and why.
+- **An install no longer overwrites your vault's git hooks, tool edits or `core.hooksPath`.**
+  A fresh-context validation reproduced each loss against vaults built by older releases.
+  `.githooks/` was copied over on every install, so an uncommitted hook edit was gone with no
+  backup; now a hook gt shipped is updated, an uncommitted edit is kept, and a committed one is
+  backed up first. A vault tool was replaced when its file was *older on disk* than the
+  release's copy — an owner's edit older than a freshly unpacked release was "stale", a
+  pristine copy seeded later was "AHEAD". Tools are now compared by content against every
+  text gt has shipped (`templates/shipped-hashes.json`, from `dev/shipped_hashes.py`): gt's
+  own text is updated, anything else is kept as a local modification. `core.hooksPath` is set
+  only when unset. The logic moved from `install.sh` into `scripts/vault_refresh.py`.
+- **The install backs up the vault files it may change before its first write.** The only
+  backup was gt_upgrade's, taken after the core-rule, CLAUDE.md, hook and tool refreshes, so
+  it never held what they replaced. `install-vault-files-<stamp>.tar.gz` is kept only when
+  the install changed something in it.
+- **What an install puts back or converts is named.** A re-created Core rule, the re-inserted
+  CLAUDE.md enforcement section and each converted `log.md` / `decisions.md` (with notes such
+  as trailing blank lines dropped) are listed instead of "migrated 1 project(s)". A rule or
+  the section listed in `.gt-removed` beside `core-rules/` is never re-created, by
+  `install-core-rules` or by the upgrade's core-rules step.
+- **A vault upgrade never removes lines from your PROTOCOL.md or CONVENTIONS.md unasked.**
+  Releases before 0.14.0 recorded the owner's own document as its merge base; with base ==
+  ours a "clean" 3-way merge *is* the template, so an install on a clean vault would have
+  replaced the document — dropping owner sections and wikilinks while the dry run said
+  "would merge cleanly (-16 lines)" (and "+0 lines" for six overwritten ones). A merge that
+  would remove any line of the owner's document is now held: never a pending step, never
+  applied by `install.sh`, reported as `needs a person: merge held` with the lines it would
+  remove. `run --record-base <doc>` keeps the document (backing up the old base under
+  `~/.claude/golden-thread/backups/`); `run --accept-merge <doc>` takes the merge. Dry runs
+  report lines added and removed, not a net count.
+- **The worker check no longer calls another live session's shells orphans.** It judged a
+  worker by CPU and declaration alone, so a second session's SessionStart reported two wait
+  loops of a live session as `ORPHAN` and offered `reap`, which would have killed them. It now
+  walks each shell's parent chain: a shell with a live `claude` above it belongs to that
+  session, is listed as information (session id, claude pid, uptime, and `WAITING on: <what
+  it polls>` for a poll loop or a shell whose only children are `sleep`), and is never
+  reaped — `reap` refuses it even if classification were wrong. `ORPHAN` now means no
+  `claude` remains above it. This session's own undeclared workers are still raised.
+- **Migrating or merging `log.md` and `decisions.md` no longer rewrites bytes that are not
+  UTF-8.** `gt_log.py`, `gt_adr.py` and `gt_spool.py` read them with `errors="replace"`, so a
+  latin-1 `é` in an old log became U+FFFD in both the frozen baseline and the generated file —
+  and the round-trip gate compared two already-replaced copies, so it passed. Every read that
+  feeds a write now uses `surrogateescape`, which carries any undecodable byte through
+  unchanged; the baseline is written from the file's raw bytes and checked against them.
+- **Rolling back to a gt from before modules ends where that release's own installer did.**
+  `./install.sh 0.12.8` or `0.13.0` from a 0.15.0 tree removed gt-wiki: the releases those
+  gts shipped with (0.1.2, 0.1.3) carry no `module.json`, so nothing admitted them. The
+  installer now carries which plugin releases each gt release shipped with (`SHIPPED_WITH`,
+  checked against git history by a test) and installs exactly those on a rollback. The same
+  rollback also ignored `install_demo=no`: those gts carry the demo inside gt, and 0.15.0 had
+  dropped the stripping. A `--without demo` this run, a recorded `demo: off`, or
+  `install_demo=no` now leaves `/gt:gt-demo` out of that gt, as 0.13.0 did.
+- **An upgrade says where moved commands went.** `/gt:gt-watch`, `/gt:gt-farm` and (from
+  before 0.14.0) `/gt:gt-demo` simply stopped resolving after the upgrade. The installer
+  now prints `Moved: /gt:gt-watch → /gt-watch:gt-watch` once for each skill the previous gt
+  had and the new gt left to a module, naming the module to turn on when it is off.
+- **An upgrade wires hooks in the same order as a fresh install.** Each writer appended its
+  own entry, so an upgrade from 0.13.0/0.14.0 left `guard_protected_paths.sh` last in
+  PreToolUse where a fresh install put it first. install.sh and `vault_init.py
+  install-core-rules` now both apply one canonical order per event: blocks that are not
+  purely gt's (your own hooks, or a block mixing yours with ours) first, in the order you
+  had them; then gt's in `HOOK_REGISTRATIONS` order, module hooks after; then any other entry
+  pointing into the gt hooks dir. Entries only move — nothing is added or removed by it.
+- **File modes are set, not inherited.** `cp` gives a new file the source's mode and keeps an
+  existing file's, so a fresh install from an untracked 0700 checkout left hooks at 0711 and
+  plugin files at 0700 while an upgrade kept 0755/0644. Everything install.sh copies into the
+  plugin cache, the marketplace and the hooks dir is now 0755 for directories, `*.sh` and
+  `*.py`, and 0644 for every other file. A file of your own in the hooks dir is not touched.
+- **`install-choices.json` is written one way.** `record-choice` wrote it 0644 with sorted
+  keys, the machine migration 0600 with unsorted ones. Both now write 0600 — the mode of
+  every other state file the installer keeps under `~/.claude` — with sorted keys.
+- **`install.sh --vault` keeps an owner's `core.hooksPath` too.** The refresh step already
+  did, but the `--vault` connect path (`vault_init.py` seeding) ran `git config core.hooksPath
+  .githooks` first, so a custom hooks directory was still replaced. Both paths now set it only
+  when it is unset; the chaining hint prints once.
+- **Git hooks follow the vault-tool rule.** A `.githooks/` file is replaced only when its bytes
+  match a hook some release shipped (`shipped-hashes.json`); an owner's edit, committed or not,
+  is kept and reported as `MODIFIED LOCALLY`. Committed edits used to be backed up and replaced.
+- **Hand-written lines in a generated `log.md` are kept.** Any render (`gt_log.py add`,
+  including the receipt an install writes) rebuilt the file from the spool and deleted lines
+  typed into it, with no word. They are now captured into `spool/log/hand-edits-<time>.md` and
+  announced; a line starting with a date sorts by that date, an undated line after the
+  baseline. `decisions.md` has no slot to guess, so `gt_adr.py merge` refuses and names the
+  lines instead.
+- **A merge base copied from the owner's own file is never merged against.** A pre-0.14 base
+  identical to the document let a merge that only ADDED lines through, re-inserting a section
+  the owner had deleted. Such a merge is now always held for a person, whatever it adds or
+  removes. Merges also keep the document's bytes and line endings (CRLF stayed CRLF only by
+  luck of the text-mode pipeline; it is now bytes end to end).
+- **Upgrade and fresh install write the same JSON key order.** The hook EVENT keys in
+  `settings.json`, `enabledPlugins` and the plugins in `installed_plugins.json` kept an older
+  release's insertion order. Your own events and other marketplaces' plugins stay first, in
+  the order you had them; gt's follow in one fixed order.
+- **No bytecode is left behind.** Python run by the installer wrote `__pycache__` into the
+  plugin cache, the marketplace copy and, on the `--vault` path, the vault's own tools
+  directory, differently each run. The installer now runs with `PYTHONDONTWRITEBYTECODE=1` and
+  strips `__pycache__` from what it installs; `marketplace.json` gets its mode set like every
+  other installed file.
+- **The Moved notice reflects where the install ends.** It was computed before the machine
+  migrations and said `module farm is off` for an upgrader whose farm a migration then turned
+  on. The off/on tail is now added from the final module state.
+- **A rollback removes what a newer release wired.** `./install.sh 0.12.8` from a newer tree
+  left the newer `guard_protected_paths` hook wired and its files in the hooks dir, which
+  0.12.8 reported as drift every session. Hooks-dir files byte-identical to a copy a newer
+  release (or module) in the tree ships, and entries for scripts those releases register, are
+  removed when the older gt does not ship them; files of your own are left alone.
+
 ## gt 0.14.0 · gt-demo 0.14.0 · gt-wiki 0.2.0 — 2026-09-14
 
 **An upgrade now finishes the job without you.** 0.13.0 removed what older releases left
