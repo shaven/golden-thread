@@ -104,6 +104,29 @@ by `install.sh` while it is on. Since 0.15.0 there are six.
 | `farm` (`gt-farm`) | off (kept on when upgrading from a gt that had it) | `/gt-farm:gt-farm` | Route bulk, mechanical, or second-opinion tasks to an external AI service as a self-contained work packet. All four gates (Stateless, Self-contained, Checkable, Releasable) must pass before a task leaves. Results come back unverified. Was `/gt:gt-farm`. |
 | `flow` (`gt-flow`) | on | `/gt-flow:gt-flow` | Render the vault's event stream as one offline HTML page: a lane per project, an arrow each time knowledge climbed a level. Add `--redact` before sharing it. |
 
+#### What flow shows
+
+Every move through the vault — a capture, a promotion, an ADR, a source ingested or
+superseded — is recorded as an event in `Projects/golden-thread/events.jsonl` by the skill
+that made it. `/gt-flow:gt-flow` (or *"show how knowledge moved"*) draws that stream as one
+offline HTML file: a lane per project, time left to right, height in the lane the ladder
+level. Dots arrive, triangles move, squares leave, and an arrow joins the level an item left
+to the level it reached.
+
+![Flow view of three fictional demo projects, with findings climbing from memory to research to Knowledge and on to a Core rule](docs/flow-example.png)
+
+The picture is [`docs/flow-example.html`](docs/flow-example.html), rendered from the
+sample stream [`docs/flow-example-events.jsonl`](docs/flow-example-events.jsonl). Open
+the HTML to filter by project or kind and click any mark for its details.
+
+```bash
+FLOW=~/.claude/plugins/cache/golden-thread-plugin/gt-flow/0.15.0/scripts
+python3 $FLOW/gt_flow.py render --vault <vault> [--project <slug>] [--since YYYY-MM-DD] [--tasks] [--redact]
+```
+
+A vault older than 0.15.0 starts empty: `gt_events.py backfill --dry-run` shows the history
+it would recover from git and `log.md`. Use `--redact` before the page leaves your screen.
+
 ---
 
 ## Vault Structure
