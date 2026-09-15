@@ -18,7 +18,17 @@ and blocks it if the rule was broken.
 
 
 > [!IMPORTANT]
-> **0.12.4 runs work in parallel by default, and you will notice it.** A Core rule now
+> **0.15.0 makes gt a small core plus six optional modules**, and an upgrade no longer
+> changes anything you wrote without saying so and asking. Three commands moved
+> (`/gt:gt-watch` → `/gt-watch:gt-watch`, `/gt:gt-farm` → `/gt-farm:gt-farm`,
+> `/gt:gt-demo` → `/gt-demo:gt-demo`), and the installer tells you. New with it: the vault
+> records how knowledge moves as events, and **`/gt-flow:gt-flow` draws it** — see
+> [Seeing how knowledge moved](#seeing-how-knowledge-moved). Choose modules with
+> `install.sh --list-modules`, `--without <name>` and `--with <name>`; details in the
+> [CHANGELOG](CHANGELOG.md).
+
+> [!NOTE]
+> **Since 0.12.4, work runs in parallel by default, and you will notice it.** A Core rule now
 > asks for divisible work to be split across your processors instead of crawling through
 > one core, and the tools here honour it: `tests/run.sh` and `dev/render-pdfs.sh` fan out,
 > and so will anything Claude writes while the rule is active. **The first sign is
@@ -266,6 +276,53 @@ Separately, a second question — *would this make sense to someone who has neve
 this vault?* — sends a fact **out**, into that project's `CLAUDE.md`, committed to its
 repo where any agent working in that code picks it up with no setup. Reach picks the
 level; audience decides whether it should also leave.
+
+### Seeing how knowledge moved
+
+Every move up (or across, or out of) the ladder is recorded as a **movement event** in
+`Projects/golden-thread/events.jsonl` as it happens: a project created, a note captured
+or filed, a promotion, an ADR, a source ingested or superseded, a task opened or done.
+The skills record their own moves, so there is nothing to remember.
+
+The `flow` module (on by default) draws that stream as **one self-contained HTML file**
+that opens offline. Each project is a lane, time runs left to right, and height within a
+lane is the ladder level. A dot is something arriving, a triangle something moving, a
+square something leaving. **An arrow joins the level an item left to the level it
+reached**, so a promotion is an arrow climbing.
+
+![Flow view of three fictional PizzaBot projects: a finding captured in memory climbs to research, then to a Knowledge page once a second project hits it, then to global-memory and a Core rule](golden-thread-plugin/docs/flow-example.png)
+
+*Three fictional demo projects over three weeks. In `demo-pizzabot`, a finding goes from
+`memory/` (2) to `research.md` (3) to a Knowledge page (4) once `demo-delivery-drones`
+hits the same problem, and later becomes a Core rule. The red line is a source being
+superseded. Open [the interactive page](golden-thread-plugin/docs/flow-example.html)
+(download it; GitHub shows the source) to filter by project or kind and click any mark
+for its details. It was rendered from
+[`flow-example-events.jsonl`](golden-thread-plugin/docs/flow-example-events.jsonl).*
+
+In a session, ask for it — *"show how knowledge moved"* — or run `/gt-flow:gt-flow`.
+Directly:
+
+```bash
+FLOW=~/.claude/plugins/cache/golden-thread-plugin/gt-flow/0.15.0/scripts
+python3 $FLOW/gt_flow.py render --vault <vault>                      # whole vault
+python3 $FLOW/gt_flow.py render --vault <vault> --project <slug> --since 2026-09-01
+python3 $FLOW/gt_flow.py render --vault <vault> --redact             # before sharing
+```
+
+- **A vault older than 0.15.0 has no events yet.** `gt_events.py backfill --dry-run`
+  shows the history it would recover from your git log and `log.md`; run it without
+  `--dry-run` to add it. A second run adds nothing.
+- **`--redact` before the picture leaves your screen.** Every project, path, task id and
+  session becomes a salted hash and notes are dropped; levels, kinds and counts stay. An
+  unredacted page says so in an orange badge at the top.
+- Task events are hidden at first (on a real vault they are most of the stream); they
+  are one click away in the Kinds filter, or shown from the start with `--tasks`.
+- It only reads the vault. The file lands in the current directory, or `--out`; an
+  `--out` inside the vault is refused.
+
+Full reference, including exit codes, in the
+[Manual](golden-thread-plugin/MANUAL.md#gt-flowgt-flow).
 
 ## Maintenance is code, not judgement
 
