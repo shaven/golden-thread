@@ -104,6 +104,13 @@ class ModuleFormat(Sandbox):
         fx["missing required"] = (write_module(r / "noreq", summary=DROP), 1)
         fx["setting default not in values"] = (write_module(r / "setdef", settings=[
             {"key": "zed_mode", "default": "mute", "values": ["calm"], "summary": "x"}]), 1)
+        # optional `detail` (0.15.0): the long explanation a setting keeps when it moves
+        fx["setting with detail"] = (write_module(r / "setdetail", settings=[
+            {"key": "zed_mode", "default": "calm", "values": ["calm"], "summary": "x",
+             "detail": "calm  quiet\n\nWhy it exists."}]), 0)
+        fx["setting detail not a string"] = (write_module(r / "setdetailbad", settings=[
+            {"key": "zed_mode", "default": "calm", "values": ["calm"], "summary": "x",
+             "detail": ["not", "text"]}]), 1)
         fx["path escape"] = (write_module(r / "escape", scripts=["../x.py"],
                                           replaces_core=["../../etc"]), 1)
         fx["demo act"] = (self._with_demo(r / "demo", "demo/act.md"), 0)
@@ -155,7 +162,8 @@ class ModuleFormat(Sandbox):
                "version mismatch": "differs from the directory name",
                "bad requires_gt '0.14.0'": "requires_gt clause",
                "demo missing": "does not exist in the module",
-               "demo escapes": "not a relative path inside the module"}
+               "demo escapes": "not a relative path inside the module",
+               "setting detail not a string": "settings[0] detail must be a string"}
         for label, text in why.items():
             p = self.py(PLUGINS, "module-check", fx[label][0])
             self.assertIn(text, p.stdout, label)

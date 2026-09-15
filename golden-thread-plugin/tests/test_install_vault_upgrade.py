@@ -19,6 +19,8 @@ older release equals a fresh install of the newest). Contracts pinned here:
     backup exists and no file is left half-written;
   * nothing pending: "Vault upgrades: none pending", and the vault is not re-stamped.
 """
+import hashlib
+import json
 import os
 import shutil
 import subprocess
@@ -68,6 +70,16 @@ class VaultUpgradeBase(PruneBase):
         self.assertEqual(self.porcelain(v), "", "fixture: vault not clean")
         self.assertIn("nothing pending", self.py(self.up, "status", "--vault", v).stdout)
         return v
+
+    def list_as_shipped(self, f):
+        """Record f's current text in the fixture release's shipped-hashes.json, as if an
+        earlier release had shipped it (0.15.0: refreshes go by content, not mtime)."""
+        hashes = self.src / "templates" / "shipped-hashes.json"
+        d = json.loads(hashes.read_text(encoding="utf-8"))
+        kind = "githooks" if f.parent.name == ".githooks" else "tools"
+        d[kind].setdefault(f.name, []).append(hashlib.sha256(f.read_bytes()).hexdigest())
+        hashes.write_text(json.dumps(d, indent=1), encoding="utf-8")
+        self.manifest()
 
     def make_doc_merge_pending(self, v):
         """The release changed PROTOCOL.md since this vault's base; the vault has its own edit.
@@ -140,11 +152,11 @@ class InstallRefreshesDoNotBlock(VaultUpgradeBase):
         protocol, added = self.make_doc_merge_pending(v)
         tool = v / "Projects" / "golden-thread" / "tools" / "gt_tasks.py"
         tool.write_text(tool.read_text(encoding="utf-8") + "\n# an older copy\n", encoding="utf-8")
+        self.list_as_shipped(tool)                  # an earlier release's text: install updates it
         self.commit(v, "owner work")
-        os.utime(tool, (1_000_000, 1_000_000))      # older than the template: install replaces it
         head = self.head(v)
         p = self.install()
-        self.assertIn("Vault tool REPLACED → gt_tasks.py", p.stdout)
+        self.assertIn("Vault tool UPDATED → gt_tasks.py", p.stdout)
         self.assertNotIn("not applied", p.stdout, "the install's own refresh blocked the upgrade")
         self.assertIn(added, protocol.read_text(encoding="utf-8"), "pending step not applied")
         self.assertIn("this install's own refreshes", p.stdout)
@@ -175,6 +187,27 @@ class NoBaseDocumentNeedsAPerson(VaultUpgradeBase):
                           "template, then run /gt:gt-upgrade" % protocol, p.stdout)
             self.assertIn("Vault upgrades: none pending", p.stdout)
             self.assertNotIn("applying", p.stdout)
+            self.assertEqual(self.porcelain(v), "", "install %d dirtied the vault" % attempt)
+        self.assertEqual(len(self.backups), n, "gt_upgrade run was invoked")
+
+
+class BaseRecordedFromTheOwnersFile(VaultUpgradeBase):
+    def test_a_clean_vault_keeps_its_own_section_through_two_installs(self):
+        # 2026-09-14: a 0.12.x base equal to the owner's PROTOCOL.md; an unattended merge
+        # would have replaced the document with the template.
+        v = self.current_vault()
+        protocol = v / "Projects" / "PROTOCOL.md"
+        owner = "# Protocol\n\n## Write that down\n\nthe owner's own rule\n"
+        protocol.write_text(owner, encoding="utf-8")
+        v.joinpath(*BASE).write_text(owner, encoding="utf-8")
+        self.commit(v, "a base captured from the owner's file")
+        n = len(self.backups)
+        for attempt in (1, 2):
+            p = self.install()
+            self.assertEqual(protocol.read_text(encoding="utf-8"), owner,
+                             "install %d replaced the owner's document" % attempt)
+            self.assertIn("needs a person: merge held", p.stdout)
+            self.assertIn("Vault upgrades: none pending", p.stdout)
             self.assertEqual(self.porcelain(v), "", "install %d dirtied the vault" % attempt)
         self.assertEqual(len(self.backups), n, "gt_upgrade run was invoked")
 
@@ -302,3 +335,107 @@ class NothingPending(VaultUpgradeBase):
     def test_no_vault_prints_no_upgrade_line(self):
         p = self.install()
         self.assertNotIn("Vault upgrades", p.stdout)
+
+
+class InstallKeepsOwnerVaultFiles(VaultUpgradeBase):
+    """0.15.0: the in-vault refreshes a validator caught destroying owner content.
+
+    Each owner change is made first and asserted to survive the install; the old install.sh
+    fails every one of these."""
+
+    @property
+    def install_backups(self):
+        return sorted((self.home / ".claude" / "golden-thread" / "backups")
+                      .glob("install-vault-files-*.tar.gz"))
+
+    def test_uncommitted_githook_edit_survives(self):
+        v = self.current_vault()
+        hook = v / ".githooks" / "prepare-commit-msg"
+        edited = hook.read_bytes() + b"\n# owner, not yet committed\n"
+        hook.write_bytes(edited)
+        p = self.install()
+        self.assertEqual(hook.read_bytes(), edited, "an uncommitted hook edit was overwritten")
+        self.assertIn("Git hook KEPT → .githooks/prepare-commit-msg", p.stdout)
+
+    def test_owner_edited_tool_older_on_disk_survives(self):
+        v = self.current_vault()
+        tool = v / "Projects" / "golden-thread" / "tools" / "gt_tasks.py"
+        edited = tool.read_bytes() + b"\n# OWNER LOCAL FIX\n"
+        tool.write_bytes(edited)
+        self.commit(v, "owner fix")
+        os.utime(tool, (1_000_000, 1_000_000))
+        p = self.install()
+        self.assertEqual(tool.read_bytes(), edited, "the owner's tool edit was replaced")
+        self.assertIn("Vault tool MODIFIED LOCALLY → gt_tasks.py", p.stdout)
+        self.assertNotIn("REPLACED → gt_tasks.py", p.stdout)
+
+    def test_custom_hooks_path_survives(self):
+        v = self.current_vault()
+        self.assertOk(self.git(v, "config", "core.hooksPath", "my-hooks"))
+        p = self.install()
+        self.assertEqual(self.git(v, "config", "--get", "core.hooksPath").stdout.strip(), "my-hooks")
+        self.assertIn("core.hooksPath is 'my-hooks' (yours)", p.stdout)
+
+    def test_custom_hooks_path_survives_install_with_vault(self):
+        # The --vault connect path runs vault_init seed_vault_workspace before the refresh;
+        # it set core.hooksPath unconditionally, so the refresh saw .githooks and said wired.
+        v = self.current_vault()
+        self.assertOk(self.git(v, "config", "core.hooksPath", "my-hooks"))
+        p = self.install("--vault", v)
+        self.assertEqual(self.git(v, "config", "--get", "core.hooksPath").stdout.strip(), "my-hooks")
+        self.assertNotIn("changed: git config core.hooksPath", p.stdout)
+        self.assertEqual(p.stdout.count("core.hooksPath is 'my-hooks' (yours), so"), 1,
+                         "the chaining hint should print exactly once:\n" + p.stdout)
+
+    def test_install_with_vault_leaves_no_bytecode_in_the_vault(self):
+        # Validator 2026-09-14: the --vault path runs the vault's own tools, which wrote a
+        # tracked __pycache__/*.pyc into the vault.
+        v = self.current_vault()
+        for pc in v.rglob("__pycache__"):
+            shutil.rmtree(pc)
+        self.commit(v, "no bytecode")
+        self.install("--vault", v)
+        self.assertEqual([str(p.relative_to(v)) for p in v.rglob("__pycache__")], [],
+                         "the install left bytecode in the vault")
+
+    def test_backup_is_taken_before_the_first_write_and_holds_the_original(self):
+        v = self.current_vault()
+        hook = v / ".githooks" / "post-commit"
+        edited = hook.read_bytes() + b"\n# an earlier release's hook\n"
+        hook.write_bytes(edited)
+        self.list_as_shipped(hook)       # so the install replaces it (an owner edit is kept)
+        self.commit(v, "older shipped hook")
+        rule = v / "Projects" / "golden-thread" / "core-rules" / "core_parallel_when_beneficial.md"
+        rule.unlink()
+        self.commit(v, "owner removed a rule")
+        before = len(self.install_backups)
+        p = self.install()
+        self.assertEqual(len(self.install_backups), before + 1, "no pre-write backup kept")
+        import tarfile
+        with tarfile.open(self.install_backups[-1]) as tf:
+            self.assertEqual(tf.extractfile(".githooks/post-commit").read(), edited,
+                             "the backup does not hold the hook as it was")
+        self.assertIn("backed up before it wrote anything", p.stdout)
+
+    def test_untouched_vault_leaves_no_pre_write_backup(self):
+        self.current_vault()
+        before = len(self.install_backups)
+        self.install()
+        self.assertEqual(len(self.install_backups), before)
+
+    def test_restored_core_rule_is_announced_and_a_listed_removal_is_honoured(self):
+        v = self.current_vault()
+        rules = v / "Projects" / "golden-thread" / "core-rules"
+        (rules / "core_parallel_when_beneficial.md").unlink()
+        self.commit(v, "owner removed a rule")
+        p = self.install()
+        self.assertTrue((rules / "core_parallel_when_beneficial.md").exists())
+        self.assertIn("Added Core rule → core_parallel_when_beneficial.md", p.stdout)
+        # listed as removed: stays removed, and says so
+        (rules / "core_parallel_when_beneficial.md").unlink()
+        (rules.parent / ".gt-removed").write_text("core_parallel_when_beneficial.md  # mine\n")
+        self.commit(v, "owner removed it on purpose")
+        p = self.install()
+        self.assertFalse((rules / "core_parallel_when_beneficial.md").exists(),
+                         "a rule listed in .gt-removed was re-created")
+        self.assertIn("Left removed → core_parallel_when_beneficial.md", p.stdout)

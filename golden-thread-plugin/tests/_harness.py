@@ -49,6 +49,22 @@ def latest_version_dir(root: Path) -> Path:
 GT = (REPO / "golden-thread" / os.environ["GT_TEST_VERSION"]) if os.environ.get("GT_TEST_VERSION") \
     else latest_version_dir(REPO / "golden-thread")
 WIKI = latest_version_dir(REPO / "golden-thread-wiki")
+
+
+def _module_dir(dirname):
+    """The newest release of an optional module, or None when this tree does not ship it."""
+    try:
+        return latest_version_dir(REPO / dirname)
+    except (RuntimeError, OSError):
+        return None
+
+
+# Modules extracted from gt in 0.14.0 (demo) and 0.15.0 (watch, report card, farm).
+DEMO = _module_dir("golden-thread-demo")
+WATCH = _module_dir("golden-thread-watch")
+REPORT_CARD = _module_dir("golden-thread-report-card")
+FARM = _module_dir("golden-thread-farm")
+FLOW = _module_dir("golden-thread-flow")
 SCRIPTS = GT / "scripts"
 HOOKS = GT / "hooks"
 TEMPLATES = GT / "templates"

@@ -17,6 +17,7 @@ Contract:
 """
 import json
 import shutil
+from pathlib import Path
 import unittest
 
 from _harness import Sandbox, REPO, GT, WIKI, SCRIPTS, load_module
@@ -36,8 +37,15 @@ class WiringCoverage(Sandbox):
         shutil.copytree(WIKI, root / "golden-thread-wiki" / WIKI.name, ignore=IGNORE)
         return root, root / "golden-thread" / GT.name
 
-    def check(self, version_dir):
-        return self.py(CHECK, str(version_dir))
+    def check(self, version_dir, matrix=None):
+        # A fixture copy breaks one thing on purpose; the module on/off matrix adds two
+        # installs that prove nothing about it. Only the shipped release runs the matrix.
+        if matrix is None:
+            matrix = Path(version_dir) == GT
+        args = [str(version_dir)] + ([] if matrix else ["--no-module-matrix"])
+        # The check runs one to three real installs and allows each 600s itself; the
+        # harness's default 120s for the whole call timed out under load (gate, load ~40).
+        return self.py(CHECK, *args, timeout=1800)
 
     # ---- the release as it stands ------------------------------------------------
     def test_the_shipped_release_passes(self):
@@ -69,8 +77,8 @@ class WiringCoverage(Sandbox):
         inst = root / "install.sh"
         src = inst.read_text()
         broken = src.replace(
-            'if [ -n "$VAULT_PATH" ] && [ -d "$VAULT_PATH" ]; then\n  snapshot_vault_state "$VAULT_PATH"\n  wire_enforcement_hooks "$VAULT_PATH"\nfi',
-            'if [ -n "$VAULT_PATH" ] && [ -d "$VAULT_PATH" ] && [ -e "$VAULT_PATH/.no-such-marker" ]; then\n  snapshot_vault_state "$VAULT_PATH"\n  wire_enforcement_hooks "$VAULT_PATH"\nfi')
+            'if [ -n "$VAULT_PATH" ] && [ -d "$VAULT_PATH" ]; then\n  snapshot_vault_state "$VAULT_PATH"\n  backup_vault_before_writes "$VAULT_PATH"\n  wire_enforcement_hooks "$VAULT_PATH"\nfi',
+            'if [ -n "$VAULT_PATH" ] && [ -d "$VAULT_PATH" ] && [ -e "$VAULT_PATH/.no-such-marker" ]; then\n  snapshot_vault_state "$VAULT_PATH"\n  backup_vault_before_writes "$VAULT_PATH"\n  wire_enforcement_hooks "$VAULT_PATH"\nfi')
         self.assertNotEqual(broken, src, "fixture did not narrow the wiring condition")
         inst.write_text(broken)
         p = self.check(vdir)
@@ -116,12 +124,13 @@ class WiringCoverage(Sandbox):
         self.assertNotEqual(broken, src, "fixture did not disable vault_init seeding")
         vi.write_text(broken)
 
-        inst = root / "install.sh"
-        isrc = inst.read_text()
-        ibroken = isrc.replace('for t in "$SRC/templates/tools/"*.py; do',
-                               'for t in "$SRC/templates/tools/"*.NOPE; do')
-        self.assertNotEqual(ibroken, isrc, "fixture did not disable install.sh seeding")
-        inst.write_text(ibroken)
+        # Since 0.15.0 install.sh's own seeding runs through vault_refresh.py refresh_tools.
+        vr = vdir / "scripts" / "vault_refresh.py"
+        vsrc = vr.read_text()
+        vbroken = vsrc.replace('for t in sorted(src.glob("*.py")):',
+                               'for t in sorted(src.glob("*.NOPE")):')
+        self.assertNotEqual(vbroken, vsrc, "fixture did not disable install.sh seeding")
+        vr.write_text(vbroken)
 
         p = self.check(vdir)
         self.assertEqual(p.returncode, 1, "unseeded vault tools passed the gate:\n" + p.stdout)
@@ -228,6 +237,36 @@ class ModuleWiring(Sandbox):
         (self.vd / "module.json").write_text(json.dumps(data))
         self.install()
         self.assertTrue(any("invalid module.json" in p for p in self.findings()))
+
+    def test_on_module_skills_and_scripts_must_reach_its_cache(self):
+        data = json.loads((self.vd / "module.json").read_text())
+        (self.vd / "skills" / "zed-hi").mkdir(parents=True)
+        (self.vd / "skills" / "zed-hi" / "SKILL.md").write_text("---\nname: zed-hi\n---\n")
+        data.update(skills=["zed-hi"], scripts=["zed_report.py"])
+        (self.vd / "module.json").write_text(json.dumps(data))
+        self.install()
+        out = self.cov.module_cache_findings(self.repo, self.home, self.comp, gt_version="1.0.0")
+        self.assertTrue(any("skill zed-hi is not in the installed cache" in p for p in out), out)
+        self.assertTrue(any("scripts/zed_report.py is not in the installed cache" in p
+                            for p in out), out)
+        cache = self.home / ".claude" / "plugins" / "cache" / "golden-thread-plugin" / "gt-zed" / "0.1.0"
+        shutil.copytree(self.vd / "skills", cache / "skills")
+        shutil.copytree(self.vd / "scripts", cache / "scripts")
+        self.assertEqual(self.cov.module_cache_findings(self.repo, self.home, self.comp,
+                                                        gt_version="1.0.0"), [])
+        self.choose("off")
+        out = self.cov.module_cache_findings(self.repo, self.home, self.comp, gt_version="1.0.0")
+        self.assertTrue(any("OFF but its plugin cache" in p for p in out), out)
+
+    def test_the_gate_runs_the_all_on_and_all_off_matrix(self):
+        src = CHECK.read_text()
+        self.assertIn('("every module on", "--with")', src)
+        self.assertIn('("every module off", "--without")', src)
+
+    def test_the_release_gate_never_skips_the_matrix(self):
+        gate = (REPO / "dev" / "release-check.sh").read_text()
+        self.assertIn("check_wiring_coverage.py", gate)
+        self.assertNotIn("--no-module-matrix", gate)
 
     def test_a_release_without_the_module_reader_has_no_modules(self):
         class Old:

@@ -12,7 +12,7 @@ it at startup, look things up while working, and write back what they learn.
 Its distinguishing idea is the second problem, the one most memory systems never
 address: **writing a rule down does not mean it gets followed.**
 
-Plugin **v0.14.0**. Ten Core rules currently enforced, five of them *validated* — a
+Plugin **v0.15.0**. Ten Core rules currently enforced, five of them *validated* — a
 hook inspects the finished reply (`Stop`) or the tool call about to run (`PreToolUse`)
 and blocks it if the rule was broken.
 
@@ -99,7 +99,7 @@ The Core tier is deliberately small; every addition dilutes the reliability of t
 | `core_verification_state` | reminder | Label every derived figure with `unverified`, `self-verified` or `independently verified` |
 | `core_explicit_vault_target` | **validated** | Name the vault on every mutating tool run — `--vault` or `--dry-run` |
 | `core_secrets_live_in_the_store` | reminder | A secret's value rests only in the secrets store, never in source, a repo, a log or a session |
-| `core_parallel_when_beneficial` | reminder | Parallelise divisible work in every project, up to the `parallel_max` budget; serial must be justified |
+| `core_parallel_when_beneficial` | reminder | Parallelise divisible work in every project, within one `parallel_max` budget shared by every session on the machine; serial must be justified |
 | `core_test_before_commit` | **validated** | Never commit code whose tests you have not seen pass; per-repo opt-out with `.gt-no-test-gate` |
 
 Two ways in: the user **designates** a rule, or an existing fact is **promoted** and
@@ -115,9 +115,13 @@ costly, so a broken hook announces itself.
 
 | Path | What it is |
 |---|---|
-| `golden-thread-plugin/golden-thread/<ver>/` | The `gt` plugin — 18 skills, scripts, templates, hooks |
+| `golden-thread-plugin/golden-thread/<ver>/` | The `gt` plugin — 16 skills, scripts, templates, hooks |
 | `golden-thread-plugin/golden-thread-wiki/<ver>/` | Module `wiki` (plugin `gt-wiki`) — 5 skills for LLM wiki vaults |
 | `golden-thread-plugin/golden-thread-demo/<ver>/` | Module `demo` (plugin `gt-demo`) — the guided PizzaBot 3000 tour |
+| `golden-thread-plugin/golden-thread-watch/<ver>/` | Module `watch` (plugin `gt-watch`) — follow upstream git repos, P0 on a security fix |
+| `golden-thread-plugin/golden-thread-report-card/<ver>/` | Module `report-card` (plugin `gt-report-card`) — the session report card and close-out question |
+| `golden-thread-plugin/golden-thread-farm/<ver>/` | Module `farm` (plugin `gt-farm`) — work packets for an external AI service |
+| `golden-thread-plugin/golden-thread-flow/<ver>/` | Module `flow` (plugin `gt-flow`) — an offline timeline of knowledge moving up the ladder |
 | `golden-thread-plugin/install.sh` | Installs gt and every module that is on, wires the hooks, applies upgrades |
 
 The vault *content* lives in a separate private repo. This one is the machinery.
@@ -150,9 +154,10 @@ bash golden-thread-plugin/install.sh --vault <path>
 # then restart Claude Code — plugins and hooks load at session start
 ```
 
-That installs gt and every **module** that is on — today `wiki` (gt-wiki) and `demo`
-(gt-demo), both on by default. Choose with `--list-modules`, `--without <name>` and
-`--with <name>`; the choice is remembered. Re-running it upgrades from any older release to
+That installs gt and every **module** that is on. Six ship with 0.15.0: `wiki`, `demo`,
+`watch`, `report-card` and `flow` are on by default; `farm` is off for a fresh install and
+kept on when you upgrade from a gt that had `/gt:gt-farm`. Choose with `--list-modules`,
+`--without <name>` and `--with <name>`; the choice is remembered. Re-running it upgrades from any older release to
 the newest, removing what old releases left behind and applying vault upgrades when your
 vault is committed. See the [Install Guide](golden-thread-plugin/INSTALL.md).
 
@@ -174,7 +179,7 @@ cannot be reached and the rules are not loaded — the banner names the cause.
 
 ## The skills
 
-Eighteen skills in gt, plus the skills of its modules. Each composes through files rather than through other skills, so
+Sixteen skills in gt, plus the skills of its modules (listed after gt's own). Each composes through files rather than through other skills, so
 removing any one leaves the rest working.
 
 | Skill | What it does |
@@ -192,12 +197,22 @@ removing any one leaves the rest working.
 | `gt-upgrade` | Updates the VAULT after `install.sh` updates the plugin — the step that did not exist until a 0.11.0 migration had to be run by hand across 43 projects. Migrations detect their own work, documents are three-way merged against a base the vault carries, and a step that needs a person is reported rather than guessed at. |
 | `gt-doctor` | Answers "is this install healthy?" in one command — version, component drift, hook wiring, pending migrations, stray workers, unpushed commits, publish drift, lint. Every answer is stated relative to the release it was checked against, because a clean report from a check pinned to the wrong version reads exactly like a healthy install. |
 | `gt-lint` | Runs 18 deterministic health checks — broken links, orphans, index gaps, scope leaks, staleness, superseded sources — plus `core-unenforced`, which catches a rule that is stored but never re-asserted. |
-| `gt-farm` | Hands bulk or mechanical work to an external AI service as a self-contained packet with a strict return contract — bulk fetching, freshness sweeps, or a genuinely non-Claude second opinion. The packet is identical whether you paste it into a web UI or send it to an API. |
-| `gt-settings` | Shows and changes everything the plugin does on its own — component drift checking, the version check, orphaned-worker detection, the unpushed-commit check, and the session report card. Every automatic behaviour is registered here and every one can be switched off. |
+| `gt-settings` | Shows and changes everything the plugin does on its own — component drift checking, the version check, orphaned-worker detection, the unpushed-commit check, and the settings each installed module adds (the report card, the upstream watch). Every automatic behaviour is registered here and every one can be switched off. |
 | `gt-route` | Mid-session: names what the session has actually become, says where its output belongs, and checks you are in the right project. For when a session has drifted from what it opened with, or you cannot name what you are doing. |
-| `gt-watch` | Watches any git repo and opens your next session with a P0 when it ships something you need to know about — a security fix, a breaking change. |
-| `gt-demo` | A guided tour of the whole system against a throwaway vault, so nothing you try touches your own. |
 | `gt-runbook-lint` | Finds procedures duplicated across project runbooks and routes them to the right shared layer: `PROTOCOL.md`, a `Knowledge/` page, or a repo `CLAUDE.md`. Duplication across two runbooks is the signal a fact belongs one layer out. |
+
+Module skills (each present only while its module is on):
+
+| Skill | Module | What it does |
+|---|---|---|
+| `/gt-watch:gt-watch` | `watch` | Watches any git repo and opens your next session with a P0 when it ships something you need to know about — a security fix, a breaking change. Was `/gt:gt-watch` before 0.15.0. |
+| `/gt-farm:gt-farm` | `farm` | Hands bulk or mechanical work to an external AI service as a self-contained packet with a strict return contract. The packet is identical whether you paste it into a web UI or send it to an API. Was `/gt:gt-farm`; off for a fresh install. |
+| `/gt-flow:gt-flow` | `flow` | Draws how knowledge moved through the vault — one lane per project, an arrow each time an item climbed a level — as one offline HTML file. `--redact` before sharing. |
+| `/gt-demo:gt-demo` | `demo` | A guided tour of the whole system against a throwaway vault, so nothing you try touches your own. |
+| `/gt-wiki:gt-wiki` … | `wiki` | Five skills for a standalone LLM wiki: query, ingest, init, lint, refresh. |
+
+The report card (`report-card` module) has no command: it runs at `/compact` and session
+end, and is switched with `/gt:gt-settings`.
 
 ## The commands
 
@@ -211,6 +226,8 @@ do them.
 | `gt_log.py add "<line>"` | Records a log entry. Writes only **your session's** spool file, so two sessions can never overwrite one another. `log.md` is rendered from those spools, never written directly. |
 | `gt_adr.py allocate <project>` | Reserves the next ADR number and prints it. The number is taken with a single atomic operation, so two sessions cannot both take ADR-6 — which has happened. Write the decision into the file it names. |
 | `gt_log.py merge` · `gt_adr.py merge <project>` | Regenerate `log.md` / `decisions.md` from the spools. Idempotent: running twice changes nothing. |
+| `gt_log.py add "<line>" --event <kind> --item <path>` | The same log line, plus one structured event recording what moved where. `gt-promote` and `gt-refresh` record their moves this way; `gt-review`, `gt-work` and `gt-ingest` call `gt_events.py emit`. |
+| `gt_events.py` | The structured event stream (`events.jsonl`, schema v1) that `/gt-flow:gt-flow` draws. `backfill --dry-run` previews history rebuilt from git and `log.md` for a vault that predates the events. |
 | `gt_tasks.py` | Regenerates `TASKS.md`, the cross-project task rollup, ranked and computed against the clock rather than stored. |
 | `gt_session.py` | Registers a session, claims the files it is about to write, and reports which other sessions are live. Liveness is checked against the OS, not guessed from a timestamp. |
 | `gt_closeout.py` | Names projects whose signals say they may be finished, with the reasons. Closure is asked for, never assumed. |

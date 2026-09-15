@@ -114,7 +114,8 @@ pre, table { break-inside: avoid; font-size: 9px; }
 table { width:100%; border-collapse: collapse; }
 th, td { border:1px solid #ddd; padding:3px 5px; text-align:left; vertical-align:top; }
 </style></head><body><h1 id="golden-thread-user-manual">User Manual</h1>
-<p>Complete reference for gt's eighteen skills and its modules. Written against <strong>gt v0.14.0</strong>.</p>
+<p>Complete reference for gt's sixteen skills and its six modules. Written against <strong>gt v0.15.0</strong>
+(gt-wiki 0.2.1; gt-demo, gt-watch, gt-report-card, gt-farm and gt-flow 0.15.0).</p>
 <hr />
 <h2 id="the-model">The model</h2>
 <p>Claude forgets everything between sessions. The vault doesn't. Golden Thread's
@@ -319,7 +320,7 @@ project memory. If a page comes back <code>status: stale</code>, verify before a
 /gt:gt-runbook-lint    # facts duplicated across runbooks
 /gt:gt-refresh         # upstream changes to Sources/
 </code></pre>
-<p><strong>What <code>install.sh</code> does on an upgrade (0.14.0).</strong> One run from any older release ends where a
+<p><strong>What <code>install.sh</code> does on an upgrade (since 0.14.0).</strong> One run from any older release ends where a
 fresh install of the newest would, so skipping releases is safe:</p>
 <ol>
 <li>Installs every plugin the release ships and removes what older releases left behind
@@ -332,21 +333,86 @@ fresh install of the newest would, so skipping releases is safe:</p>
    A vault the same install created gets an initial commit first. A vault holding your own
    uncommitted work is never touched — the install prints the command to run instead.</li>
 </ol>
-<p>Two things are always left for you, reported by the install and by <code>/gt:gt-upgrade</code>:
+<p>Three things are always left for you, reported by the install and by <code>/gt:gt-upgrade</code>:
 <strong>needs a person: no merge base</strong> (a PROTOCOL.md or CONVENTIONS.md you edited before gt
 recorded a base — review it against the template, then <code>gt_upgrade.py run --record-base
-&lt;doc&gt;</code>), and <strong>conflict awaiting you</strong> (resolve the <code>.merge-conflict</code> file, then
-<code>--record-base</code>). Neither is ever merged unattended, and neither is re-run on every install.</p>
+&lt;doc&gt;</code>), <strong>merge held</strong> (a merge that would remove lines from your document, typically
+because a release before 0.14.0 recorded your own file as the base — keep yours with
+<code>--record-base &lt;doc&gt;</code>, or take the merge with <code>--accept-merge &lt;doc&gt;</code>), and <strong>conflict
+awaiting you</strong> (resolve the <code>.merge-conflict</code> file, then <code>--record-base</code>). None is ever
+merged unattended, and none is re-run on every install. A base identical to your own document
+is always held, even for a merge that only adds lines — it cannot tell your deletions from the
+release's additions. A dry run reports lines <strong>added and removed</strong> from your document
+(<code>would merge cleanly (+3 added, -0 removed from your document)</code>), never a net count, which
+once read "+0 lines" over six overwritten ones.</p>
 <pre><code class="language-bash">python3 $SCRIPTS/gt_machine_migrate.py status          # machine migrations pending here
 python3 $SCRIPTS/gt_upgrade.py --vault &lt;vault&gt; status  # vault upgrades pending
 </code></pre>
-<p><strong>Modules (0.14.0).</strong> Optional parts of Golden Thread ship as modules — separate plugins in
-the same marketplace, versioned with gt, each declared by a <code>module.json</code>. Today: <code>wiki</code>
-(<code>gt-wiki</code>) and <code>demo</code> (<code>gt-demo</code>), both on by default.</p>
+<p><strong>Modules (since 0.14.0).</strong> Optional parts of Golden Thread ship as modules — separate plugins in
+the same marketplace, versioned with gt, each declared by a <code>module.json</code>. 0.15.0 ships six:</p>
+<table>
+<thead>
+<tr>
+<th>Module</th>
+<th>Plugin</th>
+<th>Default</th>
+<th>What it adds</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>wiki</code></td>
+<td><code>gt-wiki</code></td>
+<td>on</td>
+<td><code>/gt-wiki:gt-wiki</code> and four more skills for a standalone LLM wiki</td>
+</tr>
+<tr>
+<td><code>demo</code></td>
+<td><code>gt-demo</code></td>
+<td>on</td>
+<td><code>/gt-demo:gt-demo</code>, the guided tour</td>
+</tr>
+<tr>
+<td><code>watch</code></td>
+<td><code>gt-watch</code></td>
+<td>on</td>
+<td><code>/gt-watch:gt-watch</code>, a session-start hook and the <code>watch</code> setting (was <code>/gt:gt-watch</code>)</td>
+</tr>
+<tr>
+<td><code>report-card</code></td>
+<td><code>gt-report-card</code></td>
+<td>on</td>
+<td>the session report card: three hooks (PreCompact, SessionEnd, SessionStart) and the <code>report_card</code> and <code>closeout_check</code> settings; no command</td>
+</tr>
+<tr>
+<td><code>farm</code></td>
+<td><code>gt-farm</code></td>
+<td><strong>off</strong> for a fresh install</td>
+<td><code>/gt-farm:gt-farm</code>, work packets for an external AI (was <code>/gt:gt-farm</code>)</td>
+</tr>
+<tr>
+<td><code>flow</code></td>
+<td><code>gt-flow</code></td>
+<td>on</td>
+<td><code>/gt-flow:gt-flow</code>, the flow view of the event stream</td>
+</tr>
+</tbody>
+</table>
 <pre><code class="language-bash">bash install.sh --list-modules          # each module, its state, and why
 bash install.sh --without demo          # remove it; the choice is remembered
-bash install.sh --with demo             # bring it back
+bash install.sh --with farm             # bring one in
 </code></pre>
+<p><strong>Upgrading from 0.14.0.</strong> <code>/gt:gt-watch</code>, the report card and <code>/gt:gt-farm</code> were part of gt
+until 0.14.0; in 0.15.0 they are modules and the commands are renamed (<code>/gt-watch:gt-watch</code>,
+<code>/gt-farm:gt-farm</code>). The installer tells you where each went, once per command you had:
+<code>Moved: /gt:gt-watch → /gt-watch:gt-watch</code>, with <code>(module watch is off: ./install.sh --with
+watch)</code> added when that module is off after the install (the same for <code>/gt:gt-farm</code> and, from
+before 0.14.0, <code>/gt:gt-demo</code>). One <code>install.sh</code> run over 0.14.0 ends where a fresh 0.15.0 install with
+the same module choices would. A machine that had <code>/gt:gt-farm</code> keeps it: a machine
+migration records <code>farm</code> as on, so an upgrade never silently loses a command you had. Your
+<code>watch</code>, <code>report_card</code> and <code>closeout_check</code> values are kept. Rolling back
+(<code>bash install.sh 0.14.0</code>) removes the module plugins 0.14.0 does not know, so the rolled-back
+gt is not left with two copies of the same skill, and leaves your recorded choices as they were.</p>
 <p>The choice lives in <code>~/.claude/golden-thread/install-choices.json</code>. A module that is off
 leaves nothing behind: no plugin cache, marketplace entry, enabled flag, hooks or hook
 scripts. A module's hooks are wired only while it is on, and can never be one of the Core-rule
@@ -376,7 +442,8 @@ two days earlier held 24 of the top rows in the rollup.</p>
 </code></pre>
 <p>names projects whose signals say they may be finished: most open tasks past due,
 most tasks checked with nothing urgent left, three quiet weeks, or nothing open. The
-same probe runs at <code>/compact</code> and session end (setting <code>closeout_check</code>), and
+same probe runs at <code>/compact</code> and session end (setting <code>closeout_check</code>, from the
+report-card module), and
 <code>gt-work</code> asks after the last urgent task is checked. The question is always put to
 you, never acted on.</p>
 <p>Closing means: <code>stage: complete</code>, leftover tasks to <code>p:: 7</code> (shelved, not deleted),
@@ -399,6 +466,51 @@ are actively asserted, not merely stored. Idempotent.</p>
 <p><code>CLAUDE.md</code> is read at <strong>session start</strong>. A rule added mid-session does not
 apply until you restart — that looks like the rule being ignored.</p>
 </blockquote>
+<h4 id="what-an-install-changes-inside-your-vault">What an install changes inside your vault</h4>
+<p><code>install.sh</code> refreshes a few files in the vault on every run. Since 0.15.0 each is decided
+by <strong>content</strong>, and every change is named in the install output:</p>
+<table>
+<thead>
+<tr>
+<th>What</th>
+<th>Rule</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Vault tools (<code>Projects/golden-thread/tools/*.py</code>)</td>
+<td>Replaced only when your copy is text gt shipped (listed in <code>templates/shipped-hashes.json</code>). Anything else is <strong>kept</strong>: <code>Vault tool MODIFIED LOCALLY → … kept</code>, with the template to diff against.</td>
+</tr>
+<tr>
+<td>Git hooks (<code>.githooks/*</code>)</td>
+<td>Same rule as vault tools: a copy gt shipped is updated; a hook matching no shipped version (your edit, committed or not) is kept and reported as modified locally.</td>
+</tr>
+<tr>
+<td><code>core.hooksPath</code></td>
+<td>Set to <code>.githooks</code> only when unset. If you set your own, it is left alone and the install says how to call the attribution hooks from yours.</td>
+</tr>
+<tr>
+<td>Core rules and CLAUDE.md's "First: is enforcement active?" section</td>
+<td>A missing rule is added back and named (<code>Added Core rule → …</code>); so is the section.</td>
+</tr>
+<tr>
+<td><code>log.md</code>, each <code>decisions.md</code></td>
+<td>Converted once to generated files (the 0.11.0 spool migration) when the vault was clean before the install; each converted file is named, with any note (such as trailing blank lines dropped).</td>
+</tr>
+</tbody>
+</table>
+<p>Before the first of these writes, the files involved are backed up to
+<code>~/.claude/golden-thread/backups/install-vault-files-&lt;stamp&gt;.tar.gz</code> (with the previous
+<code>core.hooksPath</code>). The backup is deleted again when the install changed none of them.</p>
+<p><strong>Keeping something removed.</strong> A rule or section you delete on purpose comes back on the
+next install unless you list it in <code>.gt-removed</code>, beside <code>core-rules/</code> (by default
+<code>Projects/golden-thread/.gt-removed</code>). One entry per line, <code>#</code> for comments:</p>
+<pre><code>core_parallel_when_beneficial.md     # a Core rule file name
+claude-md-enforcement-section        # CLAUDE.md's &quot;is enforcement active?&quot; section
+</code></pre>
+<p>Listed items are never re-created (<code>Left removed → …</code>). gt never writes this file. Removing
+a rule file does not switch off a hook that enforces it (<code>enforcement: validated</code>); the
+install warns when that is the case — use <code>gt_settings.py</code> for that.</p>
 <h3 id="gtgt-create"><code>/gt:gt-create</code></h3>
 <p>Scaffolds a project. Gathers slug, title, tags, <strong>domain</strong>, sub-project parent,
 runbook, and <strong>topology</strong>; runs the script; then fills <code>idea.md</code> from what you
@@ -411,13 +523,13 @@ no conflict marker to warn you. So none of them is written directly.</p>
 <pre><code class="language-bash">T=&lt;vault&gt;/Projects/golden-thread/tools
 
 # A log entry. Writes only this session's spool file, then re-renders log.md.
-python3 $T/gt_log.py add &quot;2026-01-01 10:00 CST [work] my-project — what happened&quot;
+python3 $T/gt_log.py --vault &lt;vault&gt; add &quot;2026-01-01 10:00 CST [work] my-project — what happened&quot;
 
 # An ADR. Reserve the number FIRST -- two sessions that both read &quot;the highest is 5&quot;
 # will both write ADR-6. This takes the number in a single atomic step and prints it.
-python3 $T/gt_adr.py allocate my-project --title &quot;The choice&quot;
+python3 $T/gt_adr.py --vault &lt;vault&gt; allocate my-project --title &quot;The choice&quot;
 #   -&gt; 7        (and creates the file that holds ADR-7; write the body into it)
-python3 $T/gt_adr.py merge my-project
+python3 $T/gt_adr.py --vault &lt;vault&gt; merge my-project
 
 # Who has spooled what, and any allocation left unfinished
 python3 $T/gt_log.py status
@@ -426,29 +538,54 @@ python3 $T/gt_adr.py status my-project
 <p>Adopting this in an existing vault is one command per file. It freezes what is there as
 a baseline that sorts first, so no history is rewritten and no ADR is renumbered, and it
 refuses unless the merge reproduces the original byte for byte:</p>
-<pre><code class="language-bash">python3 $T/gt_log.py migrate
-python3 $T/gt_adr.py migrate my-project
+<pre><code class="language-bash">python3 $T/gt_log.py --vault &lt;vault&gt; migrate
+python3 $T/gt_adr.py --vault &lt;vault&gt; migrate my-project
 </code></pre>
 <p><code>migrate</code> refuses on a project whose ADR numbers already collide, because renumbering
 would invalidate every existing reference to them. <code>gt-lint</code>'s <code>adr-collision</code> reports
 those so you can decide. A deliberate <code>## ADR-6 amendment:</code> is not a collision and is
 left alone.</p>
-<p><strong>Movement events (0.13.0).</strong> <code>gt_events.py</code> records <em>what moved where</em> as structured JSON
-lines, the data the planned flow visualizer and dashboard read. Same spool pattern as the
-log: one file per session under <code>spool/events/</code>, merged into <code>events.jsonl</code>. In 0.13.0 the
-tool and schema ship; other tools start emitting events in a later release.</p>
-<pre><code class="language-bash">python3 $T/gt_events.py --vault &lt;vault&gt; emit --kind promote --item Knowledge/Quote-API.md \
-    --from Projects/ats/memory/quote_api.md --to Knowledge/Quote-API.md --level-from 2 --level-to 4
+<p><strong>Movement events.</strong> <code>gt_events.py</code> records <em>what moved where</em> as structured JSON lines —
+the data <code>/gt-flow:gt-flow</code> draws. Same spool pattern as the log: one file per session
+under <code>spool/events/</code>, merged into <code>events.jsonl</code>. The tool and schema (v1) shipped in
+0.13.0; <strong>since 0.15.0 operations record events as they happen</strong>:</p>
+<ul>
+<li><code>gt_log.py add "&lt;line&gt;" --event &lt;kind&gt; --item &lt;path&gt; [--from --to --level-from --level-to
+  --project]</code> spools the log line and one event in one command. <code>/gt:gt-promote</code> and
+  <code>/gt:gt-refresh</code> record their moves this way; <code>/gt:gt-review</code>, <code>/gt:gt-work</code> and
+  <code>/gt:gt-ingest</code> emit theirs with <code>gt_events.py emit</code>.</li>
+<li><code>gt_adr.py allocate</code> emits an <code>adr</code> event for each number it reserves.</li>
+<li><code>vault_init.py</code> emits <code>create</code>, <code>rename</code>, <code>merge</code> and <code>archive</code> when <code>create-project</code>,
+  <code>rename-project</code>, <code>merge-project</code> and <code>archive-project</code> actually do something (never under
+  <code>--dry-run</code>). <code>archive-project</code> is the only source of <code>archive</code>: <code>gt_closeout.py answer
+  &lt;slug&gt; yes</code> records your decision to close, not the move, and emits no event.</li>
+<li><code>gt_tasks.py</code> emits <code>task.open</code> / <code>task.done</code> for checkbox lines that changed — once the
+  stream has been seeded with task events by a backfill.</li>
+</ul>
+<p>An event can never fail the operation it describes: a failure is one line on stderr.</p>
+<p>A vault older than the events has none. <code>backfill</code> rebuilds the history from git and
+<code>log.md</code> — Knowledge and global-memory additions, renames between levels, project renames,
+README checkbox changes — as <code>actor: backfill</code> events. Preview it first; a second run adds
+nothing. (A dry run on the author's vault found about 1,430 events.)</p>
+<pre><code class="language-bash">python3 $T/gt_log.py --vault &lt;vault&gt; add &quot;2026-01-01 [graduate] quote_api → Knowledge&quot; --event promote \
+    --item Knowledge/Quote-API.md --from Projects/ats/memory/quote_api.md \
+    --to Knowledge/Quote-API.md --level-from 2 --level-to 4 --project ats
+python3 $T/gt_events.py --vault &lt;vault&gt; backfill --dry-run   # what history would be added
 python3 $T/gt_events.py --vault &lt;vault&gt; validate          # report bad lines, exit 1 if any
 python3 $T/gt_events.py --vault &lt;vault&gt; list --kind promote --json
 </code></pre>
 <p>Every event is checked before it is written: vault-relative paths only, a closed list of
 kinds, levels 1–5, a note of at most 120 characters, no unknown keys.</p>
-<p><strong>Hand-editing a generated file is not a style violation</strong> — the change is lost at the
-next merge. <code>gt-lint</code> reports it as <code>generated-hand-edited</code>.</p>
+<p><strong>Hand-editing a generated file is still the wrong place for it</strong>, but it is no longer lost
+(0.15.0): a line typed into <code>log.md</code> is captured into <code>spool/log/hand-edits-&lt;time&gt;.md</code> at the
+next merge and announced — a line starting with a date sorts by it, an undated one lands after
+the baseline — and <code>gt_adr.py merge</code> refuses to render over a hand-written line in
+<code>decisions.md</code>, naming it, until you move it into an ADR. <code>gt-lint</code> reports the file as
+<code>generated-hand-edited</code>.</p>
 <p>Both commands sit on one shared primitive, <code>gt_spool.py</code>: per-session spool files plus a
 merge whose ordering uses nothing machine-specific, so two machines rendering the same
-spools produce byte-identical output. You do not call it directly; it is documented here
+spools produce byte-identical output. Bytes that are not valid UTF-8 (an old latin-1 <code>é</code> in
+<code>log.md</code> or <code>decisions.md</code>) pass through <code>migrate</code> and <code>merge</code> exactly as they were (0.15.0). You do not call it directly; it is documented here
 because a merge that ordered by mtime or directory order would make the <em>generated</em> file
 conflict in git, which is worse than the problem being solved.</p>
 <h2 id="daily-work">Daily work</h2>
@@ -564,7 +701,9 @@ asks where each belongs, files it as a task or project, and checks the inbox lin
 off with a pointer. Regenerates the rollup at the end.</p>
 <hr />
 <h2 id="context-management">Context management</h2>
-<h3 id="gtgt-farm"><code>/gt:gt-farm</code></h3>
+<h3 id="gt-farmgt-farm"><code>/gt-farm:gt-farm</code></h3>
+<p><em>Module <code>farm</code> (plugin <code>gt-farm</code>). Off for a fresh install — <code>bash install.sh --with farm</code>
+adds it. A machine upgrading from a gt that shipped <code>/gt:gt-farm</code> keeps it on.</em></p>
 <p>Routes work out of this context to an external AI service when work is bulk,
 mechanical, or genuinely benefits from a non-Claude second opinion.</p>
 <p>The unit is a <strong>work packet</strong>: self-contained, with a strict return contract
@@ -610,7 +749,14 @@ personal identifiers.</p>
   <code>source:</code> URL and confirming the claim.
 - <code>GAPS</code> is mandatory and <code>GAPS: None</code> must be justified, not asserted.
 - Cite the specific page carrying the claim, never a homepage.</p>
-<p>Packets are saved to <code>&lt;vault&gt;/Projects/external-ai-tools/packets/&lt;YYYY-MM-DD&gt;-&lt;slug&gt;.md</code>.</p>
+<p>Packets are saved to <code>&lt;packet dir&gt;/&lt;YYYY-MM-DD&gt;-&lt;slug&gt;.md</code>. The packet dir is
+<code>farm_packet_dir</code> in <code>~/.claude/vault-config.json</code> if set, else
+<code>Projects/&lt;current project&gt;/packets/</code>. A relative value is taken from the vault root and a
+literal <code>&lt;project&gt;</code> in it becomes the current project's slug; an absolute value is used as
+is. The skill names no particular AI service: which services you have is your
+configuration (<code>farm_services</code> in <code>vault-config.json</code> names a table of them). Copying a
+packet uses whichever clipboard tool the machine has — <code>pbcopy</code>, <code>wl-copy</code>, <code>xclip</code> or
+<code>clip.exe</code> — and with none, you are given the packet file's path instead.</p>
 <hr />
 <h2 id="knowledge-management">Knowledge management</h2>
 <h3 id="gtgt-promote"><code>/gt:gt-promote</code></h3>
@@ -815,7 +961,7 @@ is registered here and can be switched off.</p>
 <td><code>orphan_check</code></td>
 <td><code>off</code> · <code>report</code> · <code>reap</code></td>
 <td><code>report</code></td>
-<td>At session start, looks for abandoned background Claude workers; <code>reap</code> stops them</td>
+<td>At session start, looks for abandoned background Claude workers; <code>reap</code> stops them. A worker is judged by who owns it (0.15.0): a shell with a live <code>claude</code> process above it belongs to that session and is listed as information — session id, claude pid, uptime, and <code>WAITING on: &lt;what it polls&gt;</code> for a poll loop — and is never reaped, even by <code>reap</code>. <code>ORPHAN</code> means no <code>claude</code> remains above it. This session's own undeclared or idle workers are still raised</td>
 </tr>
 <tr>
 <td><code>push_check</code></td>
@@ -824,22 +970,10 @@ is registered here and can be switched off.</p>
 <td>At session start, reports vault commits not yet pushed</td>
 </tr>
 <tr>
-<td><code>report_card</code></td>
-<td><code>off</code> · <code>minimal</code> · <code>full</code></td>
-<td><code>minimal</code></td>
-<td>At <code>/compact</code> and session end, summarises session hygiene; the card is shown at the start of your next session, because output at those two events is never displayed</td>
-</tr>
-<tr>
 <td><code>protected_paths</code></td>
 <td><code>off</code> · <code>ask</code></td>
 <td><code>ask</code></td>
 <td>A Write or Edit to the vault's <code>core-rules/</code> or <code>global-memory/</code>, to <code>~/.claude/golden-thread/</code>, or to <code>~/.claude/settings.json</code> always shows the permission prompt; editing an existing file in <code>Sources/</code> is refused (supersede it with a new file). Shell commands that write those files are not seen</td>
-</tr>
-<tr>
-<td><code>watch</code></td>
-<td><code>off</code> · <code>report</code></td>
-<td><code>off</code></td>
-<td><code>/gt:gt-watch</code>: the hourly fetch and the session-start report of repo changes</td>
 </tr>
 <tr>
 <td><code>test_gate</code></td>
@@ -861,6 +995,84 @@ is registered here and can be switched off.</p>
 </tr>
 </tbody>
 </table>
+<p><strong>Settings that come from modules.</strong> Since 0.15.0 a module declares its own settings in
+its <code>module.json</code> — <code>key</code>, <code>default</code>, <code>values</code>, <code>summary</code>, and an optional long <code>detail</code>
+that <code>gt_settings.py explain &lt;name&gt;</code> prints. They are listed under <code>module &lt;name&gt;</code> in
+<code>show</code> and exist only while the module is installed. A value you set for a module that is
+later switched off is kept and shown as <em>OFF — settings kept, not in effect</em>; it takes
+effect again after <code>bash install.sh --with &lt;module&gt;</code>.</p>
+<table>
+<thead>
+<tr>
+<th>Setting</th>
+<th>Module</th>
+<th>Values</th>
+<th>Default</th>
+<th>What it does</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>report_card</code></td>
+<td><code>report-card</code></td>
+<td><code>off</code> · <code>minimal</code> · <code>full</code></td>
+<td><code>minimal</code></td>
+<td>At <code>/compact</code> and session end, summarises session hygiene; the card is shown at the start of your next session, because output at those two events is never displayed</td>
+</tr>
+<tr>
+<td><code>closeout_check</code></td>
+<td><code>report-card</code></td>
+<td><code>off</code> · <code>ask</code></td>
+<td><code>ask</code></td>
+<td>At <code>/compact</code> and session end, names a project that looks finished so you are asked whether to close it</td>
+</tr>
+<tr>
+<td><code>watch</code></td>
+<td><code>watch</code></td>
+<td><code>off</code> · <code>report</code></td>
+<td><code>off</code></td>
+<td><code>/gt-watch:gt-watch</code>: the cron fetch and the session-start report of repo changes</td>
+</tr>
+</tbody>
+</table>
+<p><code>report_card</code> (detail):</p>
+<pre><code>off     nothing
+minimal hygiene only -- what went wrong in THIS session  (default)
+full    hygiene, plus vault features available and unused
+
+Fires on PreCompact so it is produced while there is still context to write
+it in, rather than competing for the last of it at session end.
+</code></pre>
+<p><code>closeout_check</code> (detail):</p>
+<pre><code>off     nothing
+ask     name each project whose signals say it may be finished, with the
+        reasons, so the assistant puts the question to you  (default)
+
+Runs the vault's own `Projects/golden-thread/tools/gt_closeout.py`. Signals:
+most open tasks past due, most tasks checked off with nothing urgent left,
+no new task and no write-back for three weeks, or no open task at all. Every
+time the question is put to you it is recorded with the signal values, and
+your answer is recorded beside it, so `gt_closeout.py history` can show what
+'ready to close' has actually looked like for you and the thresholds can be
+tuned to that rather than to a guess.
+
+On 2026-09-05 the CYC26 talk had been delivered for two days while 25 of its
+rehearsal tasks sat open and overdue at the top of the rollup, above live
+trading work. Nothing had asked.
+</code></pre>
+<p><code>watch</code> (detail):</p>
+<pre><code>off     no fetching and no report  (default)
+report  the cron fetch runs, and session start lists unacknowledged upstream
+        changes: P0s first with repo and reason, review items one line each,
+        routine changes as a count
+
+A watch is a note in Projects/golden-thread/watches/. The fetch runs from cron
+(gt_watch.py install-cron), never from a session; the session-start hook only
+reads the local queue in ~/.claude/golden-thread/watch/. P0 comes from fixed
+rules -- a security advisory, a CVE or GHSA id, 'security fix' in a release --
+never from a reading of commit prose, because a P0 that cries wolf stops being
+read. GT_WATCH=off|report in the environment overrides this setting.
+</code></pre>
 <blockquote>
 <p><strong>Heads-up:</strong> <code>parallel_work</code> is <code>on</code> and <code>parallel_max</code> is <code>auto</code> out of the box, so
 after upgrading to 0.12.4 a long run will use as much of your machine as it can — many
@@ -906,15 +1118,17 @@ enforcement on every session start.</p>
 <p>Finds procedures duplicated across runbooks and routes them to the right shared
 layer — <code>PROTOCOL.md</code>, a Knowledge page, or a repo <code>CLAUDE.md</code>.</p>
 <hr />
-<h3 id="gtgt-watch"><code>/gt:gt-watch</code></h3>
+<h3 id="gt-watchgt-watch"><code>/gt-watch:gt-watch</code></h3>
+<p><em>Module <code>watch</code> (plugin <code>gt-watch</code>), installed by default; it was <code>/gt:gt-watch</code> before
+0.15.0. <code>bash install.sh --without watch</code> removes it, including the crontab line it installed.</em></p>
 <p>Watch any git repo you depend on, and hear about it when it changes in a way you said
 you care about — raised as a <strong>P0</strong> when it ships a security fix.</p>
-<pre><code>/gt:gt-watch add &lt;git-url&gt;   — create a watch (any git URL: GitHub, GitLab, self-hosted, file://)
-/gt:gt-watch list            — every watch and its last change
-/gt:gt-watch check           — fetch now instead of waiting for cron
-/gt:gt-watch show &lt;slug&gt;     — Claude reads the new commits and explains them
-/gt:gt-watch ack [&lt;slug&gt;]    — mark changes seen
-/gt:gt-watch remove &lt;slug&gt;   — stop watching
+<pre><code>/gt-watch:gt-watch add &lt;git-url&gt;   — create a watch (any git URL: GitHub, GitLab, self-hosted, file://)
+/gt-watch:gt-watch list            — every watch and its last change
+/gt-watch:gt-watch check           — fetch now instead of waiting for cron
+/gt-watch:gt-watch show &lt;slug&gt;     — Claude reads the new commits and explains them
+/gt-watch:gt-watch ack [&lt;slug&gt;]    — mark changes seen
+/gt-watch:gt-watch remove &lt;slug&gt;   — stop watching
 </code></pre>
 <p><strong>A watch is a note</strong> — <code>Projects/golden-thread/watches/&lt;slug&gt;.md</code>, editable in Obsidian's
 Properties panel. Its frontmatter says what to watch: <code>url</code>, <code>track</code> (commits, tags,
@@ -931,14 +1145,16 @@ id; a change to <code>SECURITY.md</code> or your <code>watch_paths</code> that s
 matching your own <code>p0_when</code>. A new release, a major-version jump, a change under
 <code>watch_paths</code>, or "BREAKING CHANGE" is a <strong>review</strong> item. Ordinary words like "auth" or
 "security" in a commit message are not enough — a P0 that cries wolf stops being read.</p>
-<p>Off until you switch it on: setting <code>watch</code> (<code>off</code> · <code>report</code>). <code>add</code> offers to switch it
-on and install the cron entry.</p>
+<p>The module is on by default, but it fetches and reports nothing until you switch it on:
+setting <code>watch</code> (<code>off</code> · <code>report</code>). <code>add</code> offers to switch it on and install the cron entry.</p>
 <hr />
 <h3 id="gt-demogt-demo"><code>/gt-demo:gt-demo</code></h3>
 <p><em>Module <code>demo</code> (plugin <code>gt-demo</code>), installed by default. <code>bash install.sh --without demo</code>
 removes it; <code>--with demo</code> brings it back.</em></p>
-<p>An eleven-act guided tour of Golden Thread on PizzaBot 3000, a fictional pizza-ordering
-project. It runs in its <strong>own throwaway vault</strong>, so nothing it does can reach yours.</p>
+<p>A guided tour of Golden Thread on PizzaBot 3000, a fictional pizza-ordering
+project: nine core acts, plus one act for each installed module that ships one — in 0.15.0
+<code>wiki</code>, <code>watch</code> and <code>flow</code>, so twelve with the default modules. It runs in its <strong>own
+throwaway vault</strong>, so nothing it does can reach yours.</p>
 <pre><code>/gt-demo:gt-demo start    — build the demo vault and print the command that opens it
 /gt-demo:gt-demo tour     — (in the demo session) run the tour; you only click Next
 /gt-demo:gt-demo end      — every commit and file the tour produced
@@ -953,18 +1169,50 @@ settings or state. Run that in a new terminal and type
 <code>/gt-demo:gt-demo tour</code>. For each act Claude says one line to the audience, does the work with
 the real skill, says what just happened, and offers buttons — <strong>Next</strong>, <strong>Repeat this
 act</strong>, <strong>Skip ahead</strong>, <strong>End tour</strong>.</p>
-<p><strong>The acts:</strong> Core rules enforced (a prepared reply carrying a key is blocked) · open a
-project · "what's next?" from the task rollup · capture a finding and an ADR mid-session ·
-ingest a source and query the wiki · route a stray idea · validate a wrong claim ·
-lint finds a planted broken link · promote a finding to a Knowledge page (which fixes the
-link) · watch an upstream library and see its security release open as a P0 · file the inbox, close the session, and show the receipt. The acts are plain text
-in <code>templates/demo-pizzabot/tour.md</code> — reorder or reword them there.</p>
+<p><strong>The core acts:</strong> Core rules enforced (a prepared reply carrying a key is blocked) · open a
+project · "what's next?" from the task rollup · capture a finding mid-session · route a
+stray idea · validate a wrong claim · lint finds a planted broken link · promote a finding
+to a Knowledge page (which fixes the link) · file the inbox, close the session, and show
+the receipt. They are plain text in <code>templates/demo-pizzabot/tour.md</code>.</p>
+<p><strong>Module acts</strong> come from each installed module's <code>module.json</code> → <code>demo</code> file and are placed
+before the closing act: <strong>wiki</strong> — ingest a source and query the wiki; <strong>watch</strong> — watch an
+upstream library and see its security release open as a P0; <strong>flow</strong> — render the tour's
+events as a redacted flow view. A module that is not installed has no act. A module act
+names its scripts as <code>&lt;module:NAME&gt;</code>, which the demo resolves with
+<code>gt_demo.sh module-scripts NAME</code> (exit 3: not installed, the act is skipped).</p>
 <p><strong>Why its own vault:</strong> a fuller tour writes to shared files (<code>INBOX.md</code>, <code>TASKS.md</code>,
 <code>log.md</code>, <code>Knowledge/</code>) that other sessions also write. Undoing that in a real vault
 means rewinding history everyone shares. In a throwaway vault, <code>clean</code> just rebuilds it.
 The demo never writes your <code>vault-config.json</code>: the demo session is pinned with
 <code>GT_VAULT</code>, which every skill and hook honors. <code>clean</code> and <code>remove</code> delete a directory
 only if it carries the demo's marker file.</p>
+<hr />
+<h3 id="gt-flowgt-flow"><code>/gt-flow:gt-flow</code></h3>
+<p><em>Module <code>flow</code> (plugin <code>gt-flow</code>), new in 0.15.0, installed by default.</em></p>
+<p>Draws how knowledge moved through the vault over time, as <strong>one self-contained HTML file</strong>
+that opens offline — no network, no CDN. One lane per project, time left to right, each
+lane split into the ladder's levels (memory → research/decisions/design → Knowledge →
+global-memory → Core); an arrow joins the level an item left to the level it reached, so a
+promotion is an arrow climbing. It reads <code>Projects/golden-thread/events.jsonl</code> and never
+writes the vault.</p>
+<pre><code class="language-bash">FLOW=~/.claude/plugins/cache/golden-thread-plugin/gt-flow/0.15.0/scripts
+python3 $FLOW/gt_flow.py render --vault &lt;vault&gt; [--out FILE|DIR] [--redact] \
+    [--project &lt;slug&gt; ...] [--since YYYY-MM-DD] [--tasks]
+</code></pre>
+<ul>
+<li><strong><code>--redact</code> before the page leaves your own screen</strong> — an Artifact, a chat, a ticket, a
+  screenshot. Every project, path, task id, domain and session becomes a short salted hash
+  and notes are dropped; levels, kinds and counts stay. The salt is random per render, so
+  two redacted files cannot be joined. If the redaction self-check fails, nothing is written.</li>
+<li>Task events (<code>task.open</code>, <code>task.done</code>) are hidden at first — on a real vault they are most
+  of the stream. They are one click away in the Kinds filter; <code>--tasks</code> shows them from the start.</li>
+<li><code>--project</code> is repeatable and includes sub-projects; <code>--since</code> takes a date or an ISO-8601 instant.</li>
+<li>Without <code>--out</code> the file lands in the current directory (a temp directory when that is
+  inside the vault). An <code>--out</code> inside the vault is <strong>refused</strong>.</li>
+</ul>
+<p>Exit codes: <code>0</code> written · <code>1</code> bad arguments, an invalid event file or an unknown schema
+version · <code>2</code> no events yet (run <code>gt_events.py backfill --dry-run</code> to see what history
+would be recovered) · <code>3</code> the filters matched nothing.</p>
 <hr />
 <h2 id="where-does-this-fact-go">Where does this fact go?</h2>
 <table>
@@ -1027,7 +1275,7 @@ answer is not obvious — including when the honest answer is that the fact belo
 project other than the one loaded.</p>
 <hr />
 <h2 id="script-reference">Script reference</h2>
-<pre><code class="language-bash">SCRIPTS=~/.claude/plugins/cache/golden-thread-plugin/gt/0.14.0/scripts
+<pre><code class="language-bash">SCRIPTS=~/.claude/plugins/cache/golden-thread-plugin/gt/0.15.0/scripts
 
 python3 $SCRIPTS/vault_init.py fresh --vault ~/my-vault --domain &quot;My Team&quot;
 

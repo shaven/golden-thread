@@ -201,6 +201,24 @@ class Applying(UpgradeBase):
         import os
         self.assertTrue(os.path.isfile(path), "the reported backup does not exist")
 
+    # 0.15.0: a conversion the installer applies unattended says WHICH files it changed and
+    # what that means, not just "migrated 1 project(s)".
+    def test_decisions_conversion_names_each_file_and_its_note(self):
+        self.project("alpha", "# D\n\n## ADR-1: one\n\n\n")      # trailing blank lines
+        p = self.up("run", "--allow-dirty")
+        self.assertIn("Projects/alpha/decisions.md — migrated alpha", p.stdout)
+        self.assertIn("now GENERATED from spool/decisions/", p.stdout)
+
+    def test_a_rule_listed_in_gt_removed_is_not_re_added(self):
+        core = self.v / "Projects" / "golden-thread" / "core-rules"
+        (core / "core_parallel_when_beneficial.md").unlink()
+        self.assertIn("core_parallel_when_beneficial.md", self.up("status").stdout)
+        (core.parent / ".gt-removed").write_text("core_parallel_when_beneficial.md\n")
+        self.assertNotIn("core_parallel_when_beneficial.md", self.up("status").stdout)
+        self.up("run", "--allow-dirty")
+        self.assertFalse((core / "core_parallel_when_beneficial.md").exists(),
+                         "a rule the owner listed as removed was re-added")
+
 
 class DocumentMerges(UpgradeBase):
     def doc(self):
@@ -339,6 +357,128 @@ class DocumentMerges(UpgradeBase):
         st = self.up("status")
         self.assertIn("nothing pending", st.stdout)
         self.assertNotIn("needs a person", st.stdout)
+
+
+class MergesThatRemoveYourLines(UpgradeBase):
+    """A clean merge that would remove lines from the owner's document is held for a person.
+
+    2026-09-14, the owner's vault: a pre-0.14 release recorded PROTOCOL.md itself as the
+    base, so base == ours and the "clean" merge WAS the template -- the owner's "Write that
+    down" section and every wikilink gone, reported as "would merge cleanly (-16 lines)",
+    and install.sh applies pending steps unattended on a clean vault. The same shape arises
+    when a release removes a section the owner still has. Neither is decided unattended."""
+
+    OWNER = "# Protocol\n\n## Write that down\n\nthe owner's own rule\n\n[[a-wikilink]]\n"
+
+    def doc(self):
+        return self.v / "Projects" / "PROTOCOL.md"
+
+    def base(self):
+        return self.v / BASE / "PROTOCOL.md"
+
+    def base_is_ours(self):
+        self.base().write_text(self.OWNER)
+        self.doc().write_text(self.OWNER)
+        return self.doc()
+
+    def test_a_base_recorded_from_the_owners_file_never_replaces_the_document(self):
+        d = self.base_is_ours()
+        before = d.read_bytes()
+        st = self.up("status")
+        self.assertNotIn("doc-merge", st.stdout, "a line-removing merge offered as appliable")
+        self.assertIn("needs a person: merge held", st.stdout, st.stdout)
+        self.assertIn("identical to your", st.stdout)
+        for _ in range(2):
+            p = self.up("run", "--allow-dirty")
+            self.assertEqual(d.read_bytes(), before, "the owner's document was replaced")
+            self.assertFalse(d.with_suffix(".md.merge-conflict").exists())
+            self.assertIn("needs a person: merge held", p.stdout)
+        self.assertEqual(self.base().read_text(), self.OWNER, "run rewrote the base")
+
+    def test_an_add_only_merge_against_a_base_copied_from_the_owner_is_held(self):
+        # Validator 2026-09-14: the owner deleted a section; the base was recorded from that
+        # already-edited file, so the merge only ADDED the template's section back -- and
+        # was applied, because nothing was removed.
+        shipped = (TEMPLATES / "PROTOCOL.md").read_text()
+        lines = shipped.splitlines(True)
+        cut = next(i for i in range(len(lines) // 2, len(lines)) if lines[i].startswith("#"))
+        owner = "".join(lines[:cut])          # the owner removed everything from here on
+        self.assertNotEqual(owner, shipped)
+        self.base().write_text(owner)
+        self.doc().write_text(owner)
+        before = self.doc().read_bytes()
+        self.assertNotIn("doc-merge", self.up("status").stdout)
+        p = self.up("run", "--allow-dirty")
+        self.assertEqual(self.doc().read_bytes(), before, "a deleted section was re-inserted")
+        self.assertIn("needs a person: merge held", p.stdout, p.stdout)
+
+    def test_a_clean_merge_keeps_crlf_line_endings(self):
+        from _harness import load_module
+        gu = load_module(SCRIPTS / "gt_upgrade.py", "gt_upgrade_crlf")
+        d = self.tmp / "crlf"
+        d.mkdir()
+        base, shipped, target = d / "base.md", d / "shipped.md", d / "doc.md"
+        base.write_bytes(b"# T\r\n\r\none\r\ntwo\r\n")
+        shipped.write_bytes(b"# T\r\n\r\none\r\ntwo\r\nthree\r\n")    # the release adds
+        target.write_bytes(b"<!-- mine -->\r\n# T\r\n\r\none\r\ntwo\r\n")  # the owner adds
+        rc, _msg = gu._merge3(target, base, shipped, False)
+        self.assertEqual(rc, 0)
+        self.assertEqual(target.read_bytes(),
+                         b"<!-- mine -->\r\n# T\r\n\r\none\r\ntwo\r\nthree\r\n",
+                         "the merge changed the document's line endings")
+
+    def test_a_release_removing_a_section_the_owner_kept_is_held(self):
+        shipped = (TEMPLATES / "PROTOCOL.md").read_text()
+        self.base().write_text(shipped + "\n## A section the release dropped\n")
+        d = self.doc()
+        # the owner's edit at the top, far from the release's removal: a clean merge
+        d.write_text("<!-- mine -->\n" + shipped + "\n## A section the release dropped\n")
+        before = d.read_bytes()
+        self.assertNotIn("doc-merge", self.up("status").stdout)
+        p = self.up("run", "--allow-dirty")
+        self.assertEqual(d.read_bytes(), before)
+        self.assertIn("A section the release dropped", p.stdout, "the removed line was not shown")
+
+    def test_dry_run_reports_lines_added_and_removed_not_a_net_count(self):
+        shipped = (TEMPLATES / "PROTOCOL.md").read_text().splitlines(True)
+        idx = next(i for i in range(len(shipped) // 3, len(shipped))
+                   if shipped[i].strip() and not shipped[i].startswith("#"))
+        base = "".join(shipped[:idx] + shipped[idx + 1:])
+        self.base().write_text(base)
+        self.doc().write_text(base + "\n## Mine\n")
+        p = self.up("run", "--dry-run")
+        self.assertIn("would merge cleanly (+1 added, -0 removed from your document)", p.stdout,
+                      p.stdout)
+
+    def test_record_base_repairs_a_base_recorded_from_the_owners_file(self):
+        d = self.base_is_ours()
+        before = d.read_bytes()
+        p = self.up("run", "--allow-dirty", "--record-base", "PROTOCOL.md")
+        self.assertOk(p)
+        self.assertEqual(self.base().read_text(), (TEMPLATES / "PROTOCOL.md").read_text())
+        self.assertEqual(d.read_bytes(), before)
+        saved = list((self.home / ".claude" / "golden-thread" / "backups").glob("PROTOCOL.md.base.*"))
+        self.assertEqual(len(saved), 1, "the replaced base was not backed up")
+        self.assertEqual(saved[0].read_text(), self.OWNER)
+        st = self.up("status")
+        self.assertIn("nothing pending", st.stdout)
+        self.assertNotIn("needs a person", st.stdout)
+
+    def test_record_base_still_keeps_a_base_that_merges_without_loss(self):
+        shipped = (TEMPLATES / "PROTOCOL.md").read_text()
+        kept = shipped.replace("\n", "\n\n", 1)
+        self.base().write_text(kept)
+        self.doc().write_text(shipped + "\n## Mine\n")
+        p = self.up("run", "--allow-dirty", "--dry-run", "--record-base", "PROTOCOL.md")
+        self.assertIn("already has a merge base", p.stdout)
+        self.assertEqual(self.base().read_text(), kept)
+
+    def test_accept_merge_applies_a_held_merge_when_a_person_says_so(self):
+        self.base_is_ours()
+        p = self.up("run", "--allow-dirty", "--accept-merge", "PROTOCOL.md")
+        self.assertOk(p)
+        self.assertEqual(self.doc().read_text(), (TEMPLATES / "PROTOCOL.md").read_text())
+        self.assertNotIn("needs a person", self.up("status").stdout)
 
 
 if __name__ == "__main__":

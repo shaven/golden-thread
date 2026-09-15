@@ -10,7 +10,8 @@ figures are invented stand-ins; the contents shown are examples of shape, not
 records of fact.
 
 Skill names are as installed: `/gt:gt-open`, not `/gt-open`. The `gt-wiki` plugin is
-a separate, optional mode covered in Scenario 8.
+a separate, optional mode covered in Scenario 8; the other modules (watch, flow, and
+choosing what is installed) are in Scenario 9.
 
 ---
 
@@ -31,7 +32,7 @@ a separate, optional mode covered in Scenario 8.
   session        │  /gt:gt-open  →  work  →  /gt:gt-work                │
                  │        ↑                                            │
                  │   during work:  /gt:gt-query   /gt:gt-validate       │
-                 │                 /gt:gt-farm    INBOX.md capture      │
+                 │                 /gt-farm:gt-farm   INBOX.md capture  │
                  └────────────────────────┬────────────────────────────┘
                                           │
   between        ┌────────────────────────▼────────────────────────────┐
@@ -616,7 +617,11 @@ Logged with `graduate`, naming the destination repo from `source.md`.
 weather APIs before deciding which one the `weather-feed` project should use. That
 is a lot of page reading, and the reading itself is not the scarce resource. Context is.
 
-### `/gt:gt-farm`
+### `/gt-farm:gt-farm`
+
+Farm is a module and is **off on a fresh install** (a machine upgrading from a gt that had
+`/gt:gt-farm` keeps it on). Turn it on once with `bash install.sh --with farm`, then restart
+Claude Code.
 
 You say: *"farm out the API comparison"*
 
@@ -931,6 +936,62 @@ page-to-source chain stays uniform.
 
 ---
 
+## Scenario 9 — Choosing modules, watching upstream, and seeing the flow
+
+**Situation.** You want the upstream security watch and the flow view, but not the demo on
+this machine.
+
+### Choosing modules
+
+Optional parts of Golden Thread are modules: separate plugins installed by the same
+`install.sh` run. `wiki`, `demo`, `watch`, `report-card` and `flow` are on by default;
+`farm` is off for a fresh install.
+
+```bash
+bash install.sh --list-modules     # each module, whether it is on, and why
+bash install.sh --without demo     # remove it completely; the choice is remembered
+```
+
+A module that is off leaves nothing behind — no plugin cache, enabled flag, hooks or hook
+scripts. The choice lives in `~/.claude/golden-thread/install-choices.json`, so later
+installs keep it, and a setting you gave a module survives while it is off.
+
+### `/gt-watch:gt-watch`
+
+You say: *"watch the payments SDK repo for security fixes"*
+
+1. `add <git-url>` verifies the URL with `git ls-remote`, writes a watch note under
+   `Projects/golden-thread/watches/`, and takes a baseline so only later changes count.
+2. Watching is off until the `watch` setting is `report`; the skill offers to switch it on
+   and to install the hourly fetch (`gt_watch.py install-cron --every 1h`) — only on a yes.
+3. The cron fetch queues classified events outside the vault. At the next session start the
+   hook reports them, **P0 first** — a CVE or GHSA id, a security advisory, or a watch's own
+   `p0_when` pattern. Severity comes from the script's rules, never from how urgent the
+   prose sounds. `show <slug>` explains the queue; `ack` marks it seen.
+
+`bash install.sh --without watch` removes the module and its tagged crontab line (after a
+backup); `--with watch` puts that exact line back.
+
+### `/gt-flow:gt-flow`
+
+You say: *"show me how knowledge moved this quarter"*
+
+1. It reads `Projects/golden-thread/events.jsonl` — the event stream operations write as they
+   happen. A vault older than the events gets its history once with
+   `gt_events.py --vault <vault> backfill` (preview with `--dry-run`; a second run adds
+   nothing).
+2. It renders one offline HTML file: a lane per project, time left to right, height by level,
+   an arrow each time an item climbed. Task events start hidden (`--tasks` shows them).
+3. Anything leaving this machine gets `--redact`, which replaces project, file and session
+   names with short hashes and drops notes. Redaction is opt-in; the default render keeps
+   real names for your own screen.
+
+**What this bought you.** You choose what runs on each machine without losing settings, a
+security fix upstream reaches you as a P0 at session start instead of by accident, and the
+shape of your knowledge work is visible without reading the log.
+
+---
+
 ## Command reference: where each one appears and what it saves you
 
 | Command | Scenario | The failure it prevents |
@@ -943,7 +1004,7 @@ page-to-source chain stays uniform.
 | `/gt:gt-query` | 1 | re-deriving what the vault already holds |
 | `/gt:gt-work` | 1, 3 | findings and decisions evaporating at session end; stage drift |
 | `/gt:gt-validate` | 1, 3, 4 | an unverified number reaching a decision or production |
-| `/gt:gt-farm` | 4 | spending context on raw material instead of judgement; unverifiable answers |
+| `/gt-farm:gt-farm` | 4 | spending context on raw material instead of judgement; unverifiable answers |
 | `/gt:gt-promote` | 1, 3, 6, 7 | facts stuck at the wrong scope; Core rules stored but unwired |
 | `/gt:gt-review` | 5 | thoughts captured in the wrong place and lost |
 | `/gt:gt-lint` | 0, 2, 7 | structural drift noticed by accident |

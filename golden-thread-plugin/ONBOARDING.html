@@ -103,7 +103,7 @@
   h1,h2,h3{break-after:avoid;} table{break-inside:avoid;}
 </style></head><body><h1 id="golden-thread-getting-started">Golden Thread — Getting Started</h1>
 <p>A guided walkthrough for your first session. Six steps, ~15 minutes.</p>
-<p><strong>Requirements:</strong> Python 3.8+, Claude Code installed. Written against <strong>gt v0.14.0</strong>.</p>
+<p><strong>Requirements:</strong> Python 3.8+, Claude Code installed. Written against <strong>gt v0.15.0</strong>.</p>
 <hr />
 <h2 id="step-1-install">Step 1 — Install</h2>
 <p>Unzip the plugin and run the installer:</p>
@@ -119,9 +119,17 @@ enforcement hooks, which are wired against a vault and cannot be wired without o
 running it — an agent, CI — it stops with exit 4 and asks for the decision rather than
 choosing a directory for you. <code>bash install.sh --no-vault</code> installs the plugin alone,
 deliberately.</p>
-<p>The installer sets up two plugins:
-- <strong><code>gt</code></strong> — memory, projects, session workflow, and enforcement hooks
-- <strong><code>gt-wiki</code></strong> — knowledge base with immutable sources</p>
+<p>The installer sets up <strong><code>gt</code></strong> — memory, projects, session workflow, and enforcement hooks —
+plus each optional <strong>module</strong> that is on:
+- <strong><code>gt-wiki</code></strong> — knowledge base with immutable sources
+- <strong><code>gt-demo</code></strong> — the guided tour, in its own throwaway vault
+- <strong><code>gt-watch</code></strong> — follow git repos you depend on (<code>/gt-watch:gt-watch</code>)
+- <strong><code>gt-report-card</code></strong> — the session report card at <code>/compact</code>
+- <strong><code>gt-flow</code></strong> — a picture of how your knowledge moved (<code>/gt-flow:gt-flow</code>)
+- <strong><code>gt-farm</code></strong> — work packets for an external AI; <strong>off</strong> unless you add it with
+  <code>bash install.sh --with farm</code> (or had <code>/gt:gt-farm</code> before upgrading)</p>
+<p><code>bash install.sh --list-modules</code> shows each one and why it is on or off;
+<code>--without &lt;name&gt;</code> leaves one out, and the choice is remembered.</p>
 <hr />
 <h2 id="step-2-initialize-your-vault">Step 2 — Initialize your vault</h2>
 <p>Open any Claude Code session and run:</p>
@@ -222,7 +230,7 @@ escalates, a <code>due</code> inside three days escalates. <strong>Regenerate be
 you; <code>waiting:: agent</code> is what the next session should pick up.</p>
 <p>That is the loop: capture without switching, sweep to file, regenerate to decide.</p>
 <p><strong>Close what is finished.</strong> The rollup's <em>Review</em> section, the <code>/compact</code> report card
-and <code>gt-work</code> all ask the same question when a project's signals say it may be done:
+(report-card module) and <code>gt-work</code> all ask the same question when a project's signals say it may be done:
 most tasks past due, most tasks checked, three quiet weeks, or nothing open. Answer
 yes, no or later; every answer is recorded so the question learns your pattern. Closing
 sets <code>stage: complete</code> and shelves leftover tasks at <code>p:: 7</code> — they stay in the README,
@@ -245,24 +253,27 @@ they just stop outranking live work.</p>
 /gt:gt-refresh             ← check if any source documents changed upstream
 /gt:gt-review              ← file the inbox (INBOX.md, plus daily notes if you keep them)
 /gt:gt-settings            ← view and toggle what Golden Thread does automatically
-/gt:gt-farm                ← route bulk or mechanical tasks to an external AI service as a work packet
 /gt:gt-validate            ← independently verify a claim before recording it as fact
-/gt:gt-watch               ← watch a git repo you depend on; a security fix upstream opens your next session as a P0
-/gt-demo:gt-demo           ← guided eleven-act tour in a throwaway demo vault: start / tour / end / clean / remove
+
+# from modules
+/gt-watch:gt-watch         ← watch a git repo you depend on; a security fix upstream opens your next session as a P0
+/gt-flow:gt-flow           ← draw how knowledge climbed the ladder, one offline HTML file (--redact before sharing)
+/gt-farm:gt-farm           ← route bulk or mechanical tasks to an external AI service as a work packet (farm module, off by default)
+/gt-demo:gt-demo           ← guided tour in a throwaway demo vault, nine acts plus one per module: start / tour / end / clean / remove
 </code></pre>
 <hr />
 <h2 id="adding-a-knowledge-base-gt-wiki">Adding a knowledge base (gt-wiki)</h2>
 <p>If you want a structured wiki alongside your project memory:</p>
-<pre><code>/gt:gt-wiki-init
+<pre><code>/gt-wiki:gt-wiki-init
 </code></pre>
 <p>Then add sources:</p>
-<pre><code>/gt:gt-wiki-ingest &lt;url or file path&gt;
+<pre><code>/gt-wiki:gt-wiki-ingest &lt;url or file path&gt;
 </code></pre>
 <p>Query it:</p>
-<pre><code>/gt:gt-wiki
+<pre><code>/gt-wiki:gt-wiki
 </code></pre>
 <p>Check its sources for upstream changes:</p>
-<pre><code>/gt:gt-wiki-refresh
+<pre><code>/gt-wiki:gt-wiki-refresh
 </code></pre>
 <p>The wiki uses immutable sources — every ingested document is stored verbatim and never modified. Knowledge pages are synthesized summaries that link to the originals. When a source changes upstream, refresh adds a new source that supersedes the old one; for sources in a local git repo the change is detected by <code>git diff</code>, not by eye.</p>
 <hr />
@@ -277,7 +288,7 @@ they just stop outranking live work.</p>
 <p><strong>Core rules seem to apply sometimes but not always</strong> — run <code>/gt:gt-lint</code> and look for <code>core-unenforced</code> findings. The hook may not be wired. Fix:</p>
 <pre><code class="language-bash">python3 &lt;plugin&gt;/scripts/vault_init.py install-core-rules --vault &lt;vault&gt;
 </code></pre>
-<p><strong>I want to turn off the automatic session report</strong> — run <code>/gt:gt-settings set report_card off</code>.</p>
+<p><strong>I want to turn off the automatic session report</strong> — run <code>/gt:gt-settings set report_card off</code>, or remove the module with <code>bash install.sh --without report-card</code>.</p>
 <p><strong>Timestamp missing from responses</strong> — the enforcement hook is unwired. Run <code>/hooks</code> in Claude Code or restart. If it persists, re-run <code>install.sh</code>.</p>
 <hr />
 <p>For the complete skill reference, see <a href="MANUAL.md">MANUAL.md</a>.</p>

@@ -100,6 +100,7 @@ hr{border:0;border-top:1px solid var(--line);margin:56px 0}
     <li><a href="#s6">6 · The other endings</a></li>
     <li><a href="#s7">7 · Maintenance day</a></li>
     <li><a href="#s8">8 · The gt-wiki mode</a></li>
+    <li><a href="#s9">9 · Modules, watch, flow</a></li>
     <li class="ref"><a href="#ref">Command reference</a></li>
     <li><a href="#files">Files and write direction</a></li>
   </ol>
@@ -118,7 +119,7 @@ hr{border:0;border-top:1px solid var(--line);margin:56px 0}
 <ol class="stages">
   <li><span class="when">One time, per machine</span><div class="cmds"><span>/gt:gt-init</span><span>/gt:gt-settings</span></div>wire the vault and hooks, choose what runs on its own</li>
   <li><span class="when">A project arrives</span><div class="cmds"><span>/gt:gt-create</span><span>/gt:gt-ingest</span><span>/gt:gt-review</span></div>new, existing, or filed from <code>INBOX.md</code></li>
-  <li><span class="when">Every session</span><div class="cmds"><span>/gt:gt-open</span><span>work</span><span>/gt:gt-work</span></div>during work: <span class="cmds"><span>/gt:gt-query</span><span>/gt:gt-validate</span><span>/gt:gt-farm</span><span>INBOX.md</span></span></li>
+  <li><span class="when">Every session</span><div class="cmds"><span>/gt:gt-open</span><span>work</span><span>/gt:gt-work</span></div>during work: <span class="cmds"><span>/gt:gt-query</span><span>/gt:gt-validate</span><span>/gt-farm:gt-farm</span><span>INBOX.md</span></span></li>
   <li><span class="when">Between sessions</span><div class="cmds"><span>/gt:gt-promote</span><span>/gt:gt-lint</span><span>/gt:gt-runbook-lint</span><span>/gt:gt-refresh</span><span>gt_tasks.py</span><span>gt_closeout.py</span></div></li>
   <li><span class="when">The project ends</span><div class="cmds"><span>close</span><span>rename</span><span>merge</span><span>archive</span><span>later</span></div>then promote what it taught</li>
 </ol>
@@ -418,7 +419,8 @@ gt_session.py list</code></pre>
 <h2><span class="num">Scenario 4</span>Research-heavy: farming, sources, and refresh</h2>
 <p class="situation"><b>Situation.</b> You need to know current rate limits and pricing across three external weather APIs before deciding which one the <code>weather-feed</code> project should use. That is a lot of page reading, and the reading itself is not the scarce resource. Context is.</p>
 
-<h3><code>/gt:gt-farm</code></h3>
+<h3><code>/gt-farm:gt-farm</code></h3>
+<p>Farm is a module and is <strong>off on a fresh install</strong> (a machine upgrading from a gt that had <code>/gt:gt-farm</code> keeps it on). Turn it on once with <code>bash install.sh --with farm</code>, then restart Claude Code.</p>
 <div class="say"><b>You say</b>farm out the API comparison</div>
 <ol>
 <li><strong>Applies the four gates. Most things do not leave.</strong>
@@ -583,6 +585,35 @@ Never deleted. It registers the session and claims <code>INBOX.md</code> first, 
 <p>A worked path: a teammate asks <em>how does our deploy pipeline handle rollbacks?</em> <code>/gt-wiki:gt-wiki</code> reads the index, finds <code>Deploy Pipeline.md</code>, follows its link to <code>Rollback Procedure.md</code>, notices the two pages disagree on whether database migrations roll back, <strong>flags the contradiction right away</strong> rather than waiting for lint, answers with both citations, logs the query, and offers to file the resolved answer back as a page once you settle it. A page created from that conversation still gets a lightweight <code>Sources/2026-09-05 Conversation - rollback migrations.md</code> so the page-to-source chain stays uniform.</p>
 </section>
 
+<section id="s9">
+<h2><span class="num">Scenario 9</span>Choosing modules, watching upstream, and seeing the flow</h2>
+<p class="situation"><b>Situation.</b> You want the upstream security watch and the flow view, but not the demo on this machine.</p>
+
+<h3>Choosing modules</h3>
+<p>Optional parts of Golden Thread are modules: separate plugins installed by the same <code>install.sh</code> run. <code>wiki</code>, <code>demo</code>, <code>watch</code>, <code>report-card</code> and <code>flow</code> are on by default; <code>farm</code> is off for a fresh install.</p>
+<pre><code>bash install.sh --list-modules     # each module, whether it is on, and why
+bash install.sh --without demo     # remove it completely; the choice is remembered</code></pre>
+<p>A module that is off leaves nothing behind — no plugin cache, enabled flag, hooks or hook scripts. The choice lives in <code>~/.claude/golden-thread/install-choices.json</code>, so later installs keep it, and a setting you gave a module survives while it is off.</p>
+
+<h3><code>/gt-watch:gt-watch</code></h3>
+<div class="say"><b>You say</b>watch the payments SDK repo for security fixes</div>
+<ol>
+<li><code>add &lt;git-url&gt;</code> verifies the URL with <code>git ls-remote</code>, writes a watch note under <code>Projects/golden-thread/watches/</code>, and takes a baseline so only later changes count.</li>
+<li>Watching is off until the <code>watch</code> setting is <code>report</code>; the skill offers to switch it on and to install the hourly fetch (<code>gt_watch.py install-cron --every 1h</code>) — only on a yes.</li>
+<li>The cron fetch queues classified events outside the vault. At the next session start the hook reports them, <strong>P0 first</strong> — a CVE or GHSA id, a security advisory, or a watch's own <code>p0_when</code> pattern. Severity comes from the script's rules, never from how urgent the prose sounds. <code>show &lt;slug&gt;</code> explains the queue; <code>ack</code> marks it seen.</li>
+</ol>
+<p><code>bash install.sh --without watch</code> removes the module and its tagged crontab line (after a backup); <code>--with watch</code> puts that exact line back.</p>
+
+<h3><code>/gt-flow:gt-flow</code></h3>
+<div class="say"><b>You say</b>show me how knowledge moved this quarter</div>
+<ol>
+<li>It reads <code>Projects/golden-thread/events.jsonl</code> — the event stream operations write as they happen. A vault older than the events gets its history once with <code>gt_events.py --vault &lt;vault&gt; backfill</code> (preview with <code>--dry-run</code>; a second run adds nothing).</li>
+<li>It renders one offline HTML file: a lane per project, time left to right, height by level, an arrow each time an item climbed. Task events start hidden (<code>--tasks</code> shows them).</li>
+<li>Anything leaving this machine gets <code>--redact</code>, which replaces project, file and session names with short hashes and drops notes. Redaction is opt-in; the default render keeps real names for your own screen.</li>
+</ol>
+<div class="bought"><b>What this bought you</b><p>You choose what runs on each machine without losing settings, a security fix upstream reaches you as a P0 at session start instead of by accident, and the shape of your knowledge work is visible without reading the log.</p></div>
+</section>
+
 <hr>
 
 <section id="ref">
@@ -596,7 +627,7 @@ Never deleted. It registers the session and claims <code>INBOX.md</code> first, 
 <tr><td><code>/gt:gt-query</code></td><td>1</td><td>re-deriving what the vault already holds</td></tr>
 <tr><td><code>/gt:gt-work</code></td><td>1, 3</td><td>findings and decisions evaporating at session end; stage drift</td></tr>
 <tr><td><code>/gt:gt-validate</code></td><td>1, 3, 4</td><td>an unverified number reaching a decision or production</td></tr>
-<tr><td><code>/gt:gt-farm</code></td><td>4</td><td>spending context on raw material instead of judgement; unverifiable answers</td></tr>
+<tr><td><code>/gt-farm:gt-farm</code></td><td>4</td><td>spending context on raw material instead of judgement; unverifiable answers</td></tr>
 <tr><td><code>/gt:gt-promote</code></td><td>1, 3, 6, 7</td><td>facts stuck at the wrong scope; Core rules stored but unwired</td></tr>
 <tr><td><code>/gt:gt-review</code></td><td>5</td><td>thoughts captured in the wrong place and lost</td></tr>
 <tr><td><code>/gt:gt-lint</code></td><td>0, 2, 7</td><td>structural drift noticed by accident</td></tr>

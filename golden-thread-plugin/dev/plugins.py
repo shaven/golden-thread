@@ -267,7 +267,7 @@ def validate_module(version_dir):
         if not isinstance(s, dict):
             reasons.append("settings[%d] is not an object" % i)
             continue
-        for k in sorted(set(s) - {"key", "default", "values", "summary"}):
+        for k in sorted(set(s) - {"key", "default", "values", "summary", "detail"}):
             reasons.append("settings[%d] unknown key %r" % (i, k))
         for k in ("key", "default", "values", "summary"):
             if k not in s:
@@ -285,6 +285,10 @@ def validate_module(version_dir):
                            % (i, s["default"]))
         if "summary" in s and not isinstance(s["summary"], str):
             reasons.append("settings[%d] summary must be a string" % i)
+        # Optional long explanation for `gt_settings.py explain` (0.15.0): a setting that
+        # moved out of gt must not lose the text that says why it exists.
+        if "detail" in s and not isinstance(s["detail"], str):
+            reasons.append("settings[%d] detail must be a string" % i)
     for i, r in enumerate(lst("requires_modules")):
         if not isinstance(r, dict):
             reasons.append("requires_modules[%d] is not an object" % i)

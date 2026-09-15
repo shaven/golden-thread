@@ -10,13 +10,18 @@ Contracts pinned here:
   * a fixture third plugin is copied to the cache and marketplace, listed in
     marketplace.json, registered in installed_plugins.json, enabled and summarised --
     and no gt-specific step (hooks dir, hook registrations, demo) runs for it;
-  * a pinned version pins gt only;
+  * a pinned version pins gt only -- except that each other plugin installs the release
+    that pinned gt shipped with: install.sh's SHIPPED_WITH table equals what git history
+    says each gt release commit carried (0.15.0);
   * scripts/gt_machine_migrate.py, when the release ships it, runs after hooks are wired
     and before the vault step: exit 0 continues and prints its output, exit 1 or 2 stops
     with INSTALL INCOMPLETE after printing; when absent, nothing is printed.
 """
+import ast
 import json
+import re
 import shutil
+import subprocess
 import unittest
 
 from _harness import Sandbox, REPO, GT, WIKI
@@ -24,6 +29,45 @@ from _harness import Sandbox, REPO, GT, WIKI
 INSTALL = REPO / "install.sh"
 IGNORE = shutil.ignore_patterns("__pycache__", "*.pyc", ".DS_Store")
 EXTRA_DIR, EXTRA_VER, EXTRA_NAME = "gt-extra", "1.0.0", "gt-extra"
+
+
+def _vkey(v):
+    return tuple(int(x) for x in v.split("."))
+
+
+class ShippedWithMatchesHistory(unittest.TestCase):
+    """SHIPPED_WITH (in install.sh's helper) says which release of each other plugin a gt
+    release installs on a rollback. It is derived from git history, so it is checked
+    against it: at the commit that first added golden-thread/<gt>/, the newest release of
+    every other plugin present is what that gt's own installer installed."""
+
+    def test_table_equals_git_history(self):
+        m = re.search(r"^SHIPPED_WITH = (\{.*?^\})$", INSTALL.read_text(), re.M | re.S)
+        self.assertIsNotNone(m, "SHIPPED_WITH not found in install.sh")
+        table = ast.literal_eval(m.group(1))
+        root = REPO.parent
+        if not shutil.which("git") or subprocess.run(
+                ["git", "-C", str(root), "rev-parse"], capture_output=True).returncode != 0:
+            self.skipTest("not a git checkout")
+        checked = 0
+        for gt, plugins in table.items():
+            added = subprocess.run(
+                ["git", "-C", str(root), "log", "--diff-filter=A", "--format=%h", "--reverse",
+                 "--", "%s/golden-thread/%s/.claude-plugin/plugin.json" % (REPO.name, gt)],
+                capture_output=True, text=True).stdout.split()
+            if not added:
+                continue
+            for d in ("golden-thread-wiki", "golden-thread-demo"):
+                names = subprocess.run(
+                    ["git", "-C", str(root), "ls-tree", "--name-only", added[0],
+                     "%s/%s/" % (REPO.name, d)], capture_output=True, text=True).stdout.split()
+                vers = [n.rsplit("/", 1)[-1] for n in names]
+                vers = sorted((v for v in vers if re.fullmatch(r"\d+\.\d+\.\d+", v)), key=_vkey)
+                plugin = "gt-" + d.split("-", 2)[2]
+                self.assertEqual(plugins.get(plugin), vers[-1] if vers else None,
+                                 "gt %s: %s" % (gt, plugin))
+                checked += 1
+        self.assertGreater(checked, 0, "no table row could be checked against history")
 
 
 class PluginDiscoveryAgrees(Sandbox):
@@ -129,7 +173,7 @@ class InstallsAThirdPlugin(Base):
         flat = [h.get("command", "") for bl in settings.get("hooks", {}).values()
                 for b in bl for h in b.get("hooks", [])]
         self.assertFalse([c for c in flat if EXTRA_NAME in c or "extra_tool" in c], flat)
-        self.assertIn("Registered 9 hooks", p.stdout, "hook registration count changed")
+        self.assertIn("Registered 5 hooks", p.stdout, "hook registration count changed")
 
     def test_a_superseded_cache_of_the_third_plugin_is_pruned(self):
         old = self.plugins / "cache" / "golden-thread-plugin" / EXTRA_NAME / "0.9.0"
@@ -202,6 +246,32 @@ class RunsMachineMigrations(Base):
         p = self.install()
         self.assertOk(p)
         self.assertIn("run | --release | %s" % self.src, p.stdout)
+
+    def test_it_receives_the_gt_installed_before_this_install(self):
+        """0.15.0: read from installed_plugins.json BEFORE install.sh overwrites it, and
+        passed through the environment so an older release's migrator is not handed an
+        option it would refuse."""
+        (self.src / "scripts" / "gt_machine_migrate.py").write_text(
+            "import os, sys\nprint('PREV=' + os.environ.get('GT_PREVIOUS_RELEASE', '<unset>'))\n"
+            "assert '--previous-release' not in sys.argv\n")
+        self.manifest()
+        inst = self.plugins / "installed_plugins.json"
+        inst.parent.mkdir(parents=True)
+        inst.write_text(json.dumps({"version": 2, "plugins": {
+            "gt@golden-thread-plugin": [{"version": "0.12.8"}]}}))
+        p = self.install()
+        self.assertOk(p)
+        self.assertIn("PREV=0.12.8", p.stdout)
+        p = self.install()                              # now gt GT.name is what was there
+        self.assertIn("PREV=%s" % GT.name, p.stdout)
+
+    def test_a_first_install_has_no_previous_release(self):
+        (self.src / "scripts" / "gt_machine_migrate.py").write_text(
+            "import os\nprint('PREV=[' + os.environ.get('GT_PREVIOUS_RELEASE', '<unset>') + ']')\n")
+        self.manifest()
+        p = self.install()
+        self.assertOk(p)
+        self.assertIn("PREV=[]", p.stdout)
 
     def test_a_failed_migration_stops_the_install(self):
         self.stub("FAILED demo-to-install-choices: cannot write", 1)

@@ -1,9 +1,9 @@
 # Golden Thread Plugin — Documentation
-## Version gt 0.14.0 / gt-wiki 0.2.0 / gt-demo 0.14.0
+## Version gt 0.15.0 / gt-wiki 0.2.1 / gt-demo, gt-watch, gt-report-card, gt-farm, gt-flow 0.15.0
 
 ---
 
-Golden Thread turns an Obsidian vault into the single source of truth for all AI memory across every project and every session. The tiered rule model introduced in v0.6.0 now carries **seven hook-backed Core rules** enforced at three points in the turn, 0.9.12 added `gt-route` for the middle of a session, and 0.9.13 makes the session-start component check verify that the hooks are **wired**, not merely installed, 0.11.0 makes `log.md` and `decisions.md` generated files so concurrent sessions cannot overwrite one another, 0.12.3 stops a vault tool running against a vault it was never told to touch, 0.12.4 makes parallel execution the default for divisible work in every project, 0.12.5 stops code being committed before its tests have been seen to pass, 0.13.0 makes an upgrade from any older release end where a fresh install would, and 0.14.0 splits optional parts into modules you can decline — gt-wiki 0.2.0 (an LLM-powered knowledge base with immutable sources and interlinked pages) and gt-demo 0.14.0 (the guided tour).
+Golden Thread turns an Obsidian vault into the single source of truth for all AI memory across every project and every session. The tiered rule model introduced in v0.6.0 now carries **seven hook-backed Core rules** enforced at three points in the turn, 0.9.12 added `gt-route` for the middle of a session, and 0.9.13 makes the session-start component check verify that the hooks are **wired**, not merely installed, 0.11.0 makes `log.md` and `decisions.md` generated files so concurrent sessions cannot overwrite one another, 0.12.3 stops a vault tool running against a vault it was never told to touch, 0.12.4 makes parallel execution the default for divisible work in every project, 0.12.5 stops code being committed before its tests have been seen to pass, 0.13.0 makes an upgrade from any older release end where a fresh install would, 0.14.0 splits optional parts into modules you can decline, and 0.15.0 makes six of them — gt-wiki 0.2.1 (an LLM-powered knowledge base with immutable sources and interlinked pages), gt-demo (the guided tour), gt-watch (upstream repos), gt-report-card (the session report card), gt-farm (work packets for an external AI) and the new gt-flow, which draws the vault's event stream as a timeline of knowledge climbing the ladder.
 
 ---
 
@@ -27,25 +27,25 @@ Facts move up the hierarchy as they prove themselves general. They never move ba
 
 ---
 
-## Core Rules (gt 0.14.0)
+## Core Rules (gt 0.15.0)
 
 Golden Thread defines a tiered rule model that separates rules by scope and enforcement strength.
-**Ten Core rules ship as of 0.14.0**, up from one at 0.6.0 (the count read "seven" from 0.9.10 through 0.12.3, one behind the files):
+**Ten Core rules ship as of 0.15.0**, up from one at 0.6.0 (the count read "seven" from 0.9.10 through 0.12.3, one behind the files):
 
 | # | Rule |
 |---|---|
 | 1 | Register your session and claim a vault file before writing it; never write a file another live session has claimed. |
 | 2 | Name the vault on every mutating tool run — `--vault` or `--dry-run` — never let the target be inferred. |
 | 3 | Never put a secret's value into the session — not to inspect it, not to redact it, not to check it. |
-| 4 | Begin every response with the current wall-clock timestamp — before any other text you emit. |
-| 5 | `global-memory/` contains only facts needed in EVERY project. |
-| 6 | Do not auto-load the full memory index. |
-| 7 | Parallelise any work that can be parallelised, in every project — independent units run concurrently up to the configured budget, and serial execution must be justified, not assumed. |
-| 8 | A secret's value rests only in the secrets store or a mode-600 file the store wrote — never in source, a vault file, a repo, a log, or a session. |
-| 9 | Label every derived figure you present as fact with its verification state — `unverified`, `self-verified`, or `independently verified`. |
-| 10 | Run the tests before you commit code, and say which ran — never commit code whose tests you have not seen pass. |
+| 4 | Run the tests before you commit code, and say which ran — never commit code whose tests you have not seen pass. |
+| 5 | Begin every response with the current wall-clock timestamp — before any other text you emit. |
+| 6 | `global-memory/` contains only facts needed in EVERY project. |
+| 7 | Do not auto-load the full memory index. |
+| 8 | Parallelise any work that can be parallelised, in every project — independent units run concurrently within one machine-wide budget shared by every session, and serial execution must be justified, not assumed. (Reworded in 0.15.0: the `parallel_max` budget is one for the whole machine, not one per session.) |
+| 9 | A secret's value rests only in the secrets store or a mode-600 file the store wrote — never in source, a vault file, a repo, a log, or a session. |
+| 10 | Label every derived figure you present as fact with its verification state — `unverified`, `self-verified`, or `independently verified`. |
 
-Verify the set at any time with `echo '{}' | ~/.claude/golden-thread/hooks/inject_core_rules.sh`.
+The numbers are the order the `UserPromptSubmit` hook injects them in. Verify the set at any time with `echo '{}' | ~/.claude/golden-thread/hooks/inject_core_rules.sh`.
 
 **Three scope levels:**
 
@@ -84,7 +84,7 @@ The canonical rule definitions live in `Projects/golden-thread/core-rules/` insi
 
 ---
 
-## gt Skills (17)
+## gt Skills (16)
 
 ### Setup
 
@@ -115,7 +115,6 @@ The canonical rule definitions live in `Projects/golden-thread/core-rules/` insi
 
 | Command | What it does |
 |---|---|
-| `/gt:gt-farm` | Route bulk, mechanical, or second-opinion tasks to an external AI service as a self-contained work packet. All four gates (Stateless, Self-contained, Checkable, Releasable) must pass before a task leaves. Results come back unverified. |
 | `/gt:gt-validate` | Verify a claim by re-deriving it with a fresh-context validator — never by reviewing the reasoning that produced it. Use before recording a finding as fact or before a production change. |
 
 ### Maintenance
@@ -124,21 +123,26 @@ The canonical rule definitions live in `Projects/golden-thread/core-rules/` insi
 |---|---|
 | `/gt:gt-upgrade` | Bring an existing vault up to the installed release: run the migrations it has not had, take the release's changes into `PROTOCOL.md` and `CONVENTIONS.md` without losing local edits, add newly shipped Core rules, stamp the vault. Rehearse with `--dry-run`; it refuses a dirty tree and backs up before applying. |
 | `/gt:gt-doctor` | One report for the whole install: plugin version, component drift, hook wiring, pending vault migrations, stray workers, unpushed commits, publish-destination drift and a lint summary. Exit 2 means a check *could not run*, which is deliberately distinct from clean. |
-| `/gt:gt-lint` | Audit the vault for structural problems: 14 checks covering broken wikilinks, orphaned pages, missing index entries, unlisted memory files, Knowledge pages citing superseded sources, stale pages, and `core-unenforced` — a Core rule that is stored but wired to no hook. |
+| `/gt:gt-lint` | Audit the vault for structural problems: 18 checks covering broken wikilinks, orphaned pages, missing index entries, unlisted memory files, Knowledge pages citing superseded sources, stale pages, and `core-unenforced` — a Core rule that is stored but wired to no hook. |
 | `/gt:gt-runbook-lint` | Scan all project `runbook.md` files for content that has drifted into multiple runbooks. Routes duplicated content to the right shared layer via `gt-promote`. |
-| `/gt:gt-settings` | View and change what Golden Thread does on its own: component drift checking at session start, and the session report card at compact. Every automatic behaviour can be switched off. |
+| `/gt:gt-settings` | View and change what Golden Thread does on its own: component drift checking at session start, and every setting an installed module adds (`report_card`, `closeout_check`, `watch`). Every automatic behaviour can be switched off. |
 
-### Watching upstream
+## Modules (6)
 
-| Command | What it does |
-|---|---|
-| `/gt:gt-watch` | Watch any git repo. `add <url>` writes a watch note; a cron fetch (`gt_watch.py fetch`) classifies every change by rules — P0 for security advisories, CVE/GHSA ids or security releases; review for new releases, major bumps, changes under `watch_paths`; routine otherwise — and a SessionStart hook reports unacknowledged changes, P0 first. `show` explains a change, `ack` marks it seen. Setting `watch`, default `off`. |
+Optional parts, each a separate plugin in the `golden-thread-plugin` marketplace, declared by a `module.json`, versioned with gt and installed by `install.sh` while on. `bash install.sh --list-modules` shows each one's state; `--without <name>` / `--with <name>` change it and the choice is remembered. A module's hooks are wired only while it is on and are always *reporter* hooks — a Core-rule enforcement hook can never belong to a module. Module settings (with an optional long `detail`) register from `module.json` and are listed under the module's name in `/gt:gt-settings`; a value set for a module that is later switched off is kept.
 
-### Demo
+| Command | Module (plugin) · default | What it does |
+|---|---|---|
+| `/gt-wiki:gt-wiki` and four more | `wiki` (`gt-wiki`) · on | A standalone LLM wiki: immutable sources, interlinked pages, ingest, lint and refresh — see below. |
+| `/gt-demo:gt-demo` | `demo` (`gt-demo`) · on | A guided tour on the fictional PizzaBot 3000 project, run in its own throwaway vault: nine core acts (Core rules, open, task rollup, capture, route, validate, lint, promote, inbox and close) plus one act from each installed module that ships one — `wiki`, `watch` and `flow`, so twelve with the defaults. `start`, `tour`, `end`, `clean`, `remove`, `status`. |
+| `/gt-watch:gt-watch` | `watch` (`gt-watch`) · on | Watch any git repo. `add <url>` writes a watch note; a cron fetch (`gt_watch.py fetch`) classifies every change by rules — P0 for security advisories, CVE/GHSA ids or security releases; review for new releases, major bumps, changes under `watch_paths`; routine otherwise — and a SessionStart hook reports unacknowledged changes, P0 first. `show` explains a change, `ack` marks it seen. Setting `watch`, default `off`. `--without watch` also removes its crontab line. Was `/gt:gt-watch`. |
+| *(no command)* | `report-card` (`gt-report-card`) · on | The session report card at `/compact` and session end — saved as a notice and shown at the next session start, because output at those events is never displayed — and the project close-out question. Settings `report_card`, `closeout_check`. |
+| `/gt-farm:gt-farm` | `farm` (`gt-farm`) · **off** fresh, on for upgraders | Route bulk, mechanical, or second-opinion tasks to an external AI service as a self-contained work packet. All four gates (Stateless, Self-contained, Checkable, Releasable) must pass before a task leaves. Results come back unverified. Was `/gt:gt-farm`; a machine upgrading from a gt that shipped it keeps it on. |
+| `/gt-flow:gt-flow` | `flow` (`gt-flow`) · on | New in 0.15.0. Renders `events.jsonl` as one offline HTML file: a lane per project, time left to right, an arrow each time an item climbed a level. `--redact` hashes every name before the page is shared; task events are hidden until `--tasks` or a click; `--project`, `--since`. Never writes the vault. |
 
-| Command | What it does |
-|---|---|
-| `/gt-demo:gt-demo` (module `demo`) | An eleven-act guided tour on the fictional PizzaBot 3000 project, run in its own throwaway vault — `start` builds it, `tour` runs the acts one click at a time (Core rules, open, task rollup, capture, wiki, route, validate, lint, promote, watch, inbox and close), `end` shows the receipt, `clean` rebuilds, `remove` deletes the demo vault. Removed with `bash install.sh --without demo`. |
+### Movement events (0.15.0)
+
+`gt_events.py` (schema v1, since 0.13.0) now receives events from the operations themselves: `gt_log.py add … --event <kind> --item <path>` spools a log line and its event in one command (used by `gt-promote` and `gt-refresh`); `gt-review`, `gt-work` and `gt-ingest` call `gt_events.py emit`; `gt_adr.py allocate` emits `adr`; `vault_init.py` emits `create`, `rename`, `merge` and `archive` (the only source of `archive`); `gt_tasks.py` emits `task.open` / `task.done` once the stream has been seeded. An event can never fail the operation it records. A vault older than the events recovers its history with `gt_events.py --vault <vault> backfill --dry-run` (then without `--dry-run`): git and `log.md` rebuilt as `actor: backfill` events, idempotent.
 
 ### Concurrent sessions stop colliding (0.12.3)
 
@@ -199,11 +203,11 @@ The gt-wiki plugin provides an LLM-powered knowledge base separate from the Gold
 
 | Command | What it does |
 |---|---|
-| `/gt:gt-wiki-init` | Set up a new wiki vault from scratch. Runs `vault_init.py` deterministically — creates `Sources/`, `Knowledge/`, `index.md`, `log.md`, seeds `CLAUDE.md` from template, and stamps `Knowledge/_template.md`. |
-| `/gt:gt-wiki` | Query the wiki. Reads `index.md` first, follows wikilinks, falls back to grep, deep-digs Sources for precision. Logs every query. |
-| `/gt:gt-wiki-ingest` | Add a source: fetch or paste, store immutably in `Sources/`, discuss with user, write Knowledge pages per `_template.md`, cross-link bidirectionally, then update `index.md` and `log.md` through `wiki_log.py` so every entry has the same shape. Records `upstream_sha:` for sources inside a git repo. |
-| `/gt:gt-wiki-lint` | Run `wiki_lint.py` (10 deterministic checks). Interprets findings, proposes fixes, records declines in `lint-declines.md` so nothing gets re-litigated. |
-| `/gt:gt-wiki-refresh` | Check selected sources for upstream changes. `wiki_refresh.py` detects changes deterministically for local sources (`git fetch` + `git diff` from the source's `upstream_sha:`, or its `ingested:` date) and flags web-only sources for the LLM to fetch and compare. Supersedes changed ones with new immutable source files. Updates citing Knowledge pages. |
+| `/gt-wiki:gt-wiki-init` | Set up a new wiki vault from scratch. Runs `vault_init.py` deterministically — creates `Sources/`, `Knowledge/`, `index.md`, `log.md`, seeds `CLAUDE.md` from template, and stamps `Knowledge/_template.md`. |
+| `/gt-wiki:gt-wiki` | Query the wiki. Reads `index.md` first, follows wikilinks, falls back to grep, deep-digs Sources for precision. Logs every query. |
+| `/gt-wiki:gt-wiki-ingest` | Add a source: fetch or paste, store immutably in `Sources/`, discuss with user, write Knowledge pages per `_template.md`, cross-link bidirectionally, then update `index.md` and `log.md` through `wiki_log.py` so every entry has the same shape. Records `upstream_sha:` for sources inside a git repo. |
+| `/gt-wiki:gt-wiki-lint` | Run `wiki_lint.py` (10 deterministic checks). Interprets findings, proposes fixes, records declines in `lint-declines.md` so nothing gets re-litigated. |
+| `/gt-wiki:gt-wiki-refresh` | Check selected sources for upstream changes. `wiki_refresh.py` detects changes deterministically for local sources (`git fetch` + `git diff` from the source's `upstream_sha:`, or its `ingested:` date) and flags web-only sources for the LLM to fetch and compare. Supersedes changed ones with new immutable source files. Updates citing Knowledge pages. |
 
 ---
 
@@ -308,9 +312,9 @@ bash install.sh
 # Restart Claude Code
 ```
 
-Installs `gt` (v0.14.0) and each module that is on — `gt-wiki` (v0.2.0) and `gt-demo` (v0.14.0), both on by default — as separate plugins under the `golden-thread-plugin` marketplace. Choose modules with `--list-modules`, `--without <name>` and `--with <name>` (remembered). Re-running upgrades from any older release. Requires Python 3.8+.
+Installs `gt` (v0.15.0) and each module that is on — `wiki`, `demo`, `watch`, `report-card` and `flow` on by default, `farm` off for a fresh install — as separate plugins under the `golden-thread-plugin` marketplace. Choose modules with `--list-modules`, `--without <name>` and `--with <name>` (remembered). Re-running upgrades from any older release. Requires Python 3.8+.
 
-`install.sh` installs the **newest version directory** present, not a hardcoded constant — pass an argument only to roll back deliberately (`./install.sh 0.9.3`). Never pipe it to `head`: `set -o pipefail` turns the closed pipe into an abort partway through, leaving the cache updated and registration undone.
+`install.sh` installs the **newest version directory** present, not a hardcoded constant — pass an argument only to roll back deliberately (`./install.sh 0.14.0`). Never pipe it to `head`: `set -o pipefail` turns the closed pipe into an abort partway through, leaving the cache updated and registration undone.
 
 ---
 
@@ -329,8 +333,9 @@ Installs `gt` (v0.14.0) and each module that is on — `gt-wiki` (v0.2.0) and `g
 
 # periodically
 /gt:gt-lint                   # catch structural drift
-/gt:gt-wiki-ingest <url>      # add a source to the wiki
+/gt-wiki:gt-wiki-ingest <url> # add a source to the wiki
 /gt:gt-promote                # graduate a finding to Knowledge or global-memory
+/gt-flow:gt-flow              # see how knowledge moved (--redact before sharing)
 ```
 
 ---

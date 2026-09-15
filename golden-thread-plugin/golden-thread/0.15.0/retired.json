@@ -1,0 +1,12 @@
+{
+  "about": "What earlier gt releases installed into ~/.claude/golden-thread/hooks/ or wired into settings.json that this release no longer does. install.sh removes exactly these (after a backup) so an upgrade converges on a fresh install; a hooks-dir file or hook entry listed nowhere here is unknown and is left in place. Cumulative: an entry stays for as long as any release that shipped it can still be upgraded from. A file removed from hooks/ (or from HOOK_DIR_SCRIPTS) must be added here in the same release. Derived 2026-09-14 from git history of golden-thread/*/hooks, HOOK_DIR_SCRIPTS and HOOK_REGISTRATIONS across 0.5.0-0.12.9.",
+  "hook_files": [
+    {
+      "source": "hooks/gt_paths.py",
+      "installed_as": "gt_paths.py",
+      "last_shipped": "0.12.7",
+      "note": "removed from hooks/ in 0.12.8 (it shipped twice); still installed from scripts/gt_paths.py, so install.sh must not delete it while the release ships it"
+    }
+  ],
+  "hook_registrations": []
+}

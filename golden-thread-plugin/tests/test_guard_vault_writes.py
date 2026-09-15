@@ -191,6 +191,15 @@ class GuardVaultWrites(GuardBase):
         self.assertDenied("python3 tools/gt_closeout.py answer proj yes",
                           "gt_closeout.py answer appends to closeout-signals.jsonl")
 
+    def test_gt_events_backfill_is_a_write(self):
+        self.assertDenied("python3 tools/gt_events.py backfill",
+                          "gt_events.py backfill appends to the event spool")
+        for cmd in ("python3 tools/gt_events.py backfill --dry-run",
+                    "python3 tools/gt_events.py --vault /tmp/copy backfill",
+                    "python3 tools/gt_events.py list"):
+            with self.subTest(cmd=cmd):
+                self.assertAllowed(cmd, "targeted or read-only gt_events.py must pass")
+
     def test_gt_closeout_read_only_subcommands_allowed(self):
         for cmd in ("python3 tools/gt_closeout.py candidates",
                     "python3 tools/gt_closeout.py history proj",

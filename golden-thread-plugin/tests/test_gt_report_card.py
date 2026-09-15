@@ -8,15 +8,20 @@ findings only under `full`; closeout candidates gated by closeout_check.
 Since 0.12.9 the card is also parked in ~/.claude/golden-thread/notices/report-card.md
 (PreCompact/SessionEnd stdout reaches no one, per the hooks reference, 2026-09-13) and
 delivered by `surface --hook` at SessionStart as JSON.
+
+Since 0.15.0 the tool ships in the gt-report-card module
+(golden-thread-report-card/<ver>/scripts), not beside gt's scripts, so it must find
+gt_settings in the stable hooks dir rather than next to itself.
 """
 import json
 import os
 import time
 import unittest
 
-from _harness import Sandbox, SCRIPTS
+from _harness import Sandbox, REPO, latest_version_dir
 
-TOOL = SCRIPTS / "gt_report_card.py"
+MODULE = latest_version_dir(REPO / "golden-thread-report-card")
+TOOL = MODULE / "scripts" / "gt_report_card.py"
 
 
 class ReportCard(Sandbox):
@@ -62,6 +67,21 @@ class ReportCard(Sandbox):
         self.assertEqual(self.card(), "")
         p.unlink()
         self.assertEqual(self.card(), "")
+
+    def test_settings_registry_found_in_the_hooks_dir(self):
+        """Nothing sits beside the module's copy; the installed gt_settings is used."""
+        self.assertFalse((TOOL.parent / "gt_settings.py").exists())
+        hooks = self.home / ".claude" / "golden-thread" / "hooks"
+        hooks.mkdir(parents=True)
+        (hooks / "gt_settings.py").write_text(
+            "def get(name):\n    return {'report_card': 'full'}.get(name)\n")
+        self.assertIn("report card (full)", self.card())
+
+    def test_broken_settings_registry_falls_back(self):
+        hooks = self.home / ".claude" / "golden-thread" / "hooks"
+        hooks.mkdir(parents=True)
+        (hooks / "gt_settings.py").write_text("raise RuntimeError('broken')\n")
+        self.assertEqual(self.card().strip(), "GOLDEN THREAD report card (minimal): clean.")
 
     def test_tolerates_hook_flag(self):
         self.assertIn("clean", self.card("--hook"))

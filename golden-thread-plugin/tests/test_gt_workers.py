@@ -31,6 +31,55 @@ not a ps line at all
 """ % {"s": SNAP}
 
 
+# 2026-09-14 15:50, as a second session's SessionStart saw it: every worker below is a
+# shell of ANOTHER, live session (claude 910000). Two are wait loops whose only child is
+# `sleep`; one runs tests. The check called the first two ORPHAN and offered `reap`.
+TASK = "/private/tmp/claude-501/-Users-x-vault/cb41fa74-0965-4f5c-be6e-cd6c9071803b/tasks/b1.output"
+LIVE = """\
+    1      0 20-00:00:00   9:00.00 /sbin/launchd
+910000     1  1-01:28:32  30:00.00 claude
+910001 910000    16:15   0:01.06 /bin/zsh -c source %(s)s && eval 'F=%(t)s; until grep -q "test_install_vault_upgrade:" $F 2>/dev/null; do sleep 5; done; cat $F' < /dev/null && pwd -P >| /tmp/cwd
+910011 910001    00:01   0:00.00 sleep 5
+910002 910000    06:05   0:00.22 /bin/zsh -c source %(s)s && eval 'F=%(t)s; until grep -q "test_install_vault_upgrade:" $F; do sleep 10; done; tail -3 $F' < /dev/null && pwd -P >| /tmp/cwd
+910012 910002    00:04   0:00.00 sleep 10
+910003 910000    16:25   0:00.09 /bin/zsh -c source %(s)s && eval 'cd "/repo/golden-thread-plugin"; bash dev/render-pdfs.sh' < /dev/null && pwd -P >| /tmp/cwd
+910013 910003    16:20   0:02.71 python3.12 -m unittest test_install
+""" % {"s": SNAP, "t": TASK}
+
+
+class WorkersOfALiveSession(Sandbox):
+    """Shells whose `claude` is alive are never orphans and never reaped."""
+
+    def setUp(self):
+        super().setUp()
+        self.bin = self.tmp / "bin"
+        self.bin.mkdir()
+        (self.tmp / "ps.txt").write_text(LIVE)
+        ps = self.bin / "ps"
+        ps.write_text("#!/bin/sh\ncat '%s'\n" % (self.tmp / "ps.txt"))
+        ps.chmod(0o755)
+        self.env["PATH"] = str(self.bin) + os.pathsep + self.env.get("PATH", "")
+
+    def test_live_session_shells_are_not_orphans(self):
+        p = self.py(TOOL, "check")
+        self.assertOk(p)
+        out = p.stdout
+        self.assertNotIn("ORPHAN", out)
+        self.assertNotIn("needing a decision", out)
+        self.assertNotIn("reap", out)
+        self.assertIn("clean", out.splitlines()[0])        # gt-doctor reads line one
+        self.assertIn("3 belong to other live sessions", out)
+        self.assertIn("session cb41fa74 (claude pid 910000, up 1-01:28:32)", out)
+        self.assertIn('WAITING on: grep -q "test_install_vault_upgrade:" %s' % TASK, out)
+        self.assertIn("pid 910003", out)
+
+    def test_reap_refuses_workers_of_a_live_session(self):
+        p = self.py(TOOL, "reap", "--dry-run")
+        self.assertOk(p)
+        self.assertIn("would reap 0 stalled worker(s): none", p.stdout)
+        self.assertIn("3 belong to live sessions, never reaped", p.stdout)
+
+
 class WorkersCli(Sandbox):
     def setUp(self):
         super().setUp()
@@ -199,6 +248,44 @@ class WorkersInProcess(Sandbox):
         self.assertEqual(signalled, {900001}, "reap touched a non-stalled worker")
         self.assertIn((900001, 15), self.kills)
         self.assertIn("reaped 1 stalled worker(s): 900001", buf[-1])
+
+    def _live(self):
+        fake_run = lambda *a, **k: types.SimpleNamespace(stdout=LIVE, returncode=0)
+        self.m.subprocess = types.SimpleNamespace(run=fake_run)
+
+    def test_owner_session_and_waiting_are_derived(self):
+        self._live()
+        ws = {w["pid"]: w for w in self.m.workers()}
+        self.assertEqual(ws[910001]["owner"], 910000)
+        self.assertEqual(ws[910001]["owner_elapsed_raw"], "1-01:28:32")
+        self.assertEqual(ws[910001]["session"], "cb41fa74-0965-4f5c-be6e-cd6c9071803b")
+        self.assertTrue(ws[910001]["waiting"])
+        self.assertIn(TASK, ws[910001]["waits_on"])          # $F expanded
+        self.assertFalse(ws[910003]["waiting"])
+        self.m.subprocess = types.SimpleNamespace(
+            run=lambda *a, **k: types.SimpleNamespace(stdout=PS, returncode=0))
+        ws = {w["pid"]: w for w in self.m.workers()}
+        self.assertIsNone(ws[900001]["owner"])                # reparented to launchd
+
+    def test_reap_never_signals_a_live_sessions_worker(self):
+        self._live()
+        # even if classify were wrong, the guard in reap must hold
+        with mock.patch.object(self.m, "classify", lambda *a, **k: "undeclared-stalled"), \
+                mock.patch("builtins.print", lambda *a, **k: None):
+            self.m.reap()
+        self.assertEqual(self.kills, [], "reap signalled a worker whose claude is alive")
+
+    def test_own_session_workers(self):
+        self._live()
+        ws = {w["pid"]: w for w in self.m.workers()}
+        c = self.m.classify
+        self.assertEqual(c(ws[910001], {}, mine=None), "live-session")
+        self.assertEqual(c(ws[910003], {}, mine=None), "live-session")
+        self.assertEqual(c(ws[910001], {}, mine=910000), "waiting")
+        self.assertEqual(c(ws[910003], {}, mine=910000), "undeclared-working")
+        self.assertEqual(c(ws[910003], {910003: {}}, mine=910000), "active")
+        idle = dict(ws[910003], cpu=0.1)
+        self.assertEqual(c(idle, {}, mine=910000), "own-idle")
 
     def test_policy_reap_runs_report_then_reap_in_one_capture(self):
         real = load_module(SCRIPTS / "gt_settings.py", "gt_settings_for_workers")

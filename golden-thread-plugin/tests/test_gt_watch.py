@@ -2,6 +2,10 @@
 
 All offline: a sandbox bare repo stands in for the remote, `gh` and `crontab` are
 stubs on PATH, HOME is throwaway, and the state dir is pinned with GT_WATCH_STATE.
+
+0.15.0: gt_watch.py is the `watch` module's (plugin gt-watch, golden-thread-watch/<version>/),
+no longer a gt core script. gt_settings.py still comes from the gt release under test,
+pinned with GT_CORE_SCRIPTS. The module contract itself is tests/test_watch_module.py.
 """
 import json
 import os
@@ -10,9 +14,11 @@ import stat
 import unittest
 from pathlib import Path
 
-from _harness import Sandbox, SCRIPTS, TEMPLATES
+from _harness import Sandbox, SCRIPTS, REPO, latest_version_dir
 
-WATCH = SCRIPTS / "gt_watch.py"
+WATCH_MODULE = latest_version_dir(REPO / "golden-thread-watch")
+WATCH = WATCH_MODULE / "scripts" / "gt_watch.py"
+TEMPLATES = WATCH_MODULE / "templates"
 
 GH_STUB = """#!/usr/bin/env bash
 # canned gh: auth ok; releases and advisories from $GH_FIXTURES
@@ -55,6 +61,7 @@ class WatchTest(Sandbox):
         self.fixtures = self.tmp / "gh"
         self.fixtures.mkdir()
         self.env.update({"GT_VAULT": str(self.vault), "GT_WATCH_STATE": str(self.state),
+                         "GT_CORE_SCRIPTS": str(SCRIPTS),
                          "GT_WATCH": "report", "GH_FIXTURES": str(self.fixtures),
                          "CRONTAB_FILE": str(self.tmp / "crontab.txt"),
                          "PATH": "%s:%s" % (self.bin, os.environ.get("PATH", ""))})
@@ -407,25 +414,46 @@ class TestCron(WatchTest):
         self.assertOk(self.watch("install-cron", "--every", "30m"))
         self.assertIn("*/30 * * * *", (self.tmp / "crontab.txt").read_text())
 
+    NOTE = "no gt-watch cron entry"
+
+    def test_hook_names_a_missing_cron_entry_and_only_then(self):
+        # with the entry in place: no note
+        self.add()
+        self.assertOk(self.watch("install-cron"))
+        self.assertNotIn(self.NOTE, self.hook_text())
+        # entry gone (e.g. install.sh --without watch): the hook says so, with the fix
+        self.assertOk(self.watch("uninstall-cron"))
+        text = self.hook_text()
+        self.assertIn(self.NOTE, text)
+        self.assertIn("install-cron", text)
+        self.assertEqual(len([l for l in text.splitlines() if self.NOTE in l]), 1)
+
+    def test_no_note_without_watches_or_without_a_crontab_binary(self):
+        self.assertNotIn(self.NOTE, self.hook_text())          # no watches yet
+        self.add()
+        self.assertIn(self.NOTE, self.hook_text())             # control: it would fire
+        (self.bin / "crontab").unlink()
+        path = ":".join(p for p in self.env["PATH"].split(":")
+                        if not (Path(p) / "crontab").exists())
+        self.assertNotIn(self.NOTE, self.hook_text(env={"PATH": path}))
+
 
 class TestRegistries(unittest.TestCase):
 
-    def test_setting_and_hook_declared(self):
-        import importlib.util
-        import sys
-        sys.path.insert(0, str(SCRIPTS))
-        try:
-            spec = importlib.util.spec_from_file_location("gtc_w", str(SCRIPTS / "gt_components.py"))
-            m = importlib.util.module_from_spec(spec)
-            spec.loader.exec_module(m)
-        finally:
-            sys.path.pop(0)
-        self.assertIn("gt_watch.py", m.HOOK_DIR_SCRIPTS)
-        regs = [r for r in m.HOOK_REGISTRATIONS if r["script"] == "gt_watch.py"]
-        self.assertEqual(regs, [{"event": "SessionStart", "script": "gt_watch.py",
-                                 "args": ["--hook"], "owner": "install.sh"}])
-        text = (SCRIPTS / "gt_settings.py").read_text()
-        self.assertIn('"watch": {', text)
+    def test_setting_and_hook_declared_by_the_module(self):
+        m = json.loads((WATCH_MODULE / "module.json").read_text())
+        self.assertEqual(m["hookdir_scripts"], ["gt_watch.py"])
+        self.assertEqual(m["hooks"], [{"event": "SessionStart", "script": "gt_watch.py",
+                                       "args": ["--hook"], "kind": "reporter"}])
+        self.assertEqual([s["key"] for s in m["settings"]], ["watch"])
+        watch = m["settings"][0]
+        self.assertEqual((watch["default"], watch["values"]), ("off", ["off", "report"]))
+
+    def test_user_facing_text_names_the_module_command(self):
+        for p in (WATCH, TEMPLATES / "watch.md", WATCH_MODULE / "skills" / "gt-watch" / "SKILL.md"):
+            t = p.read_text()
+            self.assertNotIn("/gt:gt-watch", t, "%s still invokes watch through the gt plugin" % p.name)
+        self.assertIn("/gt-watch:gt-watch", WATCH.read_text())
 
 
 if __name__ == "__main__":

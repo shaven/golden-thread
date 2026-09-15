@@ -1,0 +1,9 @@
+{
+  "name": "gt-farm",
+  "version": "0.15.0",
+  "description": "Golden Thread farm: hand bulk, mechanical or second-opinion work to an external AI service as a self-contained work packet with a strict return contract, gated so nothing private leaves the session.",
+  "author": {
+    "name": "Stacy Haven",
+    "email": "shaven@shavenconsulting.com"
+  }
+}

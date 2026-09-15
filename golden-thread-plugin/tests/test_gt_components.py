@@ -26,8 +26,10 @@ _REGS = load_module(SCRIPTS / "gt_components.py", "gt_components_counts").HOOK_R
 N_HOOKS = len(_REGS)
 N_INSTALL_SH = sum(1 for r in _REGS if r["owner"] == "install.sh")
 N_ENFORCEMENT = N_HOOKS - N_INSTALL_SH
+# gt_watch.py and gt_report_card.py left gt in 0.15.0 (watch / report-card modules).
 HOOKDIR_SCRIPTS = ("gt_components.py", "gt_workers.py", "gt_version_check.py",
-                   "gt_push_check.py", "gt_watch.py", "gt_report_card.py")
+                   "gt_push_check.py")
+MOVED_TO_MODULES = ("gt_watch.py", "gt_report_card.py")
 
 
 class ComponentsBase(Sandbox):
@@ -134,8 +136,10 @@ class Manifest(ComponentsBase):
         self.assertOk(p)
         names = p.stdout.split()
         for n in ("gt_settings.py", "gt_components.py", "gt_workers.py",
-                  "gt_version_check.py", "gt_push_check.py", "gt_watch.py", "gt_report_card.py"):
+                  "gt_version_check.py", "gt_push_check.py"):
             self.assertIn(n, names)
+        for n in MOVED_TO_MODULES:
+            self.assertNotIn(n, names, "%s is a module's hookdir script since 0.15.0" % n)
 
 
 class HookRegistrations(ComponentsBase):
@@ -148,8 +152,11 @@ class HookRegistrations(ComponentsBase):
                                 "check", str(self.vdir), "--hook"])
         argv = shlex.split(by[("SessionStart", "gt_version_check.py")]["command"])
         self.assertEqual(argv[2:], ["check", str(self.root), "--hook"])
-        argv = shlex.split(by[("PreCompact", "gt_report_card.py")]["command"])
-        self.assertEqual(argv, ["python3", str(self.installed / "gt_report_card.py")])
+        argv = shlex.split(by[("SessionStart", "gt_push_check.py")]["command"])
+        self.assertEqual(argv, ["python3", str(self.installed / "gt_push_check.py"),
+                                "check", "--hook"])
+        self.assertFalse([r for r in regs if r["script"] in MOVED_TO_MODULES],
+                         "gt itself registers a hook a module owns since 0.15.0")
         # shell hooks execute directly, not through python3
         argv = shlex.split(by[("Stop", "validate_response.sh")]["command"])
         self.assertEqual(argv, [str(self.installed / "validate_response.sh")])
@@ -522,6 +529,8 @@ class ModuleBase(ComponentsBase):
             "schema": 1, "name": name, "plugin": "gt-" + name, "version": version,
             "requires_gt": requires, "summary": "fixture " + name, "default": default,
             "hooks": list(hooks), "hookdir_scripts": list(hookdir)}))
+        # Every shipped plugin carries a manifest; the drift check reads a module's (0.15.0).
+        self.assertOk(self.py(TOOL, "manifest", vd))
         return vd
 
     def states(self, *args):
@@ -697,6 +706,209 @@ class ModuleHooks(ModuleBase):
         self.assertIn("clean", out)
         self.assertIn("all %d hooks wired" % (N_HOOKS + 1), out)
         self.assertNotIn("extra", out)
+
+
+class ModuleHookFilesAreDriftChecked(ModuleBase):
+    """0.15.0 is the first release whose modules install into the hooks dir for real (watch,
+    report card). Until then compare() read only gt's manifest, so a module's installed copy
+    -- which runs at every session start -- could go stale without a word."""
+
+    def setUp(self):
+        super().setUp()
+        self.full_setup()
+        self.dst = self.installed / "zed_report.py"
+        shutil.copy2(self.zed / "scripts" / "zed_report.py", self.dst)
+
+    def test_a_stale_module_hookdir_copy_is_reported_under_its_plugin(self):
+        self.dst.write_text("# an older zed\n")
+        self.set_mtime(self.dst, -3600)
+        out = self.check()
+        self.assertRegex(out, r"stale\s+gt-zed scripts/zed_report\.py")
+
+    def test_missing_is_reported_and_auto_applies_from_the_module(self):
+        self.config(vault_path=str(self.tmp), component_updates="auto")
+        self.dst.unlink()
+        out = self.check()
+        self.assertIn("applied automatically", out)
+        self.assertEqual(self.dst.read_text(), (self.zed / "scripts" / "zed_report.py").read_text())
+        self.assertIn("clean", self.check())
+
+    def test_apply_subcommand_covers_module_files(self):
+        self.dst.unlink()
+        p = self.py(TOOL, "apply", self.vdir)
+        self.assertOk(p)
+        self.assertIn("gt-zed scripts/zed_report.py", p.stdout)
+        self.assertTrue(self.dst.is_file())
+
+    def test_a_leftover_from_the_modules_cache_is_stale_not_unexplained(self):
+        old = "# zed as the previous install left it\n"
+        self.dst.write_text(old)
+        self.set_mtime(self.dst, +3600)
+        cached = (self.home / ".claude" / "plugins" / "cache" / "golden-thread-plugin" / "gt-zed"
+                  / "0.2.0" / "scripts" / "zed_report.py")
+        cached.parent.mkdir(parents=True)
+        cached.write_text(old)
+        self.assertRegex(self.check(), r"stale\s+gt-zed scripts/zed_report\.py")
+
+    def test_an_off_modules_file_is_not_compared_but_is_extra(self):
+        self.choose(zed="off")
+        self.wire(drop=("zed_report.py",))
+        self.dst.write_text("# whatever\n")
+        out = self.check()
+        self.assertNotIn("gt-zed scripts", out)
+        self.assertRegex(out, r"extra\s+zed_report\.py")
+
+    def test_a_module_without_a_manifest_says_so(self):
+        (self.zed / "MANIFEST.json").unlink()
+        self.assertRegex(self.check(), r"no-manifest\s+gt-zed MANIFEST\.json")
+
+
+class ExistingInstallEntriesBelongToTheModule(ModuleBase):
+    """An install from before a script moved into a module has the same file in the hooks
+    dir and the same command in settings.json. With the module ON both must read as the
+    module's -- wired, not extra, not unwired -- and a manifest that still declares the
+    script (built before the move) must not count it twice."""
+
+    def setUp(self):
+        super().setUp()
+        self.mover = self.module("mover", "on", hooks=[
+            {"event": "SessionStart", "script": "gt_moved.py", "args": ["--hook"],
+             "kind": "reporter"}], hookdir=["gt_moved.py"])
+
+    def test_the_old_core_entry_and_file_are_the_modules(self):
+        self.full_setup()
+        for vd, n in ((self.mover, "gt_moved.py"), (self.zed, "zed_report.py")):
+            shutil.copy2(vd / "scripts" / n, self.installed / n)
+        # what an older gt wrote: exactly the command the module resolves to
+        old_cmd = "python3 %s --hook" % shlex.quote(str(self.installed / "gt_moved.py"))
+        mine = [r for r in self.registrations() if r.get("module") == "mover"]
+        self.assertEqual([r["command"] for r in mine], [old_cmd])
+        out = self.check()
+        self.assertIn("clean", out)
+        self.assertNotIn("extra", out)
+
+    def test_a_manifest_still_declaring_the_script_counts_it_once(self):
+        self.full_setup()
+        for vd, n in ((self.mover, "gt_moved.py"), (self.zed, "zed_report.py")):
+            shutil.copy2(vd / "scripts" / n, self.installed / n)
+        man_p = self.vdir / "MANIFEST.json"
+        man = json.loads(man_p.read_text())
+        man["hooks"].append({"event": "SessionStart", "script": "gt_moved.py",
+                             "args": ["--hook"], "owner": "install.sh"})
+        man_p.write_text(json.dumps(man))
+        p = self.py(TOOL, "wiring", self.vdir)
+        self.assertOk(p)
+        self.wire(drop=("gt_moved.py",))
+        p = self.py(TOOL, "wiring", self.vdir)
+        self.assertEqual(p.stdout.count("unwired"), 1, p.stdout)
+
+
+class KeyOrderIsCanonical(Sandbox):
+    """order_hook_events / order_plugin_keys (0.15.0, R1): a validator found the EVENT key
+    order of settings.json "hooks", enabledPlugins and installed_plugins.json differed
+    between an upgrade and a fresh install. Dict equality hides it, so these compare lists."""
+
+    def setUp(self):
+        super().setUp()
+        self.mod = load_module(TOOL, "gt_components_keys")
+        self.hd = self.home / ".claude" / "golden-thread" / "hooks"
+        self.hd.mkdir(parents=True)
+
+    def block(self, script):
+        return {"hooks": [{"type": "command", "command": "%s/%s" % (self.hd, script)}]}
+
+    def test_event_keys_follow_one_order_whatever_the_history(self):
+        mine = {"hooks": [{"type": "command", "command": "echo mine"}]}
+        fresh = {"SessionStart": [self.block("a.py")], "PreToolUse": [self.block("b.sh")],
+                 "PreCompact": [self.block("c.py")], "Notification": [mine]}
+        upgraded = {"PreCompact": [self.block("c.py")], "Notification": [mine],
+                    "PreToolUse": [self.block("b.sh")], "SessionStart": [self.block("a.py")]}
+        for h in (fresh, upgraded):
+            self.mod.order_hook_events(h, str(self.hd))
+        self.assertEqual(list(fresh), list(upgraded))
+        self.assertEqual(list(fresh), ["Notification", "SessionStart", "PreToolUse", "PreCompact"])
+        self.assertFalse(self.mod.order_hook_events(fresh, str(self.hd)), "not idempotent")
+
+    def test_plugin_keys_follow_one_order_and_keep_foreign_keys_first(self):
+        want = ["gt@m", "gt-demo@m", "gt-wiki@m"]
+        a = {"other@x": True, "gt@m": True, "gt-wiki@m": True, "gt-demo@m": True}
+        b = {"gt-demo@m": True, "gt@m": True, "other@x": True, "gt-wiki@m": True}
+        for d in (a, b):
+            self.mod.order_plugin_keys(d, want, "m")
+        self.assertEqual(list(a), list(b))
+        self.assertEqual(list(a), ["other@x", *want])
+
+
+class HookOrderIsCanonical(Sandbox):
+    """order_hook_blocks (0.15.0, R1): gt's entries in one order, whatever the history.
+
+    An upgrade from 0.13.0/0.14.0 left PreToolUse as session_claims, test_before_commit,
+    vault_writes, protected_paths; a fresh install as protected_paths first."""
+
+    def setUp(self):
+        super().setUp()
+        self.mod = load_module(TOOL, "gt_components_order")
+        self.hd = self.home / ".claude" / "golden-thread" / "hooks"
+        self.hd.mkdir(parents=True)
+        self.order = [(r["event"], r["script"]) for r in self.mod.HOOK_REGISTRATIONS]
+
+    def gt(self, script, py=False):
+        cmd = ("python3 %s --hook" if py else "%s") % (self.hd / script)
+        return {"hooks": [{"type": "command", "command": cmd}]}
+
+    def test_upgrade_order_is_put_back_to_the_fresh_order(self):
+        upgraded = {"PreToolUse": [self.gt("guard_session_claims.sh"),
+                                   self.gt("guard_test_before_commit.sh"),
+                                   self.gt("guard_vault_writes.sh"),
+                                   self.gt("guard_protected_paths.sh")]}
+        fresh = {"PreToolUse": [self.gt("guard_protected_paths.sh"),
+                                self.gt("guard_session_claims.sh"),
+                                self.gt("guard_test_before_commit.sh"),
+                                self.gt("guard_vault_writes.sh")]}
+        self.assertNotEqual(upgraded, fresh, "fixture must start from the diverged order")
+        self.assertTrue(self.mod.order_hook_blocks(upgraded, self.order, str(self.hd)))
+        self.assertFalse(self.mod.order_hook_blocks(fresh, self.order, str(self.hd)))
+        self.assertEqual(upgraded, fresh)
+
+    def test_users_blocks_first_in_their_own_order_then_gt_then_unknown_gt(self):
+        mine1 = {"hooks": [{"type": "command", "command": "echo one"}]}
+        mine2 = {"matcher": "Bash", "hooks": [{"type": "command", "command": "echo two"}]}
+        mixed = {"hooks": [{"type": "command", "command": str(self.hd / "guard_vault_writes.sh")},
+                           {"type": "command", "command": "echo three"}]}
+        stray = self.gt("gt_ingest.py", py=True)
+        hooks = {"PreToolUse": [self.gt("guard_vault_writes.sh"), mine1, stray,
+                                self.gt("guard_protected_paths.sh"), mixed, mine2]}
+        self.mod.order_hook_blocks(hooks, self.order, str(self.hd))
+        blocks = hooks["PreToolUse"]
+        self.assertEqual(blocks[:3], [mine1, mixed, mine2])
+        self.assertEqual(blocks[3:5], [self.gt("guard_protected_paths.sh"),
+                                       self.gt("guard_vault_writes.sh")])
+        self.assertEqual(blocks[5:], [stray])
+
+    def test_nothing_added_or_removed_and_other_events_untouched(self):
+        ss = [self.gt("gt_push_check.py", py=True), self.gt("gt_components.py", py=True)]
+        hooks = {"SessionStart": list(ss), "Stop": "not a list"}
+        self.mod.order_hook_blocks(hooks, self.order, str(self.hd))
+        self.assertEqual(hooks["SessionStart"], [ss[1], ss[0]])
+        self.assertEqual(hooks["Stop"], "not a list")
+        again = json.loads(json.dumps(hooks))
+        self.assertFalse(self.mod.order_hook_blocks(again, self.order, str(self.hd)))
+
+
+class InstallChoicesAreWrittenOneWay(Sandbox):
+    """record-choice and the machine migration write install-choices.json identically.
+
+    Before 0.15.0 record-choice left 0644 and the migration 0600, so an upgrade differed
+    from a fresh install in the file's mode (R1)."""
+
+    def test_record_choice_writes_0600_with_sorted_keys(self):
+        p = self.py(TOOL, "record-choice", self.home, "demo", "off")
+        self.assertOk(p)
+        f = self.home / ".claude" / "golden-thread" / "install-choices.json"
+        self.assertEqual(oct(f.stat().st_mode & 0o777), oct(0o600))
+        doc = {"version": 1, "choices": {"demo": "off"}}
+        self.assertEqual(f.read_text(), json.dumps(doc, indent=2, sort_keys=True) + "\n")
+        self.assertEqual([x.name for x in f.parent.iterdir() if x.name.endswith(".tmp")], [])
 
 
 if __name__ == "__main__":

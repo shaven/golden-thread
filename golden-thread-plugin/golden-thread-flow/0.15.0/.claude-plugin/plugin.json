@@ -1,0 +1,9 @@
+{
+  "name": "gt-flow",
+  "version": "0.15.0",
+  "description": "Golden Thread Flow: draw knowledge moving up the ladder over time -- session, memory, research and decisions, Knowledge, global-memory, Core -- as one self-contained, offline HTML page, with a --redact mode for anything shared.",
+  "author": {
+    "name": "Stacy Haven",
+    "email": "shaven@shavenconsulting.com"
+  }
+}

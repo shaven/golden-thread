@@ -156,6 +156,31 @@ class VersionCheck(Sandbox):
         self.assertIn("current", out)
         self.assertNotIn("gt-wiki", out)
 
+    def module_release(self, dirname, plugin, name, version):
+        d = self.root / dirname / version
+        (d / ".claude-plugin").mkdir(parents=True, exist_ok=True)
+        (d / ".claude-plugin" / "plugin.json").write_text(
+            json.dumps({"name": plugin, "version": version}))
+        (d / "module.json").write_text(json.dumps({"name": name, "plugin": plugin,
+                                                   "version": version}))
+
+    def test_every_module_is_version_checked_not_just_gt_wiki(self):
+        """Until 0.15.0 only gt and gt-wiki were compared, so a stale gt-watch (or gt-demo)
+        beside a newer source release was never mentioned."""
+        self.release("0.15.0")
+        self.module_release("golden-thread-watch", "gt-watch", "watch", "0.15.0")
+        self.module_release("golden-thread-watch", "gt-watch", "watch", "0.15.1")
+        self.module_release("golden-thread-farm", "gt-farm", "farm", "0.15.0")
+        p = self.installed(gt="0.15.0")
+        data = json.loads(p.read_text())
+        data["plugins"]["gt-watch@golden-thread-plugin"] = [{"version": "0.15.0"}]
+        p.write_text(json.dumps(data))
+        out = self.check()
+        self.assertRegex(out, r"gt-watch\s+0\.15\.0 installed, 0\.15\.1 available")
+        self.assertNotIn("gt-farm", out, "a module that is not installed stays silent")
+        self.choices(farm="off")
+        self.assertRegex(self.check(), r"gt-farm\s+not installed by choice")
+
     # -- degraded inputs -----------------------------------------------------------
     def test_source_root_missing_is_said_out_loud(self):
         self.installed(gt="0.9.13")

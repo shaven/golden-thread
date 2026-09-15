@@ -255,6 +255,23 @@ class DoctorGtSrcCheck(DoctorBase):
         self.assertEqual(row["state"], "warn")
         self.assertIn("scripts", row["detail"])
 
+    def test_every_published_plugin_dir_is_expected_and_a_conflict_copy_is_not(self):
+        """0.15.0: the expected set was a literal list from before modules, so it flagged
+        golden-thread-demo and would flag every module dir after a publish."""
+        d = self.dest(**{"SOURCE.json": json.dumps({"commit": "abc123", "gt": "0.15.0"}),
+                         "install-SomeHost.sh": "x"})
+        for plugin, ver in (("golden-thread", "0.15.0"), ("golden-thread-demo", "0.15.0"),
+                            ("golden-thread-watch", "0.15.0"), ("golden-thread-flow", "0.15.0")):
+            (d / plugin / ver / ".claude-plugin").mkdir(parents=True)
+            (d / plugin / ver / ".claude-plugin" / "plugin.json").write_text("{}")
+        (d / "golden-thread-lookalike").mkdir()           # no release inside: not a plugin
+        row = json.loads(self.doctor("--json", "--only", "gt-src").stdout)["checks"][0]
+        self.assertEqual(row["state"], "warn")
+        for published in ("golden-thread-demo", "golden-thread-watch", "golden-thread-flow"):
+            self.assertNotIn(published, row["detail"].replace("golden-thread-lookalike", ""))
+        self.assertIn("install-SomeHost.sh", row["detail"])
+        self.assertIn("golden-thread-lookalike", row["detail"])
+
     def test_destination_without_provenance_is_flagged(self):
         self.dest(**{"README.md": "x"})
         row = json.loads(self.doctor("--json", "--only", "gt-src").stdout)["checks"][0]
