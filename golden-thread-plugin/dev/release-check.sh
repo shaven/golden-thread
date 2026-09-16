@@ -191,6 +191,12 @@ OUT=$(python3 dev/check_wiring_coverage.py "$GT" 2>&1); rc=$?
 [ $rc -eq 0 ] && ok "$OUT" || { echo "$OUT" | tail -20; bad "a shipped item does not reach its destination"; }
 
 step "docs"
+# Counts and version numbers, derived from the source. The rest of this step checks that a
+# skill is NAMED; nothing in it can tell whether what a document SAYS is still true, and a
+# stale count is the part of that which is mechanical enough to check (2026-09-16).
+OUT=$(python3 dev/check_doc_counts.py 2>&1); rc=$?
+[ $rc -eq 0 ] && ok "$(echo "$OUT" | tail -1)" \
+  || { echo "$OUT" | sed 's/^/  /'; bad "a doc count disagrees with the code"; }
 OUT=$(python3 build-docs.py 2>&1); rc=$?
 [ $rc -eq 0 ] && ok "every .html matches its .md" || { echo "$OUT" | tail -12; bad "docs drifted — fix the .md, then ./build-docs.py --build"; }
 MISSING=$(python3 - "$GT" <<'PY'

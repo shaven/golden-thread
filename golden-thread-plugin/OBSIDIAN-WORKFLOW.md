@@ -1,5 +1,8 @@
 # Golden Thread — Obsidian & Daily Workflow Guide
 
+> **Reader:** someone working in Obsidian alongside sessions
+> **Claims last checked against the code:** 2026-09-16 — see *The documents, and what belongs in each* in [`CLAUDE.md`](../CLAUDE.md).
+
 How to use Golden Thread day-to-day, combining Obsidian as your reading/navigation layer with Claude Code skills as your writing layer.
 
 ---

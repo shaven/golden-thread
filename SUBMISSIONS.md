@@ -1,5 +1,8 @@
 # Contributing a pack to Golden Thread
 
+> **Reader:** an outside contributor sending a pack
+> **Claims last checked against the code:** 2026-09-16 — see *The documents, and what belongs in each* in [`CLAUDE.md`](CLAUDE.md).
+
 Golden Thread has **no plugin runtime**. Nobody's code runs on anyone's machine as a
 third-party add-on. Instead you **submit a pack**, it is reviewed, and if accepted it is
 **merged into this repository** and becomes part of Golden Thread — held to the same release

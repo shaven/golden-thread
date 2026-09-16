@@ -13,6 +13,7 @@ Contract:
 """
 import os
 import subprocess
+import time
 import sys
 import tempfile
 import unittest
@@ -105,6 +106,94 @@ class CommitTest(unittest.TestCase):
         r = self.run_commit("--allow-findings")
         self.assertIn("newfile.py", r.stdout, "the file list comes before the verdict")
         self.assertLess(r.stdout.index("newfile.py"), r.stdout.index("REFUSING"))
+
+    # -- what the 2026-09-16 validation got through -------------------------------------
+    def test_receipt_staleness_is_found_from_any_cwd(self):
+        """THE defect: staged names are repo-relative and were stat'd against the CALLER's cwd,
+        so from anywhere but the repo root nothing resolved, every miss was swallowed as
+        "not evidence of staleness", and a stale receipt covered everything."""
+        import importlib.util
+        spec = importlib.util.spec_from_file_location(
+            "rcpt", str(SCRIPT.parent / "gt_test_receipt.py"))
+        rcpt = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(rcpt)
+        home = self.tmp / "home"
+        home.mkdir(exist_ok=True)
+        old_home, os.environ["HOME"] = os.environ.get("HOME"), str(home)
+        old_cwd = os.getcwd()
+        try:
+            rcpt.LEDGER = str(home / "ledger.jsonl")
+            self.stage("c.py")
+            rcpt.record(str(self.repo), "tests", True, 1)
+            time.sleep(1.1)
+            (self.repo / "c.py").write_text("# edited after the run\n", encoding="utf-8")
+            os.chdir("/")                       # anywhere that is not the repo root
+            ok, _r, stale = rcpt.covers(str(self.repo), ["c.py"])
+            self.assertFalse(ok, "a file edited after the run must not be covered")
+            self.assertEqual(stale, "c.py")
+        finally:
+            os.chdir(old_cwd)
+            if old_home is not None:
+                os.environ["HOME"] = old_home
+
+    def test_an_unstattable_path_fails_closed(self):
+        """`except OSError: continue` meant a deleted file was always covered, so `git rm`
+        never needed evidence at all."""
+        import importlib.util
+        spec = importlib.util.spec_from_file_location(
+            "rcpt", str(SCRIPT.parent / "gt_test_receipt.py"))
+        rcpt = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(rcpt)
+        home = self.tmp / "home2"
+        home.mkdir(exist_ok=True)
+        old_home, os.environ["HOME"] = os.environ.get("HOME"), str(home)
+        try:
+            rcpt.LEDGER = str(home / "ledger.jsonl")
+            rcpt.record(str(self.repo), "tests", True, 1)
+            ok, _r, stale = rcpt.covers(str(self.repo), ["never-existed.py"])
+            self.assertFalse(ok, "a path that cannot be checked is an unknown, not a pass")
+            self.assertEqual(stale, "never-existed.py")
+        finally:
+            if old_home is not None:
+                os.environ["HOME"] = old_home
+
+    def test_default_branch_guard_is_case_insensitive(self):
+        self.git("checkout", "-q", "-B", "MASTER")
+        self.stage()
+        r = self.run_commit("--allow-findings")
+        self.assertIn("this is MASTER", r.stdout)
+
+    def test_an_unborn_head_on_main_is_still_guarded(self):
+        """`rev-parse --abbrev-ref HEAD` says "HEAD" before the first commit, so the root
+        commit landed on main unguarded."""
+        fresh = self.tmp / "fresh"
+        fresh.mkdir()
+        subprocess.run(["git", "init", "-q", "-b", "main", str(fresh)], capture_output=True)
+        (fresh / "a.txt").write_text("x\n", encoding="utf-8")
+        subprocess.run(["git", "-C", str(fresh), "add", "-A"], capture_output=True)
+        r = subprocess.run([sys.executable, str(SCRIPT), "--repo", str(fresh), "-m", "t",
+                            "--allow-findings"], capture_output=True, text=True)
+        self.assertIn("this is main", r.stdout, r.stdout)
+
+    def test_a_merge_in_progress_is_refused(self):
+        """It concluded a merge with a message written for an ordinary commit, and cleared
+        MERGE_HEAD, silently."""
+        gitdir = (self.repo / ".git")
+        (gitdir / "MERGE_HEAD").write_text("0" * 40 + "\n", encoding="utf-8")
+        self.stage()
+        r = self.run_commit("--allow-findings")
+        self.assertIn("in progress", r.stdout, r.stdout)
+
+    def test_staged_names_reach_the_receipt_as_absolute_paths(self):
+        import importlib.util
+        spec = importlib.util.spec_from_file_location("ac", str(SCRIPT))
+        mod = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(mod)
+        self.stage("d.py")
+        files = mod.staged_files(str(self.repo))
+        self.assertTrue(files)
+        for f in files:
+            self.assertTrue(os.path.isabs(f), f)
 
     def test_repo_is_required(self):
         r = subprocess.run([sys.executable, str(SCRIPT), "-m", "x"],

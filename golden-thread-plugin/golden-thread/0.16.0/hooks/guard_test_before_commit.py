@@ -153,7 +153,11 @@ def changed_files(root):
     Staged first. `git commit -a` stages nothing up front, so fall back to the modified
     working tree, which is what -a would pick up.
     """
-    names = [n for n in git(root, "diff", "--cached", "--name-only").splitlines() if n]
+    # -z, because git QUOTES a path with non-ASCII or unusual characters by default
+    # (core.quotePath): `café.txt` arrives as `"caf\303\251.txt"`, which then does not stat.
+    # That used to be swallowed as "not evidence of staleness"; now an unstattable path fails
+    # closed, so quoting would turn every accented filename into a permanent refusal.
+    names = [n for n in git(root, "diff", "--cached", "--name-only", "-z").split("\0") if n]
     if not names:
         names = [l[3:].strip().strip('"') for l in git(root, "status", "--porcelain").splitlines()
                  if l[:2] not in ("??",) and len(l) > 3]

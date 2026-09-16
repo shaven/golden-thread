@@ -67,21 +67,7 @@ read them, and `gt_registry.py slots` names the five slots that still have none.
   and is reported as `RETRACTED` rather than hidden. Only vault packs may retract, so a
   contributed pack still cannot retire a core definition.
 
-**Cut rather than shipped.** Four things were removed after a validation ran the code:
-
-- **Credential scanning**, and the 22-pattern pack behind it. It missed `.env` files entirely
-  and leaked the values it redacted — the naming check prints raw source text, so a
-  credential-shaped identifier reached stdout and `--json` on the same run that carefully
-  printed a length for it. A scanner that misses is worse than none, because people stop
-  looking. The `secrets` slot remains for the tool that will do it properly.
-- **`gt-optimize --apply`.** It deleted **live** index rows — URL-encoded names, titled links,
-  `mailto:`, `obsidian://`, filenames containing a bracket: of eight rows in one fixture, seven
-  of them live, one survived. It also rewrote the inside of fenced code blocks, converted CRLF
-  files wholesale, turned mode `0600` into `0644`, and applied stale line offsets to a file
-  edited in between by an editor autosaving. Its ten findings on a real vault were harmless by
-  luck rather than by design.
-- **The `lint` check**, declared as a check and wired to nothing: its slot has no field that
-  can express *what* to detect.
+**The `secrets` slot ships with no consumer.** Credential scanning was built for this release and cut before it shipped, so there is nothing to miss — but the slot and its shape remain for the tool that will do it properly. `gt_registry.py slots` marks every slot nothing reads yet, so a pack written for one is a considered choice.
 
 **Aggregators tell you how many checks ran.** Both aggregators originally counted the
 **installed** members rather than the **declared** ones, so a partial install printed

@@ -51,6 +51,24 @@ shipped broken while everything looked fine.
   not. `MANIFEST.json` covers only what lives inside a version directory, and
   `install.sh` sits at the root. This makes changing it require a bump.
 
+## Documentation
+
+What moves together, and the regeneration order, is in `../CLAUDE.md` under *Changing
+documentation*, which also says what belongs in each of the nine documents and who reads it.
+
+`check_doc_counts.py` derives every count and version number from the source — skills, Core
+rules, each module's newest version — and fails the gate when a document disagrees. It runs as
+part of the `docs` step. A count is quoted in several documents at once, so one stale number
+becomes four and nothing about a wrong number looks wrong: on 2026-09-16 two documents said
+`gt Skills (16)` while 21 shipped, and a version line named five modules at 0.15.0 after they
+had all moved to 0.16.0. The rule "never write a count you have not derived" is the kind of
+discipline this project has learned not to rely on, so the count is derived here instead.
+
+It checks numbers, which are the mechanical part. **A paragraph that is accurate about a
+previous release still passes** — that is what the per-document guidance is for. The short version: five markdown files, then `build-docs.py --build`,
+`render-pdfs.sh`, and a manifest regeneration — and the gate only checks that skills are
+*named*, never that what the docs say is still true.
+
 ## Publishing
 
 **`dev/publish.sh` is the entry point.** It runs every publish requirement in order and

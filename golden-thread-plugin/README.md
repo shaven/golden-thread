@@ -1,5 +1,8 @@
 # Golden Thread Plugin
 
+> **Reader:** someone who has installed it and wants the reference
+> **Claims last checked against the code:** 2026-09-16 — see *The documents, and what belongs in each* in [`CLAUDE.md`](../CLAUDE.md).
+
 A Claude Code plugin that turns an Obsidian vault into the single source of truth for all AI memory across every project and every session.
 
 
@@ -47,7 +50,7 @@ Facts move up the hierarchy as they prove themselves general. They never move ba
 
 ---
 
-## Sixteen Skills (plus modules)
+## Twenty-One Skills (plus modules)
 
 ### Setup
 

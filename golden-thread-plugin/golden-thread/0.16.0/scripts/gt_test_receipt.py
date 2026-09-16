@@ -90,17 +90,38 @@ def covers(repo, files):
     A passing receipt covers the change only if nothing in `files` has been touched
     since it was written. The first file newer than the receipt is named, because
     "your tests are stale" is unactionable and "you edited X after the run" is not.
+
+    TWO FIXES, both found by validation on 2026-09-16, and both of which made this
+    control silently useless rather than noisily broken:
+
+    1. PATHS ARE RESOLVED AGAINST THE REPO ROOT. `files` comes from
+       `git diff --cached --name-only` and is repo-RELATIVE, but this used to stat it
+       against the CALLER's cwd. Run from anywhere except the repo root -- which is the
+       normal case for a PreToolUse hook, whose cwd is the session's project, not
+       necessarily the repo being committed -- every path missed, every miss was swallowed
+       below, and a stale receipt covered everything. Same receipt, same repo, same file
+       edited after the run: exit 1 from the repo root, exit 0 from /tmp.
+
+    2. AN UNRESOLVABLE PATH FAILS CLOSED. `except OSError: continue` treated "I could not
+       stat this" as "this is not evidence of staleness", so a deleted file, or any path
+       that did not resolve, was always covered -- `git rm` never needed evidence at all.
+       A path that cannot be checked is an UNKNOWN, and this codebase's rule is that an
+       unknown is not a pass. It is now reported as the reason, and the caller refuses.
     """
     r = latest(repo, ok_only=True)
     if not r:
         return False, None, None
     when = r.get("at", 0)
+    root = repo_root(repo) or repo
     for f in files:
+        full = f if os.path.isabs(f) else os.path.join(root, f)
         try:
-            if os.path.getmtime(f) > when:
+            if os.path.getmtime(full) > when:
                 return False, r, f
         except OSError:
-            continue                      # deleted or unreadable: not evidence of staleness
+            # Deleted, renamed, or a name this process cannot resolve. Removing a file is a
+            # change like any other and needs evidence the tests were seen to pass after it.
+            return False, r, f
     return True, r, None
 
 

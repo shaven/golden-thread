@@ -33,7 +33,15 @@ import subprocess
 import sys
 
 HERE = os.path.dirname(os.path.abspath(__file__))
-DEFAULT_BRANCHES = ("main", "master")
+sys.path.insert(0, HERE)
+
+# Compared casefolded, and only ever as a fallback: the repo's real default comes from
+# origin/HEAD when there is one. `Main`, `MASTER` and `MaIn` all committed unguarded against
+# the old exact-lowercase pair (validation 2026-09-16).
+DEFAULT_BRANCHES = ("main", "master", "trunk", "develop", "production")
+TIMEOUT_S = 300
+# A commit that is halfway through something must not be concluded by a tool nobody told.
+IN_PROGRESS = ("MERGE_HEAD", "CHERRY_PICK_HEAD", "REVERT_HEAD", "rebase-merge", "rebase-apply")
 
 
 def git(repo, *args, **kw):
@@ -41,18 +49,64 @@ def git(repo, *args, **kw):
 
 
 def staged_files(repo):
-    out = git(repo, "diff", "--cached", "--name-only")
+    """-> ABSOLUTE paths of what is staged, or None.
+
+    Absolute, and via -z, for two reasons validation found on 2026-09-16: the relative names
+    were handed to gt_test_receipt, which stat'd them against ITS cwd and so found nothing
+    whenever this was run from anywhere but the repo root -- every file then counted as covered
+    and a stale receipt let the commit through. And git quotes non-ASCII names by default, which
+    does not stat either."""
+    out = git(repo, "diff", "--cached", "--name-only", "-z")
     if out.returncode != 0:
         return None
-    return [ln.strip() for ln in out.stdout.split("\n") if ln.strip()]
+    return [os.path.join(repo, n) for n in out.stdout.split("\0") if n.strip()]
 
 
 def run_script(name, args):
     path = os.path.join(HERE, name)
     if not os.path.isfile(path):
         return None, "%s is not installed" % name
-    proc = subprocess.run([sys.executable, path] + args, capture_output=True, text=True)
+    try:
+        proc = subprocess.run([sys.executable, path] + args, capture_output=True, text=True,
+                              timeout=TIMEOUT_S)
+    except subprocess.TimeoutExpired:
+        return None, "%s did not finish within %ds" % (name, TIMEOUT_S)
+    except OSError as exc:
+        return None, "%s could not be run: %s" % (name, exc)
     return proc, None
+
+
+def current_branch(repo):
+    """-> (branch or None, why). None means unborn or detached -- both of which reported as
+    the literal string "HEAD" from `rev-parse --abbrev-ref`, so a first commit on an unborn
+    `main` sailed past the default-branch guard (validation 2026-09-16)."""
+    out = git(repo, "symbolic-ref", "--quiet", "--short", "HEAD")
+    if out.returncode == 0 and out.stdout.strip():
+        return out.stdout.strip(), None
+    if git(repo, "rev-parse", "--verify", "HEAD").returncode != 0:
+        return None, "this repository has no commits yet, so the branch it would create is "\
+                     "unverifiable here"
+    return None, "HEAD is detached; a commit here is reachable only through the reflog"
+
+
+def default_branch(repo):
+    """The repo's OWN default, from origin/HEAD, rather than a guess from a hard-coded list."""
+    out = git(repo, "symbolic-ref", "--quiet", "--short", "refs/remotes/origin/HEAD")
+    if out.returncode == 0 and out.stdout.strip():
+        return out.stdout.strip().split("/", 1)[-1]
+    return None
+
+
+def in_progress(repo):
+    gitdir = git(repo, "rev-parse", "--git-dir").stdout.strip()
+    if not gitdir:
+        return None
+    if not os.path.isabs(gitdir):
+        gitdir = os.path.join(repo, gitdir)
+    for marker in IN_PROGRESS:
+        if os.path.exists(os.path.join(gitdir, marker)):
+            return marker
+    return None
 
 
 def main(argv=None):
@@ -84,12 +138,12 @@ def main(argv=None):
         print("nothing is staged in %s -- stage what you mean to commit first" % repo)
         return 1
 
-    branch = git(repo, "rev-parse", "--abbrev-ref", "HEAD").stdout.strip()
+    branch, branch_why = current_branch(repo)
     print("repo:   %s" % repo)
-    print("branch: %s" % branch)
+    print("branch: %s" % (branch or "(none: %s)" % branch_why))
     print("staged: %d file(s)" % len(files))
     for f in files[:20]:
-        print("    %s" % f)
+        print("    %s" % os.path.relpath(f, repo))
     if len(files) > 20:
         print("    ... and %d more" % (len(files) - 20))
     print()
@@ -108,7 +162,17 @@ def main(argv=None):
         print("--- checks ---")
         print(proc.stdout.rstrip() or "(no output)")
         print()
-        if proc.returncode == 3:
+        # stderr is PRINTED, not discarded: a crashing checker exits 1 exactly like one
+        # reporting findings, and the traceback was the only way to tell them apart.
+        if (proc.stderr or "").strip():
+            print("--- checks (stderr) ---")
+            print(proc.stderr.rstrip())
+            print()
+        if proc.returncode == 1 and "Traceback (most recent call last)" in (proc.stderr or "") \
+                and not (proc.stdout or "").strip():
+            refusals.append("the checks CRASHED rather than reporting; that is an unknown, not "
+                            "a finding, and --allow-findings cannot accept it")
+        elif proc.returncode == 3:
             refusals.append("a check could not run; what it covers is unknown, so this is "
                             "not something --allow-findings can wave through")
         elif proc.returncode == 1 and not args.allow_findings:
@@ -128,10 +192,25 @@ def main(argv=None):
                         "commit -- editing a file after a run invalidates the receipt, which "
                         "is the point. (%s)" % (proc.stdout.strip() or "gt_test_receipt check"))
 
-    # 3. The default branch.
-    if branch in DEFAULT_BRANCHES and not args.allow_default_branch:
+    # 3. The default branch -- casefolded, against the repo's own default where it has one.
+    repo_default = default_branch(repo)
+    protected = {b.casefold() for b in DEFAULT_BRANCHES}
+    if repo_default:
+        protected.add(repo_default.casefold())
+    if branch is None and not args.allow_default_branch:
+        refusals.append("%s; pass --allow-default-branch if you mean to commit anyway"
+                        % branch_why)
+    elif branch and branch.casefold() in protected and not args.allow_default_branch:
         refusals.append("this is %s; branch first, or pass --allow-default-branch if you "
                         "really mean to commit here" % branch)
+
+    # 4. Something already in progress. Concluding a merge with a message written for an
+    #    ordinary commit produced a two-parent commit and cleared MERGE_HEAD, silently.
+    marker = in_progress(repo)
+    if marker:
+        refusals.append("a %s is in progress; finish it with git yourself rather than letting "
+                        "this conclude it with a message written for an ordinary commit"
+                        % marker.replace("_HEAD", "").replace("rebase-", "rebase ").lower())
 
     if refusals:
         print("REFUSING TO COMMIT")
@@ -148,8 +227,20 @@ def main(argv=None):
         print(out.stdout + out.stderr, file=sys.stderr)
         return 3
     print(out.stdout.strip())
-    print("\nCommitted. NOT pushed -- a commit is reversible here, a push is not.")
-    print("  git -C %s push" % repo)
+    if (out.stderr or "").strip():
+        # Hook output arrives here. It used to be swallowed, so a post-commit hook that
+        # pushed left no trace at all beneath a line claiming nothing was pushed.
+        print(out.stderr.rstrip())
+    print("\nCommitted. THIS TOOL did not push -- it has no push flag and never runs one.")
+    ahead = git(repo, "rev-list", "--count", "@{u}..HEAD")
+    if ahead.returncode == 0 and ahead.stdout.strip() == "0":
+        # Not a guarantee of anything this tool did: `git commit` runs the repo's own hooks,
+        # and a post-commit hook can push. Saying "NOT pushed" flatly was a claim about the
+        # repository that this tool is not in a position to make (validation 2026-09-16).
+        print("NOTE: HEAD is not ahead of its upstream. A commit hook in this repository may "
+              "have pushed it -- check `git log origin/HEAD` if that matters.")
+    else:
+        print("  git -C %s push" % repo)
     return 0
 
 

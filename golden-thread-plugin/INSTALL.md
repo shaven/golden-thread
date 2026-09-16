@@ -1,5 +1,8 @@
 # Golden Thread Plugin — Install Guide
 
+> **Reader:** installing for the first time, or verifying a fork
+> **Claims last checked against the code:** 2026-09-16 — see *The documents, and what belongs in each* in [`CLAUDE.md`](../CLAUDE.md).
+
 **Requirements:** Python 3.8+, Claude Code (any version).
 
 ---

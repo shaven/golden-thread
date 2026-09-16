@@ -1,5 +1,8 @@
 # Golden Thread
 
+> **Reader:** someone who has never heard of Golden Thread
+> **Claims last checked against the code:** 2026-09-16 — see *The documents, and what belongs in each* in [`CLAUDE.md`](CLAUDE.md).
+
 A memory system for AI coding sessions, built on plain markdown and git — and,
 unusually, one where the rules that matter most are **mechanically enforced** rather
 than merely written down.
@@ -18,7 +21,26 @@ and blocks it if the rule was broken.
 
 
 > [!IMPORTANT]
-> **0.15.0 makes gt a small core plus six optional modules**, and an upgrade no longer
+> **0.16.0 gives the definitions somewhere to come from, and something to read them.**
+> Golden Thread has **no plugin runtime** — nobody's code runs on your machine as a
+> third-party add-on. Contributions arrive as **packs**: plain JSON data, reviewed and
+> merged into gt itself, after which they are first-party and held to the same release
+> gate as everything else. See [SUBMISSIONS.md](SUBMISSIONS.md).
+>
+> The packs now have consumers. **`/gt:gt-scan`** checks code against the language
+> definitions in effect on this machine — and knows nothing about any language itself, so
+> four small packs teach it one it has never seen, with no code change. **`/gt:gt-optimize`**
+> reports vault content that costs context and earns nothing back. **`/gt:gt-handoff`**
+> writes the next session a handoff that marks what it must not assume. **`/gt:gt-allin`**
+> runs every check and tells you how many actually *ran*, and **`/gt:gt-allin-commit`**
+> commits only once a passing test receipt covers every staged file.
+>
+> A definition you disagree with is switched off from your own vault:
+> `{"retract": [{"lang": "go"}]}`. Only your packs may retract, so a contributed pack can
+> never retire someone else's definition.
+
+> [!NOTE]
+> **0.15.0 made gt a small core plus six optional modules**, and an upgrade no longer
 > changes anything you wrote without saying so and asking. Three commands moved
 > (`/gt:gt-watch` → `/gt-watch:gt-watch`, `/gt:gt-farm` → `/gt-farm:gt-farm`,
 > `/gt:gt-demo` → `/gt-demo:gt-demo`), and the installer tells you. New with it: the vault
@@ -374,6 +396,27 @@ does, and asserts that every file the manual tells a new user to run exists, tha
 hooks answer, and that the fresh vault lints clean. Nothing on the machine is touched.
 The vault this system was built in is a separate, private repo; nothing here depends
 on it.
+
+### If you change behaviour, change the documentation with it
+
+The docs are **five markdown files plus generated HTML and PDFs**, and they drift apart
+silently because nothing forces them to move together. The full list, and the order the
+artefacts must be regenerated in, is in
+[`golden-thread-plugin/CLAUDE.md`](golden-thread-plugin/CLAUDE.md) under *Changing
+documentation*. **This README is the front door**: its version callout describes the current
+release, and it is the first thing to go stale when one ships.
+
+The release gate checks that every skill is *named* in three files and that no PDF is older
+than its source. It cannot check whether what a document **says** is still true — and a doc
+that is accurate about a *previous* release is the failure that actually happens. A single pass
+on 2026-09-16 found four at once, including a contributor guide whose worked example used a
+slot no tool reads: anyone following it exactly would have produced a pack that validates,
+merges, resolves, and then does nothing.
+
+So when you change something, re-read the surrounding paragraph rather than the line you came
+for. Better still, make the claim check itself — `gt_registry.CONSUMERS` records which tool
+reads each slot and a test asserts each one really does, which is why that particular claim
+cannot quietly stop being true.
 
 ## Acknowledgments
 

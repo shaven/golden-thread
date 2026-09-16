@@ -1,5 +1,9 @@
 # Golden Thread Plugin — Documentation
-## Version gt 0.16.0 / gt-wiki 0.2.1 / gt-demo, gt-watch, gt-report-card, gt-farm, gt-flow 0.15.0
+
+> **Reader:** quick lookup, and the printed PDF
+> **Claims last checked against the code:** 2026-09-16 — see *The documents, and what belongs in each* in [`CLAUDE.md`](../CLAUDE.md).
+
+## Version gt 0.16.0 / gt-wiki 0.2.2 / gt-demo, gt-watch, gt-report-card, gt-farm, gt-flow 0.16.0
 
 ---
 
@@ -84,7 +88,7 @@ The canonical rule definitions live in `Projects/golden-thread/core-rules/` insi
 
 ---
 
-## gt Skills (16)
+## gt Skills (21)
 
 ### Setup
 

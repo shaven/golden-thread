@@ -1,5 +1,8 @@
 # Golden Thread — User Manual
 
+> **Reader:** a daily user — the deepest document, where the *why* lives
+> **Claims last checked against the code:** 2026-09-16 — see *The documents, and what belongs in each* in [`CLAUDE.md`](../CLAUDE.md).
+
 Complete reference for gt's sixteen skills and its six modules. Written against **gt v0.15.0**
 (gt-wiki 0.2.1; gt-demo, gt-watch, gt-report-card, gt-farm and gt-flow 0.15.0).
 
