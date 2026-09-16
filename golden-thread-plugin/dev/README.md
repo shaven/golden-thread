@@ -51,6 +51,24 @@ shipped broken while everything looked fine.
   not. `MANIFEST.json` covers only what lives inside a version directory, and
   `install.sh` sits at the root. This makes changing it require a bump.
 
+## Documentation
+
+What moves together, and the regeneration order, is in `../CLAUDE.md` under *Changing
+documentation*, which also says what belongs in each of the nine documents and who reads it.
+
+`check_doc_counts.py` derives every count and version number from the source — skills, Core
+rules, each module's newest version — and fails the gate when a document disagrees. It runs as
+part of the `docs` step. A count is quoted in several documents at once, so one stale number
+becomes four and nothing about a wrong number looks wrong: on 2026-09-16 two documents said
+`gt Skills (16)` while 21 shipped, and a version line named five modules at 0.15.0 after they
+had all moved to 0.16.0. The rule "never write a count you have not derived" is the kind of
+discipline this project has learned not to rely on, so the count is derived here instead.
+
+It checks numbers, which are the mechanical part. **A paragraph that is accurate about a
+previous release still passes** — that is what the per-document guidance is for. The short version: five markdown files, then `build-docs.py --build`,
+`render-pdfs.sh`, and a manifest regeneration — and the gate only checks that skills are
+*named*, never that what the docs say is still true.
+
 ## Publishing
 
 **`dev/publish.sh` is the entry point.** It runs every publish requirement in order and
@@ -85,6 +103,7 @@ since everything here was correct and only the copy the other machine reads was 
 | `foreign_files.py` | lists files in the publish destination that the publisher did not write, so a second writer is named before `rsync --delete` removes it |
 | `render-pdfs.sh` | re-renders the PDFs after a docs change, in parallel — one Chrome per document, each with its own `--user-data-dir`; workers from `gt_settings.py jobs`, `GT_RENDER_JOBS=1` for serial |
 | `feature_requests.py` | validates the cross-machine feature-request queue |
+| `submissions.py` | validates a **contributed pack** before a human reads it: proves reachability (a Tier A slot must carry no free text at all — that absence is the proof, never the declared tier), and refuses instruction-shaped prose, ReDoS-prone and backreferencing patterns, subtractive packs, executable content, non-UTF-8 bytes, invisible code points, copyleft licences, and missing provenance or DCO. `validate <pack>` per pack; `slots` prints the open slots and their tier. Contributor-facing spec: `../SUBMISSIONS.md` |
 | `shipped_hashes.py` | writes `<release>/templates/shipped-hashes.json`: the sha256 of every vault tool and githook text any release shipped (git history plus the version dirs in the tree; a hash once listed is never dropped). `vault_refresh.py` replaces only a vault copy matching one of them, so rerun `python3 dev/shipped_hashes.py golden-thread/<ver>` after editing a template tool or githook; `test_vault_refresh` fails until you do |
 | `publish.sh` | runs every publish requirement in order; `--list` prints them, `--dry-run` rehearses |
 | `scrub_check.py` | scans for employer and machine-specific strings; exit 1 = hits, other = could not scan (also a failure — an unscanned file is not a clean file)  `--repo <dir>` scans everything a push publishes (tracked + untracked-not-ignored) |

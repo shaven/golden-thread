@@ -114,6 +114,10 @@ pre, table { break-inside: avoid; font-size: 9px; }
 table { width:100%; border-collapse: collapse; }
 th, td { border:1px solid #ddd; padding:3px 5px; text-align:left; vertical-align:top; }
 </style></head><body><h1 id="golden-thread-user-manual">User Manual</h1>
+<blockquote>
+<p><strong>Reader:</strong> a daily user — the deepest document, where the <em>why</em> lives
+<strong>Claims last checked against the code:</strong> 2026-09-16 — see <em>The documents, and what belongs in each</em> in <a href="../CLAUDE.md"><code>CLAUDE.md</code></a>.</p>
+</blockquote>
 <p>Complete reference for gt's sixteen skills and its six modules. Written against <strong>gt v0.15.0</strong>
 (gt-wiki 0.2.1; gt-demo, gt-watch, gt-report-card, gt-farm and gt-flow 0.15.0).</p>
 <hr />
@@ -160,6 +164,40 @@ early becomes a rule you must remember to disbelieve.</p>
 <code>MEMORY.md</code> descriptions matter: they are the entire basis for deciding whether a
 file is worth opening.</p>
 <hr />
+<h2 id="packs-and-the-registry">Packs and the registry</h2>
+<p><em>New in 0.16.0.</em></p>
+<p>Golden Thread keeps pluggable definitions in <strong>slots</strong> — how a language names things, which
+paths are noise, what a credential looks like, what a term means. Each slot is filled by
+<strong>packs</strong>: one JSON file of data, never a program.</p>
+<pre><code class="language-bash">gt_registry.py show naming --lang python    # what is in effect, and which pack it came from
+gt_registry.py sources                      # every pack found, in precedence order
+gt_registry.py slots                        # the slot table and merge modes
+</code></pre>
+<p><strong>Precedence is community &lt; core &lt; local.</strong> A merged contribution <em>extends</em> coverage — a
+language core does not define — but never redefines what core defines; the user's own packs,
+under <code>&lt;vault&gt;/Projects/golden-thread/packs/</code>, always win. When one entry beats another the
+loser is listed as <code>SHADOWED</code> with the winner named, so a definition never disappears without a
+word. A pack that cannot be read is an error, not a silent gap.</p>
+<p>Slots merge in one of two modes: <code>union</code> (entries accumulate and only identical ones collapse —
+<code>ignore</code>, <code>secrets</code>) or <code>map</code> (one value per key — <code>naming</code>, <code>encoding</code>, <code>filetype</code>).</p>
+<p><strong>Switching a definition off: <code>retract</code>.</strong> A union slot is additive, so nothing in it can be
+replaced — that rule is what stops a contributed pack retiring a core credential pattern. It
+also meant a noisy core definition could not be silenced, which is how a check stops being run
+at all. A pack <strong>in your own vault</strong> may therefore carry a <code>retract</code> list:</p>
+<pre><code class="language-json">{&quot;slot&quot;: &quot;naming&quot;, &quot;...&quot;: &quot;...&quot;, &quot;retract&quot;: [{&quot;lang&quot;: &quot;go&quot;}]}
+</code></pre>
+<p>It matches on any field, so <code>{"lang": "go"}</code> switches off every Go definition in that slot at
+once — which is also how you choose which language packs are live, with no separate install
+step. Only vault packs may retract: a contributed or core pack declaring one is refused and
+reported. Every retraction prints as <code>RETRACTED</code>, alongside the shadowed entries, because a
+definition you turned off should still be visible to you.</p>
+<p><strong>Some slots have no consumer yet.</strong> <code>gt_registry.py slots</code> marks them. A pack in one of those
+resolves correctly and is then read by no tool at all — stated there rather than discovered.</p>
+<p><strong>Contributing a pack.</strong> gt runs no third-party code; packs are submitted, reviewed and merged
+into gt. <code>dev/submissions.py validate &lt;pack&gt;</code> checks a pack before a human reads it, and the
+release gate re-validates every shipped pack so review stays true rather than historical. A
+pack's tier is derived from whether its slot can reach model context, never from what the pack
+declares. See <code>SUBMISSIONS.md</code>.</p>
 <h2 id="vault-layout">Vault layout</h2>
 <pre><code>&lt;vault&gt;/
   CLAUDE.md              vault-wide conventions and page schema
@@ -317,6 +355,11 @@ project memory. If a page comes back <code>status: stale</code>, verify before a
 <pre><code>/gt:gt-upgrade         # finish what install.sh could not apply (review, conflicts)
 /gt:gt-doctor          # the whole install in one report; --fix re-wires hooks only
 /gt:gt-lint            # broken links, orphans, unlisted memory, scope leaks
+/gt:gt-optimize        # content that costs context and earns nothing back
+/gt:gt-scan            # code against the language definitions in effect
+/gt:gt-allin           # every check in one run; reports how many actually ran
+/gt:gt-allin-commit    # commit once the checks pass and a receipt covers the files
+/gt:gt-handoff         # write the next session a handoff it can trust
 /gt:gt-runbook-lint    # facts duplicated across runbooks
 /gt:gt-refresh         # upstream changes to Sources/
 </code></pre>

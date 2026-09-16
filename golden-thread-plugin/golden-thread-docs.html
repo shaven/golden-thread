@@ -113,7 +113,11 @@
 <h1 class="title">Golden Thread Plugin</h1>
 </header>
 <h1 id="golden-thread-plugin-documentation">Golden Thread Plugin — Documentation</h1>
-<h2 id="version-gt-0150-gt-wiki-021-gt-demo-gt-watch-gt-report-card-gt-farm-gt-flow-0150">Version gt 0.15.0 / gt-wiki 0.2.1 / gt-demo, gt-watch, gt-report-card, gt-farm, gt-flow 0.15.0</h2>
+<blockquote>
+<p><strong>Reader:</strong> quick lookup, and the printed PDF
+<strong>Claims last checked against the code:</strong> 2026-09-16 — see <em>The documents, and what belongs in each</em> in <a href="../CLAUDE.md"><code>CLAUDE.md</code></a>.</p>
+</blockquote>
+<h2 id="version-gt-0160-gt-wiki-022-gt-demo-gt-watch-gt-report-card-gt-farm-gt-flow-0160">Version gt 0.16.0 / gt-wiki 0.2.2 / gt-demo, gt-watch, gt-report-card, gt-farm, gt-flow 0.16.0</h2>
 <hr />
 <p>Golden Thread turns an Obsidian vault into the single source of truth for all AI memory across every project and every session. The tiered rule model introduced in v0.6.0 now carries <strong>seven hook-backed Core rules</strong> enforced at three points in the turn, 0.9.12 added <code>gt-route</code> for the middle of a session, and 0.9.13 makes the session-start component check verify that the hooks are <strong>wired</strong>, not merely installed, 0.11.0 makes <code>log.md</code> and <code>decisions.md</code> generated files so concurrent sessions cannot overwrite one another, 0.12.3 stops a vault tool running against a vault it was never told to touch, 0.12.4 makes parallel execution the default for divisible work in every project, 0.12.5 stops code being committed before its tests have been seen to pass, 0.13.0 makes an upgrade from any older release end where a fresh install would, 0.14.0 splits optional parts into modules you can decline, and 0.15.0 makes six of them — gt-wiki 0.2.1 (an LLM-powered knowledge base with immutable sources and interlinked pages), gt-demo (the guided tour), gt-watch (upstream repos), gt-report-card (the session report card), gt-farm (work packets for an external AI) and the new gt-flow, which draws the vault's event stream as a timeline of knowledge climbing the ladder.</p>
 <hr />
@@ -243,7 +247,7 @@ often it would train the guard to be ignored.</p>
 <p>The canonical rule definitions live in <code>Projects/golden-thread/core-rules/</code> inside the vault. Editing a rule file there changes what the hook injects — the rule text is never duplicated into the script.</p>
 <p><strong>The canary:</strong> <code>core_timestamp_every_message.md</code> is designated Core/Validated not because a missing timestamp causes real harm, but because it is trivially observable at the top of every reply. When the timestamp disappears, enforcement has broken.</p>
 <hr />
-<h2 id="gt-skills-16">gt Skills (16)</h2>
+<h2 id="gt-skills-21">gt Skills (21)</h2>
 <h3 id="setup">Setup</h3>
 <table>
 <thead>
@@ -352,6 +356,26 @@ often it would train the guard to be ignored.</p>
 <tr>
 <td><code>/gt:gt-lint</code></td>
 <td>Audit the vault for structural problems: 18 checks covering broken wikilinks, orphaned pages, missing index entries, unlisted memory files, Knowledge pages citing superseded sources, stale pages, and <code>core-unenforced</code> — a Core rule that is stored but wired to no hook.</td>
+</tr>
+<tr>
+<td><code>/gt:gt-optimize</code></td>
+<td>Find vault content that costs context and earns nothing back: a fact duplicated across memory files, an index row pointing at a file that is gone, a <code>global-memory/</code> file over budget, a relative date in a file that will be read months later. Splits findings into SAFE (applied with <code>--apply</code>) and JUDGEMENT (reported only — deleting knowledge is not reversible by reading a diff). Never writes <code>core-rules/</code>, and needs a flag for <code>global-memory/</code>.</td>
+</tr>
+<tr>
+<td><code>/gt:gt-scan</code></td>
+<td>Scan code against the language definitions in effect on this machine — naming conventions and encoding, per language, all of it from packs rather than from the script. An aggregator over leaf scanners: it reports how many members RAN alongside what they found, because "nothing is wrong" and "nothing was checked" otherwise print identically.</td>
+</tr>
+<tr>
+<td><code>/gt:gt-allin</code></td>
+<td>Run every check in one command — scan, lint, the optimize report, install health — and report how many members actually RAN alongside what they found, because a short finding list from a half-failed run reads exactly like a clean bill of health. Never pushes and never applies a change: <code>--suggest-push</code> prints the command for you, and refuses even that when anything failed.</td>
+</tr>
+<tr>
+<td><code>/gt:gt-allin-commit</code></td>
+<td>Commit, but only once the checks pass and a passing test receipt covers every staged file. Refuses on <code>main</code>/<code>master</code> without a flag, refuses when a check <em>could not run</em> (an unknown is not a finding anyone can accept), and never pushes — a commit is reversible with <code>git reset</code>, a push is fetched by other people. It checks the receipt itself because <code>guard_test_before_commit</code> is a PreToolUse hook and cannot see a script running git.</td>
+</tr>
+<tr>
+<td><code>/gt:gt-handoff</code></td>
+<td>Write the next session a handoff it can trust: the facts gathered from the project and the repository, each labelled with its source and whether it was actually verified. The design narrative is deliberately left for the session that did the work — a script that invents it produces a document that reads finished and is not.</td>
 </tr>
 <tr>
 <td><code>/gt:gt-runbook-lint</code></td>

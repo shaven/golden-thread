@@ -25,7 +25,7 @@ import sys
 import unittest
 from pathlib import Path
 
-from _harness import Sandbox, GT, WIKI, REPO, PYTHON, SCRIPTS, load_module, latest_version_dir
+from _harness import Sandbox, GT, WIKI, REPO, PYTHON, SCRIPTS, load_module, latest_version_dir, gt_requires_range
 
 FLOW = latest_version_dir(REPO / "golden-thread-flow")
 SCRIPT = FLOW / "scripts" / "gt_flow.py"
@@ -144,10 +144,13 @@ class FlowModuleJson(unittest.TestCase):
     def test_contract(self):
         m = self.mod
         self.assertEqual((m["schema"], m["name"], m["plugin"], m["version"]),
-                         (1, "flow", "gt-flow", "0.15.0"))
+                         (1, "flow", "gt-flow", FLOW.name))
+        # the module tracks the gt release; a module left behind at an older
+        # version is skipped at install, silently, on every machine
+        self.assertEqual(FLOW.name, GT.name)
         self.assertEqual(m["version"], FLOW.name)
         self.assertEqual((self.plugin["name"], self.plugin["version"]), ("gt-flow", m["version"]))
-        self.assertEqual(m["requires_gt"], ">=0.15.0,<0.16.0")
+        self.assertEqual(m["requires_gt"], gt_requires_range(GT.name))
         self.assertEqual(m["default"], "on")
         self.assertEqual(m["skills"], ["gt-flow"])
         self.assertEqual(m["scripts"], ["gt_flow.py"])

@@ -83,6 +83,25 @@ class ProtectedPathsTest(Sandbox):
         hso = self.assertAsk(self.guard(self.vault / "global-memory" / "new.md"))
         self.assertIn("global-memory", hso["permissionDecisionReason"])
 
+    def test_write_to_local_packs_asks(self):
+        """Local packs are the highest-precedence registry tier and the only one no validator
+        and no release gate ever sees. Security review 2026-09-16 wrote a pack that shadowed a
+        core naming rule and the guard raised no objection at all."""
+        p = self.vault / "Projects" / "golden-thread" / "packs"
+        p.mkdir(parents=True, exist_ok=True)
+        hso = self.assertAsk(self.guard(p / "naming.mine.pack.json"))
+        self.assertIn("packs", hso["permissionDecisionReason"])
+
+    def test_local_packs_guard_survives_a_case_variant_spelling(self):
+        """realpath returns the CALLER's spelling on a case-insensitive volume, which is how
+        Global-Memory/ and CORE-RULES/ slipped through in 0.15.0. Same path, same trap."""
+        p = self.vault / "Projects" / "golden-thread" / "packs"
+        p.mkdir(parents=True, exist_ok=True)
+        self.assertAsk(self.guard(
+            f"{self.vault}/Projects/golden-thread/PACKS/naming.mine.pack.json"))
+        self.assertAsk(self.guard(
+            f"{self.vault}/Projects/alpha/../../Projects/golden-thread/packs/x.pack.json"))
+
     def test_edit_core_rule_asks(self):
         hso = self.assertAsk(self.guard(self.core / "core_example.md", tool="Edit"))
         self.assertIn("core-rules", hso["permissionDecisionReason"])
@@ -119,6 +138,50 @@ class ProtectedPathsTest(Sandbox):
         real.write_text("fact\n", encoding="utf-8")
         os.symlink(real, link)
         self.assertAsk(self.guard(link, tool="Edit"))
+
+    # -- case variants (0.15.1: identity compare, not realpath string) ----------------
+    def _case_insensitive(self, base):
+        """True when base/a and base/A are the same file on this volume."""
+        probe = base / "gtprobe.case"
+        try:
+            probe.write_text("x", encoding="utf-8")
+            return (base / "GTPROBE.CASE").exists()
+        except OSError:
+            return False
+        finally:
+            try:
+                probe.unlink()
+            except OSError:
+                pass
+
+    def test_case_variant_of_global_memory_asks(self):
+        """`Global-Memory/` resolves to the protected `global-memory/` on a case-insensitive
+        volume, so a write there must still prompt. Pre-0.15.1 the realpath string compare
+        kept the caller's case and stayed silent -- the bug this fix closes."""
+        if not self._case_insensitive(self.vault):
+            self.skipTest("case-sensitive volume; variant names are distinct files")
+        self.assertAsk(self.guard(self.vault / "Global-Memory" / "new.md"),
+                       "case variant of global-memory must ask")
+
+    def test_case_variant_of_core_rules_asks(self):
+        if not self._case_insensitive(self.vault):
+            self.skipTest("case-sensitive volume")
+        variant = self.vault / "Projects" / "golden-thread" / "CORE-RULES" / "x.md"
+        self.assertAsk(self.guard(variant, tool="Edit"),
+                       "case variant of core-rules must ask")
+
+    def test_case_variant_of_settings_json_asks(self):
+        if not self._case_insensitive(self.home / ".claude"):
+            self.skipTest("case-sensitive volume")
+        self.assertAsk(self.guard(self.home / ".claude" / "Settings.json"),
+                       "case variant of settings.json must ask")
+
+    def test_case_variant_with_traversal_asks(self):
+        """Identity compare and `..` handling together."""
+        if not self._case_insensitive(self.vault):
+            self.skipTest("case-sensitive volume")
+        sneaky = f"{self.vault}/Projects/alpha/../../GLOBAL-MEMORY/x.md"
+        self.assertAsk(self.guard(sneaky), "case variant reached via .. must ask")
 
     # -- deny / Sources ---------------------------------------------------------------
     def test_edit_existing_source_denied(self):

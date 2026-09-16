@@ -1,5 +1,8 @@
 # Golden Thread — User Manual
 
+> **Reader:** a daily user — the deepest document, where the *why* lives
+> **Claims last checked against the code:** 2026-09-16 — see *The documents, and what belongs in each* in [`CLAUDE.md`](../CLAUDE.md).
+
 Complete reference for gt's sixteen skills and its six modules. Written against **gt v0.15.0**
 (gt-wiki 0.2.1; gt-demo, gt-watch, gt-report-card, gt-farm and gt-flow 0.15.0).
 
@@ -57,6 +60,53 @@ A project with 70 notes costs ~80 lines to open instead of ~2,000. This is why
 file is worth opening.
 
 ---
+
+## Packs and the registry
+
+*New in 0.16.0.*
+
+Golden Thread keeps pluggable definitions in **slots** — how a language names things, which
+paths are noise, what a credential looks like, what a term means. Each slot is filled by
+**packs**: one JSON file of data, never a program.
+
+```bash
+gt_registry.py show naming --lang python    # what is in effect, and which pack it came from
+gt_registry.py sources                      # every pack found, in precedence order
+gt_registry.py slots                        # the slot table and merge modes
+```
+
+**Precedence is community < core < local.** A merged contribution *extends* coverage — a
+language core does not define — but never redefines what core defines; the user's own packs,
+under `<vault>/Projects/golden-thread/packs/`, always win. When one entry beats another the
+loser is listed as `SHADOWED` with the winner named, so a definition never disappears without a
+word. A pack that cannot be read is an error, not a silent gap.
+
+Slots merge in one of two modes: `union` (entries accumulate and only identical ones collapse —
+`ignore`, `secrets`) or `map` (one value per key — `naming`, `encoding`, `filetype`).
+
+**Switching a definition off: `retract`.** A union slot is additive, so nothing in it can be
+replaced — that rule is what stops a contributed pack retiring a core credential pattern. It
+also meant a noisy core definition could not be silenced, which is how a check stops being run
+at all. A pack **in your own vault** may therefore carry a `retract` list:
+
+```json
+{"slot": "naming", "...": "...", "retract": [{"lang": "go"}]}
+```
+
+It matches on any field, so `{"lang": "go"}` switches off every Go definition in that slot at
+once — which is also how you choose which language packs are live, with no separate install
+step. Only vault packs may retract: a contributed or core pack declaring one is refused and
+reported. Every retraction prints as `RETRACTED`, alongside the shadowed entries, because a
+definition you turned off should still be visible to you.
+
+**Some slots have no consumer yet.** `gt_registry.py slots` marks them. A pack in one of those
+resolves correctly and is then read by no tool at all — stated there rather than discovered.
+
+**Contributing a pack.** gt runs no third-party code; packs are submitted, reviewed and merged
+into gt. `dev/submissions.py validate <pack>` checks a pack before a human reads it, and the
+release gate re-validates every shipped pack so review stays true rather than historical. A
+pack's tier is derived from whether its slot can reach model context, never from what the pack
+declares. See `SUBMISSIONS.md`.
 
 ## Vault layout
 
@@ -244,6 +294,11 @@ project memory. If a page comes back `status: stale`, verify before acting on it
 /gt:gt-upgrade         # finish what install.sh could not apply (review, conflicts)
 /gt:gt-doctor          # the whole install in one report; --fix re-wires hooks only
 /gt:gt-lint            # broken links, orphans, unlisted memory, scope leaks
+/gt:gt-optimize        # content that costs context and earns nothing back
+/gt:gt-scan            # code against the language definitions in effect
+/gt:gt-allin           # every check in one run; reports how many actually ran
+/gt:gt-allin-commit    # commit once the checks pass and a receipt covers the files
+/gt:gt-handoff         # write the next session a handoff it can trust
 /gt:gt-runbook-lint    # facts duplicated across runbooks
 /gt:gt-refresh         # upstream changes to Sources/
 ```

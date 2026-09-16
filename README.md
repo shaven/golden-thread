@@ -1,5 +1,8 @@
 # Golden Thread
 
+> **Reader:** someone who has never heard of Golden Thread
+> **Claims last checked against the code:** 2026-09-16 — see *The documents, and what belongs in each* in [`CLAUDE.md`](CLAUDE.md).
+
 A memory system for AI coding sessions, built on plain markdown and git — and,
 unusually, one where the rules that matter most are **mechanically enforced** rather
 than merely written down.
@@ -12,13 +15,32 @@ it at startup, look things up while working, and write back what they learn.
 Its distinguishing idea is the second problem, the one most memory systems never
 address: **writing a rule down does not mean it gets followed.**
 
-Plugin **v0.15.0**. Ten Core rules currently enforced, five of them *validated* — a
+Plugin **v0.16.0**. Ten Core rules currently enforced, five of them *validated* — a
 hook inspects the finished reply (`Stop`) or the tool call about to run (`PreToolUse`)
 and blocks it if the rule was broken.
 
 
 > [!IMPORTANT]
-> **0.15.0 makes gt a small core plus six optional modules**, and an upgrade no longer
+> **0.16.0 gives the definitions somewhere to come from, and something to read them.**
+> Golden Thread has **no plugin runtime** — nobody's code runs on your machine as a
+> third-party add-on. Contributions arrive as **packs**: plain JSON data, reviewed and
+> merged into gt itself, after which they are first-party and held to the same release
+> gate as everything else. See [SUBMISSIONS.md](SUBMISSIONS.md).
+>
+> The packs now have consumers. **`/gt:gt-scan`** checks code against the language
+> definitions in effect on this machine — and knows nothing about any language itself, so
+> four small packs teach it one it has never seen, with no code change. **`/gt:gt-optimize`**
+> reports vault content that costs context and earns nothing back. **`/gt:gt-handoff`**
+> writes the next session a handoff that marks what it must not assume. **`/gt:gt-allin`**
+> runs every check and tells you how many actually *ran*, and **`/gt:gt-allin-commit`**
+> commits only once a passing test receipt covers every staged file.
+>
+> A definition you disagree with is switched off from your own vault:
+> `{"retract": [{"lang": "go"}]}`. Only your packs may retract, so a contributed pack can
+> never retire someone else's definition.
+
+> [!NOTE]
+> **0.15.0 made gt a small core plus six optional modules**, and an upgrade no longer
 > changes anything you wrote without saying so and asking. Three commands moved
 > (`/gt:gt-watch` → `/gt-watch:gt-watch`, `/gt:gt-farm` → `/gt-farm:gt-farm`,
 > `/gt:gt-demo` → `/gt-demo:gt-demo`), and the installer tells you. New with it: the vault
@@ -207,6 +229,11 @@ removing any one leaves the rest working.
 | `gt-upgrade` | Updates the VAULT after `install.sh` updates the plugin — the step that did not exist until a 0.11.0 migration had to be run by hand across 43 projects. Migrations detect their own work, documents are three-way merged against a base the vault carries, and a step that needs a person is reported rather than guessed at. |
 | `gt-doctor` | Answers "is this install healthy?" in one command — version, component drift, hook wiring, pending migrations, stray workers, unpushed commits, publish drift, lint. Every answer is stated relative to the release it was checked against, because a clean report from a check pinned to the wrong version reads exactly like a healthy install. |
 | `gt-lint` | Runs 18 deterministic health checks — broken links, orphans, index gaps, scope leaks, staleness, superseded sources — plus `core-unenforced`, which catches a rule that is stored but never re-asserted. |
+| `gt-optimize` | Finds what the vault pays for on every turn and gets nothing back for — a fact duplicated across memory files, a dead index row, a `global-memory/` file over budget. Only mechanically safe cases are applied; anything needing judgement is reported, because a wrong deletion here loses knowledge no diff will bring back. Measured against a real vault it went from 1771 findings to 199 once it stopped reporting generated files and recorded artifacts. |
+| `gt-scan` | Checks code against the language definitions this machine actually has — naming and encoding, per language, entirely from packs: a contributed language pack teaches it a new language with no code change. It reports how many checks RAN next to what they found, so a scan that could not load its definitions can never be mistaken for a clean tree. |
+| `gt-allin` | One command for every check, built so a skipped check can never pass for a clean one: the headline is "N of M members ran", and a member that could not execute outranks a member that found something. It does not push — an aggregator is where a partial run is easiest to mistake for a complete one, and pushing there would break the very rule about seeing tests pass that the tool exists to serve. |
+| `gt-allin-commit` | The separate, deliberate act of committing — kept apart from the sweep so a routine check is never also a write. It verifies a passing test receipt covers every staged file, refuses when a check could not run at all, and stops at the commit: a commit is reversible here, a push is fetched by other people. |
+| `gt-handoff` | Hands the next session what it needs and marks what it must not assume. Facts carry their source and verification state; the design narrative is left blank for the person who did the work, because a handoff that reads finished when it is not gives the next session false confidence instead of none. |
 | `gt-settings` | Shows and changes everything the plugin does on its own — component drift checking, the version check, orphaned-worker detection, the unpushed-commit check, and the settings each installed module adds (the report card, the upstream watch). Every automatic behaviour is registered here and every one can be switched off. |
 | `gt-route` | Mid-session: names what the session has actually become, says where its output belongs, and checks you are in the right project. For when a session has drifted from what it opened with, or you cannot name what you are doing. |
 | `gt-runbook-lint` | Finds procedures duplicated across project runbooks and routes them to the right shared layer: `PROTOCOL.md`, a `Knowledge/` page, or a repo `CLAUDE.md`. Duplication across two runbooks is the signal a fact belongs one layer out. |
@@ -337,6 +364,21 @@ decisions that ended up sharing one number.
 systems state and check by hand. Adopting it found a live collision: two skills sharing
 three verbatim trigger phrases.
 
+## Contributing a pack
+
+gt runs **no third-party code**. Contributions are **submitted, reviewed and merged** into gt
+itself, after which they are first-party and held to the release gate. New in **0.16.0**:
+
+```bash
+python3 dev/submissions.py slots                 # which slots are open, and their tier
+python3 dev/submissions.py validate my.pack.json # check before you send
+python3 <gt>/scripts/gt_registry.py show naming --lang python   # what is in effect, and from where
+```
+
+A pack is one JSON file of data, not a program, so a reviewer can read all of it. Its tier is
+derived from whether its slot can reach model context — never from what the pack declares. Full
+spec: [SUBMISSIONS.md](SUBMISSIONS.md).
+
 ## Contributing to this repo
 
 Read [`CLAUDE.md`](CLAUDE.md) first — it carries the landmines, including the one that
@@ -354,6 +396,27 @@ does, and asserts that every file the manual tells a new user to run exists, tha
 hooks answer, and that the fresh vault lints clean. Nothing on the machine is touched.
 The vault this system was built in is a separate, private repo; nothing here depends
 on it.
+
+### If you change behaviour, change the documentation with it
+
+The docs are **five markdown files plus generated HTML and PDFs**, and they drift apart
+silently because nothing forces them to move together. The full list, and the order the
+artefacts must be regenerated in, is in
+[`golden-thread-plugin/CLAUDE.md`](golden-thread-plugin/CLAUDE.md) under *Changing
+documentation*. **This README is the front door**: its version callout describes the current
+release, and it is the first thing to go stale when one ships.
+
+The release gate checks that every skill is *named* in three files and that no PDF is older
+than its source. It cannot check whether what a document **says** is still true — and a doc
+that is accurate about a *previous* release is the failure that actually happens. A single pass
+on 2026-09-16 found four at once, including a contributor guide whose worked example used a
+slot no tool reads: anyone following it exactly would have produced a pack that validates,
+merges, resolves, and then does nothing.
+
+So when you change something, re-read the surrounding paragraph rather than the line you came
+for. Better still, make the claim check itself — `gt_registry.CONSUMERS` records which tool
+reads each slot and a test asserts each one really does, which is why that particular claim
+cannot quietly stop being true.
 
 ## Acknowledgments
 

@@ -11,6 +11,73 @@ release's own summary line, kept short rather than reconstructed after the fact.
 
 ---
 
+## gt 0.16.0 — unreleased
+
+**Contributions arrive by submission and review, not by a plugin runtime; the definitions they
+carry get their first consumers; and a security fix for protected paths.**
+
+**Protected paths (security).** `guard_protected_paths` compared paths as `realpath` strings.
+On a case-insensitive volume (APFS) `realpath` returns the caller's spelling, not the on-disk
+name, so a case- or Unicode-variant of a protected path resolved to the protected file and got
+**no prompt**: `Global-Memory/…`, `CORE-RULES/…` and `~/.claude/Settings.json` were all silent
+while their canonical spellings asked. The guard now compares **file identity**
+`(st_dev, st_ino)` of the nearest existing ancestor, with an NFC + `casefold()` fallback —
+never `str.lower()`, which misses `ſ` (U+017F) and the Kelvin sign.
+
+**Contributions.** gt does not run third-party code. Contributions are **submitted, reviewed
+and merged** into gt itself, after which they are first-party and held to the release gate.
+
+- `dev/submissions.py` validates a contributed pack before a human reads it. The load-bearing
+  rule: a pack's tier is **derived from its slot's reachability**, never believed from what the
+  pack declares. A slot that cannot reach model context has no field for prose to live in, and
+  that absence is the proof. It also refuses instruction-shaped text, ReDoS-prone and
+  backreferencing patterns, subtractive packs, executable content, non-UTF-8 bytes, invisible
+  code points, copyleft licences (in the pack *or* its upstream), and missing provenance or DCO.
+- `scripts/gt_registry.py` resolves packs into one answer per key and names the source.
+  Precedence is **community < core < local**: a merged contribution extends coverage but never
+  silently redefines a core default, and the user's own packs always win. Shadowed entries are
+  reported rather than dropped, and an unreadable pack is an error rather than a silent gap.
+- Packs ship in `packs/core/` and `packs/community/` and are hash-verified in `MANIFEST.json`;
+  the release gate re-validates every shipped pack, so "it was reviewed" stays true rather than
+  becoming historical.
+- `SUBMISSIONS.md` is the contributor-facing spec. gt is MIT permanently: no CLA, no
+  relicensing, so a contributor's grant is final and the terms cannot change under them.
+
+**The definitions get consumers.** A registry nothing reads is a registry nobody notices is
+broken — the packs shipped hash-verified against a manifest row shape that never matched, and
+were refused on every installation for weeks while the tests stayed green. Five commands now
+read them, and `gt_registry.py slots` names the five slots that still have none.
+
+- `/gt:gt-scan` checks code against the **language definitions in effect on this machine** —
+  naming and encoding, per language. Nothing about any language lives in the script: the
+  `filetype` and `construct` slots mean four small packs teach gt a language it has never seen,
+  with no code change. It is an aggregator over leaf scanners, and reports how many members
+  **ran** alongside what they found.
+- `/gt:gt-optimize` reports vault content that costs context and earns nothing back: a fact
+  duplicated across memory files, an index row pointing at a file that is gone, a
+  `global-memory/` file over budget. It **reports only** — see below.
+- `/gt:gt-handoff` gathers what the next session needs, labels every fact with its source and
+  verification state, and deliberately refuses to write the design narrative.
+- `/gt:gt-allin` runs every check in one command and never pushes or applies anything.
+  `/gt:gt-allin-commit` is the separate, deliberate act: it commits only once a passing test
+  receipt covers every staged file, and checks that receipt itself, because
+  `guard_test_before_commit` is a PreToolUse hook that cannot see a script running git.
+- **Local-only `retract`** answers both "this core rule is too noisy for me" and "which
+  language packs do I want": `{"retract": [{"lang": "go"}]}` in a vault pack switches Go off
+  and is reported as `RETRACTED` rather than hidden. Only vault packs may retract, so a
+  contributed pack still cannot retire a core definition.
+
+**The `secrets` slot ships with no consumer.** Credential scanning was built for this release and cut before it shipped, so there is nothing to miss — but the slot and its shape remain for the tool that will do it properly. `gt_registry.py slots` marks every slot nothing reads yet, so a pack written for one is a considered choice.
+
+**Aggregators tell you how many checks ran.** Both aggregators originally counted the
+**installed** members rather than the **declared** ones, so a partial install printed
+`1 of 1 member(s) ran`, exited 0 having scanned nothing and linted nothing, and offered to
+push — the exact failure they exist to prevent. The denominator is now what the command
+declares it checks; a crash is no longer read as a finding; members have a timeout; and member
+output is escaped and prefixed so it cannot forge the summary line printed above it.
+
+---
+
 ## gt 0.15.0 · gt-demo 0.15.0 · gt-wiki 0.2.1 · gt-watch · gt-report-card · gt-farm · gt-flow 0.15.0 — 2026-09-14
 
 **Three parts of gt become modules, and one new module draws the vault's history.** gt now

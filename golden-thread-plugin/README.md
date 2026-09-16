@@ -1,5 +1,8 @@
 # Golden Thread Plugin
 
+> **Reader:** someone who has installed it and wants the reference
+> **Claims last checked against the code:** 2026-09-16 — see *The documents, and what belongs in each* in [`CLAUDE.md`](../CLAUDE.md).
+
 A Claude Code plugin that turns an Obsidian vault into the single source of truth for all AI memory across every project and every session.
 
 
@@ -47,7 +50,7 @@ Facts move up the hierarchy as they prove themselves general. They never move ba
 
 ---
 
-## Sixteen Skills (plus modules)
+## Twenty-One Skills (plus modules)
 
 ### Setup
 
@@ -86,6 +89,11 @@ Facts move up the hierarchy as they prove themselves general. They never move ba
 |---|---|
 | `/gt:gt-upgrade` | Bring an existing vault up to the installed release: run the migrations it has not had, take the release's changes into `PROTOCOL.md` and `CONVENTIONS.md` without losing local edits, add newly shipped Core rules, stamp the vault. Rehearse with `--dry-run`; it refuses a dirty tree and backs up before applying. |
 | `/gt:gt-doctor` | One report for the whole install: plugin version, component drift, hook wiring, pending vault migrations, stray workers, unpushed commits, publish-destination drift and a lint summary. Exit 2 means a check *could not run*, which is deliberately distinct from clean. |
+| `/gt:gt-scan` | Scan code against the language definitions in effect on this machine — naming conventions and encoding, per language, all of it from definition packs rather than from the script, so a contributed language pack teaches it a new language with no code change. An aggregator over leaf scanners: it reports how many members RAN alongside what they found. |
+| `/gt:gt-optimize` | Find vault content that costs context and earns nothing back: a fact duplicated across memory files, an index row pointing at a file that is gone, a `global-memory/` file over budget, a relative date in a file that will be read months later. Reports only — it never edits your notes. |
+| `/gt:gt-allin` | Every check in one command — scan, lint, the optimize report, install health — reporting how many members actually ran, not just what they found. Never pushes and never applies a change. |
+| `/gt:gt-allin-commit` | The separate, deliberate act: commit once the checks pass and a test receipt covers every staged file. Refuses on the default branch, refuses without evidence, and never pushes — a commit is reversible, a push is not. |
+| `/gt:gt-handoff` | Write the next session a handoff it can trust: facts gathered from the project and repository, each labelled with its source and whether it was actually verified, plus the questions a script cannot answer. The design narrative is left for the person who did the work. |
 | `/gt:gt-lint` | Audit the vault for structural problems: broken wikilinks, orphaned pages, missing index entries, unlisted memory files, Knowledge pages citing superseded sources, stale pages, and Core rules that are stored but not enforced. Applies fixes with your approval. |
 | `/gt:gt-runbook-lint` | Scan all project `runbook.md` files for content that has drifted into multiple runbooks. Classifies duplicated content by type and routes it to the right shared layer (PROTOCOL.md, Knowledge page, or repo CLAUDE.md) via `gt-promote`. |
 | `/gt:gt-settings` | View and change what Golden Thread does automatically: component drift checking at session start, and every setting an installed module adds (the report card, the upstream watch). Every automatic behaviour can be switched off. |
@@ -128,6 +136,30 @@ A vault older than 0.15.0 starts empty: `gt_events.py backfill --dry-run` shows 
 it would recover from git and `log.md`. Use `--redact` before the page leaves your screen.
 
 ---
+
+## Packs and the registry (0.16.0)
+
+Pluggable definitions — naming conventions, ignore sets, secret shapes, vocabularies — live in
+**packs**: one JSON file of data each, shipped in `packs/core/` and `packs/community/` and
+hash-verified in `MANIFEST.json`. `scripts/gt_registry.py` resolves them into one answer per key
+and names the source.
+
+```bash
+gt_registry.py show <slot> [--lang X]   # what is in effect, and where it came from
+gt_registry.py sources                  # every pack found, in precedence order
+gt_registry.py slots                    # the slot table
+```
+
+Precedence is **community < core < local**: a merged contribution extends coverage but never
+silently redefines a core default, and a user's own packs under
+`<vault>/Projects/golden-thread/packs/` always win. A shadowed entry is reported, not dropped.
+
+Union slots are additive — nothing can replace an entry, which is what stops a contributed pack
+retiring a core definition. To switch one off, a pack **in your own vault** carries a `retract`
+list: `{"retract": [{"lang": "go"}]}` turns off every Go definition in that slot, and is
+reported as `RETRACTED` rather than hidden. Only vault packs may retract. `gt_registry.py slots`
+also marks the slots no shipped tool reads yet, so a pack for one of them is a considered
+choice rather than a surprise. Contributing a pack: `../SUBMISSIONS.md`.
 
 ## Vault Structure
 

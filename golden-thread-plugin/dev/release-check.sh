@@ -98,6 +98,61 @@ for i in "${!PDIRS[@]}"; do
   [ $rc -eq 0 ] && ok "skill_lint (${PNAMES[$i]})" || { echo "$OUT" | tail -15; bad "skill_lint (${PNAMES[$i]})"; }
 done
 
+step "packs"
+# Every contributed pack that ships in this release must still pass the submission validator.
+# A pack is merged once and then lives here forever; without this step a rule that was safe at
+# review time can be edited afterwards -- by anyone with commit access, including a future
+# refactor -- and nothing would notice. Re-validating in-tree is what keeps "it was reviewed"
+# true rather than historical.
+# PDIRS is the NEWEST version of each plugin, but install.sh <version> can install an older
+# one, so an unvalidated pack in an older shipping dir would still reach a machine. Walk every
+# version directory that ships (security review, 2026-09-16).
+# -L, because plain `find` does not descend a SYMLINKED packs dir while install.sh's `cp -r`
+# dereferences it -- the one path the gate could not see was a path the installer materialised.
+# The walk is scoped to the plugin dirs and prunes .git/node_modules/tests, because an
+# unscoped `find .` also validated a vendored submodule's .git/packs and any test fixture named
+# *.pack.json, blocking the gate on a non-issue (security review, 2026-09-16).
+NPACK=0; PACKBAD=0
+while IFS= read -r PD; do
+  [ -d "$PD" ] || continue
+  case "$PD" in *"/.git/"*|*"/node_modules/"*|*"/tests/"*) continue;; esac
+  # A symlink anywhere in the path means the content is not what the repo shows a reviewer.
+  if [ "$(cd "$PD" 2>/dev/null && pwd -P)" != "$(cd "$(dirname "$PD")" 2>/dev/null && pwd -P)/$(basename "$PD")" ]; then
+    PACKBAD=1; bad "packs dir is a symlink and does not ship what it appears to: $PD"
+    continue
+  fi
+  while IFS= read -r p; do
+    NPACK=$((NPACK+1))
+    OUT=$(python3 dev/submissions.py validate "$p" 2>&1); RC=$?
+    # The validator has THREE verdicts and only REJECT (2) is a gate failure. REVIEW (1) means
+    # "a human must decide" -- and for a pack already in the tree, merging it WAS that decision.
+    # Treating 1 as failure would wedge the gate permanently on the first shipped runbook or
+    # vocabulary pack, whose legitimate content is imperative prose, and the obvious way out
+    # would be to delete the content (review 2026-09-16, found before any such pack shipped).
+    case "$RC" in
+      0) ;;
+      1) echo "$OUT" | tail -3
+         echo "      note: REVIEW, not a failure — approved when merged, re-raised here" ;;
+      *) echo "$OUT" | tail -5; PACKBAD=1
+         bad "pack REJECTED by the submission validator: $(basename "$p")" ;;
+    esac
+  done < <(find -L "$PD" -name '*.pack.json' | sort)
+done < <(find -L . -type d -name packs -not -path './.git/*' | sort)
+# install.sh copies packs/ for EVERY plugin, but gt_registry reads only gt's own release and
+# the module drift mapper ignores packs/ -- so a module's pack would install, never load, and
+# never be integrity-checked. No module ships one; this makes that stay true out loud rather
+# than by luck (review 2026-09-16).
+while IFS= read -r MP; do
+  case "$MP" in ./golden-thread/*) continue;; *"/.git/"*|*"/node_modules/"*|*"/tests/"*) continue;; esac
+  PACKBAD=1
+  bad "only the gt release may ship packs/ (nothing loads a module's): $MP"
+done < <(find -L . -type d -name packs -not -path './.git/*' | sort)
+
+if [ "$PACKBAD" -ne 0 ]; then :          # `bad` already reported it; do not also claim success
+elif [ $NPACK -eq 0 ]; then ok "no packs shipped"
+else ok "$NPACK shipped pack(s) still pass the submission validator"
+fi
+
 step "cli contract"
 # core_explicit_vault_target requires the CALLER to name the vault. This step asserts
 # the TOOLS still offer the flags that make that possible: a rule depending on a flag
@@ -136,6 +191,12 @@ OUT=$(python3 dev/check_wiring_coverage.py "$GT" 2>&1); rc=$?
 [ $rc -eq 0 ] && ok "$OUT" || { echo "$OUT" | tail -20; bad "a shipped item does not reach its destination"; }
 
 step "docs"
+# Counts and version numbers, derived from the source. The rest of this step checks that a
+# skill is NAMED; nothing in it can tell whether what a document SAYS is still true, and a
+# stale count is the part of that which is mechanical enough to check (2026-09-16).
+OUT=$(python3 dev/check_doc_counts.py 2>&1); rc=$?
+[ $rc -eq 0 ] && ok "$(echo "$OUT" | tail -1)" \
+  || { echo "$OUT" | sed 's/^/  /'; bad "a doc count disagrees with the code"; }
 OUT=$(python3 build-docs.py 2>&1); rc=$?
 [ $rc -eq 0 ] && ok "every .html matches its .md" || { echo "$OUT" | tail -12; bad "docs drifted — fix the .md, then ./build-docs.py --build"; }
 MISSING=$(python3 - "$GT" <<'PY'

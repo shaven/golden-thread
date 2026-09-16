@@ -51,6 +51,17 @@ GT = (REPO / "golden-thread" / os.environ["GT_TEST_VERSION"]) if os.environ.get(
 WIKI = latest_version_dir(REPO / "golden-thread-wiki")
 
 
+def next_minor(version):
+    """0.16.0 -> 0.17.0. Used to derive the requires_gt range a module must declare."""
+    major, minor, _patch = (int(x) for x in version.split("."))
+    return "%d.%d.0" % (major, minor + 1)
+
+
+def gt_requires_range(gt_version):
+    """The exact requires_gt a module tracking this gt release must carry."""
+    return ">=%s,<%s" % (gt_version, next_minor(gt_version))
+
+
 def _module_dir(dirname):
     """The newest release of an optional module, or None when this tree does not ship it."""
     try:

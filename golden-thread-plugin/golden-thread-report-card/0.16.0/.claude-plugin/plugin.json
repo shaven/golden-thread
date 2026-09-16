@@ -1,0 +1,9 @@
+{
+  "name": "gt-report-card",
+  "version": "0.16.0",
+  "description": "Golden Thread Report Card: a session report card computed at /compact and session end and delivered at the next session start, with the close-out question for projects that look finished.",
+  "author": {
+    "name": "Stacy Haven",
+    "email": "shaven@shavenconsulting.com"
+  }
+}

@@ -1171,12 +1171,15 @@ verify_source_tree() {
          return 0
        fi
        echo ""
-       echo "REFUSING TO INSTALL — shipped files that EXECUTE do not match MANIFEST.json"
+       echo "REFUSING TO INSTALL — shipped files that RUN, or that security controls READ,"
+       echo "do not match MANIFEST.json"
        printf '%s\n' "$out" | sed 's/^/  /'
        echo ""
-       echo "Nothing has been installed. These files run on every prompt, so installing a"
-       echo "set the manifest does not describe means running code nobody has verified, and"
-       echo "every later component check reporting drift this could have caught once."
+       echo "Nothing has been installed. Files marked EXECUTES run on every prompt, so"
+       echo "installing a set the manifest does not describe means running code nobody has"
+       echo "verified. Files marked INPUT TO SECURITY CONTROLS are data, but they are the data"
+       echo "that DEFINES what counts as a credential and which paths are ignored — editing one"
+       echo "is editing the control, which is why a mismatch refuses rather than warns."
        echo ""
        echo "  Meant to change them?   regenerate the manifest with the command above,"
        echo "                          then re-run this installer"
@@ -1240,12 +1243,21 @@ while [ "$i" -lt "$PLUGIN_COUNT" ]; do
   mkdir -p "$p_cache"
   # module.json and demo/ travel too: gt-demo reads module.json and the module's tour act
   # (demo/act.md) from the CACHE to assemble the tour for whatever is installed (0.14.0).
-  for dir in .claude-plugin skills scripts templates commands hooks demo; do
+  # packs/ holds the pluggable definitions gt_registry.py resolves at runtime.
+  # Without it the registry finds nothing on an installed machine and every
+  # contributed definition is inert (found by security review, 2026-09-16).
+  for dir in .claude-plugin skills scripts templates commands hooks demo packs; do
     rm -rf "${p_cache:?}/$dir"
     [ -d "$p_src/$dir" ] && cp -r "$p_src/$dir" "$p_cache/"
   done
-  rm -f "${p_cache:?}/module.json"
-  [ -f "$p_src/module.json" ] && cp "$p_src/module.json" "$p_cache/module.json"
+  # MANIFEST.json travels for the same reason packs/ does, and it is load-bearing: it is the
+  # ONLY runtime integrity control on an installed pack. Without it gt_registry.py cannot
+  # verify a single pack, and since it now fails closed, every shipped pack would refuse to
+  # load on an installed machine (both halves found by security review, 2026-09-16).
+  for f in module.json MANIFEST.json; do
+    rm -f "${p_cache:?}/$f"
+    [ -f "$p_src/$f" ] && cp "$p_src/$f" "$p_cache/$f"
+  done
   set_modes "$p_cache"
   echo "Installed ${PLUGIN_NAMES[$i]} plugin files → $p_cache"
   i=$((i + 1))
@@ -1447,12 +1459,14 @@ i=0
 while [ "$i" -lt "$PLUGIN_COUNT" ]; do
   p_src=$(plugin_src "$i"); p_market="$MARKETPLACE/plugins/${PLUGIN_NAMES[$i]}"
   cp "$p_src/.claude-plugin/plugin.json" "$p_market/.claude-plugin/plugin.json"
-  for dir in skills scripts templates commands hooks demo; do
+  for dir in skills scripts templates commands hooks demo packs; do
     rm -rf "$p_market/$dir"
     [ -d "$p_src/$dir" ] && cp -r "$p_src/$dir" "$p_market/$dir"
   done
-  rm -f "$p_market/module.json"
-  [ -f "$p_src/module.json" ] && cp "$p_src/module.json" "$p_market/module.json"
+  for f in module.json MANIFEST.json; do          # MANIFEST.json: see the cache loop above
+    rm -f "$p_market/$f"
+    [ -f "$p_src/$f" ] && cp "$p_src/$f" "$p_market/$f"
+  done
   set_modes "$p_market"
   i=$((i + 1))
 done

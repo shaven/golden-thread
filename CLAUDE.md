@@ -59,6 +59,63 @@ echo '{}' | ~/.claude/golden-thread/hooks/inject_core_rules.sh
 every session unusable. Fail open on any parse failure, honour `stop_hook_active` so
 a block cannot loop, and test the allow cases before the block case.
 
+## The documents, and what belongs in each
+
+Nine documents, each with a different reader. The release gate checks that every skill is
+*named* in three of them and that no PDF is older than its source — it cannot check whether
+what a document **says** is still true, which is the failure that actually happens.
+
+**Regeneration order** after any `.md` change (each step depends on the one before):
+
+```bash
+cd golden-thread-plugin
+python3 build-docs.py --build              # .md -> .html
+dev/render-pdfs.sh                         # .html -> .pdf
+python3 dev/plugins.py manifest golden-thread/<version>
+```
+
+### Front door
+
+| | |
+|---|---|
+| **`README.md`** | **Reader:** someone who has never heard of this. **Must carry:** what it is in two sentences; the distinguishing idea (rules are mechanically enforced, not merely written); a version callout describing the **current** release and what it added; install; the skills table; how knowledge moves; contributing pointers; licence. **Must not carry:** step-by-step usage (that is `ONBOARDING.md`) or implementation detail (`MANUAL.md`). **Goes stale at:** the version callout — it is the first thing to rot when a release ships — and every count in it. |
+
+### Contributor-facing
+
+| | |
+|---|---|
+| **`SUBMISSIONS.md`** | **Reader:** an outside contributor. **Must carry:** why there is no plugin runtime; what a pack is, with a worked example **in a slot a shipped tool actually reads**; how tiers are derived rather than declared; the validator's three verdicts and that `REVIEW` is not a rejection; every rule with the reason it exists; which slots currently have no consumer; that `retract` is vault-only so a contribution can never retire someone else's definition; the licence terms. **Goes stale at:** the worked example's slot, the verdict list, the open-slot list. |
+| **`CHANGELOG.md`** | **Reader:** someone upgrading. **Must carry:** per release, the change *and why it was made*; anything **removed** and what it actually did wrong; anything that breaks or needs migration. **Must not carry:** a silent removal. If a feature was cut, the entry says what the defect was. |
+
+### Plugin reference
+
+| | |
+|---|---|
+| **`README.md`** (plugin) | **Reader:** someone who has installed it and wants the reference. **Must carry:** what it does; every skill as a row; packs and the registry including precedence and `retract`; vault structure; the immutability model; key files. |
+| **`MANUAL.md`** | **Reader:** a daily user. **Must carry:** the model; packs and the registry in full (merge modes, precedence, `retract`, slots without consumers); vault layout; use cases; setup; daily work; every setting. The deepest document — anything with a *why* belongs here rather than in a README. |
+| **`golden-thread-docs.md`** | **Reader:** quick lookup, and the printed PDF. **Must carry:** an accurate version line for **every** plugin and module; the Core rules; one row per skill; the modules. **Goes stale at:** the version line, which names six plugins whose numbers move independently. |
+
+### Getting started
+
+| | |
+|---|---|
+| **`INSTALL.md`** | **Reader:** installing for the first time, or verifying a fork. **Must carry:** every install route; exactly what the installer does and touches; how to verify; connecting an existing vault. |
+| **`ONBOARDING.md`** | **Reader:** the first thirty minutes. **Must carry:** numbered steps from install to a first written-back session; the typical session pattern; periodic maintenance. **Must not carry:** anything optional — this document is the happy path. |
+| **`OBSIDIAN-WORKFLOW.md`** | **Reader:** someone working in Obsidian alongside sessions. **Must carry:** the division of labour; what to edit where; the promotion ladder; the plugin list. |
+
+### The rule that applies to all of them
+
+**Never write a count you have not derived.** Skill counts, rule counts, check counts and
+version numbers drift silently and are quoted across several documents at once, so one stale
+number becomes four. Count from the source — `ls .../skills`, `ls .../core-rules` — at the
+moment of writing. As of 2026-09-16 a single pass found `gt Skills (16)` in two documents when
+21 ship, a version line naming five modules at `0.15.0` after they had all moved to `0.16.0`,
+and `gt-lint`'s check count given as 18 in the docs and 13 here.
+
+**Prefer a claim that checks itself.** `gt_registry.CONSUMERS` records which tool reads each
+slot, and a test asserts each one really does — which is why that claim cannot quietly stop
+being true the way every count on this page can.
+
 ## Checks
 
 ```bash
