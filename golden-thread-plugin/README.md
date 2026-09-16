@@ -129,6 +129,24 @@ it would recover from git and `log.md`. Use `--redact` before the page leaves yo
 
 ---
 
+## Packs and the registry (0.16.0)
+
+Pluggable definitions — naming conventions, ignore sets, secret shapes, vocabularies — live in
+**packs**: one JSON file of data each, shipped in `packs/core/` and `packs/community/` and
+hash-verified in `MANIFEST.json`. `scripts/gt_registry.py` resolves them into one answer per key
+and names the source.
+
+```bash
+gt_registry.py show <slot> [--lang X]   # what is in effect, and where it came from
+gt_registry.py sources                  # every pack found, in precedence order
+gt_registry.py slots                    # the slot table
+```
+
+Precedence is **community < core < local**: a merged contribution extends coverage but never
+silently redefines a core default, and a user's own packs under
+`<vault>/Projects/golden-thread/packs/` always win. A shadowed entry is reported, not dropped.
+Contributing a pack: `../SUBMISSIONS.md`.
+
 ## Vault Structure
 
 ```

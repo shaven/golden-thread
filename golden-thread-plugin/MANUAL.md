@@ -58,6 +58,35 @@ file is worth opening.
 
 ---
 
+## Packs and the registry
+
+*New in 0.16.0.*
+
+Golden Thread keeps pluggable definitions in **slots** — how a language names things, which
+paths are noise, what a credential looks like, what a term means. Each slot is filled by
+**packs**: one JSON file of data, never a program.
+
+```bash
+gt_registry.py show naming --lang python    # what is in effect, and which pack it came from
+gt_registry.py sources                      # every pack found, in precedence order
+gt_registry.py slots                        # the slot table and merge modes
+```
+
+**Precedence is community < core < local.** A merged contribution *extends* coverage — a
+language or pattern core does not define — but never redefines what core defines; the user's own
+packs, under `<vault>/Projects/golden-thread/packs/`, always win. When one entry beats another
+the loser is listed as `SHADOWED` with the winner named, so a definition never disappears
+without a word. A pack that cannot be read is an error, not a silent gap.
+
+Slots merge in one of two modes: `union` (entries accumulate and duplicates collapse — ignore
+sets, secret patterns) or `map` (one value per key — naming, encoding).
+
+**Contributing a pack.** gt runs no third-party code; packs are submitted, reviewed and merged
+into gt. `dev/submissions.py validate <pack>` checks a pack before a human reads it, and the
+release gate re-validates every shipped pack so review stays true rather than historical. A
+pack's tier is derived from whether its slot can reach model context, never from what the pack
+declares. See `SUBMISSIONS.md`.
+
 ## Vault layout
 
 ```

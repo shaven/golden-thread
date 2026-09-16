@@ -11,6 +11,40 @@ release's own summary line, kept short rather than reconstructed after the fact.
 
 ---
 
+## gt 0.16.0 — unreleased
+
+**Contributions arrive by submission and review, not by a plugin runtime — and a security fix
+for protected paths.**
+
+**Protected paths (security).** `guard_protected_paths` compared paths as `realpath` strings.
+On a case-insensitive volume (APFS) `realpath` returns the caller's spelling, not the on-disk
+name, so a case- or Unicode-variant of a protected path resolved to the protected file and got
+**no prompt**: `Global-Memory/…`, `CORE-RULES/…` and `~/.claude/Settings.json` were all silent
+while their canonical spellings asked. The guard now compares **file identity**
+`(st_dev, st_ino)` of the nearest existing ancestor, with an NFC + `casefold()` fallback —
+never `str.lower()`, which misses `ſ` (U+017F) and the Kelvin sign.
+
+**Contributions.** gt does not run third-party code. Contributions are **submitted, reviewed
+and merged** into gt itself, after which they are first-party and held to the release gate.
+
+- `dev/submissions.py` validates a contributed pack before a human reads it. The load-bearing
+  rule: a pack's tier is **derived from its slot's reachability**, never believed from what the
+  pack declares. A slot that cannot reach model context has no field for prose to live in, and
+  that absence is the proof. It also refuses instruction-shaped text, ReDoS-prone and
+  backreferencing patterns, subtractive packs, executable content, non-UTF-8 bytes, invisible
+  code points, copyleft licences (in the pack *or* its upstream), and missing provenance or DCO.
+- `scripts/gt_registry.py` resolves packs into one answer per key and names the source.
+  Precedence is **community < core < local**: a merged contribution extends coverage but never
+  silently redefines a core default, and the user's own packs always win. Shadowed entries are
+  reported rather than dropped, and an unreadable pack is an error rather than a silent gap.
+- Packs ship in `packs/core/` and `packs/community/` and are hash-verified in `MANIFEST.json`;
+  the release gate re-validates every shipped pack, so "it was reviewed" stays true rather than
+  becoming historical.
+- `SUBMISSIONS.md` is the contributor-facing spec. gt is MIT permanently: no CLA, no
+  relicensing, so a contributor's grant is final and the terms cannot change under them.
+
+---
+
 ## gt 0.15.0 · gt-demo 0.15.0 · gt-wiki 0.2.1 · gt-watch · gt-report-card · gt-farm · gt-flow 0.15.0 — 2026-09-14
 
 **Three parts of gt become modules, and one new module draws the vault's history.** gt now

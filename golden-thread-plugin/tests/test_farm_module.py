@@ -20,7 +20,7 @@ import subprocess
 import sys
 import unittest
 
-from _harness import Sandbox, REPO, GT, WIKI, SCRIPTS, latest_version_dir
+from _harness import Sandbox, REPO, GT, WIKI, SCRIPTS, latest_version_dir, gt_requires_range
 
 FARM = latest_version_dir(REPO / "golden-thread-farm")
 SKILL = FARM / "skills" / "gt-farm" / "SKILL.md"
@@ -59,11 +59,14 @@ class FarmModuleJson(unittest.TestCase):
     def test_contract(self):
         m = self.mod
         self.assertEqual((m["schema"], m["name"], m["plugin"], m["version"]),
-                         (1, "farm", "gt-farm", "0.15.0"))
+                         (1, "farm", "gt-farm", FARM.name))
+        # the module tracks the gt release; a module left behind at an older
+        # version is skipped at install, silently, on every machine
+        self.assertEqual(FARM.name, GT.name)
         self.assertEqual(m["version"], FARM.name)
         self.assertEqual(self.plugin["name"], "gt-farm")
         self.assertEqual(self.plugin["version"], m["version"])
-        self.assertEqual(m["requires_gt"], ">=0.15.0,<0.16.0")
+        self.assertEqual(m["requires_gt"], gt_requires_range(GT.name))
         self.assertEqual(m["default"], "off")
         self.assertEqual(m["skills"], ["gt-farm"])
         self.assertEqual(m.get("hooks", []), [])

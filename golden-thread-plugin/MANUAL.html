@@ -160,6 +160,27 @@ early becomes a rule you must remember to disbelieve.</p>
 <code>MEMORY.md</code> descriptions matter: they are the entire basis for deciding whether a
 file is worth opening.</p>
 <hr />
+<h2 id="packs-and-the-registry">Packs and the registry</h2>
+<p><em>New in 0.16.0.</em></p>
+<p>Golden Thread keeps pluggable definitions in <strong>slots</strong> — how a language names things, which
+paths are noise, what a credential looks like, what a term means. Each slot is filled by
+<strong>packs</strong>: one JSON file of data, never a program.</p>
+<pre><code class="language-bash">gt_registry.py show naming --lang python    # what is in effect, and which pack it came from
+gt_registry.py sources                      # every pack found, in precedence order
+gt_registry.py slots                        # the slot table and merge modes
+</code></pre>
+<p><strong>Precedence is community &lt; core &lt; local.</strong> A merged contribution <em>extends</em> coverage — a
+language or pattern core does not define — but never redefines what core defines; the user's own
+packs, under <code>&lt;vault&gt;/Projects/golden-thread/packs/</code>, always win. When one entry beats another
+the loser is listed as <code>SHADOWED</code> with the winner named, so a definition never disappears
+without a word. A pack that cannot be read is an error, not a silent gap.</p>
+<p>Slots merge in one of two modes: <code>union</code> (entries accumulate and duplicates collapse — ignore
+sets, secret patterns) or <code>map</code> (one value per key — naming, encoding).</p>
+<p><strong>Contributing a pack.</strong> gt runs no third-party code; packs are submitted, reviewed and merged
+into gt. <code>dev/submissions.py validate &lt;pack&gt;</code> checks a pack before a human reads it, and the
+release gate re-validates every shipped pack so review stays true rather than historical. A
+pack's tier is derived from whether its slot can reach model context, never from what the pack
+declares. See <code>SUBMISSIONS.md</code>.</p>
 <h2 id="vault-layout">Vault layout</h2>
 <pre><code>&lt;vault&gt;/
   CLAUDE.md              vault-wide conventions and page schema

@@ -12,7 +12,7 @@ it at startup, look things up while working, and write back what they learn.
 Its distinguishing idea is the second problem, the one most memory systems never
 address: **writing a rule down does not mean it gets followed.**
 
-Plugin **v0.15.0**. Ten Core rules currently enforced, five of them *validated* — a
+Plugin **v0.16.0**. Ten Core rules currently enforced, five of them *validated* — a
 hook inspects the finished reply (`Stop`) or the tool call about to run (`PreToolUse`)
 and blocks it if the rule was broken.
 
@@ -336,6 +336,21 @@ decisions that ended up sharing one number.
 `skill_lint.py` enforces that no two skills can fire on the same intent — a rule most
 systems state and check by hand. Adopting it found a live collision: two skills sharing
 three verbatim trigger phrases.
+
+## Contributing a pack
+
+gt runs **no third-party code**. Contributions are **submitted, reviewed and merged** into gt
+itself, after which they are first-party and held to the release gate. New in **0.16.0**:
+
+```bash
+python3 dev/submissions.py slots                 # which slots are open, and their tier
+python3 dev/submissions.py validate my.pack.json # check before you send
+python3 <gt>/scripts/gt_registry.py show naming --lang python   # what is in effect, and from where
+```
+
+A pack is one JSON file of data, not a program, so a reviewer can read all of it. Its tier is
+derived from whether its slot can reach model context — never from what the pack declares. Full
+spec: [SUBMISSIONS.md](SUBMISSIONS.md).
 
 ## Contributing to this repo
 

@@ -1,5 +1,5 @@
 # Golden Thread Plugin — Documentation
-## Version gt 0.15.0 / gt-wiki 0.2.1 / gt-demo, gt-watch, gt-report-card, gt-farm, gt-flow 0.15.0
+## Version gt 0.16.0 / gt-wiki 0.2.1 / gt-demo, gt-watch, gt-report-card, gt-farm, gt-flow 0.15.0
 
 ---
 
