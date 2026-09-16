@@ -91,6 +91,11 @@ MIN_FACT_CHARS = 25
 # `- **Status**:` and friends: a template section label, which repeats by design.
 BOILERPLATE = re.compile(r"^[-*]\s*\*\*[^*]+\*\*\s*:?\s*$")
 
+# A line that is part of a TEMPLATE repeats by design, in every file made from that template.
+# The MEMORY.md header comment was reported as a duplicate fact across 49 files -- true, and
+# useless: it is the template working (measured 2026-09-16).
+TEMPLATE_LINE = re.compile(r"^(<!--|\{\{|<%|:::)")
+
 
 def _rel(vault, path):
     return os.path.relpath(path, vault).replace(os.sep, "/")
@@ -244,6 +249,14 @@ RELATIVE_DATE = re.compile(
     r"this (morning|afternoon|week|month)|recently|a few (days|weeks) ago)\b", re.I)
 
 
+# `today's data`, `today's date`, `today's roster` -- a possessive describes what code does at
+# RUNTIME, not a date the writer meant, and it rots no faster than the code does. 51 of 141
+# findings on a real vault were this, and a check that is a third wrong gets ignored, which is
+# worse than not having it (measured 2026-09-16).
+POSSESSIVE = re.compile(r"\b(today|tomorrow|yesterday)'s\b", re.I)
+CODE_SPAN = re.compile(r"`[^`]*`")
+
+
 def relative_dates(rel, lines):
     """JUDGEMENT: 'last week' meant something when written and means something else now, but
     only a reader knows which absolute date was intended. Durable prose only -- in INBOX.md or
@@ -252,7 +265,11 @@ def relative_dates(rel, lines):
         return []
     out = []
     for n, raw in enumerate(lines, 1):
-        m = RELATIVE_DATE.search(raw)
+        # A word inside a code span is part of an expression, not prose that dates.
+        text = CODE_SPAN.sub(" ", raw)
+        if POSSESSIVE.search(text):
+            text = POSSESSIVE.sub(" ", text)
+        m = RELATIVE_DATE.search(text)
         if m:
             out.append(_finding("relative-date", JUDGEMENT, rel, n,
                                 "%r is relative; in a file read months later it silently "
@@ -276,7 +293,7 @@ def duplicate_facts_across(vault, files_lines):
             if fence or len(line) < MIN_FACT_CHARS:
                 continue
             if line.startswith(("#", "|", "---", ">")) or line.endswith(":") \
-                    or BOILERPLATE.match(line):
+                    or BOILERPLATE.match(line) or TEMPLATE_LINE.match(line):
                 continue
             where.setdefault(line, []).append((rel, n))
     out = []

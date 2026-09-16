@@ -120,6 +120,28 @@ class OptimizeTest(unittest.TestCase):
         self.assertEqual(len(rel), 1)
         self.assertEqual(rel[0]["class"], "judgement")
 
+    def test_a_possessive_today_is_not_a_relative_date(self):
+        """`today's data` describes what code does at RUNTIME; it is not a date that rots.
+        51 of 141 findings on a real vault were this (2026-09-16)."""
+        self.write("Projects/alpha/memory/r.md",
+                   "The extension checks local storage for today's data before fetching.\n")
+        out = self.findings()
+        self.assertEqual([f for f in out["findings"] if f["kind"] == "relative-date"], [],
+                         out["findings"])
+
+    def test_a_relative_date_inside_a_code_span_is_ignored(self):
+        self.write("Projects/alpha/memory/c.md",
+                   "Set `config['date'] = TODAY` before the run completes properly.\n")
+        out = self.findings()
+        self.assertEqual([f for f in out["findings"] if f["kind"] == "relative-date"], [])
+
+    def test_a_real_relative_date_is_still_reported(self):
+        self.write("Projects/alpha/memory/d.md",
+                   "We rotated the signing key last week and the fleet picked it up.\n")
+        out = self.findings()
+        self.assertEqual(len([f for f in out["findings"]
+                              if f["kind"] == "relative-date"]), 1, out["findings"])
+
     def test_oversized_global_memory_is_reported_not_trimmed(self):
         self.write("global-memory/big.md", "\n".join("line %d of real content" % i
                                                      for i in range(60)) + "\n")
