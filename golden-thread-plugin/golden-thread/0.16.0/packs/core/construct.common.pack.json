@@ -1,0 +1,28 @@
+{
+  "schema": 1,
+  "slot": "construct",
+  "name": "common",
+  "tier": "A",
+  "spdx": "MIT",
+  "provenance": {
+    "origin": "original",
+    "contributor": "Golden Thread <gt@example.com>",
+    "upstream": null
+  },
+  "dco": "Signed-off-by: Golden Thread <gt@example.com>",
+  "entries": [
+    {"lang": "python", "construct": "function", "pattern": "^[ \\t]*def[ \\t]+([A-Za-z_][A-Za-z0-9_]{0,80})"},
+    {"lang": "python", "construct": "class", "pattern": "^[ \\t]*class[ \\t]+([A-Za-z_][A-Za-z0-9_]{0,80})"},
+    {"lang": "python", "construct": "constant", "pattern": "^([A-Z][A-Za-z0-9_]{0,80})[ \\t]*="},
+    {"lang": "javascript", "construct": "function", "pattern": "^[ \\t]*(?:export[ \\t]+)?function[ \\t]+([A-Za-z_$][A-Za-z0-9_$]{0,80})"},
+    {"lang": "javascript", "construct": "class", "pattern": "^[ \\t]*(?:export[ \\t]+)?class[ \\t]+([A-Za-z_$][A-Za-z0-9_$]{0,80})"},
+    {"lang": "typescript", "construct": "function", "pattern": "^[ \\t]*(?:export[ \\t]+)?function[ \\t]+([A-Za-z_$][A-Za-z0-9_$]{0,80})"},
+    {"lang": "typescript", "construct": "class", "pattern": "^[ \\t]*(?:export[ \\t]+)?class[ \\t]+([A-Za-z_$][A-Za-z0-9_$]{0,80})"},
+    {"lang": "typescript", "construct": "type", "pattern": "^[ \\t]*(?:export[ \\t]+)?interface[ \\t]+([A-Za-z_$][A-Za-z0-9_$]{0,80})"},
+    {"lang": "go", "construct": "function", "pattern": "^func[ \\t]+([A-Za-z_][A-Za-z0-9_]{0,80})"},
+    {"lang": "go", "construct": "type", "pattern": "^type[ \\t]+([A-Za-z_][A-Za-z0-9_]{0,80})"},
+    {"lang": "rust", "construct": "function", "pattern": "^[ \\t]*(?:pub[ \\t]+)?fn[ \\t]+([A-Za-z_][A-Za-z0-9_]{0,80})"},
+    {"lang": "rust", "construct": "type", "pattern": "^[ \\t]*(?:pub[ \\t]+)?struct[ \\t]+([A-Za-z_][A-Za-z0-9_]{0,80})"},
+    {"lang": "shell", "construct": "function", "pattern": "^[ \\t]*([A-Za-z_][A-Za-z0-9_]{0,80})[ \\t]*\\(\\)[ \\t]*\\{"}
+  ]
+}

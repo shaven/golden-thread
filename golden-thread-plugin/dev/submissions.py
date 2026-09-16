@@ -71,6 +71,12 @@ SLOTS = {
                   "style": "enum:snake|camel|pascal|kebab|screaming_snake"}},
     "lint":      {"model_reachable": False, "fields": {"lang": "token", "rule": "token",
                   "severity": "enum:info|warn|error"}},
+    # A language pack is filetype + construct + naming + encoding. All Tier A: every field is a
+    # closed grammar (a suffix or glob, a token, a validated regex) with nowhere to put prose,
+    # which is what makes a contributed language safe to merge.
+    "filetype":  {"model_reachable": False, "fields": {"match": "path", "lang": "token"}},
+    "construct": {"model_reachable": False, "fields": {"lang": "token", "construct": "token",
+                  "pattern": "pattern"}},
     "vocabulary":       {"model_reachable": True, "fields": {"term": "token", "definition": "text"}},
     "validation_rules": {"model_reachable": True, "fields": {"id": "token", "rule": "text"}},
     "runbook":          {"model_reachable": True, "fields": {"id": "token", "step": "text"}},
@@ -185,9 +191,10 @@ def check_not_instruction(where, value, hard=True):
 
 
 REDOS_ALPHABET = (" ", "\t", "\n", ".", "-", "/", "_", ":", "a", "0")
-# `(X|X)` with both branches the same -- the exponential-backtracking shape that no structural
-# check over quantifiers (NESTED_QUANT) can see, because there is no quantifier INSIDE the group.
-ALT_BRANCHES = re.compile(r"(\(\??:?([^()|]+)\|([^()|]+)\))")
+# Any group containing alternation. Branches are split and compared N-way, not as a fixed
+# pair: `(a|a)` was caught but `(RSA|EC|RSA|DSA)` was not, because a two-branch regex simply
+# failed to match a four-branch group and the check silently passed.
+ALT_GROUP = re.compile(r"\((?:\?[:=!])?([^()]*\|[^()]*)\)")
 REDOS_PACK_BUDGET_S = 5.0                # total probing time for one pack
 _LITERAL_PREFIX = re.compile(r"\A\^?((?:[A-Za-z0-9 _/:.-](?![*+?{]))*)")
 
@@ -211,13 +218,15 @@ def check_redos(where, compiled, source):
     # with a FIXED alphabet then missed `(x|x)+$`, `^(ab|ab)+$` and `^[0-9](q|q)+$` -- one blind
     # spot traded for another, same day. Identical alternation branches are the whole class and
     # are decidable by reading the pattern, so they are refused outright, whatever the alphabet.
-    for whole, left, right in ALT_BRANCHES.findall(source):
-        if left == right:
+    for inner in ALT_GROUP.findall(source):
+        branches = inner.split("|")
+        dupes = {b for b in branches if branches.count(b) > 1}
+        if dupes:
             _fail("pattern-unsafe",
-                  "%s contains %s: both branches of the alternation match the same text, so a "
-                  "failing match retries every way of splitting the input (exponential). This "
-                  "is refused by inspection -- no timing probe is relied on for it."
-                  % (where, whole))
+                  "%s contains an alternation whose branch %r appears more than once, so two "
+                  "branches match the same text and a failing match retries every way of "
+                  "splitting the input (exponential). Refused by inspection -- no timing probe "
+                  "is relied on for it." % (where, sorted(dupes)[0][:40]))
 
     # The alphabet is the fixed set UNIONED with the pattern's own literal characters, and
     # multi-character cycles as well as single ones, because `^(ab|ab)+$` never blows up on any

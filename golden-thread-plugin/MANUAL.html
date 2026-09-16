@@ -338,6 +338,11 @@ project memory. If a page comes back <code>status: stale</code>, verify before a
 <pre><code>/gt:gt-upgrade         # finish what install.sh could not apply (review, conflicts)
 /gt:gt-doctor          # the whole install in one report; --fix re-wires hooks only
 /gt:gt-lint            # broken links, orphans, unlisted memory, scope leaks
+/gt:gt-optimize        # content that costs context and earns nothing back
+/gt:gt-scan            # code against the language definitions in effect
+/gt:gt-allin           # every check in one run; reports how many actually ran
+/gt:gt-allin-commit    # commit once the checks pass and a receipt covers the files
+/gt:gt-handoff         # write the next session a handoff it can trust
 /gt:gt-runbook-lint    # facts duplicated across runbooks
 /gt:gt-refresh         # upstream changes to Sources/
 </code></pre>

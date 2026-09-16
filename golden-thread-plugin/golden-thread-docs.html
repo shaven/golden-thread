@@ -354,6 +354,26 @@ often it would train the guard to be ignored.</p>
 <td>Audit the vault for structural problems: 18 checks covering broken wikilinks, orphaned pages, missing index entries, unlisted memory files, Knowledge pages citing superseded sources, stale pages, and <code>core-unenforced</code> — a Core rule that is stored but wired to no hook.</td>
 </tr>
 <tr>
+<td><code>/gt:gt-optimize</code></td>
+<td>Find vault content that costs context and earns nothing back: a fact duplicated across memory files, an index row pointing at a file that is gone, a <code>global-memory/</code> file over budget, a relative date in a file that will be read months later. Splits findings into SAFE (applied with <code>--apply</code>) and JUDGEMENT (reported only — deleting knowledge is not reversible by reading a diff). Never writes <code>core-rules/</code>, and needs a flag for <code>global-memory/</code>.</td>
+</tr>
+<tr>
+<td><code>/gt:gt-scan</code></td>
+<td>Scan code against the language definitions in effect on this machine — naming conventions and encoding, per language, all of it from packs rather than from the script. An aggregator over leaf scanners: it reports how many members RAN alongside what they found, because "nothing is wrong" and "nothing was checked" otherwise print identically.</td>
+</tr>
+<tr>
+<td><code>/gt:gt-allin</code></td>
+<td>Run every check in one command — scan, lint, the optimize report, install health — and report how many members actually RAN alongside what they found, because a short finding list from a half-failed run reads exactly like a clean bill of health. Never pushes and never applies a change: <code>--suggest-push</code> prints the command for you, and refuses even that when anything failed.</td>
+</tr>
+<tr>
+<td><code>/gt:gt-allin-commit</code></td>
+<td>Commit, but only once the checks pass and a passing test receipt covers every staged file. Refuses on <code>main</code>/<code>master</code> without a flag, refuses when a check <em>could not run</em> (an unknown is not a finding anyone can accept), and never pushes — a commit is reversible with <code>git reset</code>, a push is fetched by other people. It checks the receipt itself because <code>guard_test_before_commit</code> is a PreToolUse hook and cannot see a script running git.</td>
+</tr>
+<tr>
+<td><code>/gt:gt-handoff</code></td>
+<td>Write the next session a handoff it can trust: the facts gathered from the project and the repository, each labelled with its source and whether it was actually verified. The design narrative is deliberately left for the session that did the work — a script that invents it produces a document that reads finished and is not.</td>
+</tr>
+<tr>
 <td><code>/gt:gt-runbook-lint</code></td>
 <td>Scan all project <code>runbook.md</code> files for content that has drifted into multiple runbooks. Routes duplicated content to the right shared layer via <code>gt-promote</code>.</td>
 </tr>

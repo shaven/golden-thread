@@ -69,7 +69,35 @@ SLOTS = {
     "lint":             {"mode": "map",   "key": ("lang", "rule")},
     "vocabulary":       {"mode": "map",   "key": ("term",)},
     "validation_rules": {"mode": "map",   "key": ("id",)},
+    # What makes a LANGUAGE PACK self-contained. Without these two, a contributed language
+    # resolved fine and then never fired, because the file-extension table and the
+    # construct-finding patterns were hard-coded in gt_scan.py -- "adding a language is a pack,
+    # not a patch" was only true for languages already patched in (found 2026-09-16).
+    # Both are `map`, so a local entry OVERRIDES rather than adds: that is what lets a user say
+    # "this extensionless file is shell" or "here .inc means php" and be believed.
+    "filetype":         {"mode": "map",   "key": ("match",)},
+    "construct":        {"mode": "map",   "key": ("lang", "construct")},
 }
+# Which shipped tool READS each slot. A slot with no consumer resolves perfectly and is then
+# read by nobody: a user can write a pack, watch `show` list it as in effect, and get silence
+# forever. That is the same inert-definition failure that let the pack feature ship dead, so the
+# slot table states it outright rather than letting someone discover it (2026-09-16).
+# test_gt_registry asserts every name here really does reference its slot.
+CONSUMERS = {
+    "ignore": "gt_scan_language.py",
+    "classify": "gt_scan_language.py",
+    "filetype": "gt_scan_language.py",
+    "construct": "gt_scan_language.py",
+    "naming": "gt_scan_language.py",
+    "encoding": "gt_scan_language.py",
+    # No consumer yet. Listed so the gap is visible, not so it looks supported:
+    "secrets": None,            # awaits gt_scan_secrets
+    "lint": None,               # the slot cannot express WHAT to detect; needs a pattern field
+    "vocabulary": None,
+    "validation_rules": None,
+    "runbook": None,
+}
+
 TIERS = ("community", "core", "local")      # low to high precedence
 MAX_PACK_BYTES = 1 << 20                    # 1 MiB: a data pack, not a dataset
 MAX_JSON_DEPTH = 8
@@ -272,8 +300,23 @@ def load_packs(slot=None, vault=None):
                     continue
             if slot and data["slot"] != slot:
                 continue
+            # `retract` is how a user turns OFF a definition in a union slot, where merging is
+            # additive and nothing can be replaced. It is honoured for the LOCAL tier only: the
+            # rule that a contributed pack must never retire a core credential pattern is the
+            # one this design exists to protect, and the user is a different principal from a
+            # contributor. A submitted pack cannot even declare it -- `retract` is not in
+            # MANIFEST_KEYS, so the submission validator refuses it as an unknown key.
+            retract = data.get("retract")
+            if retract is not None and tier != "local":
+                problems.append((path, "only a pack in your own vault may retract a definition; "
+                                       "this one is %s tier and its retract list is ignored"
+                                 % tier))
+                retract = None
+            if retract is not None and not isinstance(retract, list):
+                problems.append((path, "retract must be a list of {field: value} objects"))
+                retract = None
             packs.append({"tier": tier, "path": path, "name": _clean(data.get("name") or name),
-                          "slot": data["slot"], "entries": entries})
+                          "slot": data["slot"], "entries": entries, "retract": retract or []})
     return packs, problems
 
 
@@ -344,8 +387,24 @@ def _key(entry, fields):
     return tuple(entry.get(f, "") for f in fields)
 
 
+def _retract_matches(entry, _spec_fields, pattern):
+    """A retract names fields of what it removes: {"id": "twilio-account-sid"} for one entry,
+    or {"lang": "go"} to switch a whole language off in one line -- which is how a user chooses
+    which language packs are live, without a separate install mechanism.
+
+    ANY field of the entry may be named, not just the key fields, but at least one must be
+    present in the entry: `{}` and `{"nonsense": 1}` match nothing, so a retract can never
+    silently sweep a slot."""
+    if not isinstance(pattern, dict) or not pattern:
+        return False
+    named = [k for k in pattern if k in entry]
+    if not named:
+        return False
+    return all(entry.get(k) == pattern[k] for k in named)
+
+
 def resolve(slot, lang=None, vault=None):
-    """-> (effective, shadowed, problems)."""
+    """-> (effective, shadowed, retracted, problems)."""
     spec = SLOTS[slot]
     packs, problems = load_packs(slot, vault)
     effective, shadowed = {}, []
@@ -385,7 +444,27 @@ def resolve(slot, lang=None, vault=None):
                     shadowed.append(dict(prev, lost_to="%s (%s)"
                                          % (rec["source"], rec["tier"])))
                 effective[k] = rec
-    return list(effective.values()), shadowed, problems
+
+    # Retracts apply last, so a user can switch off a definition no matter which tier shipped
+    # it. Every removal is REPORTED -- a definition that disappeared without a word is the
+    # failure this whole module is built to avoid, and that does not stop being true because
+    # the user asked for it.
+    retracted = []
+    for pack in packs:
+        for pattern in pack["retract"]:
+            hit = False
+            for k, rec in list(effective.items()):
+                if _retract_matches(rec["entry"], spec["key"], pattern):
+                    retracted.append(dict(rec, retracted_by=pack["name"]))
+                    del effective[k]
+                    hit = True
+            if not hit:
+                # A retract that matches nothing is usually a definition that was renamed
+                # upstream: the user believes something is off and it is quietly back on.
+                problems.append((pack["path"], "retract %s matches no definition in this slot; "
+                                               "it may be left over from a renamed entry"
+                                 % json.dumps(pattern, sort_keys=True)))
+    return list(effective.values()), shadowed, retracted, problems
 
 
 def _fmt(entry):
@@ -396,9 +475,10 @@ def cmd_show(args):
     if args.slot not in SLOTS:
         print("unknown slot %r; try `gt_registry.py slots`" % args.slot, file=sys.stderr)
         return 2
-    eff, shadowed, problems = resolve(args.slot, args.lang, args.vault)
+    eff, shadowed, retracted, problems = resolve(args.slot, args.lang, args.vault)
     if args.json:
         print(json.dumps({"slot": args.slot, "effective": eff, "shadowed": shadowed,
+                          "retracted": retracted,
                           "problems": [{"path": p, "error": e} for p, e in problems]}, indent=2))
     else:
         print("slot %s  (%s)  %d in effect" % (args.slot, SLOTS[args.slot]["mode"], len(eff)))
@@ -407,6 +487,9 @@ def cmd_show(args):
         for rec in shadowed:
             print("  SHADOWED  %-22s %s  <- lost to %s"
                   % (rec["source"], _fmt(rec["entry"]), _clean(rec["lost_to"])))
+        for rec in retracted:
+            print("  RETRACTED %-22s %s  <- switched off by %s (your vault)"
+                  % (rec["source"], _fmt(rec["entry"]), _clean(rec["retracted_by"])))
         for path, err in problems:
             # The path is attacker-controlled too -- it carries the pack's FILENAME.
             # BOTH halves are cleaned: the path carries the filename and the err
@@ -414,6 +497,11 @@ def cmd_show(args):
             print("  PROBLEM %s: %s" % (_clean(path, 200), _clean(err, 300)))
         if not eff and not problems:
             print("  (nothing defined)")
+        if eff and not CONSUMERS.get(args.slot):
+            # Say it HERE too, not only in `slots`: this is the moment someone is looking at
+            # their own pack resolving and concluding, reasonably, that it is doing something.
+            print("\n  NOTE: no shipped tool reads the '%s' slot yet, so these definitions "
+                  "resolve\n        correctly and then change nothing." % args.slot)
     if not eff:
         # Nothing in effect is never "clean". A caller reading exit 0 as "complete" would take
         # an empty `secrets` slot for "no credential patterns to look for", which is exactly
@@ -453,13 +541,28 @@ def cmd_sources(args):
 
 
 def cmd_slots(_args):
-    print("%-18s %-6s %s" % ("SLOT", "MODE", "KEY"))
+    print("%-18s %-6s %-22s %s" % ("SLOT", "MODE", "KEY", "READ BY"))
+    unread = []
     for name in sorted(SLOTS):
         s = SLOTS[name]
-        print("%-18s %-6s %s" % (name, s["mode"], ", ".join(s["key"])))
+        who = CONSUMERS.get(name)
+        if not who:
+            unread.append(name)
+        print("%-18s %-6s %-22s %s"
+              % (name, s["mode"], ", ".join(s["key"]), who or "-- nothing yet --"))
+    if unread:
+        print("\nNOTHING READS THESE YET: %s" % ", ".join(unread))
+        print("A pack in one of them resolves correctly, shows as `in effect`, and is then")
+        print("read by no tool at all. The definitions are kept because the schema is settled")
+        print("and the tools are coming -- but writing one today changes nothing.")
     print("\nprecedence: community < core < local   (the user's own packs always win)")
     print("union slots are ADDITIVE: a later pack can add a definition, never replace one.")
     print("map slots keep one value per key; every loser is reported as SHADOWED.")
+    print("\nTo switch a definition off, add a `retract` list to a pack in YOUR vault:")
+    print('  {"slot": "secrets", ..., "retract": [{"id": "twilio-account-sid"}]}')
+    print("Only packs under <vault>/Projects/golden-thread/packs/ may retract, so a")
+    print("contributed pack can never retire a core definition. Every retraction is")
+    print("reported as RETRACTED, the same as a shadowed one.")
     return 0
 
 

@@ -347,6 +347,42 @@ class RegistryTest(unittest.TestCase):
         self.assertEqual(len(eff), 1, "identical entries still collapse")
         self.assertEqual(eff[0]["tier"], "core")
 
+    # -- a slot nothing reads must say so ------------------------------------------------
+    def test_every_claimed_consumer_really_references_its_slot(self):
+        """CONSUMERS is hand-maintained, so it can drift into a claim of coverage that is not
+        there -- which is the exact failure it was added to prevent."""
+        import importlib.util
+        spec = importlib.util.spec_from_file_location("reg", str(SCRIPT))
+        reg = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(reg)
+        self.assertEqual(set(reg.CONSUMERS), set(reg.SLOTS), "every slot needs an entry")
+        for slot, script in reg.CONSUMERS.items():
+            if not script:
+                continue
+            p = SCRIPT.parent / script
+            self.assertTrue(p.is_file(), "%s claims %s, which does not exist" % (slot, script))
+            self.assertIn('"%s"' % slot, p.read_text(encoding="utf-8"),
+                          "%s claims to be read by %s, which never mentions it" % (slot, script))
+
+    def test_slots_output_names_the_unread_slots(self):
+        r = self.run_reg("slots")
+        self.assertEqual(r.returncode, 0, r.stderr)
+        self.assertIn("NOTHING READS THESE YET", r.stdout)
+        self.assertIn("READ BY", r.stdout)
+
+    def test_show_warns_when_the_slot_has_no_consumer(self):
+        """The moment a person watches their own pack resolve is the moment they conclude it
+        is doing something."""
+        self.put("local", pack("vocabulary", "mine",
+                               [{"term": "alpha", "definition": "a signal"}]))
+        r = self.run_reg("show", "vocabulary")
+        self.assertIn("no shipped tool reads", r.stdout)
+
+    def test_show_does_not_warn_for_a_slot_that_is_read(self):
+        self.put("core", pack("ignore", "core", [{"path": "dist/"}]))
+        r = self.run_reg("show", "ignore")
+        self.assertNotIn("no shipped tool reads", r.stdout)
+
     # -- surfaces -----------------------------------------------------------------------
     def test_sources_lists_tier_and_counts(self):
         self.put("core", pack("ignore", "core", [{"path": "dist/"}]))
