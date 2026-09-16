@@ -13,8 +13,8 @@ release's own summary line, kept short rather than reconstructed after the fact.
 
 ## gt 0.16.0 — unreleased
 
-**Contributions arrive by submission and review, not by a plugin runtime — and a security fix
-for protected paths.**
+**Contributions arrive by submission and review, not by a plugin runtime; the definitions they
+carry get their first consumers; and a security fix for protected paths.**
 
 **Protected paths (security).** `guard_protected_paths` compared paths as `realpath` strings.
 On a case-insensitive volume (APFS) `realpath` returns the caller's spelling, not the on-disk
@@ -42,6 +42,53 @@ and merged** into gt itself, after which they are first-party and held to the re
   becoming historical.
 - `SUBMISSIONS.md` is the contributor-facing spec. gt is MIT permanently: no CLA, no
   relicensing, so a contributor's grant is final and the terms cannot change under them.
+
+**The definitions get consumers.** A registry nothing reads is a registry nobody notices is
+broken — the packs shipped hash-verified against a manifest row shape that never matched, and
+were refused on every installation for weeks while the tests stayed green. Five commands now
+read them, and `gt_registry.py slots` names the five slots that still have none.
+
+- `/gt:gt-scan` checks code against the **language definitions in effect on this machine** —
+  naming and encoding, per language. Nothing about any language lives in the script: the
+  `filetype` and `construct` slots mean four small packs teach gt a language it has never seen,
+  with no code change. It is an aggregator over leaf scanners, and reports how many members
+  **ran** alongside what they found.
+- `/gt:gt-optimize` reports vault content that costs context and earns nothing back: a fact
+  duplicated across memory files, an index row pointing at a file that is gone, a
+  `global-memory/` file over budget. It **reports only** — see below.
+- `/gt:gt-handoff` gathers what the next session needs, labels every fact with its source and
+  verification state, and deliberately refuses to write the design narrative.
+- `/gt:gt-allin` runs every check in one command and never pushes or applies anything.
+  `/gt:gt-allin-commit` is the separate, deliberate act: it commits only once a passing test
+  receipt covers every staged file, and checks that receipt itself, because
+  `guard_test_before_commit` is a PreToolUse hook that cannot see a script running git.
+- **Local-only `retract`** answers both "this core rule is too noisy for me" and "which
+  language packs do I want": `{"retract": [{"lang": "go"}]}` in a vault pack switches Go off
+  and is reported as `RETRACTED` rather than hidden. Only vault packs may retract, so a
+  contributed pack still cannot retire a core definition.
+
+**Cut rather than shipped.** Four things were removed after a validation ran the code:
+
+- **Credential scanning**, and the 22-pattern pack behind it. It missed `.env` files entirely
+  and leaked the values it redacted — the naming check prints raw source text, so a
+  credential-shaped identifier reached stdout and `--json` on the same run that carefully
+  printed a length for it. A scanner that misses is worse than none, because people stop
+  looking. The `secrets` slot remains for the tool that will do it properly.
+- **`gt-optimize --apply`.** It deleted **live** index rows — URL-encoded names, titled links,
+  `mailto:`, `obsidian://`, filenames containing a bracket: of eight rows in one fixture, seven
+  of them live, one survived. It also rewrote the inside of fenced code blocks, converted CRLF
+  files wholesale, turned mode `0600` into `0644`, and applied stale line offsets to a file
+  edited in between by an editor autosaving. Its ten findings on a real vault were harmless by
+  luck rather than by design.
+- **The `lint` check**, declared as a check and wired to nothing: its slot has no field that
+  can express *what* to detect.
+
+**Aggregators tell you how many checks ran.** Both aggregators originally counted the
+**installed** members rather than the **declared** ones, so a partial install printed
+`1 of 1 member(s) ran`, exited 0 having scanned nothing and linted nothing, and offered to
+push — the exact failure they exist to prevent. The denominator is now what the command
+declares it checks; a crash is no longer read as a finding; members have a timeout; and member
+output is escaped and prefixed so it cannot forge the summary line printed above it.
 
 ---
 

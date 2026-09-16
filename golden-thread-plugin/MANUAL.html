@@ -170,12 +170,25 @@ gt_registry.py sources                      # every pack found, in precedence or
 gt_registry.py slots                        # the slot table and merge modes
 </code></pre>
 <p><strong>Precedence is community &lt; core &lt; local.</strong> A merged contribution <em>extends</em> coverage — a
-language or pattern core does not define — but never redefines what core defines; the user's own
-packs, under <code>&lt;vault&gt;/Projects/golden-thread/packs/</code>, always win. When one entry beats another
-the loser is listed as <code>SHADOWED</code> with the winner named, so a definition never disappears
-without a word. A pack that cannot be read is an error, not a silent gap.</p>
-<p>Slots merge in one of two modes: <code>union</code> (entries accumulate and duplicates collapse — ignore
-sets, secret patterns) or <code>map</code> (one value per key — naming, encoding).</p>
+language core does not define — but never redefines what core defines; the user's own packs,
+under <code>&lt;vault&gt;/Projects/golden-thread/packs/</code>, always win. When one entry beats another the
+loser is listed as <code>SHADOWED</code> with the winner named, so a definition never disappears without a
+word. A pack that cannot be read is an error, not a silent gap.</p>
+<p>Slots merge in one of two modes: <code>union</code> (entries accumulate and only identical ones collapse —
+<code>ignore</code>, <code>secrets</code>) or <code>map</code> (one value per key — <code>naming</code>, <code>encoding</code>, <code>filetype</code>).</p>
+<p><strong>Switching a definition off: <code>retract</code>.</strong> A union slot is additive, so nothing in it can be
+replaced — that rule is what stops a contributed pack retiring a core credential pattern. It
+also meant a noisy core definition could not be silenced, which is how a check stops being run
+at all. A pack <strong>in your own vault</strong> may therefore carry a <code>retract</code> list:</p>
+<pre><code class="language-json">{&quot;slot&quot;: &quot;naming&quot;, &quot;...&quot;: &quot;...&quot;, &quot;retract&quot;: [{&quot;lang&quot;: &quot;go&quot;}]}
+</code></pre>
+<p>It matches on any field, so <code>{"lang": "go"}</code> switches off every Go definition in that slot at
+once — which is also how you choose which language packs are live, with no separate install
+step. Only vault packs may retract: a contributed or core pack declaring one is refused and
+reported. Every retraction prints as <code>RETRACTED</code>, alongside the shadowed entries, because a
+definition you turned off should still be visible to you.</p>
+<p><strong>Some slots have no consumer yet.</strong> <code>gt_registry.py slots</code> marks them. A pack in one of those
+resolves correctly and is then read by no tool at all — stated there rather than discovered.</p>
 <p><strong>Contributing a pack.</strong> gt runs no third-party code; packs are submitted, reviewed and merged
 into gt. <code>dev/submissions.py validate &lt;pack&gt;</code> checks a pack before a human reads it, and the
 release gate re-validates every shipped pack so review stays true rather than historical. A

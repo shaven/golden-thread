@@ -150,7 +150,13 @@ gt_registry.py slots                    # the slot table
 Precedence is **community < core < local**: a merged contribution extends coverage but never
 silently redefines a core default, and a user's own packs under
 `<vault>/Projects/golden-thread/packs/` always win. A shadowed entry is reported, not dropped.
-Contributing a pack: `../SUBMISSIONS.md`.
+
+Union slots are additive — nothing can replace an entry, which is what stops a contributed pack
+retiring a core definition. To switch one off, a pack **in your own vault** carries a `retract`
+list: `{"retract": [{"lang": "go"}]}` turns off every Go definition in that slot, and is
+reported as `RETRACTED` rather than hidden. Only vault packs may retract. `gt_registry.py slots`
+also marks the slots no shipped tool reads yet, so a pack for one of them is a considered
+choice rather than a surprise. Contributing a pack: `../SUBMISSIONS.md`.
 
 ## Vault Structure
 

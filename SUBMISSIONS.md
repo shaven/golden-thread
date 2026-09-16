@@ -16,8 +16,21 @@ python3 dev/submissions.py validate my-pack.pack.json
 python3 dev/submissions.py slots          # which slots are open, and their tier
 ```
 
-`READY` means send it. Anything else prints the exact reason — fix and re-run. The validator
-runs before a human reads anything, so a rejected pack costs nobody any time.
+The validator has **three verdicts**, and only one of them is a refusal:
+
+| verdict | exit | meaning |
+|---|---|---|
+| `READY` | 0 | send it |
+| `REVIEW` | 1 | a human has to look — not a rejection |
+| `REJECT` | 2 | fix the reason printed and re-run |
+
+`REVIEW` exists because some fields are *supposed* to contain prose. A `runbook.step` reading
+"You must stop the scheduler before migrating" is the slot working exactly as intended, and an
+earlier version refused it — the matcher cannot tell a legitimate instruction from an injected
+one, so it asks rather than guesses. Send a `REVIEW` pack; just expect a conversation about the
+wording.
+
+The validator runs before a human reads anything, so a rejected pack costs nobody any time.
 
 ---
 
@@ -29,23 +42,47 @@ A reviewer can read the whole thing, and `git diff` shows exactly what changed o
 ```json
 {
   "schema": 1,
-  "slot": "secrets",
-  "name": "cloud-keys",
+  "slot": "naming",
+  "name": "elixir",
   "tier": "A",
   "spdx": "MIT",
   "provenance": {
-    "origin": "adapted",
+    "origin": "original",
     "contributor": "A Dev <dev@example.com>",
-    "upstream": { "name": "gitleaks", "version": "8.18.0", "spdx": "MIT" }
+    "upstream": null
   },
   "dco": "Signed-off-by: A Dev <dev@example.com>",
   "entries": [
-    { "id": "aws-access-key", "pattern": "AKIA[0-9A-Z]{16}" }
+    { "lang": "elixir", "construct": "function", "style": "snake" }
   ]
 }
 ```
 
 Name the file `<slot>.<name>.pack.json`.
+
+### The most useful thing to send: a language
+
+`gt-scan` knows nothing about any language. Everything it knows arrives in packs, so **four
+small packs teach it a language it has never seen**, with no change to any code:
+
+| slot | what it says | example entry |
+|---|---|---|
+| `filetype` | which files are this language | `{"match": "*.ex", "lang": "elixir"}` |
+| `construct` | how to find a function, class or type | `{"lang": "elixir", "construct": "function", "pattern": "^[ \\t]*def[ \\t]+([A-Za-z_][A-Za-z0-9_]{0,80})"}` |
+| `naming` | how each construct should be named | `{"lang": "elixir", "construct": "function", "style": "snake"}` |
+| `encoding` | charset, line endings, BOM | `{"lang": "elixir", "charset": "utf-8", "eol": "lf", "bom": "never"}` |
+
+Send them together and say so in the pull request; they are reviewed as one contribution.
+
+### Some slots are open but nothing reads them yet
+
+`dev/submissions.py slots` lists every open slot. `gt_registry.py slots` additionally says
+which ones a shipped tool actually **reads**, and today `secrets`, `lint`, `vocabulary`,
+`validation_rules` and `runbook` have no consumer: a pack for one of them validates, merges,
+resolves correctly — and then changes nothing until the tool that reads it ships.
+
+That is stated plainly rather than discovered, because a definition nothing reads is the most
+demoralising kind of contribution to make. Ask before spending time on one.
 
 ---
 
@@ -118,6 +155,11 @@ submit → automated validation → planning → review of the diff → merge �
 - Rejections are public and dated, with the reason.
 - Contributions are only accepted for **slots that are currently open**. Everything else is
   closed by default; propose a new slot as an idea first.
+- **A pack cannot switch another pack off.** `retract` is honoured only for packs in a user's
+  own vault, never for a contributed or core pack — so a merged contribution can add a
+  definition but can never retire someone else's. A user, on their own machine, can retract
+  anything including yours; that is theirs to decide and it is reported to them as `RETRACTED`
+  rather than silently applied.
 - Merged packs are labelled `core` or `community`. Community packs may be removed in any
   release without a deprecation window.
 - Once merged, the pack is Golden Thread's to maintain. MIT grants for released work are

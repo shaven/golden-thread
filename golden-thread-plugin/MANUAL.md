@@ -73,13 +73,31 @@ gt_registry.py slots                        # the slot table and merge modes
 ```
 
 **Precedence is community < core < local.** A merged contribution *extends* coverage — a
-language or pattern core does not define — but never redefines what core defines; the user's own
-packs, under `<vault>/Projects/golden-thread/packs/`, always win. When one entry beats another
-the loser is listed as `SHADOWED` with the winner named, so a definition never disappears
-without a word. A pack that cannot be read is an error, not a silent gap.
+language core does not define — but never redefines what core defines; the user's own packs,
+under `<vault>/Projects/golden-thread/packs/`, always win. When one entry beats another the
+loser is listed as `SHADOWED` with the winner named, so a definition never disappears without a
+word. A pack that cannot be read is an error, not a silent gap.
 
-Slots merge in one of two modes: `union` (entries accumulate and duplicates collapse — ignore
-sets, secret patterns) or `map` (one value per key — naming, encoding).
+Slots merge in one of two modes: `union` (entries accumulate and only identical ones collapse —
+`ignore`, `secrets`) or `map` (one value per key — `naming`, `encoding`, `filetype`).
+
+**Switching a definition off: `retract`.** A union slot is additive, so nothing in it can be
+replaced — that rule is what stops a contributed pack retiring a core credential pattern. It
+also meant a noisy core definition could not be silenced, which is how a check stops being run
+at all. A pack **in your own vault** may therefore carry a `retract` list:
+
+```json
+{"slot": "naming", "...": "...", "retract": [{"lang": "go"}]}
+```
+
+It matches on any field, so `{"lang": "go"}` switches off every Go definition in that slot at
+once — which is also how you choose which language packs are live, with no separate install
+step. Only vault packs may retract: a contributed or core pack declaring one is refused and
+reported. Every retraction prints as `RETRACTED`, alongside the shadowed entries, because a
+definition you turned off should still be visible to you.
+
+**Some slots have no consumer yet.** `gt_registry.py slots` marks them. A pack in one of those
+resolves correctly and is then read by no tool at all — stated there rather than discovered.
 
 **Contributing a pack.** gt runs no third-party code; packs are submitted, reviewed and merged
 into gt. `dev/submissions.py validate <pack>` checks a pack before a human reads it, and the
