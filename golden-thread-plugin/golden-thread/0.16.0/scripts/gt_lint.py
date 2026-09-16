@@ -28,6 +28,7 @@ Checks:
   core-unenforced      Core rule whose enforcement hook is not actually wired
   adr-collision        two ADRs share a number in one project
   generated-hand-edited  log.md/decisions.md edited by hand instead of merged
+  attribution-unwired  a session wrote vault files with no registered task
   project-missing      A link points at a project folder that no longer exists
 
 Suppression: reads <vault>/lint-declines.md — lines starting with "suppress:" are matched

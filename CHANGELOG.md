@@ -11,7 +11,7 @@ release's own summary line, kept short rather than reconstructed after the fact.
 
 ---
 
-## gt 0.16.0 — unreleased
+## gt 0.16.0 · gt-demo, gt-watch, gt-report-card, gt-farm, gt-flow 0.16.0 · gt-wiki 0.2.2 — 2026-09-16
 
 **Contributions arrive by submission and review, not by a plugin runtime; the definitions they
 carry get their first consumers; and a security fix for protected paths.**

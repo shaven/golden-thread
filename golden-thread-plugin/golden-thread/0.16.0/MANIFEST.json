@@ -93,8 +93,8 @@
    "sha256": "cea0d9fbd3b1b1c7c8acfa6efd479dde165de962d022926216c5bd34c33ee843"
   },
   "scripts/gt_lint.py": {
-   "bytes": 45107,
-   "sha256": "3365ac7a2f2b66f4018d71c92496419548f1915cc30fa78f48bf158953086899"
+   "bytes": 45182,
+   "sha256": "9595a88b8b2c69854fa5649d4e2c4b482011ff833e9fc97a41c0697c76e3a0d0"
   },
   "scripts/gt_lint_weekly.py": {
    "bytes": 6895,
@@ -105,8 +105,8 @@
    "sha256": "5e227f1dc418d26c65114bf8674884ac73a9fb8b903be61e19d7d3fb9237f72f"
   },
   "scripts/gt_optimize.py": {
-   "bytes": 16785,
-   "sha256": "96313e5fc1909a34a7c28aa16348f5538ec9e8a92d6791cf76456ddd95ca2834"
+   "bytes": 17755,
+   "sha256": "fd06776bd760ba93ecdba6e7af6e10e0389088f836ccf900f5d2d4a92ae69b58"
   },
   "scripts/gt_paths.py": {
    "bytes": 4579,
@@ -309,7 +309,7 @@
    "sha256": "36afca49ff7263e1fd2230116d4fb3d7324c5e236a5053d940061dc09f680bfc"
   }
  },
- "generated": "2026-09-16T14:24:06",
+ "generated": "2026-09-16T14:49:02",
  "hooks": [
   {
    "args": [

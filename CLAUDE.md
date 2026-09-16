@@ -122,7 +122,7 @@ being true the way every count on this page can.
 python3 <plugin>/scripts/gt_lint.py <vault>
 ```
 
-Thirteen checks. `core-unenforced` is the important one — it catches a rule that is
+Eighteen checks. `core-unenforced` is the important one — it catches a rule that is
 stored but never re-asserted, which is the exact failure this system exists to close.
 
 ## Deeper context, if this machine has the vault

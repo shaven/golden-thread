@@ -60,6 +60,14 @@ def derive():
     facts["core_rules"] = len([f for f in os.listdir(rules)
                                if f.startswith("core_") and f.endswith(".md")
                                and "priority_model" not in f])
+    # gt_lint's checks, taken from what the code EMITS rather than from its own prose: the
+    # docstring listed 17 while 18 were emitted, and CLAUDE.md said 13 (2026-09-16).
+    lint = os.path.join(REPO, "golden-thread", gt, "scripts", "gt_lint.py")
+    try:
+        with open(lint, encoding="utf-8") as fh:
+            facts["lint_checks"] = len(set(re.findall(r'"check":\s*"([a-z0-9-]+)"', fh.read())))
+    except OSError:
+        facts["lint_checks"] = None
     for mod in ("golden-thread-wiki", "golden-thread-demo", "golden-thread-watch",
                 "golden-thread-report-card", "golden-thread-farm", "golden-thread-flow"):
         v = newest_version(mod)
@@ -126,14 +134,27 @@ def check(facts):
                 bad.append((rel, "says %r Core rules; %d ship"
                             % (word, facts["core_rules"])))
                 break
+    n_lint = facts.get("lint_checks")
+    if n_lint:
+        want = {str(n_lint), WORDS.get(n_lint, "").casefold()}
+        for rel in ("README.md", "golden-thread-plugin/golden-thread-docs.md", "CLAUDE.md"):
+            s = read(rel)
+            if s is None:
+                continue
+            numbers = "|".join(list(WORDS.values()) + [str(k) for k in WORDS])
+            m = re.search(r"\b(%s)\s+(?:deterministic\s+)?checks?\b" % numbers, s, re.I)
+            if m and m.group(1).casefold() not in want:
+                bad.append((rel, "says %r gt_lint checks; %d are emitted"
+                            % (m.group(1), n_lint)))
     return bad
 
 
 def main():
     facts = derive()
     bad = check(facts)
-    print("derived from the source: gt %s, %d skills, %d Core rules"
-          % (facts["gt_version"], facts["gt_skills"], facts["core_rules"]))
+    print("derived from the source: gt %s, %d skills, %d Core rules, %s lint checks"
+          % (facts["gt_version"], facts["gt_skills"], facts["core_rules"],
+             facts.get("lint_checks")))
     for f, why in bad:
         print("  %-38s %s" % (f, why))
     if bad:
