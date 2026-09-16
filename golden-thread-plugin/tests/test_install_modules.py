@@ -410,7 +410,12 @@ class DemoChoiceFromA013Home(Sandbox):
         up = self.state(self.home)
         self.assertEqual(up["choices"].get("demo"), "off")
         self.assertNotIn("gt-demo@%s" % MARKET, up["enabled"])
-        self.assertFalse([f for f in up["cache"] if f.startswith("gt-demo/") or "gt-demo" in f or "demo-pizzabot" in f or "gt_demo" in f], up["cache"])
+        # `"gt_demo" in f` also matched gt_demote.py, an unrelated scanner (2026-09-16).
+        # Match the module's own paths, not any filename containing those letters.
+        demo = [f for f in up["cache"]
+                if f.startswith("gt-demo/") or "gt-demo" in f or "demo-pizzabot" in f
+                or os.path.basename(f).startswith("gt_demo.")]
+        self.assertFalse(demo, up["cache"])
 
         fresh = self.tmp / "home-fresh"
         (fresh / ".claude").mkdir(parents=True)

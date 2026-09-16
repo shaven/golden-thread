@@ -19,6 +19,7 @@ Contracts pinned here:
 """
 import hashlib
 import json
+import os
 import shutil
 
 from _harness import Sandbox, REPO, GT, WIKI, WATCH, REPORT_CARD, FARM, latest_version_dir
@@ -306,8 +307,14 @@ class UpgradeConverges(Sandbox):
         self.assertIn("gt-wiki", plugins)
         if self.has_demo:
             self.assertIn("gt-demo", plugins, "the demo module was not installed")
-            self.assertFalse([f for f in up["cache"] if f.startswith("gt/") and "demo" in f],
-                             "the upgraded gt plugin still carries the demo")
+            # Matched on a path SEGMENT, not a substring: "demo" in f also matched
+            # gt_demote.py, a scanner that has nothing to do with the demo module
+            # (2026-09-16). A test that fires on an unrelated filename is a test that gets
+            # muted the next time it is inconvenient.
+            demo_files = [f for f in up["cache"]
+                          if f.startswith("gt/")
+                          and ("/demo/" in f or os.path.basename(f).startswith("gt_demo."))]
+            self.assertFalse(demo_files, "the upgraded gt plugin still carries the demo")
         if FARM is not None:
             self.assertIn("gt-farm", plugins, "an upgrader from 0.12.8 lost /gt:gt-farm")
         for mod, name in ((WATCH, "gt_watch.py"), (REPORT_CARD, "gt_report_card.py")):

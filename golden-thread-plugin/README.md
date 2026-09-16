@@ -50,7 +50,7 @@ Facts move up the hierarchy as they prove themselves general. They never move ba
 
 ---
 
-## Twenty-One Skills (plus modules)
+## Twenty-Three Skills (plus modules)
 
 ### Setup
 
@@ -94,6 +94,8 @@ Facts move up the hierarchy as they prove themselves general. They never move ba
 | `/gt:gt-allin` | Every check in one command — scan, lint, the optimize report, install health — reporting how many members actually ran, not just what they found. Never pushes and never applies a change. |
 | `/gt:gt-allin-commit` | The separate, deliberate act: commit once the checks pass and a test receipt covers every staged file. Refuses on the default branch, refuses without evidence, and never pushes — a commit is reversible, a push is not. |
 | `/gt:gt-handoff` | Write the next session a handoff it can trust: facts gathered from the project and repository, each labelled with its source and whether it was actually verified, plus the questions a script cannot answer. The design narrative is left for the person who did the work. |
+| `/gt:gt-context` | Render the vault's model-reachable definitions for a session to read, inside an explicit untrusted-data envelope. The Tier D slots' first consumer. |
+| `/gt:gt-validation` | Record what a validation established, and what it could not determine, stamped with the file's content hash so the definition expires when the file changes. |
 | `/gt:gt-lint` | Audit the vault for structural problems: broken wikilinks, orphaned pages, missing index entries, unlisted memory files, Knowledge pages citing superseded sources, stale pages, and Core rules that are stored but not enforced. Applies fixes with your approval. |
 | `/gt:gt-runbook-lint` | Scan all project `runbook.md` files for content that has drifted into multiple runbooks. Classifies duplicated content by type and routes it to the right shared layer (PROTOCOL.md, Knowledge page, or repo CLAUDE.md) via `gt-promote`. |
 | `/gt:gt-settings` | View and change what Golden Thread does automatically: component drift checking at session start, and every setting an installed module adds (the report card, the upstream watch). Every automatic behaviour can be switched off. |
@@ -137,7 +139,7 @@ it would recover from git and `log.md`. Use `--redact` before the page leaves yo
 
 ---
 
-## Packs and the registry (0.16.0)
+## Packs and the registry (0.16.1)
 
 Pluggable definitions — naming conventions, ignore sets, secret shapes, vocabularies — live in
 **packs**: one JSON file of data each, shipped in `packs/core/` and `packs/community/` and

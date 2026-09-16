@@ -15,7 +15,7 @@ it at startup, look things up while working, and write back what they learn.
 Its distinguishing idea is the second problem, the one most memory systems never
 address: **writing a rule down does not mean it gets followed.**
 
-Plugin **v0.16.0**. Ten Core rules currently enforced, five of them *validated* — a
+Plugin **v0.16.1**. Ten Core rules currently enforced, five of them *validated* — a
 hook inspects the finished reply (`Stop`) or the tool call about to run (`PreToolUse`)
 and blocks it if the rule was broken.
 
@@ -232,6 +232,8 @@ removing any one leaves the rest working.
 | `gt-optimize` | Finds what the vault pays for on every turn and gets nothing back for — a fact duplicated across memory files, a dead index row, a `global-memory/` file over budget. Only mechanically safe cases are applied; anything needing judgement is reported, because a wrong deletion here loses knowledge no diff will bring back. Measured against a real vault it went from 1771 findings to 199 once it stopped reporting generated files and recorded artifacts. |
 | `gt-scan` | Checks code against the language definitions this machine actually has — naming and encoding, per language, entirely from packs: a contributed language pack teaches it a new language with no code change. It reports how many checks RAN next to what they found, so a scan that could not load its definitions can never be mistaken for a clean tree. |
 | `gt-allin` | One command for every check, built so a skipped check can never pass for a clean one: the headline is "N of M members ran", and a member that could not execute outranks a member that found something. It does not push — an aggregator is where a partial run is easiest to mistake for a complete one, and pushing there would break the very rule about seeing tests pass that the tool exists to serve. |
+| `gt-context` | Renders what this vault's definitions SAY, for a session to read — the first consumer of the registry's model-reachable tier. Wrapped in an envelope that marks it as data rather than instruction, because a renderer can make content identifiable but cannot make it true. |
+| `gt-validation` | Writes down what a validation established about a file, including what it could NOT determine, stamped with the file's content hash. Edit the file and the recorded definition goes visibly stale — because every serious defect this project has shipped was a claim that outlived its implementation. |
 | `gt-allin-commit` | The separate, deliberate act of committing — kept apart from the sweep so a routine check is never also a write. It verifies a passing test receipt covers every staged file, refuses when a check could not run at all, and stops at the commit: a commit is reversible here, a push is fetched by other people. |
 | `gt-handoff` | Hands the next session what it needs and marks what it must not assume. Facts carry their source and verification state; the design narrative is left blank for the person who did the work, because a handoff that reads finished when it is not gives the next session false confidence instead of none. |
 | `gt-settings` | Shows and changes everything the plugin does on its own — component drift checking, the version check, orphaned-worker detection, the unpushed-commit check, and the settings each installed module adds (the report card, the upstream watch). Every automatic behaviour is registered here and every one can be switched off. |

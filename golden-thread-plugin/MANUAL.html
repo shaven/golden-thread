@@ -165,7 +165,7 @@ early becomes a rule you must remember to disbelieve.</p>
 file is worth opening.</p>
 <hr />
 <h2 id="packs-and-the-registry">Packs and the registry</h2>
-<p><em>New in 0.16.0.</em></p>
+<p><em>New in 0.16.1.</em></p>
 <p>Golden Thread keeps pluggable definitions in <strong>slots</strong> — how a language names things, which
 paths are noise, what a credential looks like, what a term means. Each slot is filled by
 <strong>packs</strong>: one JSON file of data, never a program.</p>
@@ -198,6 +198,84 @@ into gt. <code>dev/submissions.py validate &lt;pack&gt;</code> checks a pack bef
 release gate re-validates every shipped pack so review stays true rather than historical. A
 pack's tier is derived from whether its slot can reach model context, never from what the pack
 declares. See <code>SUBMISSIONS.md</code>.</p>
+<h3 id="what-gtgt-scan-can-check-and-how-to-ask">What <code>/gt:gt-scan</code> can check, and how to ask</h3>
+<p>Fourteen languages ship with definitions. <strong>Do not trust a list in a document for this</strong> — it
+goes stale the moment a pack ships. Ask the machine you are on:</p>
+<pre><code class="language-bash">gt_scan_language.py --languages          # what this install can actually check
+</code></pre>
+<table>
+<thead>
+<tr>
+<th>language</th>
+<th>extensions</th>
+<th>naming checked</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>python</td>
+<td><code>.py .pyi</code></td>
+<td>class, constant, function</td>
+</tr>
+<tr>
+<td>javascript</td>
+<td><code>.js .mjs .cjs .jsx</code></td>
+<td>class, function, method</td>
+</tr>
+<tr>
+<td>typescript</td>
+<td><code>.ts .tsx</code></td>
+<td>class, function, method, type</td>
+</tr>
+<tr>
+<td>ruby</td>
+<td><code>.rb .rake Rakefile Gemfile</code></td>
+<td>class, function</td>
+</tr>
+<tr>
+<td>php</td>
+<td><code>.php</code></td>
+<td>class, function</td>
+</tr>
+<tr>
+<td>java</td>
+<td><code>.java</code></td>
+<td>class, type</td>
+</tr>
+<tr>
+<td>csharp</td>
+<td><code>.cs</code></td>
+<td>class, type</td>
+</tr>
+<tr>
+<td>rust</td>
+<td><code>.rs</code></td>
+<td>function, type</td>
+</tr>
+<tr>
+<td>go</td>
+<td><code>.go</code></td>
+<td>function</td>
+</tr>
+<tr>
+<td>shell</td>
+<td><code>.sh .bash .zsh</code></td>
+<td>function</td>
+</tr>
+<tr>
+<td>sql, markdown, json, yaml</td>
+<td></td>
+<td>encoding only</td>
+</tr>
+</tbody>
+</table>
+<p>The last column of <code>--languages</code> is the one worth reading: <strong>found but not checked</strong>. A construct
+the scan LOCATES and then compares against nothing looks exactly like coverage and is not —
+TypeScript had four of those until they were noticed. Today one remains: Go's <code>type</code>, left
+deliberately, because Go's exported/unexported convention means a blanket <code>pascal</code> rule would
+flag every unexported type.</p>
+<p>A language that is missing is four small packs away (<code>filetype</code>, <code>construct</code>, <code>naming</code>,
+<code>encoding</code>) and no code change — see <code>../SUBMISSIONS.md</code>.</p>
 <h2 id="vault-layout">Vault layout</h2>
 <pre><code>&lt;vault&gt;/
   CLAUDE.md              vault-wide conventions and page schema
@@ -359,6 +437,8 @@ project memory. If a page comes back <code>status: stale</code>, verify before a
 /gt:gt-scan            # code against the language definitions in effect
 /gt:gt-allin           # every check in one run; reports how many actually ran
 /gt:gt-allin-commit    # commit once the checks pass and a receipt covers the files
+/gt:gt-context         # what the definitions here say, for a session to read
+/gt:gt-validation      # what a validation established, and when it went stale
 /gt:gt-handoff         # write the next session a handoff it can trust
 /gt:gt-runbook-lint    # facts duplicated across runbooks
 /gt:gt-refresh         # upstream changes to Sources/

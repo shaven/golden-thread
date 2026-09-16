@@ -63,7 +63,7 @@ file is worth opening.
 
 ## Packs and the registry
 
-*New in 0.16.0.*
+*New in 0.16.1.*
 
 Golden Thread keeps pluggable definitions in **slots** — how a language names things, which
 paths are noise, what a credential looks like, what a term means. Each slot is filled by
@@ -107,6 +107,38 @@ into gt. `dev/submissions.py validate <pack>` checks a pack before a human reads
 release gate re-validates every shipped pack so review stays true rather than historical. A
 pack's tier is derived from whether its slot can reach model context, never from what the pack
 declares. See `SUBMISSIONS.md`.
+
+### What `/gt:gt-scan` can check, and how to ask
+
+Fourteen languages ship with definitions. **Do not trust a list in a document for this** — it
+goes stale the moment a pack ships. Ask the machine you are on:
+
+```bash
+gt_scan_language.py --languages          # what this install can actually check
+```
+
+| language | extensions | naming checked |
+|---|---|---|
+| python | `.py .pyi` | class, constant, function |
+| javascript | `.js .mjs .cjs .jsx` | class, function, method |
+| typescript | `.ts .tsx` | class, function, method, type |
+| ruby | `.rb .rake Rakefile Gemfile` | class, function |
+| php | `.php` | class, function |
+| java | `.java` | class, type |
+| csharp | `.cs` | class, type |
+| rust | `.rs` | function, type |
+| go | `.go` | function |
+| shell | `.sh .bash .zsh` | function |
+| sql, markdown, json, yaml | | encoding only |
+
+The last column of `--languages` is the one worth reading: **found but not checked**. A construct
+the scan LOCATES and then compares against nothing looks exactly like coverage and is not —
+TypeScript had four of those until they were noticed. Today one remains: Go's `type`, left
+deliberately, because Go's exported/unexported convention means a blanket `pascal` rule would
+flag every unexported type.
+
+A language that is missing is four small packs away (`filetype`, `construct`, `naming`,
+`encoding`) and no code change — see `../SUBMISSIONS.md`.
 
 ## Vault layout
 
@@ -298,6 +330,8 @@ project memory. If a page comes back `status: stale`, verify before acting on it
 /gt:gt-scan            # code against the language definitions in effect
 /gt:gt-allin           # every check in one run; reports how many actually ran
 /gt:gt-allin-commit    # commit once the checks pass and a receipt covers the files
+/gt:gt-context         # what the definitions here say, for a session to read
+/gt:gt-validation      # what a validation established, and when it went stale
 /gt:gt-handoff         # write the next session a handoff it can trust
 /gt:gt-runbook-lint    # facts duplicated across runbooks
 /gt:gt-refresh         # upstream changes to Sources/

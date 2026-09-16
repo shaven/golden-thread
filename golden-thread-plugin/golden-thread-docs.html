@@ -117,7 +117,7 @@
 <p><strong>Reader:</strong> quick lookup, and the printed PDF
 <strong>Claims last checked against the code:</strong> 2026-09-16 — see <em>The documents, and what belongs in each</em> in <a href="../CLAUDE.md"><code>CLAUDE.md</code></a>.</p>
 </blockquote>
-<h2 id="version-gt-0160-gt-wiki-022-gt-demo-gt-watch-gt-report-card-gt-farm-gt-flow-0160">Version gt 0.16.0 / gt-wiki 0.2.2 / gt-demo, gt-watch, gt-report-card, gt-farm, gt-flow 0.16.0</h2>
+<h2 id="version-gt-0161-gt-wiki-022-gt-demo-gt-watch-gt-report-card-gt-farm-gt-flow-0161">Version gt 0.16.1 / gt-wiki 0.2.2 / gt-demo, gt-watch, gt-report-card, gt-farm, gt-flow 0.16.1</h2>
 <hr />
 <p>Golden Thread turns an Obsidian vault into the single source of truth for all AI memory across every project and every session. The tiered rule model introduced in v0.6.0 now carries <strong>seven hook-backed Core rules</strong> enforced at three points in the turn, 0.9.12 added <code>gt-route</code> for the middle of a session, and 0.9.13 makes the session-start component check verify that the hooks are <strong>wired</strong>, not merely installed, 0.11.0 makes <code>log.md</code> and <code>decisions.md</code> generated files so concurrent sessions cannot overwrite one another, 0.12.3 stops a vault tool running against a vault it was never told to touch, 0.12.4 makes parallel execution the default for divisible work in every project, 0.12.5 stops code being committed before its tests have been seen to pass, 0.13.0 makes an upgrade from any older release end where a fresh install would, 0.14.0 splits optional parts into modules you can decline, and 0.15.0 makes six of them — gt-wiki 0.2.1 (an LLM-powered knowledge base with immutable sources and interlinked pages), gt-demo (the guided tour), gt-watch (upstream repos), gt-report-card (the session report card), gt-farm (work packets for an external AI) and the new gt-flow, which draws the vault's event stream as a timeline of knowledge climbing the ladder.</p>
 <hr />
@@ -247,7 +247,7 @@ often it would train the guard to be ignored.</p>
 <p>The canonical rule definitions live in <code>Projects/golden-thread/core-rules/</code> inside the vault. Editing a rule file there changes what the hook injects — the rule text is never duplicated into the script.</p>
 <p><strong>The canary:</strong> <code>core_timestamp_every_message.md</code> is designated Core/Validated not because a missing timestamp causes real harm, but because it is trivially observable at the top of every reply. When the timestamp disappears, enforcement has broken.</p>
 <hr />
-<h2 id="gt-skills-21">gt Skills (21)</h2>
+<h2 id="gt-skills-23">gt Skills (23)</h2>
 <h3 id="setup">Setup</h3>
 <table>
 <thead>
@@ -368,6 +368,14 @@ often it would train the guard to be ignored.</p>
 <tr>
 <td><code>/gt:gt-allin</code></td>
 <td>Run every check in one command — scan, lint, the optimize report, install health — and report how many members actually RAN alongside what they found, because a short finding list from a half-failed run reads exactly like a clean bill of health. Never pushes and never applies a change: <code>--suggest-push</code> prints the command for you, and refuses even that when anything failed.</td>
+</tr>
+<tr>
+<td><code>/gt:gt-context</code></td>
+<td>Render the definitions this vault marks as model-reachable — <code>vocabulary</code>, <code>validation_rules</code>, <code>runbook</code> — inside an explicit untrusted-data envelope, hard-capped, with every line naming the pack and tier it came from. The envelope does not make the content true; it makes it identifiable as someone's definition rather than as the system speaking. Asking for a Tier A slot is a usage error, not an empty section.</td>
+</tr>
+<tr>
+<td><code>/gt:gt-validation</code></td>
+<td>Record what a validation established about a file — what was verified AND what it could not determine — stamped with the file's content hash, so the recorded definition goes visibly stale the moment the file changes. A file with no receipt reports as <em>unknown</em>, deliberately distinct from clean.</td>
 </tr>
 <tr>
 <td><code>/gt:gt-allin-commit</code></td>

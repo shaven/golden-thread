@@ -73,11 +73,18 @@ class OptimizeTest(unittest.TestCase):
             self.run_opt(*extra)
         self.assertEqual(tree_digest(self.vault), before, "this tool must never edit anything")
 
-    def test_there_is_no_apply_flag(self):
+    def test_apply_only_applies_to_demote_never_to_reporting(self):
+        """0.16.0 had no --apply at all, because the one it had DELETED things. 0.16.1 has one,
+        and it belongs to --demote only: reporting still never writes a byte."""
         r = subprocess.run([sys.executable, str(SCRIPT), "--help"],
                            capture_output=True, text=True)
-        self.assertNotIn("--apply", r.stdout)
         self.assertNotIn("--include-global-memory", r.stdout)
+        self.assertIn("--demote", r.stdout)
+        before = tree_digest(self.vault)
+        bare = self.run_opt("--apply")
+        self.assertEqual(bare.returncode, 2, "--apply without --demote is a usage error")
+        self.assertIn("only applies to --demote", bare.stderr)
+        self.assertEqual(tree_digest(self.vault), before)
 
     def test_project_must_be_a_slug_not_a_path(self):
         """`--project ../../elsewhere` edited files outside the vault entirely."""

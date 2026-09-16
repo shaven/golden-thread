@@ -1,0 +1,9 @@
+{
+  "name": "gt-watch",
+  "version": "0.16.1",
+  "description": "Golden Thread Watch: follow any git repo you depend on, classify its changes by fixed rules, and raise a P0 at session start when it ships a security fix.",
+  "author": {
+    "name": "Stacy Haven",
+    "email": "shaven@shavenconsulting.com"
+  }
+}

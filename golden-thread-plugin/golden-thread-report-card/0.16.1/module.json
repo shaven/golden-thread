@@ -1,0 +1,67 @@
+{
+  "schema": 1,
+  "name": "report-card",
+  "plugin": "gt-report-card",
+  "version": "0.16.1",
+  "requires_gt": ">=0.16.1,<0.17.0",
+  "summary": "Session report card at /compact and session end, surfaced at the next session start, with the project close-out question",
+  "default": "on",
+  "skills": [],
+  "scripts": [
+    "gt_report_card.py"
+  ],
+  "templates": [],
+  "hooks": [
+    {
+      "event": "PreCompact",
+      "script": "gt_report_card.py",
+      "args": [],
+      "kind": "reporter"
+    },
+    {
+      "event": "SessionEnd",
+      "script": "gt_report_card.py",
+      "args": [],
+      "kind": "reporter"
+    },
+    {
+      "event": "SessionStart",
+      "script": "gt_report_card.py",
+      "args": [
+        "surface",
+        "--hook"
+      ],
+      "kind": "reporter"
+    }
+  ],
+  "hookdir_scripts": [
+    "gt_report_card.py"
+  ],
+  "settings": [
+    {
+      "key": "report_card",
+      "default": "minimal",
+      "values": [
+        "off",
+        "minimal",
+        "full"
+      ],
+      "summary": "Session report card at /compact, auto-compact and session end.",
+      "detail": "off     nothing\nminimal hygiene only -- what went wrong in THIS session  (default)\nfull    hygiene, plus vault features available and unused\n\nFires on PreCompact so it is produced while there is still context to write\nit in, rather than competing for the last of it at session end."
+    },
+    {
+      "key": "closeout_check",
+      "default": "ask",
+      "values": [
+        "off",
+        "ask"
+      ],
+      "summary": "At /compact and session end, ask whether a finished-looking project should be closed.",
+      "detail": "off     nothing\nask     name each project whose signals say it may be finished, with the\n        reasons, so the assistant puts the question to you  (default)\n\nRuns the vault's own `Projects/golden-thread/tools/gt_closeout.py`. Signals:\nmost open tasks past due, most tasks checked off with nothing urgent left,\nno new task and no write-back for three weeks, or no open task at all. Every\ntime the question is put to you it is recorded with the signal values, and\nyour answer is recorded beside it, so `gt_closeout.py history` can show what\n'ready to close' has actually looked like for you and the thresholds can be\ntuned to that rather than to a guess.\n\nOn 2026-09-05 the CYC26 talk had been delivered for two days while 25 of its\nrehearsal tasks sat open and overdue at the top of the rollup, above live\ntrading work. Nothing had asked."
+    }
+  ],
+  "requires_modules": [],
+  "replaces_core": [
+    "scripts/gt_report_card.py"
+  ]
+}

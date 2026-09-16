@@ -11,6 +11,53 @@ release's own summary line, kept short rather than reconstructed after the fact.
 
 ---
 
+## gt 0.16.1 — 2026-09-16
+
+**The definitions reach a session, a note can be moved instead of deleted, and a validation
+writes down what it established.**
+
+**`/gt:gt-context` — the Tier D slots finally have a consumer.** The registry's tier system
+exists to mark content as reaching the model, and until now nothing did: six slots fed one
+offline scanner while `vocabulary`, `validation_rules` and `runbook` — the three built to be
+read by a session — had no consumer at all. This renders them inside an explicit
+untrusted-data envelope, hard-capped so a pack cannot flood a context, with every line naming
+the pack and tier it came from. The envelope does not make the content true; it makes it
+identifiable as someone's definition rather than as the system speaking, which is the only
+property a renderer can provide. Wiring it into SessionStart is deliberately NOT done —
+unattended injection into every session is a different risk from a command someone runs.
+
+**`/gt:gt-optimize --demote` — the first motion the tool has ever had.** 0.16.0 reported and
+wrote nothing, because the `--apply` that deleted things was removed after a validation found
+seven ways it destroyed notes. Demotion is the shape that can be repaired: it moves a note to
+where it costs less —
+
+    global-memory/          read in EVERY session of every project     most expensive
+    Projects/<slug>/memory/ read in every session of one project
+    Knowledge/<page>.md     read when someone asks for it              cheapest
+
+— and the ORDER is the safety property: write the destination, verify it by reading it back
+from disk, and only then replace the source with a pointer. A failure at any step leaves
+duplication, which a reader can resolve; the deleting version failed by removal, which no diff
+brings back. `memory-bloat` findings now print the `--demote` command that acts on them.
+
+**`/gt:gt-validation` — verification that expires.** Every serious defect in 0.16.0 was a claim
+that outlived its implementation: a manifest row shape that stopped matching, a `lint` check
+listed as running while wired to nothing, an aggregator counting installed rather than declared
+members. Each was true when written, and nothing tied the claim to the code's current state. A
+completed validation now records what was verified AND what it could not determine, stamped
+with the file's content hash; edit the file and the recorded definition goes visibly stale. A
+file with no receipt reports as *unknown*, which is deliberately distinct from clean.
+
+**Five more languages.** Ruby, PHP, Java, C# and SQL ship as definition packs — `filetype`,
+`construct`, `naming` and `encoding` — so `/gt:gt-scan` covers them with no code change, which
+is the claim the registry was built to make good on. The `community/` tier stays empty: tier
+means provenance, and a maintainer-written pack placed there would misrepresent the one thing
+tier guarantees.
+
+**Fixed.** `gt_optimize` still described itself as REPORTS ONLY after gaining `--demote` — the
+same claim-outliving-code failure, in code written the same day, and exactly what the receipts
+above exist to catch.
+
 ## gt 0.16.0 · gt-demo, gt-watch, gt-report-card, gt-farm, gt-flow 0.16.0 · gt-wiki 0.2.2 — 2026-09-16
 
 **Contributions arrive by submission and review, not by a plugin runtime; the definitions they

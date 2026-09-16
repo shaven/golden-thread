@@ -3,7 +3,7 @@
 > **Reader:** quick lookup, and the printed PDF
 > **Claims last checked against the code:** 2026-09-16 — see *The documents, and what belongs in each* in [`CLAUDE.md`](../CLAUDE.md).
 
-## Version gt 0.16.0 / gt-wiki 0.2.2 / gt-demo, gt-watch, gt-report-card, gt-farm, gt-flow 0.16.0
+## Version gt 0.16.1 / gt-wiki 0.2.2 / gt-demo, gt-watch, gt-report-card, gt-farm, gt-flow 0.16.1
 
 ---
 
@@ -88,7 +88,7 @@ The canonical rule definitions live in `Projects/golden-thread/core-rules/` insi
 
 ---
 
-## gt Skills (21)
+## gt Skills (23)
 
 ### Setup
 
@@ -131,6 +131,8 @@ The canonical rule definitions live in `Projects/golden-thread/core-rules/` insi
 | `/gt:gt-optimize` | Find vault content that costs context and earns nothing back: a fact duplicated across memory files, an index row pointing at a file that is gone, a `global-memory/` file over budget, a relative date in a file that will be read months later. Splits findings into SAFE (applied with `--apply`) and JUDGEMENT (reported only — deleting knowledge is not reversible by reading a diff). Never writes `core-rules/`, and needs a flag for `global-memory/`. |
 | `/gt:gt-scan` | Scan code against the language definitions in effect on this machine — naming conventions and encoding, per language, all of it from packs rather than from the script. An aggregator over leaf scanners: it reports how many members RAN alongside what they found, because "nothing is wrong" and "nothing was checked" otherwise print identically. |
 | `/gt:gt-allin` | Run every check in one command — scan, lint, the optimize report, install health — and report how many members actually RAN alongside what they found, because a short finding list from a half-failed run reads exactly like a clean bill of health. Never pushes and never applies a change: `--suggest-push` prints the command for you, and refuses even that when anything failed. |
+| `/gt:gt-context` | Render the definitions this vault marks as model-reachable — `vocabulary`, `validation_rules`, `runbook` — inside an explicit untrusted-data envelope, hard-capped, with every line naming the pack and tier it came from. The envelope does not make the content true; it makes it identifiable as someone's definition rather than as the system speaking. Asking for a Tier A slot is a usage error, not an empty section. |
+| `/gt:gt-validation` | Record what a validation established about a file — what was verified AND what it could not determine — stamped with the file's content hash, so the recorded definition goes visibly stale the moment the file changes. A file with no receipt reports as *unknown*, deliberately distinct from clean. |
 | `/gt:gt-allin-commit` | Commit, but only once the checks pass and a passing test receipt covers every staged file. Refuses on `main`/`master` without a flag, refuses when a check *could not run* (an unknown is not a finding anyone can accept), and never pushes — a commit is reversible with `git reset`, a push is fetched by other people. It checks the receipt itself because `guard_test_before_commit` is a PreToolUse hook and cannot see a script running git. |
 | `/gt:gt-handoff` | Write the next session a handoff it can trust: the facts gathered from the project and the repository, each labelled with its source and whether it was actually verified. The design narrative is deliberately left for the session that did the work — a script that invents it produces a document that reads finished and is not. |
 | `/gt:gt-runbook-lint` | Scan all project `runbook.md` files for content that has drifted into multiple runbooks. Routes duplicated content to the right shared layer via `gt-promote`. |
