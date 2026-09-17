@@ -48,6 +48,12 @@ jobs:
           # gate reports SKIP rather than guessing; freshness is enforced where rendering
           # happens. See the comment beside this variable in dev/release-check.sh.
           GT_PDF_MTIME_UNRELIABLE: '1'
+          # The scrub terms are employer and machine names, deliberately kept OUT of the repo --
+          # committing the list of strings you are hiding would publish them. So the scan cannot
+          # run here and reports SKIP instead of a verdict it did not reach. It still runs at
+          # release, on the machine that holds the terms. This flag makes the ABSENCE skippable;
+          # it does not make a real scrub failure skippable.
+          GT_SCRUB_OPTIONAL: '1'
         run: bash dev/release-check.sh
 
   dco:

@@ -332,7 +332,21 @@ OUT=$("${GT_PYTHON:-python3}" dev/scrub_check.py --repo "$(git rev-parse --show-
 case $rc in
   0) ok "$(echo "$OUT" | tail -1)";;
   1) echo "$OUT" | grep '^HIT' | head -20; bad "employer/machine strings present";;
-  *) echo "$OUT" | tail -5; bad "scrub could not check (terms file missing, or pypdf absent for PDFs)";;
+  *)
+    # The terms are employer and machine names. They are deliberately NOT in the repo --
+    # committing the list of strings you are hiding would publish them. So on a machine that
+    # has no terms file this check CANNOT run, and that is by design rather than a fault.
+    #
+    # Failing forever would make CI red on every commit and train everyone to ignore it;
+    # passing would claim a scan that never happened. So: SKIP, loudly, every time, and the
+    # scan still runs at release on the machine that holds the terms. GT_SCRUB_OPTIONAL is
+    # set only where the absence is expected -- never as a way past a real failure.
+    if [ "${GT_SCRUB_OPTIONAL:-}" = 1 ] && printf '%s' "$OUT" | grep -q 'no terms loaded'; then
+      skip "scrub not checkable here (no terms file; the terms are private and stay off the repo)"
+    else
+      echo "$OUT" | tail -5
+      bad "scrub could not check (terms file missing, or pypdf absent for PDFs)"
+    fi;;
 esac
 
 if [ "$QUICK" = no ]; then
@@ -357,7 +371,11 @@ if [ "$QUICK" = no ]; then
     bad "tests/run.sh"
   fi
   step "selftest"
-  OUT=$(./selftest.sh 2>&1); rc=$?
+  # `bash selftest.sh`, not `./selftest.sh`: the file is not marked executable in git, and
+  # setting that bit would count as CHANGING selftest.sh -- which dev/check_installer_version.py
+  # watches, so a mode change alone would demand a version bump. Invoking through bash needs no
+  # mode at all and leaves the watched file untouched.
+  OUT=$(bash ./selftest.sh 2>&1); rc=$?
   [ $rc -eq 0 ] && ok "$(echo "$OUT" | tail -1)" || { echo "$OUT" | grep FAIL | head; bad "selftest.sh"; }
 fi
 
