@@ -23,6 +23,11 @@ FAILS=0
 ok()   { printf 'ok    %s\n' "$1"; }
 bad()  { printf 'FAIL  %s\n' "$1"; FAILS=$((FAILS+1)); }
 step() { printf '\n== %s\n' "$1"; }
+# A check that CANNOT RUN here is neither a pass nor a failure and must not print as either.
+# It does not raise the exit code, but it says so every time, so a clean run never quietly
+# means "every check but one". Same rule as gt_doctor's SKIPPED and gt-allin's denominator:
+# a member that could not run is not a pass.
+skip() { printf 'SKIP  %s\n' "$1"; }
 
 # Every plugin this repo ships, by the ONE discovery rule in dev/plugins.py (shared with
 # package.sh, sync-gt-src.sh and the Python gates): "<dir> <version> <name>" per line.
@@ -258,14 +263,24 @@ STALE=$(for f in README.md MANUAL.md golden-thread-docs.md ONBOARDING.md ../READ
   grep -q "$GTV" "$f" || echo "$f never names $GTV"
 done)
 [ -z "$STALE" ] && ok "docs name the current version $GTV" || { echo "$STALE"; bad "docs a version behind"; }
-STALEPDF=""
-for pdf in *.pdf; do
-  base=${pdf%.pdf}
-  for src in "$base.md" "$base.html"; do
-    [ -f "$src" ] && [ "$src" -nt "$pdf" ] && STALEPDF="$STALEPDF $pdf(<$src)"
+# PDF freshness is an MTIME comparison, and GIT DOES NOT STORE MTIMES: a fresh clone stamps
+# every file with the checkout time, so this check is meaningless there -- it would pass or
+# fail on the order the runner happened to write files. It is a real check on a working tree
+# and no check at all on a clone, so CI sets GT_PDF_MTIME_UNRELIABLE=1 and it reports SKIP
+# rather than inventing a verdict. The freshness itself is still enforced, on the machine that
+# does the rendering, which is the only place the answer means anything.
+if [ "${GT_PDF_MTIME_UNRELIABLE:-}" = 1 ]; then
+  skip "PDF freshness not checkable here (git does not preserve mtimes; checked at release)"
+else
+  STALEPDF=""
+  for pdf in *.pdf; do
+    base=${pdf%.pdf}
+    for src in "$base.md" "$base.html"; do
+      [ -f "$src" ] && [ "$src" -nt "$pdf" ] && STALEPDF="$STALEPDF $pdf(<$src)"
+    done
   done
-done
-[ -z "$STALEPDF" ] && ok "every PDF is newer than its sources" || { echo "  stale:$STALEPDF"; bad "PDFs a render behind — run dev/render-pdfs.sh"; }
+  [ -z "$STALEPDF" ] && ok "every PDF is newer than its sources" || { echo "  stale:$STALEPDF"; bad "PDFs a render behind — run dev/render-pdfs.sh"; }
+fi
 REFS=$(python3 - "${PDIRS[@]}" <<'PY2'
 import sys, re, pathlib
 out = []

@@ -1,0 +1,91 @@
+# The release gate, on a machine that is not the author's.
+#
+# WHY THIS EXISTS. dev/release-check.sh describes itself as "the gate every check-in passes,
+# ON THIS MACHINE, before a commit" -- manual, local, and indistinguishable from not having run.
+# That is the "reminder, not enforcement" pattern this project exists to reject, applied to the
+# project itself: gt refuses to commit code whose tests were not seen to pass, while its own
+# gate depended on someone remembering.
+#
+# It also answers a question a local run cannot. A gate that shares its subject's environment
+# cannot see what that environment supplies -- an already-installed gt, a warm cache, a Python
+# that happens to have a module. A clean runner sees only what the repo carries.
+#
+# Nothing new is written here. The test suite, the submission validator, the doc-count gate and
+# verify-source all already existed and were merely unwired.
+
+name: release-check
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  gate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45          # the suite is ~1,400 tests; a hosted runner has fewer cores
+                                 # than the dev machine, so it is slower, not stuck.
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # dev/check_installer_version.py asks git WHICH COMMIT ADDED the newest version
+          # directory, and whether install.sh changed after it. A shallow clone cannot answer
+          # that, and the check would report "unverifiable" on every run -- honest, but useless.
+          fetch-depth: 0
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Release gate
+        working-directory: golden-thread-plugin
+        env:
+          # git does not preserve mtimes, so PDF freshness is not checkable in a clone. The
+          # gate reports SKIP rather than guessing; freshness is enforced where rendering
+          # happens. See the comment beside this variable in dev/release-check.sh.
+          GT_PDF_MTIME_UNRELIABLE: '1'
+        run: bash dev/release-check.sh
+
+  dco:
+    # A pack carries a `dco` field holding a Signed-off-by line, and dev/submissions.py has
+    # validated its SHAPE since before this workflow existed -- but only when someone ran the
+    # validator. This enforces the line's PRESENCE on the commits themselves, at merge.
+    #
+    # It proves a line is present. It does not tie it to an identity: that is deliberate and is
+    # recorded as GAP-2 in the vault, to be built if a second person ever submits.
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Every non-merge commit carries a sign-off
+        env:
+          BASE: ${{ github.event.pull_request.base.sha }}
+          HEAD: ${{ github.event.pull_request.head.sha }}
+        run: |
+          set -uo pipefail
+          missing=0
+          # --no-merges: a merge commit is the maintainer's act, not a contribution.
+          for sha in $(git rev-list --no-merges "$BASE".."$HEAD"); do
+            author=$(git log -1 --format='%an <%ae>' "$sha")
+            case "$author" in
+              *'[bot]'*|*'noreply@github.com'*) continue ;;
+            esac
+            if ! git log -1 --format='%B' "$sha" | grep -qiE '^Signed-off-by: .+ <.+@.+>$'; then
+              echo "missing Signed-off-by: $sha  ($author)"
+              missing=$((missing+1))
+            fi
+          done
+          if [ "$missing" -gt 0 ]; then
+            echo ""
+            echo "$missing commit(s) have no Signed-off-by line."
+            echo "Add one with:  git commit --amend --signoff   (or --signoff on each commit)"
+            exit 1
+          fi
+          echo "ok    every non-merge, non-bot commit carries a sign-off"

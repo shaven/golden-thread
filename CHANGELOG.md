@@ -11,6 +11,67 @@ release's own summary line, kept short rather than reconstructed after the fact.
 
 ---
 
+## gt 0.16.4 — 2026-09-17
+
+**The vault's writers stop losing other people's work, and the release gate stops depending on
+someone remembering to run it.**
+
+**The session claim registry no longer loses claims.** `cmd_claim` and the heartbeat were
+read-modify-write with a blind `write_text`: two processes sharing a session id, and one set of
+claims was gone. That matters more than its size suggests — this registry is what Core rule 1
+depends on, what `gt_lint_weekly` reads to decide whether INBOX.md is safe to touch, and what
+`gt_demote` reads before moving a note. A lost claim silently disarms the only cross-session
+mutual exclusion the vault has. Writes now go through a compare-and-swap that re-runs the whole
+decision on a lost race, so two writers' claims **union** rather than one replacing the other,
+and a write that never wins fails loudly instead of reporting success. Measured during the fix:
+plain compare-and-swap was not enough — check and rename are two syscalls, and with four
+concurrent claimers a claim was still lost in about half of runs — so the check and the rename
+are held together by an `flock` on the target's own descriptor. No lock file is created and the
+kernel drops it however the process exits, so a killed session leaves nothing to wedge.
+
+**`gt_spool.write_if_changed` had a shared temp name.** `<target>.gt-tmp` is deterministic, so
+two concurrent `gt_log merge` runs wrote the same scratch file and one rendered the other's
+partial bytes into `log.md`. It now uses a random name in the target's own directory, preserves
+the target's mode, and removes the temp file on any failure.
+
+**And the decision it was applied to is now a precondition.** `hand_written()` reads the file
+and decides which lines to rescue; `write_if_changed` then read it AGAIN and replaced it, so a
+save landing between the two reads was lost — not because the rescue failed, but because it had
+already been computed against bytes that no longer existed. `write_if_changed` takes an `expect`
+digest and returns a distinct `STALE` when the file has moved, and **`gt_log` and `gt_adr` pass
+it**, with a bounded retry that refuses loudly rather than either hanging or overwriting. Wiring
+it matters as much as having it: a capability nothing calls is this project's own signature
+defect. In `gt_adr` the window was worse, because that path REFUSES on hand-written lines —
+finding none and then clobbering the save that arrived a moment later defeated the refusal
+silently, in the one case it exists to catch.
+
+**`gt_lint --queue` stops eating the worklist, and preserves ticks rather than only backing them
+up.** The review queue is not a projection: a lint finding has no upstream checkbox, so a tick
+lived in that file and nowhere else, and the truncating write destroyed the only copy. A tick
+also carries the judgement recomputation cannot reach — triaged, accepting this one, not now.
+Ticks on still-open findings now carry across; a fixed finding stays gone and its old tick does
+not resurrect it; anything else that diverges is backed up and named.
+
+**`safe_write` stops claiming success for a degraded write.** When its atomic path failed it fell
+through to a plain truncating write and returned as though nothing had changed. It now reports
+`direct-degraded`, and the exception that forced it reaches stderr and the ledger instead of a
+bare `except: pass`. The fallback is kept deliberately — the defect was the silence, not the
+fallback — and the module now says plainly that it is not concurrency-safe, so its name is not
+read as a guarantee it does not offer.
+
+**The release gate runs on a machine that is not the author's.** `dev/release-check.sh` described
+itself as "the gate every check-in passes, ON THIS MACHINE, before a commit" — manual, local, and
+indistinguishable from not having run. A GitHub Actions workflow now runs it on every pull
+request and every push to main, and separately enforces that non-merge, non-bot commits carry a
+sign-off. Nothing new was written: the test suite, the submission validator, the doc-count gate
+and verify-source all already existed and were merely unwired.
+
+The gate also gained a third outcome. PDF freshness is an mtime comparison and git does not store
+mtimes, so in a fresh clone that check is meaningless — it would pass or fail on the order the
+runner happened to write files. It now reports **SKIP** rather than inventing a verdict: it does
+not raise the exit code, but it prints every time, so a clean run never quietly means "every
+check but one".
+
 ## gt 0.16.3 — 2026-09-17
 
 **Two writes that could destroy something without saying so.**

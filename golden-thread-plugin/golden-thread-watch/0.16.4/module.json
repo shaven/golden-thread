@@ -1,0 +1,50 @@
+{
+  "schema": 1,
+  "name": "watch",
+  "plugin": "gt-watch",
+  "version": "0.16.4",
+  "requires_gt": ">=0.16.4,<0.17.0",
+  "summary": "Upstream watch: follow git repos by cron and report their changes, P0 security fixes first, at session start",
+  "default": "on",
+  "skills": [
+    "gt-watch"
+  ],
+  "scripts": [
+    "gt_watch.py"
+  ],
+  "templates": [
+    "watch.md"
+  ],
+  "hooks": [
+    {
+      "event": "SessionStart",
+      "script": "gt_watch.py",
+      "args": [
+        "--hook"
+      ],
+      "kind": "reporter"
+    }
+  ],
+  "hookdir_scripts": [
+    "gt_watch.py"
+  ],
+  "settings": [
+    {
+      "key": "watch",
+      "default": "off",
+      "values": [
+        "off",
+        "report"
+      ],
+      "summary": "Watch upstream git repos (/gt-watch:gt-watch) and report their changes at session start.",
+      "detail": "off     no fetching and no report  (default)\nreport  the cron fetch runs, and session start lists unacknowledged upstream\n        changes: P0s first with repo and reason, review items one line each,\n        routine changes as a count\n\nA watch is a note in Projects/golden-thread/watches/. The fetch runs from cron\n(gt_watch.py install-cron), never from a session; the session-start hook only\nreads the local queue in ~/.claude/golden-thread/watch/. P0 comes from fixed\nrules -- a security advisory, a CVE or GHSA id, 'security fix' in a release --\nnever from a reading of commit prose, because a P0 that cries wolf stops being\nread. GT_WATCH=off|report in the environment overrides this setting."
+    }
+  ],
+  "requires_modules": [],
+  "replaces_core": [
+    "skills/gt-watch",
+    "scripts/gt_watch.py",
+    "templates/watch.md"
+  ],
+  "demo": "demo/act.md"
+}

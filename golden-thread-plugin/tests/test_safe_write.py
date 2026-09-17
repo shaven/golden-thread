@@ -53,6 +53,21 @@ class SafeWriteTest(Sandbox):
     def write(self, target, data, mode="w"):
         return self.sw_json("print(json.dumps(sw.write(%r, %r, %r)))" % (str(target), data, mode))
 
+    # Strategy 1 fails for real on some filesystems and never on this one, so the
+    # degradation tests force it: os.replace is the single call the atomic strategy
+    # cannot do without, and nothing else in write() uses it.
+    FORCE_ATOMIC_FAILURE = (
+        "def _no_replace(src, dst):\n"
+        "    raise OSError(5, 'forced: os.replace is unavailable here')\n"
+        "sw.os.replace = _no_replace\n")
+
+    def write_proc(self, target, data, mode="w", pre=""):
+        """Like write(), but returns the process so stderr can be inspected too."""
+        proc = self.sw(pre + "print(json.dumps(sw.write(%r, %r, %r)))"
+                       % (str(target), data, mode))
+        self.assertOk(proc, "driver failed")
+        return proc, json.loads(proc.stdout.strip().splitlines()[-1])
+
     def ledger(self):
         p = self.home / ".claude" / "safe_write_ledger.jsonl"
         if not p.exists():
@@ -165,14 +180,18 @@ class SafeWriteTest(Sandbox):
 
     # -- fallbacks and the ledger --------------------------------------------
     def test_writable_file_in_readonly_directory_is_written_direct(self):
+        # The atomic strategy needs a sibling temp file, so a read-only directory
+        # defeats it; the write still lands, but by truncating the file in place.
+        # It must say so: until 2026-09-17 this returned plain "direct".
         d = self.work / "rodir"
         d.mkdir()
         target = d / "f.txt"
         target.write_text("old\n")
         self.chmod(d, 0o555)
-        path, strategy = self.write(target, "new\n")
-        self.assertEqual(strategy, "direct")
+        proc, (path, strategy) = self.write_proc(target, "new\n")
+        self.assertEqual(strategy, "direct-degraded")
         self.assertEqual(target.read_text(), "new\n")
+        self.assertIn("safe_write: atomic write to", proc.stderr)
         self.assertEqual(self.ledger(), [])
 
     def test_unwritable_directory_lands_in_ledger_dir_and_replays(self):
@@ -223,6 +242,78 @@ class SafeWriteTest(Sandbox):
         self.assertIn("still-blocked", res[0][1])
         self.assertTrue(target.is_dir(), "replay deleted the target to make room")
         self.assertEqual((target / "inside.txt").read_text(), "keep\n")
+
+    # -- the fallback is visible, not silent (regression, 2026-09-17) ---------
+    # Strategy 1 (atomic) fell through to strategy 2 (truncate in place) under a
+    # bare `except Exception: pass`, returned the strategy name "direct" and
+    # discarded the reason. Callers were told the write was safe; nothing said it
+    # had stopped being atomic. These tests fail against that code.
+    def test_failed_atomic_reports_a_degraded_strategy_not_success(self):
+        target = self.work / "degraded.txt"
+        target.write_text("old\n")
+        proc, (path, strategy) = self.write_proc(target, "new\n",
+                                                 pre=self.FORCE_ATOMIC_FAILURE)
+        self.assertNotEqual(strategy, "atomic",
+                            "a non-atomic write was reported as atomic")
+        self.assertEqual(strategy, "direct-degraded",
+                         "the truncating fallback did not report that it had degraded")
+        self.assertEqual(Path(path), target.resolve())
+        self.assertEqual(target.read_text(), "new\n")
+
+    def test_failed_atomic_reports_the_reason_rather_than_discarding_it(self):
+        target = self.work / "why.txt"
+        proc, (_path, _strategy) = self.write_proc(target, "new\n",
+                                                   pre=self.FORCE_ATOMIC_FAILURE)
+        self.assertIn("safe_write", proc.stderr)
+        self.assertIn("OSError", proc.stderr,
+                      "the exception that defeated the atomic write was swallowed")
+        self.assertIn("forced: os.replace is unavailable here", proc.stderr,
+                      "the reason the atomic write failed never reached the caller")
+
+    def test_healthy_write_is_atomic_and_says_nothing(self):
+        # The other side of the contract: "atomic" must still mean atomic, and a
+        # write that did not degrade must not cry wolf on stderr.
+        target = self.work / "healthy.txt"
+        proc, (_path, strategy) = self.write_proc(target, "new\n")
+        self.assertEqual(strategy, "atomic")
+        self.assertNotIn("safe_write:", proc.stderr,
+                         "a perfectly good atomic write warned about degrading")
+
+    def test_degraded_ledger_entry_records_why_the_atomic_write_failed(self):
+        d = self.work / "rodir2"
+        d.mkdir()
+        target = d / "out.json"
+        self.chmod(d, 0o555)
+        _proc, (_path, strategy) = self.write_proc(target, '{"ok": 1}\n')
+        self.assertEqual(strategy, "ledger-dir")
+        led = self.ledger()
+        self.assertEqual(len(led), 1)
+        self.assertIn("why_not_atomic", led[0],
+                      "the ledger entry does not say why the atomic write failed")
+        self.assertTrue(led[0]["why_not_atomic"],
+                        "why_not_atomic is present but empty")
+
+    def test_append_protection_survives_a_failed_atomic_write(self):
+        # _existing_bytes() refuses rather than letting a failed append become a
+        # truncating write. Reporting degradation must not open that door: with the
+        # atomic strategy forced to fail, the truncating fallback is exactly what an
+        # unreadable target must NOT get.
+        sub = self.work / "locked2"
+        sub.mkdir()
+        target = sub / "precious.md"
+        target.write_text("do not lose this\n")
+        self.chmod(sub, 0o000)
+        proc = self.sw(self.FORCE_ATOMIC_FAILURE
+                       + "print(json.dumps(sw.write(%r, 'new line\\n', 'a')))" % str(target))
+        os.chmod(sub, 0o755)
+        self.assertNotEqual(proc.returncode, 0,
+                            "append to an unreadable target returned instead of refusing:\n"
+                            + proc.stdout)
+        self.assertIn("refusing", proc.stderr)
+        self.assertNotIn("direct-degraded", proc.stdout)
+        self.assertEqual(target.read_text(), "do not lose this\n",
+                         "the target was truncated or replaced")
+        self.assertEqual(self.ledger(), [])
 
 
 if __name__ == "__main__":

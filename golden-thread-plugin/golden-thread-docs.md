@@ -3,7 +3,7 @@
 > **Reader:** quick lookup, and the printed PDF
 > **Claims last checked against the code:** 2026-09-17 — see *The documents, and what belongs in each* in [`CLAUDE.md`](../CLAUDE.md).
 
-## Version gt 0.16.3 / gt-wiki 0.2.2 / gt-demo, gt-watch, gt-report-card, gt-farm, gt-flow 0.16.3
+## Version gt 0.16.4 / gt-wiki 0.2.2 / gt-demo, gt-watch, gt-report-card, gt-farm, gt-flow 0.16.4
 
 ---
 
@@ -31,10 +31,10 @@ Facts move up the hierarchy as they prove themselves general. They never move ba
 
 ---
 
-## Core Rules (gt 0.16.3)
+## Core Rules (gt 0.16.4)
 
 Golden Thread defines a tiered rule model that separates rules by scope and enforcement strength.
-**Ten Core rules ship as of 0.15.0** and remain ten in 0.16.3, up from one at 0.6.0 (the count read "seven" from 0.9.10 through 0.12.3, one behind the files):
+**Ten Core rules ship as of 0.15.0** and remain ten in 0.16.4, up from one at 0.6.0 (the count read "seven" from 0.9.10 through 0.12.3, one behind the files):
 
 | # | Rule |
 |---|---|

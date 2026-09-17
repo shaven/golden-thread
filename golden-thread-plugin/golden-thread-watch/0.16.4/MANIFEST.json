@@ -1,0 +1,14 @@
+{
+ "files": {
+  "scripts/gt_watch.py": {
+   "bytes": 35642,
+   "sha256": "f86a1b7e8721a1f792df5fb3cf8fb4319514ed0b3bc08c541fcf1951d1e313e0"
+  },
+  "templates/watch.md": {
+   "bytes": 1046,
+   "sha256": "445117b0bd07b0dbf1eee513f73515248c203fa0bfe95cb7e9ff7632781be7ac"
+  }
+ },
+ "generated": "2026-09-17T15:46:14",
+ "version": "0.16.4"
+}

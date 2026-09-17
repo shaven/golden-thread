@@ -1,0 +1,33 @@
+{
+  "schema": 1,
+  "slot": "filetype",
+  "name": "common",
+  "tier": "A",
+  "spdx": "MIT",
+  "provenance": {
+    "origin": "original",
+    "contributor": "Golden Thread <gt@example.com>",
+    "upstream": null
+  },
+  "dco": "Signed-off-by: Golden Thread <gt@example.com>",
+  "entries": [
+    {"match": "*.py", "lang": "python"},
+    {"match": "*.pyi", "lang": "python"},
+    {"match": "*.js", "lang": "javascript"},
+    {"match": "*.mjs", "lang": "javascript"},
+    {"match": "*.cjs", "lang": "javascript"},
+    {"match": "*.jsx", "lang": "javascript"},
+    {"match": "*.ts", "lang": "typescript"},
+    {"match": "*.tsx", "lang": "typescript"},
+    {"match": "*.go", "lang": "go"},
+    {"match": "*.rs", "lang": "rust"},
+    {"match": "*.sh", "lang": "shell"},
+    {"match": "*.bash", "lang": "shell"},
+    {"match": "*.zsh", "lang": "shell"},
+    {"match": "*.md", "lang": "markdown"},
+    {"match": "*.markdown", "lang": "markdown"},
+    {"match": "*.json", "lang": "json"},
+    {"match": "*.yml", "lang": "yaml"},
+    {"match": "*.yaml", "lang": "yaml"}
+  ]
+}

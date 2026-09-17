@@ -117,7 +117,7 @@
 <p><strong>Reader:</strong> quick lookup, and the printed PDF
 <strong>Claims last checked against the code:</strong> 2026-09-17 — see <em>The documents, and what belongs in each</em> in <a href="../CLAUDE.md"><code>CLAUDE.md</code></a>.</p>
 </blockquote>
-<h2 id="version-gt-0163-gt-wiki-022-gt-demo-gt-watch-gt-report-card-gt-farm-gt-flow-0163">Version gt 0.16.3 / gt-wiki 0.2.2 / gt-demo, gt-watch, gt-report-card, gt-farm, gt-flow 0.16.3</h2>
+<h2 id="version-gt-0164-gt-wiki-022-gt-demo-gt-watch-gt-report-card-gt-farm-gt-flow-0164">Version gt 0.16.4 / gt-wiki 0.2.2 / gt-demo, gt-watch, gt-report-card, gt-farm, gt-flow 0.16.4</h2>
 <hr />
 <p>Golden Thread turns an Obsidian vault into the single source of truth for all AI memory across every project and every session. The tiered rule model introduced in v0.6.0 now carries <strong>ten hook-backed Core rules</strong> enforced at three points in the turn, 0.9.12 added <code>gt-route</code> for the middle of a session, and 0.9.13 makes the session-start component check verify that the hooks are <strong>wired</strong>, not merely installed, 0.11.0 makes <code>log.md</code> and <code>decisions.md</code> generated files so concurrent sessions cannot overwrite one another, 0.12.3 stops a vault tool running against a vault it was never told to touch, 0.12.4 makes parallel execution the default for divisible work in every project, 0.12.5 stops code being committed before its tests have been seen to pass, 0.13.0 makes an upgrade from any older release end where a fresh install would, 0.14.0 splits optional parts into modules you can decline, and 0.15.0 makes six of them — gt-wiki 0.2.1 (an LLM-powered knowledge base with immutable sources and interlinked pages), gt-demo (the guided tour), gt-watch (upstream repos), gt-report-card (the session report card), gt-farm (work packets for an external AI) and the new gt-flow, which draws the vault's event stream as a timeline of knowledge climbing the ladder. 0.16.0 gave contributed <strong>packs</strong> — plain JSON data, reviewed and merged, never third-party code — somewhere to come from and something to read them, shipping <code>gt-scan</code>, <code>gt-optimize</code>, <code>gt-handoff</code>, <code>gt-allin</code> and <code>gt-allin-commit</code>; 0.16.1 added <code>gt-context</code> (the first consumer of the registry's model-reachable tier) and <code>gt-validation</code> (a verification receipt that goes stale when the file it describes changes); and 0.16.2 re-asserts the Core rules after a compaction as well as on every prompt, lets a module hook declare a <code>timeout</code>, and refuses a copyleft licence by its current SPDX spelling; 0.16.3 makes <code>install.sh</code> refuse when MANIFEST.json is tracked but missing rather than regenerating one, and stops <code>gt_tasks.py</code> overwriting TASKS.md in silence.</p>
 <hr />
@@ -135,9 +135,9 @@ global-memory/  (loaded in every session, all projects)
 </code></pre>
 <p>Facts move up the hierarchy as they prove themselves general. They never move back down and are never silently deleted.</p>
 <hr />
-<h2 id="core-rules-gt-0163">Core Rules (gt 0.16.3)</h2>
+<h2 id="core-rules-gt-0164">Core Rules (gt 0.16.4)</h2>
 <p>Golden Thread defines a tiered rule model that separates rules by scope and enforcement strength.
-<strong>Ten Core rules ship as of 0.15.0</strong> and remain ten in 0.16.3, up from one at 0.6.0 (the count read "seven" from 0.9.10 through 0.12.3, one behind the files):</p>
+<strong>Ten Core rules ship as of 0.15.0</strong> and remain ten in 0.16.4, up from one at 0.6.0 (the count read "seven" from 0.9.10 through 0.12.3, one behind the files):</p>
 <table>
 <thead>
 <tr>

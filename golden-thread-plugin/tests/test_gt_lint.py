@@ -366,6 +366,108 @@ class SuppressionAndQueueTest(LintBase):
         self.assertFalse(q.exists())
 
 
+# ------------------------------------------------------- the queue is a worklist, not a projection
+class QueueIsHumanWorkTest(LintBase):
+    """--queue writes a file a PERSON works through between runs (skills/gt-lint points it
+    at <vault>/review-queue.md, which gt-open reports on and gt-promote appends to). A bare
+    truncating write destroyed every tick with nothing said, and could tear the file.
+
+    Unlike TASKS.md there is no upstream copy of a tick -- findings are recomputed from the
+    vault and the writer hard-codes `- [ ]` -- so ticks are carried across, not just backed up.
+    """
+
+    DIGESTS = "Projects/golden-thread/.lint-queue-digests"
+    BACKUPS = "Projects/golden-thread/backups"
+
+    def setUp(self):
+        super().setUp()
+        self.w("Knowledge/Lonely.md", "x\n")     # one page, two findings: index-gap + orphan
+        self.q = self.tmp / "queue.md"
+
+    def run_lint(self):
+        return self.lint("--queue", self.q)[0]
+
+    def backups(self):
+        d = self.v / self.BACKUPS
+        return sorted(d.glob("queue.md.*")) if d.exists() else []
+
+    def tick_everything(self):
+        self.q.write_text(self.q.read_text(encoding="utf-8").replace("- [ ] ", "- [x] "),
+                          encoding="utf-8")
+
+    def test_an_untouched_queue_regenerates_silently_with_no_backup(self):
+        """The warning has to be rare enough to mean something."""
+        self.run_lint()                                  # seeds the queue and the receipt
+        proc = self.run_lint()                           # nothing touched it since
+        self.assertNotIn("not what this tool last generated", proc.stdout + proc.stderr)
+        self.assertEqual(self.backups(), [],
+                         "an untouched worklist must not accumulate a backup on every run")
+
+    def test_a_ticked_item_survives_the_next_run(self):
+        self.run_lint()
+        self.tick_everything()
+        before = self.q.read_text(encoding="utf-8")
+        self.assertIn("- [x] `Knowledge/Lonely.md`", before)
+        proc = self.run_lint()
+        after = self.q.read_text(encoding="utf-8")
+        self.assertNotIn("- [ ] `Knowledge/Lonely.md`", after,
+                         "a tick was silently erased: the queue is the only copy of it")
+        self.assertEqual(after.count("- [x] `Knowledge/Lonely.md`"),
+                         before.count("- [x] `Knowledge/Lonely.md`"))
+        out = proc.stdout + proc.stderr
+        self.assertIn("not what this tool last generated", out)
+        self.assertIn("carried into the regenerated queue", out)
+
+    def test_a_hand_edited_queue_is_backed_up_and_reported(self):
+        self.run_lint()
+        self.q.write_text(self.q.read_text(encoding="utf-8") + "\n- a note I typed here\n",
+                          encoding="utf-8")
+        proc = self.run_lint()
+        out = proc.stdout + proc.stderr
+        self.assertIn("not what this tool last generated", out)
+        self.assertIn("kept a copy", out, "a backup nobody is told about is not a backup")
+        kept = self.backups()
+        self.assertEqual(len(kept), 1, f"expected exactly one copy, got {kept}")
+        self.assertIn("a note I typed here", kept[0].read_text(encoding="utf-8"))
+
+    def test_a_pre_existing_queue_with_no_receipt_is_kept_not_overwritten(self):
+        self.q.write_text("# Vault Review Queue\n\nsomething from before this check existed\n",
+                          encoding="utf-8")
+        proc = self.run_lint()
+        out = proc.stdout + proc.stderr
+        self.assertIn("no previous digest recorded", out)
+        kept = self.backups()
+        self.assertEqual(len(kept), 1, f"expected exactly one copy, got {kept}")
+        self.assertIn("something from before", kept[0].read_text(encoding="utf-8"))
+
+    def test_a_tick_on_a_finding_that_is_gone_does_not_come_back(self):
+        self.w("Knowledge/Other.md", "x\n")                # a second defect keeps the queue alive
+        self.run_lint()
+        self.tick_everything()
+        self.index("Lonely")                               # fixes Lonely's index-gap and orphan
+        self.run_lint()
+        text = self.q.read_text(encoding="utf-8")
+        self.assertNotIn("Knowledge/Lonely.md", text,
+                         "a fixed finding must not be resurrected by its old tick")
+        self.assertIn("- [x] `Knowledge/Other.md`", text,
+                      "the still-open finding keeps the tick the person made")
+
+    def test_the_receipt_is_recorded_per_queue_path(self):
+        self.run_lint()
+        d = self.v / self.DIGESTS
+        self.assertTrue(d.is_file(), "no generation receipt written")
+        data = json.loads(d.read_text(encoding="utf-8"))
+        self.assertIn(str(self.q.resolve()), data, data)
+        self.assertRegex(data[str(self.q.resolve())], r"^[0-9a-f]{64}$")
+
+    def test_no_temp_file_is_left_behind(self):
+        """The write is atomic (tmp + fsync + replace) so a torn worklist never exists --
+        but a leftover tmp beside it would be its own mess."""
+        self.run_lint()
+        self.run_lint()
+        self.assertEqual(list(self.q.parent.glob("queue.md.gt-tmp*")), [])
+
+
 # ---------------------------------------------------------------------------- --json
 class JsonOutputTest(LintBase):
     def test_json_parses_and_matches_text_mode(self):
