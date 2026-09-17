@@ -1150,7 +1150,39 @@ strip_gt_demo() {  # $1 = a gt plugin dir (cache or marketplace)
 # gets overridden by reflex and then ignored.
 verify_source_tree() {
   [ -f "$SRC/scripts/gt_components.py" ] || return 0
-  [ -f "$SRC/MANIFEST.json" ] || return 0        # written later, when absent
+  if [ ! -f "$SRC/MANIFEST.json" ]; then
+    # ABSENT IS NOT AUTOMATICALLY INNOCENT. Until 0.16.2 a missing manifest returned 0 here
+    # and was regenerated further down, so deleting MANIFEST.json produced a self-consistent
+    # manifest describing whatever was in the tree -- a cheaper attack than tampering, since
+    # tampering has to survive a comparison and deletion removes the comparison.
+    #
+    # But absence is LEGITIMATE for a zip install: package.sh deliberately does not ship the
+    # manifest, precisely so a stale one cannot report drift that does not exist. So refusing
+    # every absence would break the normal distribution path.
+    #
+    # The two cases are distinguishable. A git checkout TRACKS the manifest; a zip has no git
+    # at all. A tree that tracks a manifest and does not have one has had it removed, and
+    # regenerating there would bless exactly what the check exists to catch.
+    if git -C "$SRC" ls-files --error-unmatch MANIFEST.json >/dev/null 2>&1; then
+      echo ""
+      echo "REFUSING TO INSTALL — MANIFEST.json is tracked in this tree but is not on disk"
+      echo ""
+      echo "This source is a git checkout, so the manifest is a committed file that something"
+      echo "has removed. Regenerating it here would hash whatever is in the tree right now and"
+      echo "call the result verified -- which is the one outcome the component check exists to"
+      echo "prevent, reached by deleting the check rather than defeating it."
+      echo ""
+      echo "  Restore it:        git -C \"$SRC\" checkout -- MANIFEST.json"
+      echo "  Meant to cut a new release?  python3 dev/plugins.py manifest \"$SRC\""
+      exit 6
+    fi
+    # No git: a zip install, where regenerating is correct. Say so anyway -- the component
+    # check is not running, and a check that could not run must never read as one that passed.
+    echo "No MANIFEST.json in the source and no git to restore one from (a packaged install)."
+    echo "  The component check CANNOT RUN against this tree; a manifest will be written from"
+    echo "  the files laid down, and verification starts from the NEXT install, not this one."
+    return 0
+  fi
   # `set -e` aborts on a failing command substitution, so the status must be captured in
   # the same statement. The first version wrote `OUT=$(...)` then `RC=$?` on the next
   # line, and every refusal killed the script with the helper's own exit code before the
@@ -1185,9 +1217,44 @@ verify_source_tree() {
        echo "                          then re-run this installer"
        echo "  Installing anyway?      ./install.sh --force-manifest-mismatch"
        exit 6 ;;
-    *) echo "Manifest check could not run (exit $rc) — continuing:"
+    5) # VERIFY_NO_MANIFEST from verify_source itself: the file EXISTS (the absent case
+       # returned earlier) but could not be read or parsed. Truncated, corrupt, or not JSON.
+       if [ "$FORCE_MANIFEST" = yes ]; then
+         echo "⚠ MANIFEST.json is present but unreadable — overridden by --force-manifest-mismatch"
+         printf '%s\n' "$out" | sed 's/^/  /'
+         return 0
+       fi
+       echo ""
+       echo "REFUSING TO INSTALL — MANIFEST.json is present but could not be read"
        printf '%s\n' "$out" | sed 's/^/  /'
-       return 0 ;;
+       echo ""
+       echo "A manifest that cannot be parsed compares against nothing, so every file would"
+       echo "install unverified. That is the same outcome as having no manifest, reached by a"
+       echo "different route, and until 0.16.3 it printed 'continuing' and did exactly that."
+       echo ""
+       echo "  Restore it:    git -C \"$SRC\" checkout -- MANIFEST.json"
+       echo "  Regenerate:    python3 dev/plugins.py manifest \"$SRC\""
+       echo "  Install anyway: ./install.sh --force-manifest-mismatch"
+       exit 6 ;;
+    *) # An exit code this installer does not know: gt_components.py crashed, python3 is
+       # missing, or a future release added a verdict this one predates. Whatever it was,
+       # THE CHECK DID NOT RUN -- which is not the same as the check passing, and saying
+       # "continuing" made the two indistinguishable in the one place it matters most.
+       if [ "$FORCE_MANIFEST" = yes ]; then
+         echo "⚠ Manifest check could not run (exit $rc) — overridden by --force-manifest-mismatch"
+         printf '%s\n' "$out" | sed 's/^/  /'
+         return 0
+       fi
+       echo ""
+       echo "REFUSING TO INSTALL — the manifest check could not run (exit $rc)"
+       printf '%s\n' "$out" | sed 's/^/  /'
+       echo ""
+       echo "This installer understands exit 0, 3, 4 and 5 from verify-source. Anything else"
+       echo "means the check itself failed rather than reaching a verdict, so nothing here has"
+       echo "been verified. A check that could not run is not a check that passed."
+       echo ""
+       echo "  Install anyway: ./install.sh --force-manifest-mismatch"
+       exit 6 ;;
   esac
 }
 verify_source_tree
@@ -1405,9 +1472,17 @@ fi
 if [ -f "$SRC/scripts/gt_components.py" ]; then
   if [ -f "$SRC/MANIFEST.json" ]; then
     echo "Component MANIFEST present → left untouched (verified by dev/release-check.sh)"
+  elif git -C "$SRC" ls-files --error-unmatch MANIFEST.json >/dev/null 2>&1; then
+    # Unreachable in a normal run -- verify_source_tree refuses this case before we get here.
+    # Kept as a second, independent refusal rather than a comment: the generate step is what
+    # would actually do the damage, and a guard that depends on an earlier guard still running
+    # is one edit away from being no guard at all.
+    echo "NOT writing a MANIFEST: it is tracked in this tree and missing from disk."
+    echo "  Restore it with: git -C \"$SRC\" checkout -- MANIFEST.json"
+    exit 6
   else
     python3 "$SRC/scripts/gt_components.py" manifest "$SRC" >/dev/null 2>&1 \
-      && echo "Wrote component MANIFEST → $SRC/MANIFEST.json  (none was present)"
+      && echo "Wrote component MANIFEST → $SRC/MANIFEST.json  (none was present, no git)"
   fi
 
 fi

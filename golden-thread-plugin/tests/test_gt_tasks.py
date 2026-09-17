@@ -132,6 +132,56 @@ class GtTasksTest(Sandbox):
         self.assertIn("fine task", (self.vault / "TASKS.md").read_text())
 
 
+    # -- a hand edit is still discarded, but no longer in silence (0.16.3) -----------------
+    #
+    # TASKS.md is a projection: a tick made here was never going to survive, by design. The
+    # defect was that it was discarded SILENTLY by a bare truncating write, with no record of
+    # what this tool had produced -- so a person could not tell a regeneration from their own
+    # edit going missing.
+
+    DIGEST = "Projects/golden-thread/.tasks-digest"
+    BACKUPS = "Projects/golden-thread/backups"
+
+    def test_a_clean_regeneration_says_nothing_and_keeps_no_backup(self):
+        """The warning has to be rare enough to mean something."""
+        self.project("alpha", tasks=["- [ ] do it [p:: 2]"])
+        self.run_rollup()                                   # seeds the digest
+        proc = self.py(self.tool, "--vault", self.vault)    # nothing touched it since
+        self.assertNotIn("not what this tool last generated", proc.stdout + proc.stderr)
+        self.assertFalse((self.vault / self.BACKUPS).exists(),
+                         "an untouched file must not accumulate a backup on every run")
+
+    def test_a_hand_edit_is_backed_up_and_reported(self):
+        self.project("alpha", tasks=["- [ ] do it [p:: 2]"])
+        self.run_rollup()
+        target = self.vault / "TASKS.md"
+        target.write_text(target.read_text() + "\n- [x] I ticked this by hand\n",
+                          encoding="utf-8")
+        proc = self.py(self.tool, "--vault", self.vault)
+        out = proc.stdout + proc.stderr
+        self.assertIn("not what this tool last generated", out)
+        self.assertIn("README.md", out, "must say where the edit actually belongs")
+        kept = list((self.vault / self.BACKUPS).glob("TASKS.md.*"))
+        self.assertEqual(len(kept), 1, "exactly one copy of the edited file")
+        self.assertIn("I ticked this by hand", kept[0].read_text(encoding="utf-8"))
+        self.assertNotIn("I ticked this by hand", target.read_text(encoding="utf-8"),
+                         "the projection is still regenerated -- the edit does not survive")
+
+    def test_the_digest_is_recorded_so_the_next_run_is_quiet(self):
+        self.project("alpha", tasks=["- [ ] do it [p:: 2]"])
+        self.run_rollup()
+        d = self.vault / self.DIGEST
+        self.assertTrue(d.is_file(), "no generation receipt written")
+        self.assertRegex(d.read_text(encoding="utf-8").strip(), r"^[0-9a-f]{64}$")
+
+    def test_no_temp_file_is_left_behind(self):
+        """The write is atomic (tmp + fsync + replace) so a torn TASKS.md never exists --
+        but a leftover tmp at the vault root would be its own mess."""
+        self.project("alpha", tasks=["- [ ] do it [p:: 2]"])
+        self.run_rollup()
+        self.assertEqual(list(self.vault.glob("TASKS.md.gt-tmp*")), [])
+
+
 class EscalationTest(Sandbox):
     """effective(): PP0 only via an open window; soft rules floor at PP1."""
 

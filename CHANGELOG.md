@@ -11,6 +11,35 @@ release's own summary line, kept short rather than reconstructed after the fact.
 
 ---
 
+## gt 0.16.3 — 2026-09-17
+
+**Two writes that could destroy something without saying so.**
+
+**`install.sh` refuses when MANIFEST.json is tracked but missing.** A missing manifest used to
+return clean and be regenerated further down, so deleting it produced a self-consistent manifest
+describing whatever was in the tree — a cheaper attack than tampering, because tampering has to
+survive a comparison and deletion removes the comparison. Absence is legitimate for a packaged
+install (`package.sh` deliberately does not ship the manifest, so a stale one cannot report drift
+that does not exist), and the two cases are distinguishable: a git checkout *tracks* the manifest,
+a zip has no git at all. A tree that tracks one and does not have it has had it removed, and
+regenerating there would bless exactly what the check exists to catch. The packaged path still
+works and now **says out loud** that the component check could not run against that tree, because
+a check that did not run must never read as one that passed.
+
+**`gt_tasks.py` no longer overwrites `TASKS.md` in silence.** It wrote the vault-root rollup with
+a bare truncating `write_text`: no record of what it had produced, no atomicity, and none of the
+`is_generated` / `hand_written` handling its siblings `gt_log.py` and `gt_adr.py` have. A person
+ticking a checkbox lost it at the next run with nothing said, and a crash or a sync mid-write
+could leave a torn or empty file at the vault root.
+
+The fix is a **generation receipt**: the digest of what was last generated is recorded, and a file
+that differs from it is copied aside *before* being replaced, with a message naming where the edit
+actually belongs. `TASKS.md` is a projection — a tick there was never going to survive, by design
+— so the defect was never that the edit is discarded, only that it was discarded invisibly. The
+write is now atomic (tmp + fsync + `os.replace`), which prevents the torn file rather than making
+it recoverable: the half-written state never exists. An unchanged file stays silent and accrues no
+backups, so the warning keeps its meaning.
+
 ## gt 0.16.2 — 2026-09-17
 
 **Two places the machinery could go quiet without saying so, and a refusal that gave the

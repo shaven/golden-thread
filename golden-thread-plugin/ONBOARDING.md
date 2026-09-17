@@ -5,7 +5,7 @@
 
 A guided walkthrough for your first session. Six steps, ~15 minutes.
 
-**Requirements:** Python 3.8+, Claude Code installed. Written against **gt v0.16.2**.
+**Requirements:** Python 3.8+, Claude Code installed. Written against **gt v0.16.3**.
 
 ---
 
