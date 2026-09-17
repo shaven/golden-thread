@@ -92,15 +92,44 @@ class ProtectedPathsTest(Sandbox):
         hso = self.assertAsk(self.guard(p / "naming.mine.pack.json"))
         self.assertIn("packs", hso["permissionDecisionReason"])
 
+    def _case_insensitive(self, probe_dir):
+        """Does THIS filesystem fold case? Asked, never assumed.
+
+        The guard compares file identity (st_dev, st_ino), so it INHERITS the volume's
+        semantics rather than imposing its own -- and that is right in both directions. On
+        APFS/exFAT, PACKS/ and packs/ are one inode, so a case variant reaches the protected
+        tier and must be caught. On ext4 they are two directories; the variant is not the
+        local pack tier gt_registry reads, so there is nothing behind that spelling to bypass.
+
+        This test assumed the macOS answer and so failed the first time the suite ran on Linux
+        (CI, 2026-09-17). Detecting keeps a real assertion on both platforms rather than
+        skipping one.
+        """
+        probe = probe_dir / "gt-case-probe"
+        probe.mkdir(parents=True, exist_ok=True)
+        return (probe_dir / "GT-CASE-PROBE").is_dir()
+
     def test_local_packs_guard_survives_a_case_variant_spelling(self):
         """realpath returns the CALLER's spelling on a case-insensitive volume, which is how
         Global-Memory/ and CORE-RULES/ slipped through in 0.15.0. Same path, same trap."""
         p = self.vault / "Projects" / "golden-thread" / "packs"
         p.mkdir(parents=True, exist_ok=True)
-        self.assertAsk(self.guard(
-            f"{self.vault}/Projects/golden-thread/PACKS/naming.mine.pack.json"))
+
+        # Filesystem-independent: `..` normalises to the real packs/ on any volume.
         self.assertAsk(self.guard(
             f"{self.vault}/Projects/alpha/../../Projects/golden-thread/packs/x.pack.json"))
+
+        if self._case_insensitive(self.vault / "Projects" / "golden-thread"):
+            self.assertAsk(
+                self.guard(f"{self.vault}/Projects/golden-thread/PACKS/naming.mine.pack.json"),
+                "a case variant reaches the same inode on this volume and must ask")
+        else:
+            # Case-sensitive: PACKS/ is a different directory and gt_registry never reads it
+            # as the local tier. Assert the correctly-spelled path still asks, so this branch
+            # proves something rather than merely tolerating a difference.
+            self.assertAsk(
+                self.guard(f"{self.vault}/Projects/golden-thread/packs/naming.mine.pack.json"),
+                "the correctly-spelled local pack path must still ask")
 
     def test_edit_core_rule_asks(self):
         hso = self.assertAsk(self.guard(self.core / "core_example.md", tool="Edit"))

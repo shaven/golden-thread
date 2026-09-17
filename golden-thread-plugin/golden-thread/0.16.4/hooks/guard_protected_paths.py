@@ -36,6 +36,16 @@ before 0.15.1 the string compare missed them and the write got no prompt. Where 
 does not exist yet (a new file), the nearest existing ancestor's identity is used; a
 last-resort string compare uses NFC + casefold, never str.lower().
 
+THAT PROTECTION IS INHERITED FROM THE VOLUME, NOT IMPOSED BY THIS GUARD, and the two are
+worth telling apart. Identity matching catches a case variant *because the filesystem makes
+both spellings one inode*. On a case-SENSITIVE volume (ext4, and so most Linux) `PACKS/` is
+a different directory from `packs/` -- the guard does not fire, and should not: nothing reads
+that spelling as the local pack tier, so there is no protected content behind it to reach.
+The guarantee is therefore "a variant that resolves to protected content is caught", which is
+the true statement on every volume; "case variants are caught" is only true where the volume
+folds case. Found when the suite first ran on Linux (CI, 2026-09-17) against a test that had
+encoded the macOS answer as universal.
+
 CORE RULES LOCATION: the default Projects/golden-thread/core-rules, the recorded
 vault-config.json:core_rules_path, and -- mirroring gt_paths.find_core_rules' search --
 any ancestor directory named core-rules that holds the marker model file. The ancestor

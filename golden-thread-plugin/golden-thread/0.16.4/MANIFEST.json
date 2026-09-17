@@ -1,8 +1,8 @@
 {
  "files": {
   "hooks/guard_protected_paths.py": {
-   "bytes": 11694,
-   "sha256": "ab0c70ae63dde22075011ae0d8a332ca1082571e7f06b103eb358eda00ef9d64"
+   "bytes": 12472,
+   "sha256": "5a788a0fbe49d88facd3a111ee2147549f758062c77c8731e512c23fda40b991"
   },
   "hooks/guard_protected_paths.sh": {
    "bytes": 1769,
@@ -337,7 +337,7 @@
    "sha256": "36afca49ff7263e1fd2230116d4fb3d7324c5e236a5053d940061dc09f680bfc"
   }
  },
- "generated": "2026-09-17T15:47:04",
+ "generated": "2026-09-17T16:22:51",
  "hooks": [
   {
    "args": [
