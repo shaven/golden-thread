@@ -159,8 +159,44 @@ class SubmissionsTest(unittest.TestCase):
             "upstream": {"name": "trufflehog", "version": "3", "spdx": "AGPL-3.0"}}),
             "licence-refused")
 
+    def test_current_spdx_copyleft_forms_refused_as_copyleft(self):
+        """The deprecated short forms were the only ones listed, so `GPL-3.0-or-later` -- what a
+        modern licence scanner emits -- was refused by the allowlist falling closed, with the
+        reason `licence-unknown`. Refused either way, but the contributor read "not in the
+        allowed list" and asked for it to be added instead of reading "copyleft" and stopping.
+        The reason is the thing under test here, not the refusal."""
+        for spdx, why in (("GPL-3.0-or-later", "copyleft"), ("GPL-3.0-only", "copyleft"),
+                          ("GPL-2.0-or-later", "copyleft"), ("LGPL-3.0-only", "copyleft"),
+                          ("AGPL-3.0-only", "network copyleft"),
+                          ("AGPL-3.0-or-later", "network copyleft")):
+            self.assertReject(pack(spdx=spdx), "licence-refused", spdx)
+            r = self.run_validate(pack(spdx=spdx))
+            self.assertIn(why, r.stdout, "%s must say %r" % (spdx, why))
+            self.assertNotIn("licence-unknown", r.stdout,
+                             "%s fell through to the allowlist instead of being named "
+                             "copyleft" % spdx)
+
+    def test_current_spdx_copyleft_upstream_refused_as_copyleft(self):
+        r = self.run_validate(pack(provenance={
+            "origin": "adapted", "contributor": "A Dev <dev@example.com>",
+            "upstream": {"name": "trufflehog", "version": "3", "spdx": "AGPL-3.0-or-later"}}))
+        self.assertEqual(r.returncode, 2, r.stdout)
+        self.assertIn("licence-refused", r.stdout)
+        self.assertIn("network copyleft", r.stdout)
+        self.assertNotIn("licence-unknown", r.stdout)
+
+    def test_spdx_list_version_is_recorded(self):
+        """A refusal rule is only as reproducible as the list it was read against."""
+        src = SCRIPT.read_text(encoding="utf-8")
+        self.assertIn("SPDX_LIST_VERSION", src)
+
     def test_unknown_licence_refused(self):
         self.assertReject(pack(spdx="WTFPL"), "licence-unknown")
+
+    def test_allowlist_still_fails_closed(self):
+        """REFUSED_SPDX explains the common cases; the ALLOWLIST is what refuses. A copyleft
+        identifier nobody thought to list must still be refused, just without the reason."""
+        self.assertReject(pack(spdx="GPL-1.0-or-later"), "licence-unknown")
 
     # -- provenance and DCO --------------------------------------------------------------
     def test_missing_dco_refused(self):

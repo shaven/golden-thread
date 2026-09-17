@@ -1602,11 +1602,11 @@ for r in regs:
     if r.get('module') in off_mods:
         off_scripts.setdefault(r['script'], r['module'])
 regs = [r for r in regs if r.get('module') not in off_mods]
-want = [(r['event'], r['script'], r['command'])
+want = [(r['event'], r['script'], r['command'], r.get('matcher'), r.get('timeout'))
         for r in regs if r.get('owner') == 'install.sh']
 
 changed = []
-for event, script, cmd in want:
+for event, script, cmd, matcher, timeout in want:
     arr = hooks.setdefault(event, [])
     # Replace the entry for THIS script only, not every golden-thread entry for the
     # event -- SessionStart has four, and wiping by event would delete the
@@ -1614,7 +1614,17 @@ for event, script, cmd in want:
     arr[:] = [e for e in arr
               if not any(script in (h.get('command') or '')
                          for h in e.get('hooks', []))]
-    arr.append({'hooks': [{'type': 'command', 'command': cmd}]})
+    # `timeout` sits on the HOOK, `matcher` on the BLOCK -- that is Claude Code's shape,
+    # not a choice made here. Both are omitted when unset so an entry that wants neither
+    # is byte-identical to what every release before 0.16.2 wrote; an upgrade that changes
+    # nothing should show as changing nothing.
+    entry = {'type': 'command', 'command': cmd}
+    if timeout is not None:
+        entry['timeout'] = timeout
+    block = {'hooks': [entry]}
+    if matcher is not None:
+        block['matcher'] = matcher
+    arr.append(block)
     changed.append('%s/%s' % (event, script))
 
 # Prune entries an OLDER release wired and this one dropped (0.13.0). Until now the

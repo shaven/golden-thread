@@ -1,7 +1,7 @@
 # Golden Thread
 
 > **Reader:** someone who has never heard of Golden Thread
-> **Claims last checked against the code:** 2026-09-16 — see *The documents, and what belongs in each* in [`CLAUDE.md`](CLAUDE.md).
+> **Claims last checked against the code:** 2026-09-17 — see *The documents, and what belongs in each* in [`CLAUDE.md`](CLAUDE.md).
 
 A memory system for AI coding sessions, built on plain markdown and git — and,
 unusually, one where the rules that matter most are **mechanically enforced** rather
@@ -15,13 +15,31 @@ it at startup, look things up while working, and write back what they learn.
 Its distinguishing idea is the second problem, the one most memory systems never
 address: **writing a rule down does not mean it gets followed.**
 
-Plugin **v0.16.1**. Ten Core rules currently enforced, five of them *validated* — a
+Plugin **v0.16.2**. Ten Core rules currently enforced, five of them *validated* — a
 hook inspects the finished reply (`Stop`) or the tool call about to run (`PreToolUse`)
 and blocks it if the rule was broken.
 
 
 > [!IMPORTANT]
-> **0.16.0 gives the definitions somewhere to come from, and something to read them.**
+> **0.16.2 closes the seam where the rules went quiet.** Context a hook adds does not
+> survive compaction — project-root `CLAUDE.md` is re-injected from disk, hook context is
+> summarised with everything else — so for the remainder of a turn in which auto-compaction
+> fired, the Core rules were present only as whatever the summariser kept. They are now
+> re-asserted on `SessionStart`/`compact` as well as every prompt. The mechanical tier was
+> never affected: `PreToolUse` guards and the `Stop` validator are commands, not context.
+>
+> Also: `SessionEnd` hooks share a 1.5-second budget, and a hook that overruns is cancelled
+> with its **output discarded** — a report card could have started truncating invisibly. Hooks
+> can now declare a `timeout`. And the copyleft refusal knows the current SPDX spellings, so
+> `GPL-3.0-or-later` is refused *as copyleft* rather than as an unrecognised identifier.
+>
+> **`/gt:gt-context` is explicit that its envelope is not a security control.** Published work
+> (arXiv:2503.00061) broke all eight defences it tested, above 50% attack success in every
+> case. The envelope makes content identifiable as someone's definition; what actually protects
+> you is that packs are reviewed before merge.
+
+> [!NOTE]
+> **0.16.0 gave the definitions somewhere to come from, and something to read them.**
 > Golden Thread has **no plugin runtime** — nobody's code runs on your machine as a
 > third-party add-on. Contributions arrive as **packs**: plain JSON data, reviewed and
 > merged into gt itself, after which they are first-party and held to the same release
@@ -147,7 +165,7 @@ costly, so a broken hook announces itself.
 
 | Path | What it is |
 |---|---|
-| `golden-thread-plugin/golden-thread/<ver>/` | The `gt` plugin — 16 skills, scripts, templates, hooks |
+| `golden-thread-plugin/golden-thread/<ver>/` | The `gt` plugin — 23 skills, scripts, templates, hooks, packs |
 | `golden-thread-plugin/golden-thread-wiki/<ver>/` | Module `wiki` (plugin `gt-wiki`) — 5 skills for LLM wiki vaults |
 | `golden-thread-plugin/golden-thread-demo/<ver>/` | Module `demo` (plugin `gt-demo`) — the guided PizzaBot 3000 tour |
 | `golden-thread-plugin/golden-thread-watch/<ver>/` | Module `watch` (plugin `gt-watch`) — follow upstream git repos, P0 on a security fix |
@@ -186,7 +204,7 @@ bash golden-thread-plugin/install.sh --vault <path>
 # then restart Claude Code — plugins and hooks load at session start
 ```
 
-That installs gt and every **module** that is on. Six ship with 0.15.0: `wiki`, `demo`,
+That installs gt and every **module** that is on. Six ship: `wiki`, `demo`,
 `watch`, `report-card` and `flow` are on by default; `farm` is off for a fresh install and
 kept on when you upgrade from a gt that had `/gt:gt-farm`. Choose with `--list-modules`,
 `--without <name>` and `--with <name>`; the choice is remembered. Re-running it upgrades from any older release to
@@ -211,7 +229,7 @@ cannot be reached and the rules are not loaded — the banner names the cause.
 
 ## The skills
 
-Sixteen skills in gt, plus the skills of its modules (listed after gt's own). Each composes through files rather than through other skills, so
+Twenty-three skills in gt, plus the skills of its modules (listed after gt's own). Each composes through files rather than through other skills, so
 removing any one leaves the rest working.
 
 | Skill | What it does |
@@ -236,7 +254,7 @@ removing any one leaves the rest working.
 | `gt-validation` | Writes down what a validation established about a file, including what it could NOT determine, stamped with the file's content hash. Edit the file and the recorded definition goes visibly stale — because every serious defect this project has shipped was a claim that outlived its implementation. |
 | `gt-allin-commit` | The separate, deliberate act of committing — kept apart from the sweep so a routine check is never also a write. It verifies a passing test receipt covers every staged file, refuses when a check could not run at all, and stops at the commit: a commit is reversible here, a push is fetched by other people. |
 | `gt-handoff` | Hands the next session what it needs and marks what it must not assume. Facts carry their source and verification state; the design narrative is left blank for the person who did the work, because a handoff that reads finished when it is not gives the next session false confidence instead of none. |
-| `gt-settings` | Shows and changes everything the plugin does on its own — component drift checking, the version check, orphaned-worker detection, the unpushed-commit check, and the settings each installed module adds (the report card, the upstream watch). Every automatic behaviour is registered here and every one can be switched off. |
+| `gt-settings` | Shows and changes everything the plugin does on its own — component drift checking, the version check, orphaned-worker detection, the unpushed-commit check, the pre-commit test gate, the parallel-work budget, the protected-path prompt, and the settings each installed module adds (the report card, the close-out question, the upstream watch). Every automatic behaviour is registered here and every one can be switched off. |
 | `gt-route` | Mid-session: names what the session has actually become, says where its output belongs, and checks you are in the right project. For when a session has drifted from what it opened with, or you cannot name what you are doing. |
 | `gt-runbook-lint` | Finds procedures duplicated across project runbooks and routes them to the right shared layer: `PROTOCOL.md`, a `Knowledge/` page, or a repo `CLAUDE.md`. Duplication across two runbooks is the signal a fact belongs one layer out. |
 
@@ -333,7 +351,8 @@ In a session, ask for it — *"show how knowledge moved"* — or run `/gt-flow:g
 Directly:
 
 ```bash
-FLOW=~/.claude/plugins/cache/golden-thread-plugin/gt-flow/0.15.0/scripts
+# The newest installed gt-flow, rather than a version number that goes stale in this README.
+FLOW=$(ls -d ~/.claude/plugins/cache/golden-thread-plugin/gt-flow/*/scripts | sort -V | tail -1)
 python3 $FLOW/gt_flow.py render --vault <vault>                      # whole vault
 python3 $FLOW/gt_flow.py render --vault <vault> --project <slug> --since 2026-09-01
 python3 $FLOW/gt_flow.py render --vault <vault> --redact             # before sharing
@@ -408,8 +427,10 @@ artefacts must be regenerated in, is in
 documentation*. **This README is the front door**: its version callout describes the current
 release, and it is the first thing to go stale when one ships.
 
-The release gate checks that every skill is *named* in three files and that no PDF is older
-than its source. It cannot check whether what a document **says** is still true — and a doc
+The release gate checks that every skill is *named* in three files, that no PDF is older than
+its source, and — since 2026-09-16 — that every count quoted in the docs matches one derived
+from the source (`dev/check_doc_counts.py`: skills, Core rules, lint checks, module versions).
+It still cannot check whether what a document **says** is still true — and a doc
 that is accurate about a *previous* release is the failure that actually happens. A single pass
 on 2026-09-16 found four at once, including a contributor guide whose worked example used a
 slot no tool reads: anyone following it exactly would have produced a pack that validates,

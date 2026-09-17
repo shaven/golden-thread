@@ -1,13 +1,13 @@
 # Golden Thread Plugin — Documentation
 
 > **Reader:** quick lookup, and the printed PDF
-> **Claims last checked against the code:** 2026-09-16 — see *The documents, and what belongs in each* in [`CLAUDE.md`](../CLAUDE.md).
+> **Claims last checked against the code:** 2026-09-17 — see *The documents, and what belongs in each* in [`CLAUDE.md`](../CLAUDE.md).
 
-## Version gt 0.16.1 / gt-wiki 0.2.2 / gt-demo, gt-watch, gt-report-card, gt-farm, gt-flow 0.16.1
+## Version gt 0.16.2 / gt-wiki 0.2.2 / gt-demo, gt-watch, gt-report-card, gt-farm, gt-flow 0.16.2
 
 ---
 
-Golden Thread turns an Obsidian vault into the single source of truth for all AI memory across every project and every session. The tiered rule model introduced in v0.6.0 now carries **seven hook-backed Core rules** enforced at three points in the turn, 0.9.12 added `gt-route` for the middle of a session, and 0.9.13 makes the session-start component check verify that the hooks are **wired**, not merely installed, 0.11.0 makes `log.md` and `decisions.md` generated files so concurrent sessions cannot overwrite one another, 0.12.3 stops a vault tool running against a vault it was never told to touch, 0.12.4 makes parallel execution the default for divisible work in every project, 0.12.5 stops code being committed before its tests have been seen to pass, 0.13.0 makes an upgrade from any older release end where a fresh install would, 0.14.0 splits optional parts into modules you can decline, and 0.15.0 makes six of them — gt-wiki 0.2.1 (an LLM-powered knowledge base with immutable sources and interlinked pages), gt-demo (the guided tour), gt-watch (upstream repos), gt-report-card (the session report card), gt-farm (work packets for an external AI) and the new gt-flow, which draws the vault's event stream as a timeline of knowledge climbing the ladder.
+Golden Thread turns an Obsidian vault into the single source of truth for all AI memory across every project and every session. The tiered rule model introduced in v0.6.0 now carries **ten hook-backed Core rules** enforced at three points in the turn, 0.9.12 added `gt-route` for the middle of a session, and 0.9.13 makes the session-start component check verify that the hooks are **wired**, not merely installed, 0.11.0 makes `log.md` and `decisions.md` generated files so concurrent sessions cannot overwrite one another, 0.12.3 stops a vault tool running against a vault it was never told to touch, 0.12.4 makes parallel execution the default for divisible work in every project, 0.12.5 stops code being committed before its tests have been seen to pass, 0.13.0 makes an upgrade from any older release end where a fresh install would, 0.14.0 splits optional parts into modules you can decline, and 0.15.0 makes six of them — gt-wiki 0.2.1 (an LLM-powered knowledge base with immutable sources and interlinked pages), gt-demo (the guided tour), gt-watch (upstream repos), gt-report-card (the session report card), gt-farm (work packets for an external AI) and the new gt-flow, which draws the vault's event stream as a timeline of knowledge climbing the ladder. 0.16.0 gave contributed **packs** — plain JSON data, reviewed and merged, never third-party code — somewhere to come from and something to read them, shipping `gt-scan`, `gt-optimize`, `gt-handoff`, `gt-allin` and `gt-allin-commit`; 0.16.1 added `gt-context` (the first consumer of the registry's model-reachable tier) and `gt-validation` (a verification receipt that goes stale when the file it describes changes); and 0.16.2 re-asserts the Core rules after a compaction as well as on every prompt, lets a module hook declare a `timeout`, and refuses a copyleft licence by its current SPDX spelling.
 
 ---
 
@@ -31,10 +31,10 @@ Facts move up the hierarchy as they prove themselves general. They never move ba
 
 ---
 
-## Core Rules (gt 0.15.0)
+## Core Rules (gt 0.16.2)
 
 Golden Thread defines a tiered rule model that separates rules by scope and enforcement strength.
-**Ten Core rules ship as of 0.15.0**, up from one at 0.6.0 (the count read "seven" from 0.9.10 through 0.12.3, one behind the files):
+**Ten Core rules ship as of 0.15.0** and remain ten in 0.16.2, up from one at 0.6.0 (the count read "seven" from 0.9.10 through 0.12.3, one behind the files):
 
 | # | Rule |
 |---|---|
@@ -50,6 +50,16 @@ Golden Thread defines a tiered rule model that separates rules by scope and enfo
 | 10 | Label every derived figure you present as fact with its verification state — `unverified`, `self-verified`, or `independently verified`. |
 
 The numbers are the order the `UserPromptSubmit` hook injects them in. Verify the set at any time with `echo '{}' | ~/.claude/golden-thread/hooks/inject_core_rules.sh`.
+
+Since 0.16.2 the same script is registered a **second time**, on `SessionStart` with a `compact`
+matcher, because a compaction does not preserve what a hook added earlier: project-root
+`CLAUDE.md` and auto memory are re-injected from disk, while hook-added context is summarized
+with the rest of the conversation. The exposure this closes is narrow and worth stating
+precisely — `UserPromptSubmit` has no compaction exception, so the next user prompt always
+restored the rules verbatim; what was exposed was the *remainder of the turn* in which an
+auto-compaction fired. The mechanical tier was never affected: the `PreToolUse` guards and the
+`Stop` validator are event-driven commands, not context. What lapsed was the re-assertion, not
+the backstop.
 
 **Three scope levels:**
 
@@ -101,11 +111,11 @@ The canonical rule definitions live in `Projects/golden-thread/core-rules/` insi
 
 | Command | What it does |
 |---|---|
-| `/gt:gt-open` | Load a project at session start. Reads all project docs in order (idea → research → decisions → design → spec → runbook → memory), summarizes state, and asks where to pick up. |
+| `/gt:gt-open` | Load a project at session start. Reads the core project docs in order — `source.md` first, so you know which host serves which role before touching code, then idea → research → decisions → design — and *indexes* the memory files rather than loading them. Summarizes state and asks where to pick up. |
 | `/gt:gt-route` | Mid-session. Names what the session has actually become, says where its output belongs, and checks you are in the right project, harness and model. For when a session drifted from what it opened with, or you cannot name what you are doing. |
 | `/gt:gt-work` | Write back session findings. Appends to `research.md`, adds ADRs to `decisions.md`, refines `design.md`, creates `spec.md` when design is complete, and flags content for PROTOCOL.md. |
 | `/gt:gt-ingest` | Bulk-import an existing project's memory files, CLAUDE.md rules, and notes into the vault. External sources are stored immutably in `Sources/` before being synthesized into Knowledge pages. |
-| `/gt:gt-review` | Scan recent Obsidian daily notes for uncaptured tasks and ideas. Surfaces them grouped by date, then promotes selected ones into tracked project folders. |
+| `/gt:gt-review` | Empty the inbox: sweep `INBOX.md` — plus Obsidian daily notes if you keep them — for captured-but-unfiled thoughts and route each one into a tracked project. |
 
 ### Knowledge Management
 
@@ -129,18 +139,18 @@ The canonical rule definitions live in `Projects/golden-thread/core-rules/` insi
 | `/gt:gt-doctor` | One report for the whole install: plugin version, component drift, hook wiring, pending vault migrations, stray workers, unpushed commits, publish-destination drift and a lint summary. Exit 2 means a check *could not run*, which is deliberately distinct from clean. |
 | `/gt:gt-lint` | Audit the vault for structural problems: 18 checks covering broken wikilinks, orphaned pages, missing index entries, unlisted memory files, Knowledge pages citing superseded sources, stale pages, and `core-unenforced` — a Core rule that is stored but wired to no hook. |
 | `/gt:gt-optimize` | Find vault content that costs context and earns nothing back: a fact duplicated across memory files, an index row pointing at a file that is gone, a `global-memory/` file over budget, a relative date in a file that will be read months later. Splits findings into SAFE (applied with `--apply`) and JUDGEMENT (reported only — deleting knowledge is not reversible by reading a diff). Never writes `core-rules/`, and needs a flag for `global-memory/`. |
-| `/gt:gt-scan` | Scan code against the language definitions in effect on this machine — naming conventions and encoding, per language, all of it from packs rather than from the script. An aggregator over leaf scanners: it reports how many members RAN alongside what they found, because "nothing is wrong" and "nothing was checked" otherwise print identically. |
+| `/gt:gt-scan` | Scan code against the language definitions in effect on this machine — naming conventions and encoding, per language, all of it from packs rather than from the script (fourteen languages ship with definitions; `gt_scan_language.py --languages` lists what is in effect here). An aggregator over leaf scanners: it reports how many members RAN alongside what they found, because "nothing is wrong" and "nothing was checked" otherwise print identically. |
 | `/gt:gt-allin` | Run every check in one command — scan, lint, the optimize report, install health — and report how many members actually RAN alongside what they found, because a short finding list from a half-failed run reads exactly like a clean bill of health. Never pushes and never applies a change: `--suggest-push` prints the command for you, and refuses even that when anything failed. |
-| `/gt:gt-context` | Render the definitions this vault marks as model-reachable — `vocabulary`, `validation_rules`, `runbook` — inside an explicit untrusted-data envelope, hard-capped, with every line naming the pack and tier it came from. The envelope does not make the content true; it makes it identifiable as someone's definition rather than as the system speaking. Asking for a Tier A slot is a usage error, not an empty section. |
+| `/gt:gt-context` | Render the definitions this vault marks as model-reachable — `vocabulary`, `validation_rules`, `runbook` — inside an explicit untrusted-data envelope, hard-capped, with every line naming the pack and tier it came from. The envelope is **not a security control** — no in-context framing is: *Adaptive Attacks Break Defenses Against Indirect Prompt Injection Attacks on LLM Agents* (NAACL 2025 Findings, arXiv:2503.00061) attacked eight published defences and broke all eight, above 50% attack success in every case. What the envelope provides is *identifiability*: it marks content as someone's definition rather than as the system speaking. What protects a session is that packs are reviewed before merge, and that a pack can only reach a session already trusting the vault. Asking for a Tier A slot is a usage error, not an empty section. |
 | `/gt:gt-validation` | Record what a validation established about a file — what was verified AND what it could not determine — stamped with the file's content hash, so the recorded definition goes visibly stale the moment the file changes. A file with no receipt reports as *unknown*, deliberately distinct from clean. |
 | `/gt:gt-allin-commit` | Commit, but only once the checks pass and a passing test receipt covers every staged file. Refuses on `main`/`master` without a flag, refuses when a check *could not run* (an unknown is not a finding anyone can accept), and never pushes — a commit is reversible with `git reset`, a push is fetched by other people. It checks the receipt itself because `guard_test_before_commit` is a PreToolUse hook and cannot see a script running git. |
 | `/gt:gt-handoff` | Write the next session a handoff it can trust: the facts gathered from the project and the repository, each labelled with its source and whether it was actually verified. The design narrative is deliberately left for the session that did the work — a script that invents it produces a document that reads finished and is not. |
 | `/gt:gt-runbook-lint` | Scan all project `runbook.md` files for content that has drifted into multiple runbooks. Routes duplicated content to the right shared layer via `gt-promote`. |
-| `/gt:gt-settings` | View and change what Golden Thread does on its own: component drift checking at session start, and every setting an installed module adds (`report_card`, `closeout_check`, `watch`). Every automatic behaviour can be switched off. |
+| `/gt:gt-settings` | View and change what Golden Thread does on its own. gt's own settings are `component_updates`, `version_check`, `orphan_check`, `push_check`, `test_gate`, `parallel_work`, `parallel_max` and `protected_paths`; each installed module registers its own from `module.json` and they are listed under the module's name (`report_card`, `closeout_check`, `watch`). Every automatic behaviour is registered here and every one can be switched off. |
 
 ## Modules (6)
 
-Optional parts, each a separate plugin in the `golden-thread-plugin` marketplace, declared by a `module.json`, versioned with gt and installed by `install.sh` while on. `bash install.sh --list-modules` shows each one's state; `--without <name>` / `--with <name>` change it and the choice is remembered. A module's hooks are wired only while it is on and are always *reporter* hooks — a Core-rule enforcement hook can never belong to a module. Module settings (with an optional long `detail`) register from `module.json` and are listed under the module's name in `/gt:gt-settings`; a value set for a module that is later switched off is kept.
+Optional parts, each a separate plugin in the `golden-thread-plugin` marketplace, declared by a `module.json`, versioned with gt and installed by `install.sh` while on. `bash install.sh --list-modules` shows each one's state; `--without <name>` / `--with <name>` change it and the choice is remembered. A module's hooks are wired only while it is on and are always *reporter* hooks — a Core-rule enforcement hook can never belong to a module. A module hook may declare an optional `timeout` in whole seconds (1–600); `report-card` declares 15 on `SessionEnd`, because `SessionEnd` hooks share a 1.5-second budget by default and one that overruns is cancelled with its **output discarded**, so a report card could have started truncating invisibly. Module settings (with an optional long `detail`) register from `module.json` and are listed under the module's name in `/gt:gt-settings`; a value set for a module that is later switched off is kept.
 
 | Command | Module (plugin) · default | What it does |
 |---|---|---|
@@ -195,13 +205,13 @@ The session-start component check answers two questions, not one:
 | Question | How |
 |---|---|
 | Are the right files here, unmodified? | every shipped file is hashed into `MANIFEST.json` at install time and compared |
-| Is any of it connected to anything? | `MANIFEST.json` also declares the nine hook entries the plugin expects in `settings.json`, and the check compares those too |
+| Is any of it connected to anything? | `MANIFEST.json` also declares the hook entries the plugin expects in `settings.json` — eleven as of 0.16.2 — and the check compares those too |
 
-Before 0.9.13 only the first question was asked, so a machine with every file installed and an empty `settings.json` reported **components: clean** while nothing ran. The clean line now reads *"installed matches <version>, all 9 hooks wired"* — the second clause is the part that was missing.
+Before 0.9.13 only the first question was asked, so a machine with every file installed and an empty `settings.json` reported **components: clean** while nothing ran. The clean line now reads *"installed matches <version>, all 11 hooks wired"* — the second clause is the part that was missing.
 
 Two states are reported: `unwired` (no entry for that event names the script — it never runs) and `badpath` (wired, but the command names a path that does not exist on this machine, which is what a deleted version directory or an unquoted path containing a space produces).
 
-The declaration lives in `gt_components.HOOK_REGISTRATIONS` and is what `install.sh` registers *from*, so the installer and the checker cannot disagree about what "wired" means. `install.sh` verifies its own six entries immediately after writing them; the three enforcement hooks are owned by `vault_init.py install-core-rules`, which needs a vault. `selftest.sh` asserts all nine from outside — the only vantage point that still works when nothing is wired at all.
+The declaration lives in `gt_components.HOOK_REGISTRATIONS` and is what `install.sh` registers *from*, so the installer and the checker cannot disagree about what "wired" means. `install.sh` verifies its own five entries immediately after writing them; the six enforcement hooks are owned by `vault_init.py install-core-rules`, which needs a vault. `selftest.sh` asserts every declared entry from outside — the only vantage point that still works when nothing is wired at all.
 
 
 ---
@@ -228,8 +238,11 @@ The gt-wiki plugin provides an LLM-powered knowledge base separate from the Gold
 <vault>/
   CLAUDE.md                   ← architecture + pointer to Knowledge/_template.md
   index.md                    ← navigational index of all Knowledge pages
-  log.md                      ← audit trail: every create, ingest, promote, retire
-  review-queue.md             ← items flagged for owner review (written by gt-lint)
+  log.md                      ← audit trail: GENERATED from the per-session spools
+  INBOX.md                    ← the capture point: one checkbox line, any session
+  TASKS.md                    ← GENERATED cross-project task rollup (gt_tasks.py)
+  review-queue.md             ← items flagged for owner review
+  lint-declines.md            ← lint findings you declined, so they are not re-litigated
 
   Sources/                    ← IMMUTABLE raw originals
     YYYY-MM-DD <title>.md
@@ -263,6 +276,11 @@ The gt-wiki plugin provides an LLM-powered knowledge base separate from the Gold
 
     golden-thread/
       core-rules/             ← canonical Core rule definitions
+      tools/                  ← gt_log.py, gt_adr.py, gt_spool.py, gt_tasks.py,
+                                gt_session.py, gt_closeout.py, gt_edits.py,
+                                gt_events.py, safe_write.py
+      spool/                  ← per-session log and ADR spools (log.md/decisions.md
+                                are rendered from these, never written directly)
 ```
 
 ---
@@ -285,6 +303,11 @@ The gt-wiki plugin provides an LLM-powered knowledge base separate from the Gold
 ---
 
 ## Context Footprint
+
+> **Unverified — undated.** The token figures below carry no date and no provenance, and
+> nothing in the source tree derives or checks them; the 2026-09-17 accuracy pass could not
+> establish which release they were measured against. Read them as orders of magnitude, not
+> as measurements, and re-measure before quoting them anywhere.
 
 | What loads | When | Approx tokens |
 |---|---|---|
@@ -323,7 +346,7 @@ bash install.sh
 # Restart Claude Code
 ```
 
-Installs `gt` (v0.15.0) and each module that is on — `wiki`, `demo`, `watch`, `report-card` and `flow` on by default, `farm` off for a fresh install — as separate plugins under the `golden-thread-plugin` marketplace. Choose modules with `--list-modules`, `--without <name>` and `--with <name>` (remembered). Re-running upgrades from any older release. Requires Python 3.8+.
+Installs `gt` (v0.16.2) and each module that is on — `wiki`, `demo`, `watch`, `report-card` and `flow` on by default, `farm` off for a fresh install — as separate plugins under the `golden-thread-plugin` marketplace. Choose modules with `--list-modules`, `--without <name>` and `--with <name>` (remembered). Re-running upgrades from any older release. Requires Python 3.8+.
 
 `install.sh` installs the **newest version directory** present, not a hardcoded constant — pass an argument only to roll back deliberately (`./install.sh 0.14.0`). Never pipe it to `head`: `set -o pipefail` turns the closed pipe into an abort partway through, leaving the cache updated and registration undone.
 

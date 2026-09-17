@@ -1,34 +1,32 @@
 # Golden Thread Plugin
 
 > **Reader:** someone who has installed it and wants the reference
-> **Claims last checked against the code:** 2026-09-16 — see *The documents, and what belongs in each* in [`CLAUDE.md`](../CLAUDE.md).
+> **Claims last checked against the code:** 2026-09-17 (gt 0.16.2) — see *The documents, and what belongs in each* in [`CLAUDE.md`](../CLAUDE.md).
 
 A Claude Code plugin that turns an Obsidian vault into the single source of truth for all AI memory across every project and every session.
 
 
 > [!IMPORTANT]
-> **Since 0.12.4, divisible work runs in parallel by default.** A Core rule asks for work
-> that splits into independent units to be spread across your processors instead of
-> crawling through one core, and the tools here honour it — `tests/run.sh` and
-> `dev/render-pdfs.sh` fan out, and so will anything Claude writes while the rule is
-> active. **The first sign is usually the fans**: many processes at once and CPU well
-> above 100%, all of it gone when the run ends. That is the feature, not a runaway job.
-> Measured on this suite: 509s to 108s, 4.7x.
+> **0.16.2: the Core rules are re-asserted after a compaction.** Hook-added context is
+> *summarised* during a compaction rather than re-injected from disk, so
+> `inject_core_rules.sh` is now registered on `SessionStart` with matcher `compact` as well
+> as on `UserPromptSubmit`. Scope it honestly: what was exposed was the **remainder of the
+> turn** in which an auto-compaction fired — `UserPromptSubmit` has no compaction exception,
+> so the next user prompt always restored the rules verbatim — and the **mechanical tier was
+> never affected**, because the `PreToolUse` guards and the `Stop` validator are
+> event-driven commands, not context. The full registration table is under *Install*.
 >
-> You decide how much of the machine it may use:
+> Also in 0.16.2:
 >
-> ```bash
-> gt_settings.py set parallel_max 4      # never more than 4 workers
-> gt_settings.py set parallel_work off   # serial, and the rule stops being asserted
-> gt_settings.py show                    # what is allowed right now
-> ```
->
-> **Also new in 0.12.5:** a `git commit` carrying code whose tests have not been seen to
-> pass is **refused**. Evidence is a receipt written by your test run (`tests/run.sh` and
-> `dev/release-check.sh` write their own; any project can with `gt_test_receipt.py record
-> --ok`). If a repo has no tests, exempt it once with `touch .gt-no-test-gate`; for a
-> single commit, `GT_TEST_GATE=off git commit …`; to switch it off entirely,
-> `gt_settings.py set test_gate off`. Docs-only commits are never blocked.
+> - **A module hook can declare a `timeout`** — whole seconds, 1 to 600. `SessionEnd` hooks
+>   share a **1.5-second budget**, and a hook that runs over is cancelled **with its output
+>   discarded**, which looks exactly like a hook that had nothing to say. The report card
+>   declares 15 on `SessionEnd`.
+> - **The pack-submission licence check knows the current SPDX spellings.**
+>   `GPL-3.0-or-later` — the identifier any modern licence scanner emits — is now refused
+>   **as copyleft**, with that reason, instead of as an unrecognised identifier.
+> - **`/gt:gt-context`'s envelope is documented as *not* a security control.** It provides
+>   identifiability, not protection — see *Packs and the registry* below.
 
 ## What It Does
 
@@ -67,7 +65,7 @@ Facts move up the hierarchy as they prove themselves general. They never move ba
 | `/gt:gt-route` | Mid-session check: what has this session actually become, where does its output belong, and is it happening in the right project, harness and model? Serves the middle of a session, where `gt-open` cannot see yet and `gt-work` sees too late. Cheap and repeatable — not a gate. |
 | `/gt:gt-work` | Write back session findings at the end of a session. Appends to `research.md`, adds ADRs to `decisions.md`, refines `design.md`, creates `spec.md` when design is complete, and flags content for PROTOCOL.md. |
 | `/gt:gt-ingest` | Bulk-import an existing project's memory files, CLAUDE.md rules, and notes into the vault. External sources are stored immutably in `Sources/` before being synthesized into Knowledge pages. |
-| `/gt:gt-review` | Scan recent Obsidian daily notes for uncaptured tasks and ideas. Surfaces them grouped by date, then promotes selected ones into tracked project folders. |
+| `/gt:gt-review` | Empty the inbox. Reads `<vault>/INBOX.md` first — the capture point any session drops a line into — and then Obsidian daily notes, but only if the vault is configured for them. Routes each captured item into a tracked project. |
 
 ### Knowledge Management
 
@@ -94,11 +92,11 @@ Facts move up the hierarchy as they prove themselves general. They never move ba
 | `/gt:gt-allin` | Every check in one command — scan, lint, the optimize report, install health — reporting how many members actually ran, not just what they found. Never pushes and never applies a change. |
 | `/gt:gt-allin-commit` | The separate, deliberate act: commit once the checks pass and a test receipt covers every staged file. Refuses on the default branch, refuses without evidence, and never pushes — a commit is reversible, a push is not. |
 | `/gt:gt-handoff` | Write the next session a handoff it can trust: facts gathered from the project and repository, each labelled with its source and whether it was actually verified, plus the questions a script cannot answer. The design narrative is left for the person who did the work. |
-| `/gt:gt-context` | Render the vault's model-reachable definitions for a session to read, inside an explicit untrusted-data envelope. The Tier D slots' first consumer. |
+| `/gt:gt-context` | Render the vault's model-reachable definitions for a session to read, inside an explicit untrusted-data envelope. The Tier D slots' first consumer. The envelope is **not a security control** — it provides identifiability, not protection; see *Packs and the registry* below. |
 | `/gt:gt-validation` | Record what a validation established, and what it could not determine, stamped with the file's content hash so the definition expires when the file changes. |
 | `/gt:gt-lint` | Audit the vault for structural problems: broken wikilinks, orphaned pages, missing index entries, unlisted memory files, Knowledge pages citing superseded sources, stale pages, and Core rules that are stored but not enforced. Applies fixes with your approval. |
 | `/gt:gt-runbook-lint` | Scan all project `runbook.md` files for content that has drifted into multiple runbooks. Classifies duplicated content by type and routes it to the right shared layer (PROTOCOL.md, Knowledge page, or repo CLAUDE.md) via `gt-promote`. |
-| `/gt:gt-settings` | View and change what Golden Thread does automatically: component drift checking at session start, and every setting an installed module adds (the report card, the upstream watch). Every automatic behaviour can be switched off. |
+| `/gt:gt-settings` | View and change what Golden Thread does automatically. Eight settings ship with gt — `component_updates`, `version_check`, `orphan_check`, `push_check`, `protected_paths`, `test_gate`, `parallel_work`, `parallel_max` — plus every setting an installed module adds (`report_card`, `closeout_check`, `watch`). Every automatic behaviour can be switched off. |
 
 ### Modules
 
@@ -130,7 +128,8 @@ sample stream [`docs/flow-example-events.jsonl`](docs/flow-example-events.jsonl)
 the HTML to filter by project or kind and click any mark for its details.
 
 ```bash
-FLOW=~/.claude/plugins/cache/golden-thread-plugin/gt-flow/0.15.0/scripts
+# Resolve the newest installed gt-flow, so this line does not go stale with the version
+FLOW=$(ls -d ~/.claude/plugins/cache/golden-thread-plugin/gt-flow/*/scripts | sort -V | tail -1)
 python3 $FLOW/gt_flow.py render --vault <vault> [--project <slug>] [--since YYYY-MM-DD] [--tasks] [--redact]
 ```
 
@@ -163,6 +162,16 @@ reported as `RETRACTED` rather than hidden. Only vault packs may retract. `gt_re
 also marks the slots no shipped tool reads yet, so a pack for one of them is a considered
 choice rather than a surprise. Contributing a pack: `../SUBMISSIONS.md`.
 
+**The `/gt:gt-context` envelope is not a security control (0.16.2).** It wraps rendered
+definitions in a marked block saying *data, not instructions*, and no in-context framing of that
+kind holds: *Adaptive Attacks Break Defenses Against Indirect Prompt Injection Attacks on LLM
+Agents* (NAACL 2025 Findings, arXiv:2503.00061) attacked eight published defences and broke all
+eight, with attack success above 50% in every case — delimiter schemes like this one and trained
+detectors alike. What the envelope provides is **identifiability**: a line is legible as
+someone's definition rather than as the system speaking. What protects a session is that packs
+are **reviewed before merge**, and that a pack can only reach a session already trusting the
+vault.
+
 ## Vault Structure
 
 ```
@@ -171,6 +180,8 @@ choice rather than a surprise. Contributing a pack: `../SUBMISSIONS.md`.
   index.md                    ← navigational index of all Knowledge pages
   log.md                      ← audit trail: every create, ingest, promote, retire
   review-queue.md             ← items flagged for owner review (written by gt-lint)
+  INBOX.md                    ← the capture point: one checkbox line, from any session
+  TASKS.md                    ← GENERATED cross-project task rollup (gt_tasks.py)
 
   Sources/                    ← IMMUTABLE raw originals
     YYYY-MM-DD <title>.md     ← never modified after creation; superseded by new files
@@ -183,14 +194,16 @@ choice rather than a surprise. Contributing a pack: `../SUBMISSIONS.md`.
     <topic>.md
 
   Projects/
-    README.md                 ← master project list
-    CONVENTIONS.md            ← lifecycle phases, file roles, tag taxonomy
-    PROTOCOL.md               ← recurring process rules that apply across all projects
-
     README.md                 ← master project list + Dataview views
     CONVENTIONS.md            ← lifecycle phases, property schema, domain taxonomy
     PROTOCOL.md               ← recurring process rules across all projects
     INFRASTRUCTURE.md         ← the server fleet, defined ONCE and linked from each project
+
+    golden-thread/
+      core-rules/             ← the Core tier the hooks re-assert
+      tools/                  ← gt_log.py, gt_adr.py, gt_events.py, gt_tasks.py, …
+      events.jsonl            ← the event stream gt-flow draws
+      packs/                  ← your own packs; highest precedence in the registry
 
     <project-slug>/
       README.md               ← status board + YAML property frontmatter
@@ -306,11 +319,68 @@ bash install.sh --without demo      # leave one out; remembered
 Re-running it upgrades from any older release to the newest, including vault upgrades when your
 vault is committed.
 
-After running `/gt:gt-init`, Golden Thread also wires enforcement hooks into `~/.claude/settings.json`. These re-assert Core rules at session start and session end. If you ever need to rewire them manually:
+A full install writes **eleven hook registrations across ten scripts** into
+`~/.claude/settings.json`, from one declaration (`HOOK_REGISTRATIONS` in `gt_components.py`)
+that the installer registers from and the drift check compares against — so they cannot
+disagree about what "wired" means. `install.sh` owns five of them: the four `SessionStart`
+reporters (`gt_components.py`, `gt_workers.py`, `gt_version_check.py`, `gt_push_check.py`)
+and the `guard_protected_paths.sh` `PreToolUse` guard, which is installer-owned precisely
+because it is tied to no Core rule and needs no vault to be wired.
+
+The other six are the **enforcement** tier, wired by `/gt:gt-init` — **six registrations
+across five scripts**, because since 0.16.2 `inject_core_rules.sh` is registered twice and
+the two counts differ:
+
+| Event | Script | What it is for |
+|---|---|---|
+| `UserPromptSubmit` | `inject_core_rules.sh` | re-asserts the Core rules on every turn |
+| `SessionStart` (matcher `compact`) | `inject_core_rules.sh` | **new in 0.16.2** — re-asserts them after a compaction |
+| `Stop` | `validate_response.sh` | mechanical: validates the reply |
+| `PreToolUse` | `guard_session_claims.sh` | mechanical |
+| `PreToolUse` | `guard_vault_writes.sh` | mechanical |
+| `PreToolUse` | `guard_test_before_commit.sh` | mechanical |
+
+`inject_core_rules.sh` is wired twice on purpose. Hook-added context is *summarised* during a
+compaction rather than re-injected from disk, so before 0.16.2 the Core rules survived a
+compaction only as whatever the summariser chose to keep. The exposure was the **remainder of the
+turn** in which an auto-compaction fired — `UserPromptSubmit` has no compaction exception, so the
+next user prompt always restored them verbatim. The mechanical tier was never affected: the
+`PreToolUse` guards and the `Stop` validator are event-driven commands, not context.
+
+If you ever need to rewire them manually:
 
 ```bash
 python3 <scripts>/vault_init.py install-core-rules --vault <vault>
 ```
+
+### Standing behaviour: parallel work, and the test gate
+
+Both of these shipped earlier and both are still on by default. They surprise people the
+first time, so they are written down here rather than only in the changelog.
+
+> [!NOTE]
+> **Since 0.12.4, divisible work runs in parallel by default.** A Core rule asks for work
+> that splits into independent units to be spread across your processors instead of
+> crawling through one core, and the tools here honour it — `tests/run.sh` and
+> `dev/render-pdfs.sh` fan out, and so will anything Claude writes while the rule is
+> active. **The first sign is usually the fans**: many processes at once and CPU well
+> above 100%, all of it gone when the run ends. That is the feature, not a runaway job.
+> Measured on this suite: 509s to 108s, 4.7x.
+>
+> You decide how much of the machine it may use:
+>
+> ```bash
+> gt_settings.py set parallel_max 4      # never more than 4 workers
+> gt_settings.py set parallel_work off   # serial, and the rule stops being asserted
+> gt_settings.py show                    # what is allowed right now
+> ```
+>
+> **Since 0.12.5:** a `git commit` carrying code whose tests have not been seen to
+> pass is **refused**. Evidence is a receipt written by your test run (`tests/run.sh` and
+> `dev/release-check.sh` write their own; any project can with `gt_test_receipt.py record
+> --what <suite> --ok`). If a repo has no tests, exempt it once with `touch .gt-no-test-gate`; for a
+> single commit, `GT_TEST_GATE=off git commit …`; to switch it off entirely,
+> `gt_settings.py set test_gate off`. Docs-only commits are never blocked.
 
 ---
 
@@ -362,7 +432,8 @@ python3 <vault>/Projects/golden-thread/tools/gt_log.py --vault <vault> merge
 python3 <vault>/Projects/golden-thread/tools/gt_adr.py --vault <vault> merge my-project
 
 # A log line plus one structured event (what moved where) -- gt-promote and gt-refresh
-# record their moves this way; gt-review, gt-work and gt-ingest use gt_events.py emit
+# record their moves this way; gt-review, gt-work and gt-ingest call gt_events.py emit,
+# and gt-create's scaffold script emits its own create event
 python3 <vault>/Projects/golden-thread/tools/gt_log.py --vault <vault> add "2026-01-01 [graduate] a → b" \
   --event promote --item Knowledge/x.md --from Projects/p/research.md --to Knowledge/x.md \
   --level-from 3 --level-to 4 --project p
@@ -375,15 +446,19 @@ python3 <vault>/Projects/golden-thread/tools/gt_log.py --vault <vault> migrate
 python3 <vault>/Projects/golden-thread/tools/gt_adr.py --vault <vault> migrate my-project
 ```
 
-Python scripts can also be run directly from the command line:
+Python scripts can also be run directly from the command line. One variable, so a version
+bump does not strand eight copied paths — from the release tree, or from the install:
 
 ```bash
+GT=golden-thread/0.16.2/scripts
+# installed instead:  GT=$(ls -d ~/.claude/plugins/cache/golden-thread-plugin/gt/*/scripts | sort -V | tail -1)
+
 # Create a new vault
-python3 golden-thread/0.15.0/scripts/vault_init.py fresh \
+python3 $GT/vault_init.py fresh \
   --vault ~/my-vault --domain "My Team"
 
 # Scaffold a project
-python3 golden-thread/0.15.0/scripts/vault_init.py create-project \
+python3 $GT/vault_init.py create-project \
   --vault ~/my-vault \
   --name my-project \
   --title "My Project" \
@@ -394,29 +469,29 @@ python3 golden-thread/0.15.0/scripts/vault_init.py create-project \
   --project-dir ~/Projects/my-project
 
 # Scaffold a sub-project
-python3 golden-thread/0.15.0/scripts/vault_init.py create-project \
+python3 $GT/vault_init.py create-project \
   --vault ~/my-vault \
   --name sub-feature \
   --parent my-project \
   --title "Sub Feature"
 
 # Point vault-config.json at an existing vault
-python3 golden-thread/0.15.0/scripts/vault_init.py connect \
+python3 $GT/vault_init.py connect \
   --vault ~/existing-vault
 
 # Install/rewire Core-rule enforcement hooks
-python3 golden-thread/0.15.0/scripts/vault_init.py install-core-rules \
+python3 $GT/vault_init.py install-core-rules \
   --vault ~/my-vault
 
 # Scan a project directory for ingest candidates
-python3 golden-thread/0.15.0/scripts/gt_ingest.py ~/Projects/my-project --json
+python3 $GT/gt_ingest.py ~/Projects/my-project --json
 
 # Audit vault health
-python3 golden-thread/0.15.0/scripts/gt_lint.py ~/my-vault \
+python3 $GT/gt_lint.py ~/my-vault \
   --queue ~/my-vault/review-queue.md
 
 # View/change automatic behaviours
-python3 golden-thread/0.15.0/scripts/gt_settings.py show
+python3 $GT/gt_settings.py show
 ```
 
 ---

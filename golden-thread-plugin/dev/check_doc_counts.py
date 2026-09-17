@@ -76,9 +76,20 @@ def derive():
     return facts
 
 
-WORDS = {16: "Sixteen", 17: "Seventeen", 18: "Eighteen", 19: "Nineteen", 20: "Twenty",
-         21: "Twenty-One", 22: "Twenty-Two", 23: "Twenty-Three", 24: "Twenty-Four",
-         9: "Nine", 10: "Ten", 11: "Eleven", 12: "Twelve", 13: "Thirteen"}
+# Every number a doc might spell, not just the ones a count currently sits near.
+#
+# This map is also the ALTERNATION the "N Core rules" check below is built from, so a number
+# missing here is not merely unspellable -- it is INVISIBLE. On 2026-09-17 golden-thread-docs.md
+# read "now carries seven hook-backed Core rules" while ten shipped, front-of-document and in
+# the present tense, and this gate passed it clean: the map started at 9, so "seven" matched no
+# pattern and no check ever ran. A checker whose coverage is a side effect of its vocabulary
+# reports "clean" for the cases it cannot see, which is the failure it exists to prevent.
+WORDS = {1: "One", 2: "Two", 3: "Three", 4: "Four", 5: "Five", 6: "Six", 7: "Seven",
+         8: "Eight", 9: "Nine", 10: "Ten", 11: "Eleven", 12: "Twelve", 13: "Thirteen",
+         14: "Fourteen", 15: "Fifteen", 16: "Sixteen", 17: "Seventeen", 18: "Eighteen",
+         19: "Nineteen", 20: "Twenty", 21: "Twenty-One", 22: "Twenty-Two",
+         23: "Twenty-Three", 24: "Twenty-Four", 25: "Twenty-Five", 26: "Twenty-Six",
+         27: "Twenty-Seven", 28: "Twenty-Eight", 29: "Twenty-Nine", 30: "Thirty"}
 
 
 def check(facts):
@@ -119,6 +130,24 @@ def check(facts):
                         "heading says %s Skills; %d (%s) ship"
                         % (m.group(1), n, WORDS.get(n, n))))
 
+    # The ROOT README -- the GitHub front door, and until 2026-09-17 the one document whose
+    # skill count nothing checked. It carried "Sixteen skills in gt" directly above a table
+    # listing twenty-three of them, through several releases, with this gate green: the two
+    # checks above read golden-thread-docs.md and the PLUGIN README, and the front door was
+    # simply not in the list. The most-read file had the least coverage.
+    #
+    # Matched on the phrase rather than on any "N skills", because the root README also counts
+    # gt-wiki's skills, and a checker that cries wolf gets muted -- the same reasoning the
+    # Core-rules loop below records.
+    s = read("README.md")
+    if s is not None:
+        numbers = "|".join(list(WORDS.values()) + [str(k) for k in WORDS])
+        want = WORDS.get(n, str(n))
+        for m in re.finditer(r"\b(%s) skills in gt\b" % numbers, s, re.I):
+            if m.group(1).lower() not in (want.lower(), str(n)):
+                bad.append(("README.md",
+                            "says %s skills in gt; %d (%s) ship" % (m.group(1), n, want)))
+
     for rel in ("README.md", "golden-thread-plugin/golden-thread-docs.md"):
         s = read(rel)
         if s is None:
@@ -126,9 +155,25 @@ def check(facts):
         # Only a NUMBER may be wrong here. Matching any word before "Core rules" flagged
         # "The Core rules" and "backed Core rules" -- a checker that cries wolf gets muted,
         # which would leave the real drift unwatched.
+        #
+        # The number is NOT always adjacent, though, and requiring adjacency is how
+        # "now carries seven hook-backed Core rules" survived in golden-thread-docs.md while
+        # ten shipped (2026-09-17). Allow a few adjectives in between, but skip a span
+        # containing "of": "five of the ten Core rules" names a subset, and flagging its first
+        # number would be exactly the wolf-crying this check is written to avoid.
         numbers = "|".join(list(WORDS.values()) + [str(k) for k in WORDS])
         want = WORDS.get(facts["core_rules"], str(facts["core_rules"]))
-        for m in re.finditer(r"\b(%s) Core rules\b" % numbers, s, re.I):
+        # (?<![\w.]) so a VERSION FRAGMENT is not read as a count: without it "0.16.2 re-asserts
+        # the Core rules" matched on the "2", because \b holds after a dot, and the checker
+        # reported "says '2' Core rules; 10 ship" against correct prose. A false alarm here
+        # costs more than a miss, because it is the reason a checker gets switched off.
+        for m in re.finditer(
+                r"(?<![\w.])(%s)((?:\s+[A-Za-z][\w-]*){0,3}?)\s+Core rules\b" % numbers,
+                s, re.I):
+            # "of" names a subset ("five of the ten Core rules"); "the" refers to the set
+            # rather than counting it ("re-asserts the Core rules"). Neither is a count claim.
+            if re.search(r"\b(of|the)\b", m.group(2), re.I):
+                continue
             word = m.group(1)
             if word.casefold() not in (want.casefold(), str(facts["core_rules"])):
                 bad.append((rel, "says %r Core rules; %d ship"

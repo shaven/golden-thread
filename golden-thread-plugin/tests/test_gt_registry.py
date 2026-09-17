@@ -23,6 +23,20 @@ from _harness import GT
 SCRIPT = GT / "scripts" / "gt_registry.py"
 
 
+def _registry():
+    """The gt_registry module under test, imported by path.
+
+    Several tests assert against CONSUMERS/SLOTS directly rather than against printed
+    output, because the map is hand-maintained and printed output can agree with a stale
+    map. One loader, so those tests cannot drift apart from each other.
+    """
+    import importlib.util
+    spec = importlib.util.spec_from_file_location("reg", str(SCRIPT))
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    return mod
+
+
 def pack(slot, name, entries):
     return {"schema": 1, "slot": slot, "name": name, "tier": "A", "spdx": "MIT",
             "provenance": {"origin": "original", "contributor": "T <t@example.com>",
@@ -351,10 +365,7 @@ class RegistryTest(unittest.TestCase):
     def test_every_claimed_consumer_really_references_its_slot(self):
         """CONSUMERS is hand-maintained, so it can drift into a claim of coverage that is not
         there -- which is the exact failure it was added to prevent."""
-        import importlib.util
-        spec = importlib.util.spec_from_file_location("reg", str(SCRIPT))
-        reg = importlib.util.module_from_spec(spec)
-        spec.loader.exec_module(reg)
+        reg = _registry()
         self.assertEqual(set(reg.CONSUMERS), set(reg.SLOTS), "every slot needs an entry")
         for slot, script in reg.CONSUMERS.items():
             if not script:
@@ -363,6 +374,35 @@ class RegistryTest(unittest.TestCase):
             self.assertTrue(p.is_file(), "%s claims %s, which does not exist" % (slot, script))
             self.assertIn('"%s"' % slot, p.read_text(encoding="utf-8"),
                           "%s claims to be read by %s, which never mentions it" % (slot, script))
+
+    def test_a_slot_claiming_no_consumer_really_has_none(self):
+        """The other direction, and the one that was missing.
+
+        The test above skips every slot mapped to None, so a slot could UNDERSTATE its
+        coverage indefinitely -- which is what happened: 0.16.1 shipped gt_context.py reading
+        vocabulary, validation_rules and runbook while CONSUMERS still said nothing read them,
+        and `gt_registry.py slots` printed all three under "NOTHING READS THESE YET" for a
+        whole release. Under-claiming is the safer error, but it is still a map that does not
+        describe the code.
+        """
+        reg = _registry()
+        # Only scripts that go THROUGH the registry can read a slot, so only they are
+        # candidates. A bare string search over every script is too blunt: gt_doctor.py has a
+        # check of its own called "lint", which has nothing to do with the lint SLOT, and
+        # matching on that would make this test fail for a reason that is not a defect.
+        # gt_registry.py itself DEFINES every slot name, so it can never be evidence either.
+        candidates = [p for p in SCRIPT.parent.glob("*.py")
+                      if p.name != SCRIPT.name and "gt_registry" in p.read_text(encoding="utf-8")]
+        self.assertTrue(candidates, "no script imports gt_registry; this test would be vacuous")
+        for slot, script in reg.CONSUMERS.items():
+            if script:
+                continue
+            for p in candidates:
+                self.assertNotIn(
+                    '"%s"' % slot, p.read_text(encoding="utf-8"),
+                    "CONSUMERS says nothing reads %r, but %s reads the registry and mentions "
+                    "it -- either it is a consumer and the map is stale, or the mention is "
+                    "misleading" % (slot, p.name))
 
     def test_slots_output_names_the_unread_slots(self):
         r = self.run_reg("slots")
@@ -373,9 +413,20 @@ class RegistryTest(unittest.TestCase):
     def test_show_warns_when_the_slot_has_no_consumer(self):
         """The moment a person watches their own pack resolve is the moment they conclude it
         is doing something."""
-        self.put("local", pack("vocabulary", "mine",
-                               [{"term": "alpha", "definition": "a signal"}]))
-        r = self.run_reg("show", "vocabulary")
+        # `secrets`, not `vocabulary`: the three Tier D slots gained a consumer in 0.16.2
+        # (gt_context.py, which had in fact been reading them since 0.16.1 while CONSUMERS
+        # still said nothing did). Naming a slot here that later acquires a consumer is how
+        # this test starts asserting the opposite of its own name, so pick from CONSUMERS
+        # rather than hardcoding, and fail loudly if every slot is read.
+        # The slot is named here because its entry shape is, but the claim that it is unread
+        # is checked rather than assumed: `vocabulary` used to stand here, and when 0.16.2
+        # corrected CONSUMERS (gt_context.py had read it since 0.16.1) this test would
+        # otherwise have quietly begun asserting the opposite of its own name.
+        self.assertIsNone(_registry().CONSUMERS["secrets"],
+                          "secrets now has a consumer -- point this test at a slot that does "
+                          "not, or retire it; do not weaken the assertion")
+        self.put("local", pack("secrets", "mine", [{"id": "alpha", "pattern": "x"}]))
+        r = self.run_reg("show", "secrets")
         self.assertIn("no shipped tool reads", r.stdout)
 
     def test_show_does_not_warn_for_a_slot_that_is_read(self):

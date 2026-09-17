@@ -13,8 +13,19 @@ Platform wiki:
 ## Changing documentation: what moves together
 
 Docs here are **five files and three generated artefacts**, and they drift apart silently
-because nothing requires them to be edited in one go. The release gate checks only that every
-skill is *named* in three of them — it cannot tell whether what they say is still true.
+because nothing requires them to be edited in one go. The release gate checks that every skill
+is *named* in three of them, and since 2026-09-16 `dev/check_doc_counts.py` also derives the gt
+version, the skill count, the Core-rule count, the lint-check count and every module version
+from the source and fails the build on a mismatch. **It still cannot tell whether what a
+document SAYS is true** — only whether its numbers are.
+
+And it only sees the patterns it was taught. On 2026-09-17 a sweep found two counts it had been
+passing clean for releases: the root README said "Sixteen skills in gt" directly above a table
+listing twenty-three, because that file was not in the checker's list at all; and
+`golden-thread-docs.md` said "seven hook-backed Core rules" where ten ship, because the number
+was not adjacent to the phrase and the checker's spelled-number map began at nine. Both are now
+covered. **Treat a green count gate as evidence about the counts it knows, not about the
+document** — when you add a count to a doc, add it to the checker in the same commit.
 
 When you add a command, change behaviour, or remove a feature, update **all** of:
 

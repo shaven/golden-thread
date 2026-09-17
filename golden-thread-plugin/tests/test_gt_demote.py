@@ -10,6 +10,7 @@ Contract, and the ORDER is the contract:
     guard_protected_paths is a PreToolUse hook and never sees a script write a file.
   * An existing destination is a refusal. Merging two notes is a judgement a person makes.
 """
+import datetime
 import hashlib
 import io
 import os
@@ -374,6 +375,98 @@ class DemoteTest(unittest.TestCase):
         self.assertEqual(r.returncode, 3, r.stdout + r.stderr)
         self.assertNotIn("Traceback", r.stderr, "a refusal, not a crash")
         self.assertIn("UTF-8", r.stderr)
+        self.assertEqual(digest(self.vault), before)
+
+
+    # -- Core rule 1: never write a file another live session has claimed ------------------
+    #
+    # Until 0.16.2 this tool's docstring PROMISED this refusal while no code performed it -- a
+    # claim outliving its implementation, in the tool written to stop exactly that. These tests
+    # exist so the promise cannot come loose from the code again.
+
+    SESSION_FMT = ("---\n"
+                   "session_id: {sid}\n"
+                   "agent: Claude Code\n"
+                   "status: {status}\n"
+                   "last_execution: {last}\n"
+                   "---\n"
+                   "# What this session has open\n"
+                   "{files}\n")
+
+    def claim(self, sid, rels, status="active", minutes_ago=0):
+        """Write a session file claiming `rels`, in the shape gt_session.py renders."""
+        when = datetime.datetime.now() - datetime.timedelta(minutes=minutes_ago)
+        d = self.vault / "Projects" / "golden-thread" / "sessions"
+        d.mkdir(parents=True, exist_ok=True)
+        (d / ("%s.md" % sid)).write_text(self.SESSION_FMT.format(
+            sid=sid, status=status, last=when.strftime("%Y-%m-%d %H:%M:%S"),
+            files="\n".join("- `%s`" % r for r in rels)), encoding="utf-8")
+
+    def run_as(self, session_id, *args):
+        """run_dem with an explicit CLAUDE_SESSION_ID, so a result never depends on whichever
+        session happens to be running the suite."""
+        env = dict(os.environ, CLAUDE_SESSION_ID=session_id)
+        return subprocess.run([sys.executable, str(SCRIPT), "--vault", str(self.vault)]
+                              + list(args), capture_output=True, text=True, env=env)
+
+    def _move(self, who="me", extra=()):
+        return self.run_as(who, "--file", "global-memory/kelvin.md", "--to", "project-memory",
+                           "--project", "alpha", *extra)
+
+    def test_a_note_another_live_session_claims_is_refused(self):
+        self.write("global-memory/kelvin.md")
+        self.claim("other-session", ["global-memory/kelvin.md"])
+        before = digest(self.vault)
+        r = self._move(extra=("--apply",))
+        self.assertEqual(r.returncode, 1, r.stdout + r.stderr)
+        self.assertIn("REFUSING", r.stdout)
+        self.assertIn("other-session", r.stdout)
+        self.assertEqual(digest(self.vault), before, "nothing may move while another holds it")
+
+    def test_the_refusal_shows_in_a_dry_run_too(self):
+        """Finding out at --apply time is finding out one step too late."""
+        self.write("global-memory/kelvin.md")
+        self.claim("other-session", ["global-memory/kelvin.md"])
+        r = self._move()
+        self.assertEqual(r.returncode, 1, r.stdout + r.stderr)
+        self.assertIn("REFUSING", r.stdout)
+
+    def test_my_own_claim_does_not_block_me(self):
+        """Otherwise claiming a file is how you make it unmovable by the only session
+        entitled to move it."""
+        self.write("global-memory/kelvin.md")
+        self.claim("me", ["global-memory/kelvin.md"])
+        r = self._move(extra=("--apply",))
+        self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
+        self.assertTrue((self.vault / "Projects/alpha/memory/kelvin.md").is_file())
+
+    def test_a_stale_claim_does_not_block(self):
+        """A session that stopped heart-beating is gone; its claim must not wedge the vault."""
+        self.write("global-memory/kelvin.md")
+        self.claim("ghost", ["global-memory/kelvin.md"], minutes_ago=120)
+        self.assertEqual(self._move(extra=("--apply",)).returncode, 0)
+
+    def test_a_released_session_does_not_block(self):
+        self.write("global-memory/kelvin.md")
+        self.claim("done", ["global-memory/kelvin.md"], status="released")
+        self.assertEqual(self._move(extra=("--apply",)).returncode, 0)
+
+    def test_a_claim_on_a_different_note_does_not_block(self):
+        self.write("global-memory/kelvin.md")
+        self.claim("other-session", ["global-memory/something-else.md"])
+        self.assertEqual(self._move(extra=("--apply",)).returncode, 0)
+
+    def test_an_unreadable_session_file_refuses(self):
+        """"Could not check" is not "clear". Skipping the row nobody could parse is how a guard
+        reports safe for the one case it cannot see."""
+        self.write("global-memory/kelvin.md")
+        d = self.vault / "Projects" / "golden-thread" / "sessions"
+        d.mkdir(parents=True, exist_ok=True)
+        (d / "broken.md").write_bytes(b"\xff\xfe not valid utf-8 \xff")
+        before = digest(self.vault)
+        r = self._move(extra=("--apply",))
+        self.assertEqual(r.returncode, 1, r.stdout + r.stderr)
+        self.assertIn("UNKNOWN", r.stdout)
         self.assertEqual(digest(self.vault), before)
 
 

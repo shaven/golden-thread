@@ -11,6 +11,65 @@ release's own summary line, kept short rather than reconstructed after the fact.
 
 ---
 
+## gt 0.16.2 — 2026-09-17
+
+**Two places the machinery could go quiet without saying so, and a refusal that gave the
+wrong reason.**
+
+**Core rules are re-asserted after a compaction.** The docs are explicit about what survives:
+project-root `CLAUDE.md` and auto memory are *"re-injected from disk"*, while *"context that
+hooks added earlier"* is *"summarized with the rest of the conversation"*. gt's Core rules
+travel by hook, so after a compaction they existed only as whatever the summariser chose to
+keep. `inject_core_rules.sh` is now registered on `SessionStart` with a `compact` matcher as
+well as `UserPromptSubmit`, and reads which event fired from its payload rather than naming
+one in its output.
+
+The exposure was narrower than it first looked, and saying so precisely matters more than
+overselling the fix: `UserPromptSubmit` has no compaction exception, so the next user prompt
+always restored the rules verbatim. What was exposed was the *remainder of the turn* in which
+an auto-compaction fired. The mechanical tier was never affected — `PreToolUse` guards and the
+`Stop` validator are event-driven commands, not context, so compaction cannot weaken them.
+What lapsed was the re-assertion, not the backstop.
+
+**A hook can declare a `timeout`, because `SessionEnd` cancels silently.** `SessionEnd` hooks
+share a 1.5-second budget, and a hook that reaches it is cancelled with its **output
+discarded** — no error, nothing reported to anyone. The report card measured 0.61s of that
+1.5s, so it was not truncating; but nothing stood between it and the day a vault got slower,
+and its own subprocess ceiling was `timeout=15` — ten times the whole event budget — so a
+single slow `git status` would have blown the budget while the script waited patiently. The
+module hook schema now carries `timeout` and the report card declares one. `PreCompact` is not
+on the reduced-budget list and was never at risk.
+
+**The copyleft refusal knows the current SPDX spellings.** `REFUSED_SPDX` listed only the
+deprecated short forms, so `GPL-3.0-or-later` — what any modern licence scanner emits — was
+still refused, but as `licence-unknown` rather than as copyleft. A contributor read "not in the
+allowed list" and would reasonably open an issue asking for it to be added. Both spellings of
+every copyleft family are now listed with the right reason, and the SPDX list version they were
+taken from is recorded, because a refusal rule is only as reproducible as the list it was read
+against. Fail-closed behaviour is unchanged: the allowlist still does the refusing.
+
+**`gt_demote.py` now performs the refusal it had been promising.** Its docstring said "a file
+another session has claimed is never moved" from 0.16.1 onward, and no code did it: there was no
+claim check anywhere in the file and no test for one. That is a claim outliving its
+implementation, in the docstring of the tool written to stop exactly that — and it was found by
+reading the file against its own code during a documentation sweep, not by anything mechanical.
+The check now reads the vault's session registry directly (rather than importing the vault-side
+`gt_session.py`, which a vault on an older release may not have), ignores a session's own claim,
+ignores released and stale ones, and reports in a dry run as well as under `--apply`. **An
+unreadable session file refuses**, because "could not check" is not "clear". Seven regression
+tests, each proven to fail with the guard removed.
+
+**`/gt:gt-context` says plainly that its envelope is not a security control.** *Adaptive
+Attacks Break Defenses Against Indirect Prompt Injection Attacks on LLM Agents* (NAACL 2025
+Findings, arXiv:2503.00061) attacked eight published defences and broke all eight, above 50%
+attack success in every case — delimiter schemes like this one and trained detectors alike.
+The envelope provides *identifiability*: it marks content as someone's definition rather than
+as the system speaking. What protects a session is that packs are reviewed before merge, and
+that a pack can only reach a session already trusting the vault. `PROTOCOL.md` likewise now
+records that human-gated promotion is a **measured** mitigation rather than a preference —
+published attack success against agent memory runs 45–85% for compaction poisoning and
+correlates directly with how eagerly an agent writes to memory.
+
 ## gt 0.16.1 — 2026-09-16
 
 **The definitions reach a session, a note can be moved instead of deleted, and a validation

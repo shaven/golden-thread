@@ -1,7 +1,7 @@
 # Contributing a pack to Golden Thread
 
 > **Reader:** an outside contributor sending a pack
-> **Claims last checked against the code:** 2026-09-16 — see *The documents, and what belongs in each* in [`CLAUDE.md`](CLAUDE.md).
+> **Claims last checked against the code:** 2026-09-17 — see *The documents, and what belongs in each* in [`CLAUDE.md`](CLAUDE.md).
 
 Golden Thread has **no plugin runtime**. Nobody's code runs on anyone's machine as a
 third-party add-on. Instead you **submit a pack**, it is reviewed, and if accepted it is
@@ -128,9 +128,34 @@ are refused wherever they appear.
 
 **Licence.** Golden Thread is **MIT, permanently** — there is no CLA and no plan to relicense,
 so your grant is final and the terms can never change under you. Contributions are MIT
-(inbound = outbound). Copyleft cannot be merged: GPL, AGPL and MPL are refused, including for
-anything you adapt. If you are adapting a secret-scanning ruleset, adapt **gitleaks** (MIT),
-not TruffleHog (AGPL).
+(inbound = outbound).
+
+The check is an **allowlist**, and that is what does the refusing. `spdx` must be one of:
+
+    MIT   BSD-2-Clause   BSD-3-Clause   Apache-2.0   ISC   CC0-1.0   Unlicense
+
+Anything else fails closed as `licence-unknown`, whether or not anyone anticipated it. The same
+test is applied to `provenance.upstream.spdx` when you adapt something, so an adapted pack
+cannot carry in a licence its own manifest would have been refused for.
+
+Beside the allowlist there is a short table of **common refusals with an accurate reason** —
+not a second gate, just better wording for the cases people actually hit. Copyleft cannot be
+merged into an MIT project, so every GPL, LGPL, AGPL and MPL identifier there is reported as
+`licence-refused` and says *copyleft* (`network copyleft` for AGPL, `file-level copyleft` for
+MPL); SSPL-1.0 and BUSL-1.1 are named too, as *not OSI-approved* and *not open source*. Both
+spellings of every copyleft family are listed — the deprecated short forms (`GPL-3.0`, its `+`
+variant) and the current `-only` / `-or-later` forms, plus `MPL-2.0-no-copyleft-exception` and
+the whole `LGPL-2.1` family. Until 2026-09-17 only the short forms were listed, so
+`GPL-3.0-or-later` — the identifier any modern licence scanner emits — was correctly refused
+but read as "not in the allowed list", which invites a contributor to open an issue asking for
+it to be added rather than to stop.
+
+The SPDX List version those identifiers were taken from is recorded in the source as
+`SPDX_LIST_VERSION = "3.29.0"` (verified against <https://spdx.org/licenses/> on 2026-09-17;
+that list was released 2026-09-16), because a refusal rule is only as reproducible as the list
+it was read against.
+
+If you are adapting a secret-scanning ruleset, adapt **gitleaks** (MIT), not TruffleHog (AGPL).
 
 **Provenance is mandatory.** `origin`, `contributor`, and for anything adapted the upstream
 `name`, `version` and `spdx`. This is what makes it possible to answer "where did this come

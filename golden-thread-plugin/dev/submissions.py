@@ -82,10 +82,43 @@ SLOTS = {
     "runbook":          {"model_reachable": True, "fields": {"id": "token", "step": "text"}},
 }
 
+# The SPDX list is versioned and identifiers are RENAMED between versions: `GPL-3.0` was
+# deprecated in favour of the explicit `GPL-3.0-only` / `GPL-3.0-or-later`. Recording the
+# version is what makes the refusal rule reproducible -- "we refuse copyleft" is not a
+# statement anyone can re-derive later unless the list it was read against is named. Without
+# it, the next person cannot tell a missing identifier from one that did not exist yet.
+#
+# Verified against https://spdx.org/licenses/ on 2026-09-17, which is also the point of
+# recording it: this constant was first written as "3.27" from memory and was wrong. A version
+# nobody checked is worth less than no version, because it reads as evidence.
+SPDX_LIST_VERSION = "3.29.0"      # released 2026-09-16; GNU renames landed in 3.0
+
 ALLOWED_SPDX = ("MIT", "BSD-2-Clause", "BSD-3-Clause", "Apache-2.0", "ISC", "CC0-1.0", "Unlicense")
+# REFUSED_SPDX does NOT do the refusing -- ALLOWED_SPDX does, and anything outside it fails
+# closed as licence-unknown. This table exists to give the COMMON cases an accurate reason, so
+# a GPL contributor reads "copyleft, cannot be merged into an MIT project" and stops, rather
+# than "not in the allowed list" and opens an issue asking for it to be added.
+#
+# Both spellings of every family, because the deprecated short forms are still what people
+# type and the current forms are what tooling emits. Listing only the short forms (as this did
+# until 2026-09-17) meant `GPL-3.0-or-later` -- the identifier a contributor gets from any
+# modern licence scanner -- was still refused, but with the misleading licence-unknown reason.
 REFUSED_SPDX = {
-    "GPL-2.0": "copyleft", "GPL-3.0": "copyleft", "LGPL-3.0": "copyleft",
-    "AGPL-3.0": "network copyleft", "MPL-2.0": "file-level copyleft",
+    # deprecated short forms, and their deprecated `+` spelling
+    "GPL-2.0": "copyleft", "GPL-2.0+": "copyleft",
+    "GPL-3.0": "copyleft", "GPL-3.0+": "copyleft",
+    "LGPL-2.1": "copyleft", "LGPL-2.1+": "copyleft",
+    "LGPL-3.0": "copyleft", "LGPL-3.0+": "copyleft",
+    "AGPL-3.0": "network copyleft", "AGPL-3.0+": "network copyleft",
+    # current forms, taken from the SPDX list named in SPDX_LIST_VERSION
+    "GPL-2.0-only": "copyleft", "GPL-2.0-or-later": "copyleft",
+    "GPL-3.0-only": "copyleft", "GPL-3.0-or-later": "copyleft",
+    "LGPL-2.1-only": "copyleft", "LGPL-2.1-or-later": "copyleft",
+    "LGPL-3.0-only": "copyleft", "LGPL-3.0-or-later": "copyleft",
+    "AGPL-3.0-only": "network copyleft", "AGPL-3.0-or-later": "network copyleft",
+    # MPL has no -only/-or-later split; the exception variant is a separate identifier
+    "MPL-2.0": "file-level copyleft",
+    "MPL-2.0-no-copyleft-exception": "file-level copyleft",
     "SSPL-1.0": "not OSI-approved", "BUSL-1.1": "not open source",
 }
 MANIFEST_KEYS = ("schema", "slot", "name", "tier", "spdx", "provenance", "dco", "entries")

@@ -1,11 +1,11 @@
 # Golden Thread — Getting Started
 
 > **Reader:** the first thirty minutes — the happy path only
-> **Claims last checked against the code:** 2026-09-16 — see *The documents, and what belongs in each* in [`CLAUDE.md`](../CLAUDE.md).
+> **Claims last checked against the code:** 2026-09-17 — see *The documents, and what belongs in each* in [`CLAUDE.md`](../CLAUDE.md).
 
 A guided walkthrough for your first session. Six steps, ~15 minutes.
 
-**Requirements:** Python 3.8+, Claude Code installed. Written against **gt v0.16.1**.
+**Requirements:** Python 3.8+, Claude Code installed. Written against **gt v0.16.2**.
 
 ---
 

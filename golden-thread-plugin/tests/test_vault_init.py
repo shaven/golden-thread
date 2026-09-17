@@ -16,6 +16,23 @@ VI = SCRIPTS / "vault_init.py"
 HOOK_NAMES = ENFORCEMENT_HOOKS
 
 
+def vi_registrations():
+    """The vault_init-owned rows of HOOK_REGISTRATIONS -- (event, script) PAIRS, not names.
+
+    Read from gt_components rather than listed here, for the reason that file states about
+    its own list: a second declaration of "what should be wired" is a second thing to forget.
+    Since 0.16.2 one script (inject_core_rules.sh) is registered under two events, so a count
+    of unique script names no longer equals a count of registrations.
+    """
+    import importlib.util
+    spec = importlib.util.spec_from_file_location(
+        "gt_components_for_tests", str(SCRIPTS / "gt_components.py"))
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    return [r for r in mod.HOOK_REGISTRATIONS
+            if str(r.get("owner", "")).startswith("vault_init.py")]
+
+
 class VaultInitBase(Sandbox):
     def vi(self, *args):
         return self.py(VI, *args)
@@ -297,8 +314,15 @@ class InstallCoreRulesTest(VaultInitBase):
         first = settings.read_text()
         res = self.vi_json("install-core-rules", "--vault", v, "--settings", settings)
         self.assertEqual(settings.read_text(), first, "second run changed settings")
-        self.assertEqual(len([r for r in res if "already wired" in r["note"]]), len(HOOK_NAMES),
-                         "a second run must report every enforcement hook already wired")
+        # Counted per REGISTRATION, not per script. Since 0.16.2 inject_core_rules.sh is wired
+        # twice -- UserPromptSubmit every turn, and SessionStart/compact to re-assert the rules
+        # after a compaction discards hook-added context -- so the unique-script count (5) and
+        # the registration count (6) diverged. Asserting against the script names would let a
+        # dropped second registration pass as "everything already wired", which is the exact
+        # failure vault_init's own comments describe shipping twice.
+        wanted = vi_registrations()
+        self.assertEqual(len([r for r in res if "already wired" in r["note"]]), len(wanted),
+                         "a second run must report every enforcement registration already wired")
 
     def test_missing_hook_scripts_is_an_error_not_a_silent_wire(self):
         v = self.bare_vault()

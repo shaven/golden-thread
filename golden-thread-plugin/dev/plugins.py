@@ -240,7 +240,7 @@ def validate_module(version_dir):
         if not isinstance(h, dict):
             reasons.append("hooks[%d] is not an object" % i)
             continue
-        for k in sorted(set(h) - {"event", "script", "args", "kind"}):
+        for k in sorted(set(h) - {"event", "script", "args", "kind", "timeout"}):
             reasons.append("hooks[%d] unknown key %r" % (i, k))
         for k in ("event", "script", "kind"):
             if k not in h:
@@ -249,6 +249,17 @@ def validate_module(version_dir):
             reasons.append("hooks[%d] event %r is not a hook event name" % (i, h["event"]))
         if "kind" in h and h["kind"] not in MODULE_HOOK_KINDS:
             reasons.append("hooks[%d] kind %r is not guard or reporter" % (i, h["kind"]))
+        # `timeout` exists because SOME EVENTS HAVE A BUDGET AND CANCEL SILENTLY. SessionEnd
+        # hooks share 1.5s across all of them; a hook that runs over is cancelled and its
+        # output DISCARDED, with nothing reported to anyone. Declaring a timeout raises the
+        # budget to match (up to 60s). Until 0.16.2 this key did not exist, so no gt hook
+        # could ask for one -- the report card measured 0.61s of the 1.5s and would have
+        # started truncating, invisibly, the moment a vault got slower.
+        if "timeout" in h and not (isinstance(h["timeout"], int)
+                                   and not isinstance(h["timeout"], bool)
+                                   and 1 <= h["timeout"] <= 600):
+            reasons.append("hooks[%d] timeout %r is not a whole number of seconds in 1..600"
+                           % (i, h["timeout"]))
         if "args" in h and not (isinstance(h["args"], list)
                                 and all(isinstance(a, str) for a in h["args"])):
             reasons.append("hooks[%d] args must be a list of strings" % i)
