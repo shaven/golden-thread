@@ -86,6 +86,25 @@ class GtEditsTest(Sandbox):
     def test_record_never_raises(self):
         self.assertIsNone(self.ge("print(json.dumps(ge.record(None)))"))
 
+    def test_a_write_in_a_linked_worktree_is_recorded_relative_to_that_worktree(self):
+        """_git_dir's comment says --git-dir is used "so this keeps working inside a worktree
+        or a submodule". _repo_root then returned None unless the git dir's basename was
+        literally `.git` -- which it never is in either case: a worktree's is
+        `.git/worktrees/<name>`. So the path was recorded absolute and _task_for gave up,
+        losing attribution in exactly the layout the comment says is handled."""
+        self.git("commit", "-q", "--allow-empty", "-m", "base")
+        wt = self.tmp / "wt"
+        self.git("worktree", "add", "-q", "-b", "side", str(wt))
+        # Resolved, for the same reason setUp resolves the vault: the sandbox sits under /var,
+        # a symlink to /private/var, and git answers with the resolved path.
+        wt = wt.resolve()
+        target = wt / "Knowledge" / "page.md"
+        target.parent.mkdir(parents=True, exist_ok=True)
+        row = self.ge("print(json.dumps(ge.record(%r)))" % str(target), cwd=wt)
+        self.assertIsNotNone(row, "a write inside a worktree was not recorded at all")
+        self.assertEqual(row["path"], os.path.join("Knowledge", "page.md"),
+                         "the path was not made relative to the worktree")
+
     # -- trailers ------------------------------------------------------------
     def test_trailers_one_per_path_session_host_newest_task_wins_and_staged_only(self):
         self.seed({"path": "a.md", "session": "s1", "host": "h", "task": "old"},

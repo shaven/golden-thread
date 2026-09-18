@@ -142,6 +142,22 @@ class WorkersCli(Sandbox):
         pids = [json.loads(l)["pid"] for l in self.registry.read_text().splitlines()]
         self.assertEqual(pids, [900002])
 
+    def test_a_declaration_for_a_live_non_shell_pid_survives_the_prune(self):
+        """`declare <pid>` accepts ANY pid; the prune must judge the same population.
+
+        report() pruned against the Claude-spawned SHELLS only, so declaring 900003 -- the
+        live python process doing the actual work, right there in the same ps table -- deleted
+        the declaration on the very next check. The alert it was suppressing came back with
+        nothing left on disk to explain why it had ever been quiet, which is the failure mode
+        the registry exists to prevent."""
+        self.py(TOOL, "declare", "900003", "the python child, doing the work")
+        self.py(TOOL, "declare", "900005", "the claude session itself")
+        self.py(TOOL, "declare", "900099", "long gone")
+        self.check()
+        pids = sorted(json.loads(l)["pid"] for l in self.registry.read_text().splitlines())
+        self.assertEqual(pids, [900003, 900005],
+                         "a declaration was dropped for a process that is plainly alive")
+
     def test_other_hosts_declarations_do_not_count(self):
         self.registry.parent.mkdir(parents=True, exist_ok=True)
         self.registry.write_text(json.dumps({"pid": 900001, "host": "some-other-host",

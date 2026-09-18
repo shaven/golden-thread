@@ -86,10 +86,29 @@ class BaselineTest(LintBase):
         proc, findings = self.lint()
         self.assertEqual(proc.returncode, 0, proc.stdout)
 
-    def test_missing_vault_exits_1(self):
-        proc = self.py(LINT, self.tmp / "nope")
-        self.assertEqual(proc.returncode, 1)
-        self.assertIn("vault not found", proc.stderr)
+    def test_a_missing_vault_does_not_look_like_findings(self):
+        """Exit 1 means "the vault was read and here is what is wrong with it". A vault
+        path that does not exist exited 1 too, so a caller that only reads the status
+        could not tell a report from a vault nothing had opened -- and every caller that
+        treats non-zero as "findings" reported findings that were never computed."""
+        missing = self.py(LINT, self.tmp / "nope")
+        self.assertIn("vault not found", missing.stderr)
+        self.w("Knowledge/Lonely.md", "x\n")               # a vault WITH findings
+        findings = self.py(LINT, self.v)
+        self.assertEqual(findings.returncode, 1, findings.stdout)
+        self.assertNotEqual(missing.returncode, findings.returncode,
+                            "a vault that was never read reports the same exit code as "
+                            "a vault that was read and linted")
+        self.assertEqual(missing.returncode, 2)
+
+    def test_queue_with_runbooks_is_refused_not_ignored(self):
+        """--queue was read only after the --runbooks branch had exited: no file, no
+        warning, exit 0. A caller that asked for a worklist got a silent success."""
+        q = self.tmp / "queue.md"
+        proc = self.py(LINT, "--vault", self.v, "--runbooks", "--queue", q)
+        self.assertEqual(proc.returncode, 2, proc.stdout + proc.stderr)
+        self.assertIn("--queue", proc.stderr)
+        self.assertFalse(q.exists())
 
 
 # ---------------------------------------------------------------------------- knowledge
@@ -252,6 +271,54 @@ class ProjectChecksTest(LintBase):
         self.assertNotIn("'alpha/'", proc.stdout)
 
 
+# ---------------------------------------------------------------------------- ADRs
+class AdrCollisionTest(LintBase):
+    TWO_SIXES = ("# Decisions\n\n## ADR-6: keep the ledger in git\n\nbody\n\n"
+                 "## ADR-6: move the ledger to sqlite\n\nbody\n")
+
+    def test_collision_in_a_sub_project_is_examined(self):
+        """`Projects/*/decisions.md` is one level deep. Sub-projects live deeper, and
+        every one of them was silently exempt from the check whose entire subject is
+        two decisions answering to one name."""
+        self.project("alpha")
+        self.fill_source("Projects/alpha")
+        self.project("beta", "--parent", "alpha")
+        self.fill_source("Projects/alpha/beta")
+        self.w("Projects/alpha/beta/decisions.md", self.TWO_SIXES)
+        proc, f = self.lint()
+        self.assertFinding(f, "adr-collision", "Projects/alpha/beta/decisions.md", proc)
+        self.assertIn("alpha/beta", proc.stdout)
+
+    def test_collision_at_the_top_level_still_reported(self):
+        self.project("alpha")
+        self.fill_source("Projects/alpha")
+        self.w("Projects/alpha/decisions.md", self.TWO_SIXES)
+        _, f = self.lint()
+        self.assertFinding(f, "adr-collision", "Projects/alpha/decisions.md")
+
+    def test_amendment_exclusion_is_case_insensitive(self):
+        """The code promises `## ADR-6 amendment:` is deliberate usage and excluded,
+        because "flagging it would train people to ignore the check" -- but the pattern
+        carried re.M only, so Amendment:, AMENDMENT: and (amendment): were all reported
+        as collisions. The promise is what is tested here, in the spellings people write."""
+        self.project("alpha")
+        self.fill_source("Projects/alpha")
+        for n, form in enumerate(("amendment:", "Amendment:", "AMENDMENT:", "(amendment):")):
+            self.w("Projects/alpha/decisions.md",
+                   f"# Decisions\n\n## ADR-{n}: the decision\n\nbody\n\n"
+                   f"## ADR-{n} {form} what changed\n\nbody\n")
+            proc, f = self.lint()
+            self.assertNoFinding(f, "adr-collision", "Projects/alpha/decisions.md")
+
+    def test_a_second_real_allocation_after_an_amendment_is_still_a_collision(self):
+        self.project("alpha")
+        self.fill_source("Projects/alpha")
+        self.w("Projects/alpha/decisions.md",
+               "# Decisions\n\n## ADR-6: one\n\n## ADR-6 Amendment: fine\n\n## ADR-6: two\n")
+        _, f = self.lint()
+        self.assertFinding(f, "adr-collision", "Projects/alpha/decisions.md")
+
+
 # ---------------------------------------------------------------------------- core rules
 class CoreChecksTest(LintBase):
     def test_core_misplaced_and_no_enforcement(self):
@@ -274,11 +341,53 @@ class CoreChecksTest(LintBase):
         for r in core:
             self.assertFinding(f, "core-unenforced", f"Projects/golden-thread/core-rules/{r.name}")
 
+    def hooks_dir(self):
+        return self.home / ".claude" / "golden-thread" / "hooks"
+
+    def wire(self, **events):
+        """settings.json wiring one command per event. A bare name is resolved to the
+        installed hook script; anything else is written through verbatim."""
+        hooks = {}
+        for event, command in events.items():
+            cmd = str(self.hooks_dir() / command) if command.endswith(".sh") \
+                and "/" not in command else command
+            hooks[event] = [{"hooks": [{"type": "command", "command": cmd}]}]
+        (self.home / ".claude" / "settings.json").write_text(json.dumps({"hooks": hooks}))
+
+    def test_core_unenforced_when_the_event_is_wired_to_an_unrelated_hook(self):
+        """THE defect this check exists to catch, one level up from where it looked.
+
+        wired_hook_events() marked an event wired as soon as any block under it had a
+        non-empty `hooks` list, and never read `command`. So a vault with somebody
+        else's UserPromptSubmit hook -- a linter, a logger, anything -- and
+        inject_core_rules.sh nowhere in settings.json was reported as enforcing the
+        entire Core tier. That is the project's own 0.9.5 failure restated: the hook
+        existed, install.sh copied it, the check reported clean, and nothing had
+        registered the event.
+        """
+        self.wire(UserPromptSubmit="/usr/local/bin/somebody-elses-hook.sh",
+                  Stop="/usr/local/bin/somebody-elses-hook.sh")
+        proc, f = self.lint()
+        cr = self.v / "Projects/golden-thread/core-rules"
+        rules = [p.name for p in sorted(cr.glob("core_*.md")) if "level: core" in p.read_text()]
+        self.assertTrue(rules, "the fixture vault ships no core rules")
+        for n in rules:
+            self.assertFinding(f, "core-unenforced", f"Projects/golden-thread/core-rules/{n}", proc)
+        self.assertFinding(f, "core-unenforced", "Projects/golden-thread/core-rules", proc)
+        self.assertIn("the event is wired, but to something else", proc.stdout)
+
+    def test_core_enforced_when_the_real_script_is_wired_with_arguments(self):
+        """The command is matched on the script it runs, not on one exact string, so a
+        wrapper or an argument does not read as an uninstalled mechanism."""
+        self.wire(UserPromptSubmit="bash %s --quiet" % (self.hooks_dir() / "inject_core_rules.sh"),
+                  Stop=str(self.hooks_dir() / "validate_response.sh"))
+        proc, f = self.lint()
+        self.assertNoFinding(f, "core-unenforced")
+
     def test_core_unenforced_partial_wiring(self):
         """Only UserPromptSubmit wired: validated rules (need Stop) are flagged,
         reminder rules are not, and the folder-level 'inert' finding is absent."""
-        (self.home / ".claude" / "settings.json").write_text(json.dumps(
-            {"hooks": {"UserPromptSubmit": [{"hooks": [{"type": "command", "command": "x"}]}]}}))
+        self.wire(UserPromptSubmit="inject_core_rules.sh")
         proc, f = self.lint()
         self.assertNoFinding(f, "core-unenforced", "Projects/golden-thread/core-rules")
         cr = self.v / "Projects/golden-thread/core-rules"
@@ -343,6 +452,39 @@ class SuppressionAndQueueTest(LintBase):
         proc, f = self.lint()
         self.assertEqual(proc.returncode, 0, proc.stdout)
 
+    def test_a_bare_word_does_not_silence_a_link_vault_wide(self):
+        """Suppression scope used to differ per check: broken-link also matched a bare
+        link TARGET against the whole vault, so one word silenced that link in every
+        file, while other checks honoured only the relative path. A one-word line does
+        not look like a vault-wide rule, so it no longer is one -- a link is declined
+        scoped to the file it is in."""
+        self.index("One", "Two")
+        self.w("Knowledge/One.md", "[[Gone]]\n")
+        self.w("Knowledge/Two.md", "[[Gone]]\n")
+        self.declines("suppress: Gone")
+        proc, f = self.lint()
+        self.assertFinding(f, "broken-link", "Knowledge/One.md", proc)
+        self.assertFinding(f, "broken-link", "Knowledge/Two.md", proc)
+        self.declines("suppress: Knowledge/One.md:[[Gone]]")
+        proc, f = self.lint()
+        self.assertNoFinding(f, "broken-link", "Knowledge/One.md")
+        self.assertFinding(f, "broken-link", "Knowledge/Two.md", proc)
+
+    def test_a_bare_file_name_suppresses_that_file_in_every_check(self):
+        """The documented bare-filename form, now honoured by every check rather than
+        by some of them."""
+        self.project("alpha")
+        self.fill_source("Projects/alpha")
+        self.w("Projects/alpha/decisions.md",
+               "## ADR-1: one\n\n## ADR-1: two\n")
+        self.w("Knowledge/Old.md", "---\nstatus: stale\n---\n[[Nowhere]]\n")
+        self.index("Old")
+        self.declines("suppress: decisions.md", "suppress: Old.md")
+        proc, f = self.lint()
+        self.assertNoFinding(f, "adr-collision")
+        self.assertNoFinding(f, "stale")
+        self.assertNoFinding(f, "broken-link")
+
     def test_template_suppressions_cover_shipped_placeholders(self):
         # fresh index.md carries [[Page Title]] as an example; it must not surface
         _, f = self.lint()
@@ -359,11 +501,21 @@ class SuppressionAndQueueTest(LintBase):
         self.assertIn("- [ ] `Knowledge/Lonely.md`", text)
         self.assertIn("Review queue written to", proc.stdout)
 
-    def test_queue_not_written_when_clean(self):
+    def test_a_clean_run_rewrites_the_queue_instead_of_leaving_a_stale_one(self):
+        """`if args.queue and findings:` meant a healthy vault never rewrote the file,
+        so review-queue.md went on listing findings that had been fixed -- and gt-open
+        reports its pending count from exactly that file."""
         q = self.tmp / "queue.md"
+        self.w("Knowledge/Lonely.md", "x\n")
+        self.assertEqual(self.lint("--queue", q)[0].returncode, 1)
+        self.assertIn("Knowledge/Lonely.md", q.read_text())
+        self.index("Lonely")                                  # fix both findings
         proc, _ = self.lint("--queue", q)
-        self.assertEqual(proc.returncode, 0)
-        self.assertFalse(q.exists())
+        self.assertEqual(proc.returncode, 0, proc.stdout)
+        self.assertTrue(q.exists(), "the queue was left behind by a clean run")
+        self.assertNotIn("Knowledge/Lonely.md", q.read_text(),
+                         "a clean run left the previous run's findings in the worklist")
+        self.assertIn("No open findings", q.read_text())
 
 
 # ------------------------------------------------------- the queue is a worklist, not a projection
@@ -415,8 +567,56 @@ class QueueIsHumanWorkTest(LintBase):
         self.assertEqual(after.count("- [x] `Knowledge/Lonely.md`"),
                          before.count("- [x] `Knowledge/Lonely.md`"))
         out = proc.stdout + proc.stderr
-        self.assertIn("not what this tool last generated", out)
-        self.assertIn("carried into the regenerated queue", out)
+        # A tick is a change this tool CARRIES, so it is not an unexplained edit. The
+        # comparison ignores ticks: warning on them meant the "only in that copy"
+        # message fired on every run after anyone worked the list, always benignly,
+        # which is how a warning stops being read.
+        self.assertNotIn("not what this tool last generated", out)
+        self.assertEqual(self.backups(), [],
+                         "ticking an item made a backup on every subsequent run")
+
+    def test_a_note_typed_beside_a_tick_is_still_reported(self):
+        """Ignoring ticks must not mean ignoring what is next to them."""
+        self.run_lint()
+        self.tick_everything()
+        self.q.write_text(self.q.read_text(encoding="utf-8") + "\n- a note I typed here\n",
+                          encoding="utf-8")
+        proc = self.run_lint()
+        self.assertIn("not what this tool last generated", proc.stdout + proc.stderr)
+        self.assertEqual(len(self.backups()), 1)
+
+    def test_backups_are_bounded_and_never_overwrite_each_other(self):
+        """Nothing pruned the folder, and the name was second-resolution while
+        shutil.copy2 overwrites -- so two runs in one second destroyed a copy and a
+        broken receipt grew the folder for ever."""
+        self.run_lint()
+        for i in range(15):
+            self.q.write_text(self.q.read_text(encoding="utf-8") + f"\n- note {i}\n",
+                              encoding="utf-8")
+            self.run_lint()
+        kept = self.backups()
+        self.assertEqual(len(kept), 10, f"backups unbounded: {len(kept)} copies")
+        bodies = [p.read_text(encoding="utf-8") for p in kept]
+        self.assertEqual(len(set(bodies)), len(bodies), "two runs wrote the same backup name")
+        self.assertTrue(any("note 14" in b for b in bodies), "the newest copy was pruned")
+
+    def test_an_unwritable_receipt_still_reports_where_the_copy_went(self):
+        """The receipt was written AFTER os.replace, unguarded. An unwritable one raised
+        after the queue had been replaced AND copied aside, so `return notes` never ran:
+        the user saw a traceback about a file they had not asked about, and never the
+        line naming the copy they now needed."""
+        self.q.write_text("# Vault Review Queue\n\nsomething from before\n", encoding="utf-8")
+        (self.v / self.DIGESTS).mkdir(parents=True)      # a directory: cannot be written
+        proc = self.run_lint()
+        out = proc.stdout + proc.stderr
+        self.assertNotIn("Traceback", out)
+        self.assertEqual(proc.returncode, 1, out)
+        self.assertIn("kept a copy", out)
+        self.assertIn("could not record the generation receipt", out)
+        kept = self.backups()
+        self.assertEqual(len(kept), 1, f"expected exactly one copy, got {kept}")
+        self.assertIn("something from before", kept[0].read_text(encoding="utf-8"))
+        self.assertIn("- [ ] `Knowledge/Lonely.md`", self.q.read_text(encoding="utf-8"))
 
     def test_a_hand_edited_queue_is_backed_up_and_reported(self):
         self.run_lint()
@@ -487,6 +687,18 @@ class JsonOutputTest(LintBase):
         self.assertEqual(data["counts"], text_counts)
         self.assertEqual(sorted((f["kind"], f["path"]) for f in data["findings"]),
                          sorted(text_findings))
+
+    def test_json_finding_shape_matches_the_documented_schema(self):
+        """The docstring listed {kind,path,line,message} -- omitting proposed_fix, which
+        is always emitted, and advertising `line`, which no default-mode check ever
+        sets. It now says both, and this is the assertion behind that sentence."""
+        self.w("Knowledge/Lonely.md", "x [[Nowhere]]\n")
+        data = json.loads(self.py(LINT, self.v, "--json").stdout)
+        self.assertTrue(data["findings"])
+        for f in data["findings"]:
+            self.assertEqual(set(f), {"kind", "path", "line", "message", "proposed_fix"}, f)
+            self.assertIsNone(f["line"], f)
+            self.assertTrue(f["proposed_fix"], f)
 
     def test_json_clean_vault(self):
         proc = self.py(LINT, "--vault", self.v, "--json")

@@ -11,6 +11,122 @@ release's own summary line, kept short rather than reconstructed after the fact.
 
 ---
 
+## gt 0.16.5 — 2026-09-18
+
+**Every defect an adversarial sweep found in 0.16.4, including the two that release
+introduced — and the checks that had been reporting clean over what they never verified.**
+
+A three-pass sweep of 0.16.4 (an attack on that day's concurrency work, a claims-versus-code
+audit of every script and skill, and a live health check) produced eight high-severity findings
+and about twenty more. This release closes all of them. Every behavioural fix was proven by
+reverting it and watching its test fail.
+
+**The thread running through the worst of them: three of the four highest findings were CHECKS
+THAT REPORT CLEAN OVER SOMETHING THEY NEVER VERIFIED** — the exact failure the Core tier,
+`gt_doctor` and `gt_validation` were each built to close. The defect class was not merely
+recurring; it was reproducing inside the machinery built to catch it.
+
+### Nothing verified that a Core rule's mechanism was wired. Now something does.
+
+`gt_doctor`'s docstring had advertised a `core rules` check for releases while `CHECKS` did not
+contain it — `--only core-rules` was a usage error. The one place that did look, `gt_lint`'s
+`core-unenforced`, only asked whether SOME hook occupied the event, never which one: a vault
+with any third-party `UserPromptSubmit` hook and `inject_core_rules.sh` **absent** reported the
+Core tier enforced.
+
+Both are fixed. `gt_lint` now compares the actual command through a single
+`ENFORCEMENT_MECHANISM` map, and `gt_doctor` gained the check it had been claiming — reading
+each `level: core` rule in the vault and confirming the specific script implementing its
+declared enforcement is wired and present on disk. A failure says what it means: the rule is
+**stored but not enforced**.
+
+### `gt_doctor` could not report drift at all
+
+Its component check read an exit code that `gt_components` returns as `0` by design (it is
+advisory, and also runs as a SessionStart hook). So the WARN branch, the "drift against"
+message and the `apply` fix line were dead code, and the drift text was discarded. It now parses
+the report, and distinguishes actionable drift (`stale`/`missing`) from what needs a person
+(`differs`/`ahead`/`no-manifest`) from the benign (`extra` — module-installed scripts, which
+must not warn for ever).
+
+The same "trusted the exit code" mistake was in **four more checks**: a linter that died with a
+traceback reported the vault clean; a crashed worker probe became a warning about "no output";
+`wiring` ignored `badpath` rows entirely and said every hook was wired. All now separate *could
+not run* from *clean*, and the footer names them — "N check(s) could not run at all, so this
+report does not cover them".
+
+### The session registry stopped losing claims — this time including `register`
+
+0.16.4 said "the session claim registry no longer loses claims". That was false: the
+compare-and-swap covered `claim` and `beat`, while `register` rebuilt the claim list from
+`--files` alone and `--resume` deleted the file first. Re-registering mid-session — which
+sessions routinely do — silently dropped everything claimed since, disarming the only
+cross-session mutual exclusion the vault has.
+
+`register` now goes through the same CAS: existing claims are carried forward and `--files` is
+unioned into them. A dead predecessor's claims are still released, but the count and the paths
+are named rather than dropped in silence.
+
+Two more in the same file. **An ambiguous session id now refuses instead of guessing**: with two
+registrations (`--new`, or a same-minute collision) the old code picked by sort order, so a
+process could claim into another's registration and a `release` could clear claims it did not
+own. And **the flock fallback announces itself** — measured, without it the CAS silently loses a
+claim in 9 of 10 trials with four writers while every process reports success.
+
+### Two defects 0.16.4 introduced
+
+**The retry duplicated rescued lines into the spool.** `capture_hand_written` sat inside the new
+3-attempt loop and is not idempotent: one stale attempt duplicated a rescued line, two
+triplicated it, and because the copies land in the SPOOL no re-merge can remove them — the
+vault's audit trail permanently recorded an event more than once. The capture stays inside the
+retry (a retry happens because the file moved, and what moved may be a further edit that still
+needs rescuing); the caller now tracks what it has already captured this run, as a multiset, so
+a line genuinely typed twice is still rescued twice.
+
+**An unreadable target was destroyed, permanently.** `current_digest` returned the digest of
+empty bytes on any read error, so the `expect` precondition reported "nobody moved underneath
+you" about a file nobody could read, and the render overwrote it. 0.16.4's mode preservation —
+correct in itself — then copied mode `000` onto the replacement, so the file stayed unreadable
+and every later merge destroyed it again. Reading a file that exists but cannot be read now
+RAISES; `gt_log` and `gt_adr` turn it into a clean refusal with nothing written.
+
+### Writers that reported success for work they had not done
+
+- **`safe_write`** swallowed strategies 2 and 3 in bare `except: pass` — the same silence 0.16.4
+  fixed one rung up. Each now names what failed and what it fell back to. `replay()` no longer
+  overwrites a target that reappeared; it reports `still-blocked` and leaves it for a person.
+- **`gt_lint --queue`** destroyed ticked items. The review queue is not a projection — a lint
+  finding has no upstream checkbox, so a tick lived in that file and nowhere else and carried
+  the judgement recomputation cannot reach. Ticks on still-open findings now carry across.
+- **Generation receipts** were written after `os.replace` and unguarded, so an unwritable receipt
+  crashed *after* the file was replaced and the "kept a copy" note never reached the user.
+  Backups are now bounded (count and age), never overwrite each other, and prune only their own
+  tool's copies.
+
+### Contracts that had drifted
+
+Nine scripts documented exit codes their code did not honour, and each was decided one way or
+the other rather than papered over: `gt_context --json` exited 0 having rendered nothing;
+`gt_scan_language` hid a failed pack whenever anything matched; `gt_demote` returned "error
+mid-move" for a refusal before anything moved; `vault_init` always exited 0 even holding error
+rows. `guard_session_claims` tracebacked on a no-arg call against its own fail-open contract.
+`gt_upgrade --dry-run` wrote a working copy inside the vault. `gt_edits` lost attribution in
+exactly the worktree case its comment said was handled.
+
+**Behaviour a caller can feel**: `gt_scan_language` now exits 3 rather than 1 when a pack failed
+to load and findings exist — a partial scan is could-not-run, not findings.
+
+### Also
+
+`gt_adr`'s dry run named an ADR number the real allocation would not use, ignoring the
+high-water file in exactly the case it exists for. `gt_settings` claimed to register every
+automatic behaviour while four enforcement hooks had no entry — the claim is narrowed to
+*optional* behaviour, deliberately, because a session able to switch off the hook asserting
+rules against it is not enforced. `/gt:gt-registry` was cited as a skill and does not exist.
+`gt-create` asked a question whose answer changed nothing. Skills citing Core rules by NUMBER
+now cite them by name, because numbers are run-time positions over the gated set and renumber
+when a setting is switched off.
+
 ## gt 0.16.4 — 2026-09-17
 
 **The vault's writers stop losing other people's work, and the release gate stops depending on

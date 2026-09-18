@@ -1,0 +1,22 @@
+{
+  "schema": 1,
+  "name": "flow",
+  "plugin": "gt-flow",
+  "version": "0.16.5",
+  "requires_gt": ">=0.16.5,<0.17.0",
+  "summary": "Flow view: render the vault's event stream as a per-project timeline of knowledge climbing the ladder, one offline HTML file",
+  "default": "on",
+  "skills": [
+    "gt-flow"
+  ],
+  "scripts": [
+    "gt_flow.py"
+  ],
+  "templates": [],
+  "hooks": [],
+  "hookdir_scripts": [],
+  "settings": [],
+  "requires_modules": [],
+  "replaces_core": [],
+  "demo": "demo/act.md"
+}

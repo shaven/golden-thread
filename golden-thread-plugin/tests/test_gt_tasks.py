@@ -174,6 +174,121 @@ class GtTasksTest(Sandbox):
         self.assertTrue(d.is_file(), "no generation receipt written")
         self.assertRegex(d.read_text(encoding="utf-8").strip(), r"^[0-9a-f]{64}$")
 
+    def test_first_run_also_says_where_the_edit_belongs(self):
+        """The message naming README.md used to sit in the `else` of `if not recorded`,
+        so the FIRST run -- the one most likely to be swallowing a hand edit made before
+        the check existed -- was the one run that never said where the edit belonged."""
+        self.project("alpha", tasks=["- [ ] do it [p:: 2]"])
+        (self.vault / "TASKS.md").write_text("- [x] I ticked this before the check existed\n",
+                                             encoding="utf-8")
+        (self.vault / self.DIGEST).unlink(missing_ok=True)    # genuinely no receipt yet
+        proc = self.py(self.tool, "--vault", self.vault)      # so: the first run
+        out = proc.stdout + proc.stderr
+        self.assertIn("not what this tool last generated", out)
+        self.assertIn("no previous digest recorded", out, "not the first-run path")
+        self.assertIn("README.md", out,
+                      "the first run backed the edit up without saying where it belongs")
+
+    # -- the receipt, the backups, and the runs that collide (2026-09-18) ------------
+    def test_an_unwritable_receipt_still_reports_the_backup(self):
+        """The receipt is written AFTER os.replace. Unguarded, an exception there ran
+        instead of `return notes`: TASKS.md was already replaced and the hand edit already
+        copied aside, but the person saw a traceback where "kept a copy: ..." belonged."""
+        self.project("alpha", tasks=["- [ ] do it [p:: 2]"])
+        self.run_rollup()                                   # seeds the receipt
+        d = self.vault / self.DIGEST
+        d.unlink()
+        d.mkdir()                                           # cannot be written as a file
+        target = self.vault / "TASKS.md"
+        target.write_text(target.read_text() + "\n- [x] I ticked this by hand\n",
+                          encoding="utf-8")
+        proc = self.py(self.tool, "--vault", self.vault)
+        out = proc.stdout + proc.stderr
+        self.assertEqual(proc.returncode, 0,
+                         "an unwritable receipt crashed the run AFTER TASKS.md was "
+                         "replaced:\n" + out)
+        self.assertIn("kept a copy:", out,
+                      "the backup was made but never reported -- the user saw nothing")
+        kept = list((self.vault / self.BACKUPS).glob("TASKS.md.*"))
+        self.assertEqual(len(kept), 1)
+        self.assertIn("I ticked this by hand", kept[0].read_text(encoding="utf-8"))
+        self.assertIn("receipt", out, "the failed receipt itself was not reported")
+        self.assertIn("TASKS.md written", proc.stdout,
+                      "the rollup's own success line never printed")
+
+    def test_backups_are_bounded_and_other_tools_backups_are_left_alone(self):
+        """A frozen receipt makes every later run copy TASKS.md aside, so an unchanged
+        vault grew backups for ever. Keep the newest KEEP_BACKUPS and nothing else."""
+        self.project("alpha", tasks=["- [ ] do it [p:: 2]"])
+        self.run_rollup()
+        bdir = self.vault / self.BACKUPS
+        bdir.mkdir(parents=True, exist_ok=True)
+        for i in range(25):
+            (bdir / ("TASKS.md.2026-01-%02d-120000" % (i + 1))).write_text("old %d\n" % i)
+        (bdir / "lint-queue.2026-01-01-120000").write_text("gt_lint's, not ours\n")
+        target = self.vault / "TASKS.md"
+        target.write_text(target.read_text() + "\n- [x] hand edit\n", encoding="utf-8")
+        proc = self.py(self.tool, "--vault", self.vault)
+        self.assertOk(proc)
+        kept = sorted(p.name for p in bdir.glob("TASKS.md.*"))
+        self.assertLessEqual(len(kept), 10,
+                             "backups are unbounded: %d copies kept" % len(kept))
+        self.assertTrue((bdir / "lint-queue.2026-01-01-120000").is_file(),
+                        "pruning ate another tool's backups in the shared directory")
+        # The copy this run just made is the one that must never be pruned.
+        newest = max(kept)
+        self.assertIn("hand edit", (bdir / newest).read_text(encoding="utf-8"))
+
+    def test_backups_older_than_the_age_bound_are_pruned(self):
+        import os as _os
+        import time as _time
+        self.project("alpha", tasks=["- [ ] do it [p:: 2]"])
+        self.run_rollup()
+        bdir = self.vault / self.BACKUPS
+        bdir.mkdir(parents=True, exist_ok=True)
+        long_ago = _time.time() - 60 * 86400
+        for i in range(3):
+            p = bdir / ("TASKS.md.2026-01-%02d-120000" % (i + 1))
+            p.write_text("ancient %d\n" % i)
+            _os.utime(p, (long_ago, long_ago))
+        target = self.vault / "TASKS.md"
+        target.write_text(target.read_text() + "\n- [x] hand edit\n", encoding="utf-8")
+        self.assertOk(self.py(self.tool, "--vault", self.vault))
+        left = sorted(p.name for p in bdir.glob("TASKS.md.*"))
+        self.assertEqual(len(left), 1,
+                         "60-day-old backups survived the age bound: %s" % left)
+        self.assertIn("hand edit", (bdir / left[0]).read_text(encoding="utf-8"))
+
+    def test_two_runs_in_the_same_second_keep_both_backups(self):
+        """Backup names are second-resolution and shutil.copy2 overwrites, so two runs
+        inside one second used to leave ONE file where two edits had been kept."""
+        m = load_module(self.tool, "gt_tasks_backup_race")
+        m._backup_stamp = lambda: "2026-09-18-120000"       # pin the collision
+        target = self.vault / "TASKS.md"
+        bdir = self.vault / self.BACKUPS
+        target.write_text("EDIT ONE\n", encoding="utf-8")
+        m.write_rollup(self.vault, "generated A\n")
+        target.write_text("EDIT TWO\n", encoding="utf-8")
+        m.write_rollup(self.vault, "generated B\n")
+        kept = sorted(bdir.glob("TASKS.md.*"))
+        bodies = sorted(p.read_text(encoding="utf-8") for p in kept)
+        self.assertEqual(len(kept), 2,
+                         "the second backup overwrote the first: %s"
+                         % [p.name for p in kept])
+        self.assertEqual(bodies, ["EDIT ONE\n", "EDIT TWO\n"],
+                         "a backed-up hand edit was destroyed by the next run's copy")
+
+    def test_dry_run_line_count_matches_the_rendered_file(self):
+        """`len(L)` counted append CALLS, several of which push multi-line chunks."""
+        self.project("alpha", tasks=["- [ ] do it [p:: 2]"])
+        proc = self.py(self.tool, "--vault", self.vault, "--dry-run")
+        self.assertOk(proc)
+        m = re.search(r"\((\d+) line\(s\)", proc.stderr)
+        self.assertIsNotNone(proc.stderr)
+        self.assertIsNotNone(m, "no line count in: " + proc.stderr)
+        self.assertEqual(int(m.group(1)), len(proc.stdout.splitlines()) - 1,
+                         "the dry run misreported how many lines it rendered")
+
     def test_no_temp_file_is_left_behind(self):
         """The write is atomic (tmp + fsync + replace) so a torn TASKS.md never exists --
         but a leftover tmp at the vault root would be its own mess."""

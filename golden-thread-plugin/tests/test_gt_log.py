@@ -15,6 +15,14 @@ import pathlib
 
 from _harness import Sandbox, TOOLS, SCRIPTS, PYTHON, load_module
 
+def _restore_mode(path, mode=0o644):
+    """chmod back, ignoring a path the sandbox teardown has already removed."""
+    try:
+        os.chmod(path, mode)
+    except OSError:
+        pass
+
+
 WORK = re.compile(r"^(\d{4}-\d{2}-\d{2})(?:\s+[^\s\[]+){0,2}\s+\[work\]\s+(.+?)"
                   r"(?:\s+(?:—|–|--?)\s|\s*$)")
 
@@ -533,6 +541,310 @@ class MergePassesThePrecondition(Sandbox):
         self.assertEqual(calls["n"], 3, "the retry must be bounded at three attempts")
         self.assertIn("edit 3", self.log.read_text(encoding="utf-8"),
                       "the last write standing must be the human's, not the merge's")
+
+
+class RescueHappensExactlyOnce(Sandbox):
+    """A retried merge must rescue a hand-written line ONCE, however many attempts it takes.
+
+    0.16.4 put `capture_hand_written()` inside the three-attempt retry without making it
+    idempotent. It appends the rescued lines to the SPOOL; the re-render then places them at
+    their sorted position -- but the target still holds them where the human typed them, so
+    the next attempt's diff reports them missing again and rescues them a second time, into
+    the same second-resolution filename opened "ab". Measured: one stale attempt duplicated
+    the line, two triplicated it, exit 0 either way.
+
+    The spool is the audit trail, so re-merging cannot undo it: the vault permanently records
+    one event two or three times. These tests count what is IN THE SPOOL, not what log.md
+    happens to render, because that is where the damage is permanent.
+    """
+
+    def setUp(self):
+        super().setUp()
+        self.vault = self.make_vault()
+        self.log = self.vault / "log.md"
+        self.spool = self.vault / "Projects/golden-thread/spool/log"
+
+    def _patch(self, obj, name, value):
+        original = getattr(obj, name)
+        self.addCleanup(setattr, obj, name, original)
+        setattr(obj, name, value)
+        return original
+
+    def _merge(self, mod):
+        return mod.cmd_merge(argparse.Namespace(vault=str(self.vault), quiet=True,
+                                                dry_run=False))
+
+    def spooled_count(self, needle):
+        return sum(f.read_text(encoding="utf-8", errors="replace").count(needle)
+                   for f in self.spool.rglob("*") if f.is_file())
+
+    HAND = "2026-01-02 09:00 CDT [note] typed straight into log.md by the owner"
+    LATER = "2026-06-01 10:00 CDT [work] demo — spooled, and dated after the hand edit"
+
+    def type_by_hand(self, mod):
+        """Spool a LATER-dated line, then append an EARLIER hand edit at the end of log.md.
+
+        The dates matter, and a version of this test without them proves nothing: the
+        re-report only happens when the render MOVES the rescued line, so that the target
+        (line at the end) and the render (line at its sorted position) still differ on the
+        next attempt. A hand edit whose sorted position is where it was typed produces
+        identical files, no diff, and no second capture even from the defective code.
+        """
+        mod.S.append(self.vault, "log", self.LATER, sid="alpha")
+        self.assertEqual(self._merge(mod), 0, "baseline merge")
+        with open(self.log, "a", encoding="utf-8") as fh:
+            fh.write(self.HAND + "\n")
+        body = self.log.read_text(encoding="utf-8").splitlines()
+        self.assertGreater(body.index(self.HAND), body.index(self.LATER),
+                           "fixture is wrong: the hand edit must start out BELOW a line "
+                           "it sorts above, or the render never moves it")
+
+    def _run_with_stale_attempts(self, stale):
+        """Force the first `stale` writes to lose the precondition, then merge.
+
+        Staleness is injected at `write_if_changed` rather than by racing the file, so the
+        number of wasted attempts is exact and the hand-written content never varies: the
+        human typed one line and stopped. Every extra attempt is therefore a re-decision
+        about the SAME line, which is the whole question.
+        """
+        mod = load_module(TOOLS / "gt_log.py", "gt_log_once_%d" % stale)
+        self.type_by_hand(mod)
+        calls = {"n": 0}
+
+        def flaky(target, text, expect=None):
+            calls["n"] += 1
+            if calls["n"] <= stale:
+                return mod.S.STALE          # someone moved the file; nothing written
+            return real(target, text, expect=expect)
+
+        real = self._patch(mod.S, "write_if_changed", flaky)
+        rc = self._merge(mod)
+        return rc, calls["n"]
+
+    def test_one_stale_attempt_rescues_the_line_once(self):
+        rc, attempts = self._run_with_stale_attempts(1)
+        self.assertEqual(rc, 0, "one stale attempt should still finish")
+        self.assertEqual(attempts, 2)
+        self.assertEqual(self.spooled_count(self.HAND), 1,
+                         "the rescued line is in the spool %d times; the retry captured it "
+                         "again and the audit trail now records the event twice"
+                         % self.spooled_count(self.HAND))
+        self.assertEqual(self.log.read_text(encoding="utf-8").count(self.HAND), 1)
+
+    def test_two_stale_attempts_rescue_the_line_once(self):
+        rc, attempts = self._run_with_stale_attempts(2)
+        self.assertEqual(rc, 0, "two stale attempts should still finish on the third")
+        self.assertEqual(attempts, 3)
+        self.assertEqual(self.spooled_count(self.HAND), 1,
+                         "two stale attempts triplicated the rescued line: %d copies"
+                         % self.spooled_count(self.HAND))
+        self.assertEqual(self.log.read_text(encoding="utf-8").count(self.HAND), 1)
+
+    def test_three_stale_attempts_refuse_but_still_rescue_only_once(self):
+        """The merge gives up (exit 3) -- and must not have littered the spool on the way.
+
+        Nothing is written to log.md here, so the ONLY lasting effect of the run is whatever
+        reached the spool. One copy of the line is right (it was rescued); two or three are
+        the corruption."""
+        rc, attempts = self._run_with_stale_attempts(3)
+        self.assertEqual(rc, 3, "a file that never settles must refuse")
+        self.assertEqual(attempts, 3, "the retry must be bounded at three attempts")
+        self.assertEqual(self.spooled_count(self.HAND), 1,
+                         "an abandoned merge left %d copies of the rescued line in the spool"
+                         % self.spooled_count(self.HAND))
+
+    def test_a_line_typed_twice_is_still_rescued_twice(self):
+        """The tally is a MULTISET, not a set: dropping a genuine repeat would be data loss
+        of exactly the kind the rescue exists to prevent."""
+        mod = load_module(TOOLS / "gt_log.py", "gt_log_once_twice")
+        mod.S.append(self.vault, "log", self.LATER, sid="alpha")
+        self.assertEqual(self._merge(mod), 0, "baseline merge")
+        with open(self.log, "a", encoding="utf-8") as fh:
+            fh.write(self.HAND + "\n" + self.HAND + "\n")
+        self.assertEqual(self._merge(mod), 0)
+        self.assertEqual(self.spooled_count(self.HAND), 2,
+                         "a line the owner really did type twice was rescued only once")
+
+
+class AnUnreadableTargetIsRefused(Sandbox):
+    """A file that EXISTS but cannot be read must never be written over.
+
+    0.16.4: `current_digest()` returned the digest of b"" on any OSError and
+    `write_if_changed` set `current = None` on any OSError -- both of which are also what
+    an ABSENT file gives. So `before == expect` held, the precondition reported "nobody
+    moved underneath you" about a file nobody could see, `hand_written()` returned []
+    (its `is_generated` swallows the same OSError), and the render replaced the file.
+    `chmod 000 log.md; gt_log.py merge` printed "log.md updated" and exited 0 with the
+    hand-written line gone, no warning and no rescue file.
+
+    0.16.4 also made it permanent: mode preservation copies mode 000 onto the replacement,
+    so the file stays unreadable and every later merge clobbers it again. safe_write.py's
+    rule -- refuse rather than replace a file you cannot read -- has to hold here too.
+    """
+
+    def setUp(self):
+        super().setUp()
+        if hasattr(os, "geteuid") and os.geteuid() == 0:
+            self.skipTest("root reads mode-000 files, so the defect cannot be reproduced")
+        self.vault = self.make_vault()
+        self.log = self.vault / "log.md"
+
+    def tool(self, *args):
+        return self.py(TOOLS / "gt_log.py", "--vault", self.vault, *args)
+
+    def make_unreadable(self):
+        """log.md with an owner's line in it, then mode 000. Restored for tearDown."""
+        self.assertOk(self.tool("merge"))
+        with open(self.log, "a", encoding="utf-8") as fh:
+            fh.write("2026-01-02 09:00 CDT [note] the owner's only copy of this\n")
+        raw = self.log.read_bytes()
+        os.chmod(self.log, 0o000)
+        # Restored so tearDown can remove the tree; tolerant because tearDown runs FIRST
+        # and has usually already deleted it.
+        self.addCleanup(_restore_mode, self.log)
+        if os.access(self.log, os.R_OK):                      # pragma: no cover
+            self.skipTest("this filesystem ignores mode 000")
+        return raw
+
+    def test_merge_refuses_and_the_file_survives(self):
+        raw = self.make_unreadable()
+        p = self.tool("merge")
+        self.assertEqual(p.returncode, 4,
+                         "an unreadable log.md was not refused: exit %d\n%s\n%s"
+                         % (p.returncode, p.stdout, p.stderr))
+        self.assertIn("REFUSED", p.stderr)
+        self.assertNotIn("updated", p.stdout)
+        os.chmod(self.log, 0o644)
+        self.assertEqual(self.log.read_bytes(), raw,
+                         "the merge replaced a file it could not read")
+
+    def test_the_unreadable_file_keeps_its_mode(self):
+        """The 0.16.4 compounding: the replacement inherited mode 000, so the file stayed
+        unreadable and idempotence -- an acceptance criterion -- was broken for good."""
+        self.make_unreadable()
+        self.tool("merge")
+        self.assertEqual(self.log.stat().st_mode & 0o777, 0o000,
+                         "log.md's mode changed, so something replaced it")
+
+    def test_add_spools_the_entry_and_reports_the_refusal(self):
+        """`add` must still save the line -- the spool is the session's own file and is
+        perfectly writable -- while saying, in its exit code, that log.md is not current."""
+        self.make_unreadable()
+        p = self.tool("--id", "alpha", "add", "2026-01-03 10:00 CDT [work] x — y")
+        self.assertEqual(p.returncode, 4, p.stdout + p.stderr)
+        self.assertIn("REFUSED", p.stderr)
+        spool = self.vault / "Projects/golden-thread/spool/log/alpha.md"
+        self.assertIn("[work] x", spool.read_text(encoding="utf-8"),
+                      "the entry was lost as well")
+
+    def test_dry_run_refuses_too(self):
+        self.make_unreadable()
+        p = self.tool("merge", "--dry-run")
+        self.assertEqual(p.returncode, 4, p.stdout + p.stderr)
+
+
+class SpoolUnreadable(Sandbox):
+    """The gt_spool half of the same defect, at the two functions that swallowed it."""
+
+    def setUp(self):
+        super().setUp()
+        if hasattr(os, "geteuid") and os.geteuid() == 0:
+            self.skipTest("root reads mode-000 files")
+        self.S = load_module(TOOLS / "gt_spool.py", "gt_spool_unreadable")
+        self.target = self.tmp / "log.md"
+        self.target.write_text("the owner's bytes\n", encoding="utf-8")
+        os.chmod(self.target, 0o000)
+        self.addCleanup(_restore_mode, self.target)
+        if os.access(self.target, os.R_OK):                   # pragma: no cover
+            self.skipTest("this filesystem ignores mode 000")
+
+    def test_cannot_read_is_not_the_same_as_absent(self):
+        self.assertIsNone(self.S.read_bytes_or_none(self.tmp / "nothing-here.md"),
+                          "an absent file must read as absent")
+        with self.assertRaises(self.S.Unreadable):
+            self.S.read_bytes_or_none(self.target)
+
+    def test_current_digest_refuses_rather_than_digesting_empty(self):
+        with self.assertRaises(self.S.Unreadable):
+            self.S.current_digest(self.target)
+
+    def test_write_if_changed_refuses_and_writes_nothing(self):
+        with self.assertRaises(self.S.Unreadable):
+            self.S.write_if_changed(self.target, "rendered\n")
+        with self.assertRaises(self.S.Unreadable):
+            self.S.write_if_changed(self.target, "rendered\n",
+                                    expect=self.S.content_digest(b""))
+        os.chmod(self.target, 0o644)
+        self.assertEqual(self.target.read_text(encoding="utf-8"), "the owner's bytes\n",
+                         "a file that could not be read was replaced anyway")
+        self.assertEqual([p.name for p in self.tmp.iterdir() if p.name.endswith(".gt-tmp")],
+                         [], "a refused write left a scratch file behind")
+
+
+class SafeWriteRefusalIsNotSwallowed(Sandbox):
+    """`gt_spool._safe_write` must not retry, unguarded, a write safe_write declined.
+
+    Through 0.16.4 the whole safe_write branch sat under `except Exception: pass` and fell
+    through to `open(target, "a")` -- so safe_write's central promise (refuse rather than
+    replace a file you cannot read) was caught, discarded, and the write retried without
+    it. The same branch dropped safe_write's return value, so a sidecar or ledger-dir
+    strategy -- which leaves the bytes NEXT TO the spool with a `mv` queued in the ledger --
+    reported a spooled entry that no merge would ever render.
+
+    Both are exercised by giving gt_spool a safe_write.py that behaves that way, which is
+    the module it loads by path from its own directory.
+    """
+
+    def _spool_beside(self, safe_write_body, name):
+        d = self.tmp / name
+        d.mkdir()
+        shutil.copy(TOOLS / "gt_spool.py", d / "gt_spool.py")
+        (d / "safe_write.py").write_text(safe_write_body, encoding="utf-8")
+        return load_module(d / "gt_spool.py", "gt_spool_" + name)
+
+    REFUSES = ('def write(target, data, mode="w"):\n'
+               '    raise OSError("safe_write: cannot read %s in order to append to it; '
+               'refusing rather than replacing it with only the new bytes" % target)\n')
+
+    SIDECAR = ('def write(target, data, mode="w"):\n'
+               '    side = target + ".pending-20260918"\n'
+               '    with open(side, "a") as fh:\n'
+               '        fh.write(data)\n'
+               '    return side, "sidecar"\n')
+
+    def test_a_refusal_propagates_and_nothing_is_appended(self):
+        S = self._spool_beside(self.REFUSES, "refuses")
+        target = self.tmp / "spool" / "alpha.md"
+        with self.assertRaises(OSError, msg="safe_write's refusal was swallowed and the "
+                                            "write retried with a plain append"):
+            S._safe_write(target, "2026-01-01 [work] x — y\n")
+        self.assertFalse(target.exists(),
+                         "the refused bytes were written anyway: %r"
+                         % (target.read_text(encoding="utf-8") if target.exists() else ""))
+
+    def test_bytes_that_did_not_reach_the_target_are_an_error(self):
+        S = self._spool_beside(self.SIDECAR, "sidecar")
+        target = self.tmp / "spool2" / "alpha.md"
+        target.parent.mkdir()
+        target.write_text("", encoding="utf-8")            # exists -> append mode
+        with self.assertRaises(OSError) as ctx:
+            S._safe_write(target, "2026-01-01 [work] x — y\n")
+        self.assertIn("sidecar", str(ctx.exception),
+                      "the caller was not told which strategy left the bytes elsewhere")
+        self.assertEqual(target.read_text(encoding="utf-8"), "",
+                         "the entry is not in the spool, yet the call reported success")
+
+    def test_the_fallback_still_appends_when_there_is_no_safe_write(self):
+        """A vault whose tools predate safe_write.py must keep working -- that fallback is
+        the one thing the swallowed exception was there for, and it stays."""
+        d = self.tmp / "bare"
+        d.mkdir()
+        shutil.copy(TOOLS / "gt_spool.py", d / "gt_spool.py")
+        S = load_module(d / "gt_spool.py", "gt_spool_bare")
+        target = d / "spool" / "alpha.md"
+        S._safe_write(target, "one\n")
+        S._safe_write(target, "two\n")
+        self.assertEqual(target.read_text(encoding="utf-8"), "one\ntwo\n")
 
 
 if __name__ == "__main__":

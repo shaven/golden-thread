@@ -218,6 +218,26 @@ class ValidationTest(unittest.TestCase):
         self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
         self.assertIn("first receipt", r.stdout)
 
+    def test_a_large_ledger_is_reported_and_never_trimmed(self):
+        """MAX_LINES went dead when `record` became append-only, so the docstring's promise
+        that the ledger "cannot grow without bound" was enforced by nothing. Growing is the
+        right behaviour -- this is the project's record of what was ever established, and
+        trimming it once destroyed older receipts -- so the tool SAYS the file is long and
+        leaves the decision to a person."""
+        self.write("pkg/mod.py")
+        self.assertEqual(self.record("pkg/mod.py").returncode, 0)
+        seeded = self.ledger.read_text(encoding="utf-8")
+        row = seeded.strip().splitlines()[-1]
+        with open(self.ledger, "a", encoding="utf-8") as fh:
+            for _ in range(5200):
+                fh.write(row + "\n")
+        before = self.ledger.read_text(encoding="utf-8")
+        r = self.record("pkg/mod.py", checked="one more")
+        self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
+        self.assertIn("Nothing prunes it", r.stderr, r.stderr)
+        after = self.ledger.read_text(encoding="utf-8")
+        self.assertTrue(after.startswith(before), "a receipt was dropped or rewritten")
+
     # -- 7. control characters cannot forge a receipt block ---------------------------
     def test_a_newline_in_checked_cannot_forge_a_second_receipt(self):
         """A newline in `--checked` rendered straight through `show` and forged a

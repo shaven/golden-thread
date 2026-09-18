@@ -175,6 +175,29 @@ class OptimizeTest(unittest.TestCase):
         self.findings()
         self.assertEqual(tree_digest(self.vault), before)
 
+    def test_a_live_row_is_not_called_dead_because_of_how_it_is_spelled(self):
+        """The five shapes the module docstring names as why --apply was removed.
+
+        Each of these resolves; each was reported as pointing at a file that does not exist,
+        because the target was `[^)]+` used raw. Report-only, so the cost was noise rather
+        than loss -- but "Safe: it can never load" was a claim about the parse, not the world."""
+        (self.vault / "Projects/alpha/memory/my file.md").write_text("x\n", encoding="utf-8")
+        (self.vault / "Projects/alpha/memory/real.md").write_text("x\n", encoding="utf-8")
+        self.write("Projects/alpha/memory/MEMORY.md",
+                   "- [Encoded](my%20file.md) — a space, percent-encoded\n"
+                   "- [Titled](real.md \"Tooltip\") — a link title\n"
+                   "- [Angled](<my file.md>) — angle-bracketed\n"
+                   "- [Mail](mailto:someone@example.com) — not a path\n"
+                   "- [Obsidian](obsidian://open?vault=v&file=real) — not a path\n")
+        dead = [f for f in self.findings()["findings"] if f["kind"] == "dead-index-row"]
+        self.assertEqual(dead, [], "live rows reported dead: %s" % dead)
+
+    def test_a_genuinely_missing_target_is_still_reported(self):
+        self.write("Projects/alpha/memory/MEMORY.md",
+                   "- [Gone](missing-file.md \"Title\") — really absent\n")
+        dead = [f for f in self.findings()["findings"] if f["kind"] == "dead-index-row"]
+        self.assertEqual(len(dead), 1, "the check must still find a real dead row")
+
     def test_clean_vault_exits_zero(self):
         self.write("Projects/alpha/memory/a.md", "One clear fact that stands on its own.\n")
         self.assertEqual(self.run_opt().returncode, 0)

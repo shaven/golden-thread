@@ -14,6 +14,7 @@ Contract:
     a second run writes nothing and reports "conflict awaiting you".
 """
 import json
+import shutil
 import subprocess
 import unittest
 
@@ -283,6 +284,45 @@ class DocumentMerges(UpgradeBase):
         # ...while a base the release has moved past still is.
         base.write_text(shipped.replace("\n", "\n\n", 1))
         self.assertIn("doc-merge", self.up("status").stdout)
+
+    def test_a_dry_run_writes_no_working_copy_inside_the_vault(self):
+        """A rehearsal must not write, not even for an instant.
+
+        `_merge3` copied the document to `<doc>.merging` BESIDE IT and removed it in a
+        `finally` -- so a dry run created a file in the vault, and a crash or a kill between
+        the copy and the cleanup left it there. An after-the-fact snapshot cannot see a file
+        that is deleted again, so this watches from INSIDE the merge: a `git` on PATH that
+        lists the document's directory on every call and then delegates to the real one. The
+        .merging copy exists exactly while `git merge-file` is running."""
+        real_git = shutil.which("git")
+        if not real_git:
+            self.skipTest("git not installed")
+        shipped = (TEMPLATES / "PROTOCOL.md").read_text()
+        base = self.v / BASE / "PROTOCOL.md"
+        base.parent.mkdir(parents=True, exist_ok=True)
+        # A base the release has moved past, so a merge is genuinely pending.
+        base.write_text(shipped.replace("\n", "\n\n", 1))
+        d = self.doc()
+        d.parent.mkdir(parents=True, exist_ok=True)
+        d.write_text(shipped + "\n## A section this vault added\n")
+        self.assertIn("doc-merge", self.up("status").stdout, "no merge to rehearse")
+
+        seen = self.tmp / "seen.txt"
+        bindir = self.tmp / "spybin"
+        bindir.mkdir()
+        spy = bindir / "git"
+        spy.write_text('#!/bin/sh\nls -a "%s" >> "%s"\nexec "%s" "$@"\n'
+                       % (d.parent, seen, real_git))
+        spy.chmod(0o755)
+
+        before = self.snapshot()
+        p = self.py(UP, "run", "--vault", str(self.v), "--dry-run",
+                    env={"PATH": "%s:%s" % (bindir, self.env.get("PATH", "/usr/bin:/bin"))})
+        self.assertEqual(p.returncode, 0, p.stdout + p.stderr)
+        self.assertTrue(seen.is_file(), "the spy git was never called; the test proves nothing")
+        self.assertNotIn(".merging", seen.read_text(),
+                         "a dry run created a working copy inside the vault")
+        self.assertEqual(self.snapshot(), before, "a dry run modified the vault")
 
     def test_a_conflict_leaves_the_document_untouched(self):
         shipped = (TEMPLATES / "PROTOCOL.md").read_text()

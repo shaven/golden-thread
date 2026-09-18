@@ -1,0 +1,424 @@
+{
+ "files": {
+  "hooks/guard_protected_paths.py": {
+   "bytes": 12472,
+   "sha256": "5a788a0fbe49d88facd3a111ee2147549f758062c77c8731e512c23fda40b991"
+  },
+  "hooks/guard_protected_paths.sh": {
+   "bytes": 1769,
+   "sha256": "d39f3646317dfd0d0dd204bc8b514ce6bb9c92f5ab90ab0c6dbaf24e8f2afeac"
+  },
+  "hooks/guard_session_claims.py": {
+   "bytes": 7100,
+   "sha256": "0f15b8eab4ef915e6504cbcb8e5ab4e35e65623dbc9e3ee4d48caa0cba7baea0"
+  },
+  "hooks/guard_session_claims.sh": {
+   "bytes": 1449,
+   "sha256": "05b8694b31bf1c8e8d4b46e14d3f7051e1b3f90d93bb396de10c8265dde1875b"
+  },
+  "hooks/guard_test_before_commit.py": {
+   "bytes": 12515,
+   "sha256": "66e2f2573a885d214f0f379417cbba852d3918378d7a7802e738c86f55ae4191"
+  },
+  "hooks/guard_test_before_commit.sh": {
+   "bytes": 1266,
+   "sha256": "4c6c10cbfcb4df7f77b3c7baed8b25456f14f46da0067b19b7489fafcdeca367"
+  },
+  "hooks/guard_vault_writes.py": {
+   "bytes": 12565,
+   "sha256": "ee25cb1fcf865b6050254fa682f6d5830e75fddb960129292323ca510abf3ed4"
+  },
+  "hooks/guard_vault_writes.sh": {
+   "bytes": 1490,
+   "sha256": "e187c6fc8f08ff7e2c34d9176dc640c3e18b2cf2245d89c3ebdd441909240d66"
+  },
+  "hooks/inject_core_rules.sh": {
+   "bytes": 7621,
+   "sha256": "88040501c0de5bfec1bca67cce0b6ca985736f69acc735dbcb436aafb653c287"
+  },
+  "hooks/validate_response.sh": {
+   "bytes": 8754,
+   "sha256": "e306a150da44292d39124476f5404358cfcc2f1318fb329702a47f138106c05d"
+  },
+  "packs/core/classify.common.pack.json": {
+   "bytes": 1281,
+   "sha256": "5f04c268f5267ae8fb9f519c98f19a5e63f5572f7552b5688c5a6992b656b069"
+  },
+  "packs/core/construct.common.pack.json": {
+   "bytes": 2641,
+   "sha256": "427b650e1a0b35985138e7a07f09f4966cafef39b7bc36d97ff8a7ee5c5b8b60"
+  },
+  "packs/core/construct.languages-extra.pack.json": {
+   "bytes": 1499,
+   "sha256": "e61b8ba7f5909632207bcdaab7b3aadb3773e03d4ed56834368a6d81ef7f3a7c"
+  },
+  "packs/core/encoding.defaults.pack.json": {
+   "bytes": 950,
+   "sha256": "e00c2da7a56fba7720cba823262905280ed4b38ecacbc95d5263c11de2c293f9"
+  },
+  "packs/core/encoding.languages-extra.pack.json": {
+   "bytes": 806,
+   "sha256": "73f469bf206799fcc3c10d2987a4008e0320406d316cb7f026cdcfb93045066d"
+  },
+  "packs/core/filetype.common.pack.json": {
+   "bytes": 1062,
+   "sha256": "46e808968eb994c8bf29be85e9c2a8a659f803297cb88a09b4d18184230c9627"
+  },
+  "packs/core/filetype.languages-extra.pack.json": {
+   "bytes": 770,
+   "sha256": "e2ef543ae4e45d1db1adb0f1944b3fc9f18f665ca1878ee962cd22c942a43160"
+  },
+  "packs/core/ignore.ecosystem-noise.pack.json": {
+   "bytes": 603,
+   "sha256": "8526ae386afa611ba076fb2d924779f44fafab00e91df4bfeffa496dcbb5881e"
+  },
+  "packs/core/naming.conventions.pack.json": {
+   "bytes": 1593,
+   "sha256": "cadd417e1089bd7f8fde376c1e2e2fb4ad675f2a6b6ab8597ee38d2face04f35"
+  },
+  "packs/core/naming.languages-extra.pack.json": {
+   "bytes": 999,
+   "sha256": "58e8907f04720b1a2840f1c45ce538f2fa5936fc6ea54614704a6e241fc6ea6c"
+  },
+  "scripts/gt_aggregate.py": {
+   "bytes": 6160,
+   "sha256": "6e8429b5968a66c5f7930262cfe609cbb27f7a3f68fdf384704e3b2a4812cca0"
+  },
+  "scripts/gt_allin.py": {
+   "bytes": 8075,
+   "sha256": "507fd3f81f7b586e1bb2477cefb29737beeb79cff41cb7ca85a6dbb340be6fff"
+  },
+  "scripts/gt_allin_commit.py": {
+   "bytes": 12377,
+   "sha256": "446a7eb5cb8d553562f5b2572a72fe3ff2e30fffc3e7d0886cdbd703e5730442"
+  },
+  "scripts/gt_components.py": {
+   "bytes": 83753,
+   "sha256": "2ff31a6f50eb2f517e58baac84453ba47198209649f0a9e951702cb9492c0c44"
+  },
+  "scripts/gt_context.py": {
+   "bytes": 10260,
+   "sha256": "3138ac640492de457633dbe78cc5dfbc47795242d7f3f527b6b73ac2a212022a"
+  },
+  "scripts/gt_demote.py": {
+   "bytes": 21935,
+   "sha256": "1c51fb189fb6c80165484e3e760eddcbdc09d518997e77bf8c8ee0d0633f8d6b"
+  },
+  "scripts/gt_doctor.py": {
+   "bytes": 38102,
+   "sha256": "6bf7a207cf9eb97b9a5f3b978d15c52fc4f5d3794cdb48e60d7c9601ba08d454"
+  },
+  "scripts/gt_handoff.py": {
+   "bytes": 13099,
+   "sha256": "029d05856e10ec4ab24cd64aa56dd9dc6c815a4e512e104dea68a098f9b8827e"
+  },
+  "scripts/gt_ingest.py": {
+   "bytes": 9740,
+   "sha256": "cea0d9fbd3b1b1c7c8acfa6efd479dde165de962d022926216c5bd34c33ee843"
+  },
+  "scripts/gt_lint.py": {
+   "bytes": 62685,
+   "sha256": "f30c6e455c2b42880b3b28514f3518a80cd641badf5bd35c4a84d25b4911a9cd"
+  },
+  "scripts/gt_lint_weekly.py": {
+   "bytes": 6895,
+   "sha256": "de146709ca826762ad21a19cf7313cd1dbff0c94fbbae5df5a1529c780777633"
+  },
+  "scripts/gt_machine_migrate.py": {
+   "bytes": 19372,
+   "sha256": "5e227f1dc418d26c65114bf8674884ac73a9fb8b903be61e19d7d3fb9237f72f"
+  },
+  "scripts/gt_optimize.py": {
+   "bytes": 22067,
+   "sha256": "ad7794651a47f6ed83914ef609ab4ffdecc1433b455517e841702dc35c13ccbc"
+  },
+  "scripts/gt_paths.py": {
+   "bytes": 4579,
+   "sha256": "1e12b716a04605fc157e9a1264d348f8e1d5ab289c34185563e07c3bb65cfb94"
+  },
+  "scripts/gt_push_check.py": {
+   "bytes": 10614,
+   "sha256": "97448249bb05b6a3dbb39cf1ab65aa1ca7bc9390ea427fbd5919a70a2954873c"
+  },
+  "scripts/gt_registry.py": {
+   "bytes": 31133,
+   "sha256": "c9977ee5fafbb927da720f3f2f591697b697ae12a9be39297bc45e2c1822352f"
+  },
+  "scripts/gt_scan.py": {
+   "bytes": 6511,
+   "sha256": "a64c843381706538d7211df110fe023de8c908fdfddf6292caad4279f51a1e1f"
+  },
+  "scripts/gt_scan_language.py": {
+   "bytes": 18658,
+   "sha256": "9e270d06b09a6f15ca1b0a9c6df9ef74ad8908092c96a950814d4724f37ed07e"
+  },
+  "scripts/gt_settings.py": {
+   "bytes": 39061,
+   "sha256": "05df42eb2c767af87050709e0d66e8a80f5062277ecce7e727143fbf973c16dc"
+  },
+  "scripts/gt_test_receipt.py": {
+   "bytes": 7226,
+   "sha256": "1089a832bb7bbebcd6d207eb60e36b947e2f97869320fee7a47956624a6af0c3"
+  },
+  "scripts/gt_upgrade.py": {
+   "bytes": 37018,
+   "sha256": "41f7d8c2114a13c9320386e3694385777db0c6cb2c7860b503b0cc6c7e444ede"
+  },
+  "scripts/gt_validation.py": {
+   "bytes": 14358,
+   "sha256": "bec0fefcbe4fcc604ad1d9f4b1ebc95569bd74538c7228eab1411a5495933a6e"
+  },
+  "scripts/gt_version_check.py": {
+   "bytes": 11712,
+   "sha256": "621e5da18e05b82127e81a054f39f85092f88faeb1b5a537fbfc22e4039e6b0c"
+  },
+  "scripts/gt_workers.py": {
+   "bytes": 20769,
+   "sha256": "683e4d884c514cdaa470f3f4c421eebd3a4f902b011bf5aedd421c739af11d64"
+  },
+  "scripts/skill_lint.py": {
+   "bytes": 4723,
+   "sha256": "d56bbd01ce9ba0e74b36ea2bf15fcfccd5d2d4a1ef8fdbdd33d02ae8c36fb7a0"
+  },
+  "scripts/vault_init.py": {
+   "bytes": 83107,
+   "sha256": "e7a0dfb2c88c30db5256c10618a8ae018fcfc361404db53326b702eb4c697b10"
+  },
+  "scripts/vault_refresh.py": {
+   "bytes": 11504,
+   "sha256": "f9630a1b948814559ffd0172da21c2b84ae3d4cbce0d3e845d3bf15a975423d9"
+  },
+  "templates/CONVENTIONS.md": {
+   "bytes": 19546,
+   "sha256": "5003ec9f6af14e6b8e52c679b2666bdaf360b8513b86906899493289bca37fb2"
+  },
+  "templates/INBOX.md": {
+   "bytes": 817,
+   "sha256": "036fe2517b084f4b413b577288ac6243684bba18d36fe1c90839a21fbdb4a6b6"
+  },
+  "templates/INFRASTRUCTURE.md": {
+   "bytes": 1484,
+   "sha256": "4da7fd3054ff222d417523b526fc8c6d11b5c70472e272b0f350c9acce2928b7"
+  },
+  "templates/OPEN-IN-OBSIDIAN.md": {
+   "bytes": 2965,
+   "sha256": "e2a4112b671708fda9262dbbbfe1550f9c39a8c1fccef4153e9b491bf72d5be5"
+  },
+  "templates/PROJECTS-README.md": {
+   "bytes": 2456,
+   "sha256": "dfe407a83c7413960e67fab436f62c92aa5d7756d2d540ad41a259885a1b9073"
+  },
+  "templates/PROTOCOL.md": {
+   "bytes": 23581,
+   "sha256": "39734351666ab2ccfdb002f5ebfdd48b4164ac268d2f6ee42c96ffe95e07b473"
+  },
+  "templates/core-rules/README.md": {
+   "bytes": 3761,
+   "sha256": "046d1837e01f2c1292cb0f4b1fc7045eaf899b5c6de120f6731f21449ae012a9"
+  },
+  "templates/core-rules/core_concurrent_session_claim.md": {
+   "bytes": 4867,
+   "sha256": "bdb5b107e9bcce4b61a07dfc934b64688cb4852620bbcc2dd896f0264b2a0c7d"
+  },
+  "templates/core-rules/core_explicit_vault_target.md": {
+   "bytes": 3356,
+   "sha256": "d856a54dcccc49f3ad2b228d12ea82b9e68d12664bd2fc636cb051b97614113a"
+  },
+  "templates/core-rules/core_global_memory_scope.md": {
+   "bytes": 1364,
+   "sha256": "94564bcfd2dde45d696af76ab6c02a8be52d0dff265874addff7e2eb59e8b59b"
+  },
+  "templates/core-rules/core_memory_load_policy.md": {
+   "bytes": 1226,
+   "sha256": "678290ccb586c36a7834e97a8de7f9f69fb3c447ff6fc3beaaf40717d0386d0c"
+  },
+  "templates/core-rules/core_no_secrets_in_transcript.md": {
+   "bytes": 3940,
+   "sha256": "75b31562537fe9a4fd29f21e5be7aea5fc8c3f78790a10c8218e54115cf4540f"
+  },
+  "templates/core-rules/core_parallel_when_beneficial.md": {
+   "bytes": 10081,
+   "sha256": "350a916c0e67a9a8946cace7e09b1356277a7259d43bb9844156a1570116edee"
+  },
+  "templates/core-rules/core_rule_priority_model.md": {
+   "bytes": 9437,
+   "sha256": "527e17002a294457a8ec95bebe6547b473a892fa8fa0221f4d31479b7242f0b8"
+  },
+  "templates/core-rules/core_secrets_live_in_the_store.md": {
+   "bytes": 4979,
+   "sha256": "75b1111c51201d13ad1b14d5dd811c975206233939b851803cfdef8830511706"
+  },
+  "templates/core-rules/core_test_before_commit.md": {
+   "bytes": 4741,
+   "sha256": "2fda8baa7d6fe461b3686f1d88f746af5bf126b4956806912c6e29e91805e865"
+  },
+  "templates/core-rules/core_timestamp_every_message.md": {
+   "bytes": 6323,
+   "sha256": "abe377c2fc6ce803c4c5b0cfa67a07f92775c9fa665b8056da6bbf5336084a86"
+  },
+  "templates/core-rules/core_verification_state.md": {
+   "bytes": 3153,
+   "sha256": "9904c087b6a6b4b8f56b417850dad3113f6e85e9bca02ff359b6c35d0b19efe9"
+  },
+  "templates/core-rules/enforcement.md": {
+   "bytes": 3650,
+   "sha256": "0e8e3423cab683fa70c229a55ec049324fcfbb5778e9e4b884210c036a4ee05b"
+  },
+  "templates/githooks/post-commit": {
+   "bytes": 979,
+   "sha256": "875f2d3fae03e7bc8253b6bfd30fbc79114979b9f2f6f50fab12e9fd047c31f1"
+  },
+  "templates/githooks/prepare-commit-msg": {
+   "bytes": 1653,
+   "sha256": "4b1c6197303b70672a1a6adbd8ab7a40a49eaa73f1dee94a066512ed16d46147"
+  },
+  "templates/lint-declines.md": {
+   "bytes": 959,
+   "sha256": "26a05c66a783f3fcbcd6cfe758931dfdd983b94e8f8716d7022bc46a27b03b99"
+  },
+  "templates/memory-file.md": {
+   "bytes": 673,
+   "sha256": "49959c4c8d25a564827a798078825aefd234b02ff9faf57223fbecd65af48c63"
+  },
+  "templates/project-CLAUDE.md": {
+   "bytes": 2297,
+   "sha256": "ea859c571bdaad144f3cf7ab4b3fbd3f28b6ee3b6b298f41463f877175fe9ce2"
+  },
+  "templates/runbook.md": {
+   "bytes": 2087,
+   "sha256": "7386fa88b225580c3d8172310cfa2f21622e2cc13b3863d5f4517758da45e729"
+  },
+  "templates/shipped-hashes.json": {
+   "bytes": 3946,
+   "sha256": "f03c5e0b1b46071e9bf02f2a280d9ea031c43ce03de690261afc94d0c8a17368"
+  },
+  "templates/source.md": {
+   "bytes": 2462,
+   "sha256": "6fb7d890a68046b3671c8e29ed6982c3ad5c5b9256e44ed7ceecb8fc79838acc"
+  },
+  "templates/tools/gt_adr.py": {
+   "bytes": 18301,
+   "sha256": "b7c5f85193543c44247abfda10fc58cd3f0b7ad0c1af9cc25c7e9ad7be0c720d"
+  },
+  "templates/tools/gt_closeout.py": {
+   "bytes": 12419,
+   "sha256": "122bbdec302a2ec83501ba89c6d5338c77017a772b08025117caf48574511f7c"
+  },
+  "templates/tools/gt_edits.py": {
+   "bytes": 13159,
+   "sha256": "4499af3b2b120031005532dd14cd0107c092e5b8819d25d60d5ff66127c5ad90"
+  },
+  "templates/tools/gt_events.py": {
+   "bytes": 40106,
+   "sha256": "963a2fffb5b4dab9627e9190babe7e3597826553033e0fb92908f8e3ed00850a"
+  },
+  "templates/tools/gt_log.py": {
+   "bytes": 15894,
+   "sha256": "849a0c4f788825dfd3ce23fc8f1e1d1c2e169921ea19ff0960979df5ad74c3c2"
+  },
+  "templates/tools/gt_session.py": {
+   "bytes": 44924,
+   "sha256": "c60e71b44f9542a183f86176c90d0b3d281b7cf3aede7bc041b5b1b43f6cce2f"
+  },
+  "templates/tools/gt_spool.py": {
+   "bytes": 22020,
+   "sha256": "3d482c7783db2eb5fd682821f1054e39959c6e82605b3dad66c8e60defc778f9"
+  },
+  "templates/tools/gt_tasks.py": {
+   "bytes": 30584,
+   "sha256": "acc69b85d24134713f54f8fa343d4da01979d4051ff3359bd49c85871989f4cc"
+  },
+  "templates/tools/safe_write.py": {
+   "bytes": 21774,
+   "sha256": "2cf9526da5369434e526da96b263bdea222297b79b330060167b9e33f0e90177"
+  },
+  "templates/wiki-CLAUDE.md": {
+   "bytes": 7156,
+   "sha256": "36afca49ff7263e1fd2230116d4fb3d7324c5e236a5053d940061dc09f680bfc"
+  }
+ },
+ "generated": "2026-09-18T08:04:14",
+ "hooks": [
+  {
+   "args": [
+    "check",
+    "{src}",
+    "--hook"
+   ],
+   "event": "SessionStart",
+   "owner": "install.sh",
+   "script": "gt_components.py"
+  },
+  {
+   "args": [
+    "check",
+    "--hook"
+   ],
+   "event": "SessionStart",
+   "owner": "install.sh",
+   "script": "gt_workers.py"
+  },
+  {
+   "args": [
+    "check",
+    "{plugin_root}",
+    "--hook"
+   ],
+   "event": "SessionStart",
+   "owner": "install.sh",
+   "script": "gt_version_check.py"
+  },
+  {
+   "args": [
+    "check",
+    "--hook"
+   ],
+   "event": "SessionStart",
+   "owner": "install.sh",
+   "script": "gt_push_check.py"
+  },
+  {
+   "args": [],
+   "event": "PreToolUse",
+   "owner": "install.sh",
+   "script": "guard_protected_paths.sh"
+  },
+  {
+   "args": [],
+   "event": "UserPromptSubmit",
+   "owner": "vault_init.py install-core-rules",
+   "script": "inject_core_rules.sh"
+  },
+  {
+   "args": [],
+   "event": "SessionStart",
+   "owner": "vault_init.py install-core-rules",
+   "script": "inject_core_rules.sh"
+  },
+  {
+   "args": [],
+   "event": "Stop",
+   "owner": "vault_init.py install-core-rules",
+   "script": "validate_response.sh"
+  },
+  {
+   "args": [],
+   "event": "PreToolUse",
+   "owner": "vault_init.py install-core-rules",
+   "script": "guard_session_claims.sh"
+  },
+  {
+   "args": [],
+   "event": "PreToolUse",
+   "owner": "vault_init.py install-core-rules",
+   "script": "guard_test_before_commit.sh"
+  },
+  {
+   "args": [],
+   "event": "PreToolUse",
+   "owner": "vault_init.py install-core-rules",
+   "script": "guard_vault_writes.sh"
+  }
+ ],
+ "version": "0.16.5"
+}

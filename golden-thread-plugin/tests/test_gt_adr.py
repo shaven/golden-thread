@@ -269,6 +269,32 @@ class GtAdrFaithfulnessAndDryRun(GtAdr):
         self.assertEqual(self.allocate("real"), 2,
                          "the dry run consumed ADR-2, so the next real allocation skipped it")
 
+    def test_dry_run_names_the_number_the_real_allocation_will_take(self):
+        """The rehearsal ignored the high-water floor while allocate() consulted it.
+
+        Wrong in exactly the case the floor exists for: allocate 1-3, delete the
+        highest slot, and the dry run said ADR-3 while the real run returned 4. A
+        preview computed differently from the thing it previews is not a preview.
+        """
+        for _ in range(3):
+            self.allocate()
+        (self.vault / "Projects/golden-thread/spool/decisions/demo/0003.md").unlink()
+        p = self.tool("allocate", "demo", "--title", "x", "--dry-run")
+        self.assertOk(p, "dry run failed")
+        self.assertIn("would reserve ADR-4", p.stderr,
+                      "the dry run ignored the high-water floor that allocate honours")
+        self.assertEqual(self.allocate("real"), 4,
+                         "the real allocation did not take the number the dry run named")
+
+    def test_status_reports_the_next_number_not_highest_plus_one(self):
+        """`highest ADR-N` alone invites the arithmetic the allocator refuses to do."""
+        for _ in range(3):
+            self.allocate()
+        (self.vault / "Projects/golden-thread/spool/decisions/demo/0003.md").unlink()
+        out = self.tool("status", "demo").stdout
+        self.assertIn("next ADR-4", out,
+                      "status reported no next number, or one the floor contradicts")
+
     def test_short_flag_is_accepted(self):
         self.seed("# D\n\n## ADR-1: one\n")
         before = self.dec.read_bytes()

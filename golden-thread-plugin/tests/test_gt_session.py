@@ -53,8 +53,32 @@ class SessionTools(Sandbox):
             pre += ["--stale-after", str(stale_after)]
         return self.py(self.tool, *pre, *args, env={"CLAUDE_PID": pid}, cwd=self.vault)
 
+    def gs_raw(self, *args, pid=LIVE_PID):
+        """The tool with NO flags moved in front of the verb -- for the parsing tests."""
+        return self.py(self.tool, *args, env={"CLAUDE_PID": pid}, cwd=self.vault)
+
     def files_for(self, sid):
         return sorted(self.sessions.glob(sid + "_*.md"))
+
+    def two_registrations(self, sid="two"):
+        """One session id with two registrations: the plain name and the stepped-aside
+        `-<pid>` one. This is what `--new` makes on purpose and what a same-minute
+        race makes by accident -- and it is the shape H8 resolved by sort order."""
+        self.assertOk(self.gs(sid, "register", "--task", "A", "--files", "a.md"))
+        self.assertOk(self.gs(sid, "register", "--new", "--task", "B", "--files", "b.md"))
+        files = self.files_for(sid)
+        self.assertEqual(len(files), 2, [f.name for f in files])
+        stepped = [f for f in files if re.search(r"_\d{4}-\d+\.md$", f.name)]
+        plain = [f for f in files if re.search(r"_\d{4}\.md$", f.name)]
+        self.assertEqual(len(stepped), 1, [f.name for f in files])
+        self.assertEqual(len(plain), 1, [f.name for f in files])
+        # The defect in one line: the plain name sorts LAST because '.' > '-', so
+        # `sorted(..., reverse=True)[0]` handed every command the other file.
+        self.assertEqual(sorted(files, reverse=True)[0], plain[0])
+        return plain[0], stepped[0]
+
+    def snapshot(self):
+        return {p.name: p.read_bytes() for p in self.sessions.glob("*")}
 
     def set_heartbeat(self, sid, minutes_ago):
         (f,) = self.files_for(sid)
@@ -225,6 +249,177 @@ class GtSessionTest(SessionTools):
         again = self.gs("sessA", "release")
         self.assertOk(again)
         self.assertIn("nothing to release", again.stdout)
+
+
+class RegisterKeepsClaimsTest(SessionTools):
+    """H1: re-registering a session must not throw away what it holds.
+
+    `register` never went through the compare-and-swap. It rebuilt the body from
+    `--files` alone, and `--resume` unlinked the old file first -- so the claims a
+    live session held vanished, the command printed "registered", and exited 0.
+    Every one of these fails against that code.
+    """
+
+    def test_re_registering_keeps_the_claims_already_held(self):
+        self.assertOk(self.gs("keep", "register", "--task", "one", "--files", "x.md"))
+        self.assertOk(self.gs("keep", "claim", "y.md"))
+        proc = self.gs("keep", "register", "--task", "two")
+        self.assertOk(proc)
+        (f,) = self.files_for("keep")
+        text = f.read_text()
+        for held in ("x.md", "y.md"):
+            self.assertIn("- `%s`" % held, text,
+                          "re-registering dropped the live claim on %s:\n%s" % (held, text))
+        self.assertIn("task: two", text, "the re-registration did not take over the entry")
+        self.assertIn("carried forward 2 claim(s)", proc.stdout,
+                      "nothing said what was carried forward")
+
+    def test_resume_carries_claims_forward_and_unions_files(self):
+        self.assertOk(self.gs("res", "register", "--files", "a.md", "b.md"))
+        proc = self.gs("res", "register", "--resume", "--task", "later", "--files", "c.md")
+        self.assertOk(proc)
+        (f,) = self.files_for("res")
+        text = f.read_text()
+        for held in ("a.md", "b.md", "c.md"):
+            self.assertIn("- `%s`" % held, text,
+                          "--resume replaced the claims instead of unioning them:\n" + text)
+            self.assertEqual(text.count("- `%s`" % held), 1, "a claim was duplicated")
+
+    def test_re_registering_our_own_entry_does_not_make_a_second_one(self):
+        """`mine` with a different minute-stamp left the old file in place."""
+        self.assertOk(self.gs("dupe", "register", "--files", "x.md"))
+        (f,) = self.files_for("dupe")
+        f.rename(f.with_name("dupe_2026-01-01_0101.md"))     # registered in an earlier minute
+        self.assertOk(self.gs("dupe", "register", "--task", "again"))
+        files = self.files_for("dupe")
+        self.assertEqual(len(files), 1,
+                         "re-registering made a SECOND registration for one session id: %s"
+                         % [p.name for p in files])
+        self.assertIn("- `x.md`", files[0].read_text())
+
+    def test_replacing_a_dead_predecessor_says_how_many_claims_it_dropped(self):
+        self.assertOk(self.gs("gone", "register", "--files", "n.md", "m.md", pid=dead_pid()))
+        proc = self.gs("gone", "register", "--task", "fresh")
+        self.assertOk(proc)
+        self.assertIn("releasing 2 claim(s)", proc.stdout,
+                      "a dead session's claims were released in silence:\n" + proc.stdout)
+        self.assertIn("n.md", proc.stdout)
+        (f,) = self.files_for("gone")
+        self.assertNotIn("- `n.md`", f.read_text(), "the dead session's claims were kept")
+
+
+class OneIdTwoRegistrationsTest(SessionTools):
+    """H8: a process must never operate on another process's registration.
+
+    `_path` resolved an id with `sorted(glob, reverse=True)[0]`, and the plain
+    `..._1702.md` sorts after `..._1702-73851.md` because '.' > '-'. So the
+    process that stepped aside into the `-pid` name addressed the OTHER file with
+    every command: its claims landed there, and that process's `release` cleared
+    them. Deterministic, and every command exited 0.
+    """
+
+    def test_a_registration_is_addressed_by_name_not_by_sort_order(self):
+        plain, stepped = self.two_registrations()
+        proc = self.gs("two", "--entry", stepped.name, "claim", "mine.md")
+        self.assertOk(proc)
+        self.assertIn("- `mine.md`", stepped.read_text(),
+                      "the claim did not land in the registration it was aimed at")
+        self.assertNotIn("mine.md", plain.read_text(),
+                         "the claim landed in ANOTHER process's registration")
+
+    def test_an_ambiguous_id_is_refused_rather_than_guessed(self):
+        plain, stepped = self.two_registrations()
+        for verb in (["claim", "z.md"], ["beat"]):
+            with self.subTest(cmd=verb[0]):
+                proc = self.gs("two", *verb)
+                self.assertEqual(proc.returncode, 2,
+                                 "an ambiguous id was resolved silently:\n%s%s"
+                                 % (proc.stdout, proc.stderr))
+                self.assertIn("2 registrations", proc.stderr)
+        self.assertNotIn("z.md", plain.read_text(), "a guessed claim went into another's file")
+        self.assertNotIn("z.md", stepped.read_text())
+
+    def test_release_cannot_delete_a_registration_that_is_not_ours(self):
+        plain, stepped = self.two_registrations()
+        rel = self.gs("two", "release")
+        self.assertEqual(rel.returncode, 2,
+                         "release deleted one of two registrations without being told which:\n"
+                         + rel.stdout + rel.stderr)
+        self.assertEqual(len(self.files_for("two")), 2, "release removed a registration")
+        rel = self.gs("two", "--entry", stepped.name, "release")
+        self.assertOk(rel)
+        self.assertEqual([p.name for p in self.files_for("two")], [plain.name])
+        self.assertIn("- `a.md`", plain.read_text(), "the other registration's claim was cleared")
+
+    def test_release_refuses_a_registration_held_by_another_running_process(self):
+        holder = subprocess.Popen(["sleep", "120"])
+        self._procs.append(holder)
+        self.assertOk(self.gs("solo", "register", "--files", "n.md", pid=str(holder.pid)))
+        rel = self.gs("solo", "release")
+        self.assertEqual(rel.returncode, 1,
+                         "released a live OTHER process's claims:\n" + rel.stdout + rel.stderr)
+        self.assertTrue(self.files_for("solo"), "the registration was deleted anyway")
+        self.assertIn("still running", rel.stderr)
+        self.assertOk(self.gs("solo", "release", "--force"))
+        self.assertEqual(self.files_for("solo"), [])
+
+
+class DryRunAndParsingTest(SessionTools):
+    def test_dry_run_beat_does_not_advance_the_heartbeat(self):
+        """cmd_beat had no dry() guard, and `last_execution` is exactly what every
+        OTHER session reads to decide whether this one is stale."""
+        self.assertOk(self.gs("dr", "register", pid="none"))
+        self.set_heartbeat("dr", 90)
+        (f,) = self.files_for("dr")
+        before = f.read_bytes()
+        proc = self.gs("dr", "--dry-run", "beat", pid="none")
+        self.assertOk(proc)
+        self.assertIn("dry run", proc.stdout)
+        self.assertEqual(f.read_bytes(), before,
+                         "--dry-run beat wrote to disk:\n" + f.read_text())
+
+    def test_no_subcommand_writes_under_dry_run(self):
+        self.assertOk(self.gs("dr2", "register", "--files", "x.md"))
+        self.set_heartbeat("dr2", 90)
+        before = self.snapshot()
+        for verb in (["register", "--task", "changed"], ["beat"], ["claim", "y.md"],
+                     ["release"], ["register", "--resume"], ["register", "--new"]):
+            with self.subTest(cmd=" ".join(verb)):
+                proc = self.gs("dr2", "--dry-run", *verb)
+                self.assertOk(proc)
+                self.assertEqual(self.snapshot(), before,
+                                 "--dry-run %s changed the registry" % " ".join(verb))
+
+    def test_dry_run_register_still_reports_a_refusal(self):
+        """A dry run must predict what a real one would do, not just exit 0."""
+        holder = subprocess.Popen(["sleep", "120"])
+        self._procs.append(holder)
+        self.assertOk(self.gs("busy", "register", "--task", "first", pid=str(holder.pid)))
+        proc = self.gs("busy", "--dry-run", "register", "--task", "second")
+        self.assertEqual(proc.returncode, 1, proc.stdout + proc.stderr)
+        self.assertIn("ALREADY OPEN", proc.stderr)
+
+    def test_id_parses_after_the_subcommand_too(self):
+        """`--id X claim f` used to die with "unrecognized arguments": --id was
+        declared on the top-level parser only. gt_log.py and gt_adr.py fixed the
+        same defect with parents=[common] on every subparser."""
+        self.assertOk(self.gs_raw("register", "--id", "argp", "--task", "t"))
+        proc = self.gs_raw("claim", "f.md", "--id", "argp")
+        self.assertOk(proc)
+        (f,) = self.files_for("argp")
+        self.assertIn("- `f.md`", f.read_text())
+        for tail in (["beat", "--id", "argp"], ["check", "f.md", "--id", "argp"],
+                     ["list", "--id", "argp"]):
+            with self.subTest(cmd=tail[0]):
+                self.assertOk(self.gs_raw(*tail))
+
+    def test_missing_registration_and_missing_id_are_usage_failures(self):
+        """The documented contract: 2 means the command could not be aimed."""
+        self.assertEqual(self.gs("ghost", "beat").returncode, 2)
+        self.assertEqual(self.gs("ghost", "claim", "x.md").returncode, 2)
+        bare = self.py(self.tool, "list", env={"CLAUDE_PID": LIVE_PID,
+                                               "CLAUDE_CODE_SESSION_ID": ""}, cwd=self.tmp)
+        self.assertEqual(bare.returncode, 0, bare.stderr)   # list needs no id
 
 
 CONCURRENT_CLAIMER = '''\
@@ -451,6 +646,75 @@ class GtSessionConcurrencyTest(SessionTools):
             self.assertNotEqual(os.path.basename(path), f.name + ".tmp")
             self.assertFalse(os.path.exists(path), "the temp file was left behind")
         self.assertIn("- `x.md`", f.read_text())
+
+
+class NoFlockIsAnnouncedTest(SessionTools):
+    """H7: `_hold` returns True when fcntl is missing -- correct, but not equal.
+
+    Measured with the shipped code and fcntl stubbed out, four concurrent claimers,
+    ten trials each: with flock, 0/10 trials silently dropped a claim; without it,
+    9/10 did, and every process printed success. The degradation must not be
+    fatal -- a network mount without flock has to keep working -- but it must be
+    audible, on the write paths and to anyone surveying the vault.
+    """
+
+    def unlocked_tool(self):
+        mod = load_module(self.tool, "gt_session_noflock")
+        mod.use_vault(self.vault)
+        mod.fcntl = None                 # the platform this module's fallback is for
+        return mod
+
+    def claim_args(self, sid, *files):
+        return argparse.Namespace(id=sid, files=list(files), force=False, stale_after=30)
+
+    def capture(self, fn):
+        err = io.StringIO()
+        with contextlib.redirect_stderr(err), contextlib.redirect_stdout(io.StringIO()):
+            rc = fn()
+        return rc, err.getvalue()
+
+    def test_a_claim_written_without_flock_says_so_and_still_works(self):
+        self.assertOk(self.gs("nolock", "register"))
+        mod = self.unlocked_tool()
+        rc, err = self.capture(lambda: mod.cmd_claim(self.claim_args("nolock", "x.md")))
+        self.assertEqual(rc, 0, "the missing lock was made fatal: " + err)
+        (f,) = self.files_for("nolock")
+        self.assertIn("- `x.md`", f.read_text(), "the degraded path stopped recording claims")
+        self.assertIn("NOT lock-guarded", err,
+                      "a write that could not be guarded said nothing:\n" + err)
+
+    def test_the_warning_is_printed_once_per_run_not_once_per_attempt(self):
+        self.assertOk(self.gs("noloop", "register"))
+        (f,) = self.files_for("noloop")
+        mod = self.unlocked_tool()
+        real_render, calls = mod._render, []
+
+        def render_then_interlope(fm, body):         # force at least one CAS retry
+            calls.append(1)
+            if len(calls) == 1:
+                f.write_text(f.read_text().rstrip("\n") + "\n- `theirs.md`\n")
+            return real_render(fm, body)
+
+        mod._render = render_then_interlope
+        rc, err = self.capture(lambda: mod.cmd_claim(self.claim_args("noloop", "mine.md")))
+        self.assertEqual(rc, 0)
+        self.assertGreater(len(calls), 1, "the retry this test needs never happened")
+        self.assertEqual(err.count("NOT lock-guarded"), 1,
+                         "the degradation warning repeated per attempt:\n" + err)
+
+    def test_list_and_check_surface_that_claims_cannot_be_guaranteed(self):
+        self.assertOk(self.gs("survey", "register", "--files", "x.md"))
+        for verb, ns in (("list", argparse.Namespace(id="survey", stale_after=30)),
+                         ("check", argparse.Namespace(id="survey", file="x.md", stale_after=30))):
+            with self.subTest(cmd=verb):
+                mod = self.unlocked_tool()
+                rc, err = self.capture(lambda: getattr(mod, "cmd_" + verb)(ns))
+                self.assertEqual(rc, 0)
+                self.assertIn("cannot guarantee claim integrity", err,
+                              "%s did not say this vault cannot guarantee claims:\n%s"
+                              % (verb, err))
+                self.assertEqual([p for p in self.sessions.glob("*") if p.suffix == ".tmp"], [],
+                                 "the lock probe left a temp file behind")
 
 
 if __name__ == "__main__":

@@ -258,6 +258,29 @@ class ContextTest(unittest.TestCase):
         self.assertEqual(r.returncode, 1)
         self.assertIn("no model-reachable definitions", r.stderr)
 
+    def test_nothing_defined_exits_1_on_the_json_surface_too(self):
+        """The exit code cannot mean "rendered" on one surface and "nothing" on the other.
+
+        `return 3 if problems else 1` sat inside the non-JSON branch, so --json with nothing in
+        effect fell through to `return 0` -- "rendered" -- having rendered no sections at all,
+        and a caller keying on the code could not tell an empty vault from a full one."""
+        r = self.run_ctx("--json")
+        self.assertEqual(r.returncode, 1, r.stdout)
+        self.assertEqual(json.loads(r.stdout)["sections"], [], "nothing was rendered")
+        self.assertIn("no model-reachable definitions", r.stderr)
+
+    def test_json_still_exits_0_when_something_did_render(self):
+        self.put_core(pack("vocabulary", "core", [{"term": "a", "definition": "A thing."}]))
+        r = self.run_ctx("--json")
+        self.assertEqual(r.returncode, 0, r.stderr)
+        self.assertTrue(json.loads(r.stdout)["sections"])
+
+    def test_json_reports_a_registry_problem_in_the_exit_code(self):
+        (self.release / "packs" / "core" / "vocabulary.broken.pack.json").write_text(
+            "{not json", encoding="utf-8")
+        r = self.run_ctx("--json")
+        self.assertEqual(r.returncode, 3, r.stdout)
+
     # -- a local pack is still gated -------------------------------------------------------
     def test_an_instruction_shaped_local_entry_never_reaches_the_render(self):
         """Local packs never pass the submission gate, so entry_problem is their only check --

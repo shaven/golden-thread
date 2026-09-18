@@ -209,6 +209,38 @@ class GuardTest(GuardTestBase):
             with self.subTest(case=name):
                 self.assertAllow(self.guard_raw(stdin))
 
+    def test_the_python_guard_invoked_with_no_argument_fails_open(self):
+        """Fail-open has to start at line one, before any try.
+
+        `HERE = sys.argv[1]` was the first statement, so running the guard without the
+        directory argument -- by hand, from a settings entry that lost it, from anything but
+        the .sh wrapper -- raised IndexError and exited 1 with a traceback. Claude Code reports
+        a non-zero PreToolUse hook as a failing hook on EVERY tool call, and the first thing
+        anyone does with a guard that noisy is switch it off. Its own contract is that when it
+        has nothing to say it says nothing and exits 0."""
+        self.session(host=HOST, pid=os.getpid())         # a live claim exists, on another file
+        payload = {"session_id": "caller", "hook_event_name": "PreToolUse",
+                   "tool_name": "Write",
+                   "tool_input": {"file_path": str(self.vault / "index.md"), "content": "x"}}
+        proc = self.run_cmd([PYTHON, self.hooks / "guard_session_claims.py"],
+                            input=json.dumps(payload))
+        self.assertEqual(proc.returncode, 0,
+                         "a guard must exit 0 with no argument\nstderr:\n%s" % proc.stderr)
+        self.assertEqual(proc.stdout, "", "no objection prints nothing")
+        self.assertNotIn("Traceback", proc.stderr)
+
+    def test_with_no_argument_it_still_denies_a_claimed_file(self):
+        """Failing open must not mean doing nothing: without argv[1] the guard falls back to
+        its own directory, which is where install.sh puts gt_paths.py beside it."""
+        self.session(host=HOST, pid=os.getpid())
+        payload = {"session_id": "caller", "hook_event_name": "PreToolUse",
+                   "tool_name": "Write",
+                   "tool_input": {"file_path": str(self.target), "content": "x"}}
+        proc = self.run_cmd([PYTHON, self.hooks / "guard_session_claims.py"],
+                            input=json.dumps(payload))
+        self.assertEqual(proc.returncode, 0, proc.stderr)
+        self.assertIn("core_concurrent_session_claim", proc.stdout, proc.stdout)
+
     def test_python_unavailable_allows(self):
         self.session(host=HOST, pid=os.getpid())
         stub = self.tmp / "stub-bin"

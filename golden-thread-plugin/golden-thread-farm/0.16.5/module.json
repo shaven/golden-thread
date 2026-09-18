@@ -1,0 +1,21 @@
+{
+  "schema": 1,
+  "name": "farm",
+  "plugin": "gt-farm",
+  "version": "0.16.5",
+  "requires_gt": ">=0.16.5,<0.17.0",
+  "summary": "Work packets: hand gated, self-contained tasks to an external AI service and ingest the answers as unverified",
+  "default": "off",
+  "skills": [
+    "gt-farm"
+  ],
+  "scripts": [],
+  "templates": [],
+  "hooks": [],
+  "hookdir_scripts": [],
+  "settings": [],
+  "requires_modules": [],
+  "replaces_core": [
+    "skills/gt-farm"
+  ]
+}

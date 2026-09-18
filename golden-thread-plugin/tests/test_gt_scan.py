@@ -112,6 +112,16 @@ class AggregatorTest(ScanBase):
         self.assertIn("NOT a pass", r.stdout)
         self.assertIn("0 of 1", r.stdout)
 
+    def test_exit_4_from_the_leaf_is_interpreted_not_printed_as_a_number(self):
+        """NOTHING_LOADED was declared "so the aggregator interprets rather than guesses" and
+        nothing read it: the reader got a bare `exit=4` and had to know what 4 meant."""
+        self.remanifest()                       # a manifest, but zero packs
+        self.write("a.py", "def ok(): pass\n")
+        r = self.run_agg()
+        self.assertEqual(r.returncode, 3, r.stdout + r.stderr)
+        self.assertIn("no definitions", r.stdout,
+                      "exit 4 was reported as a number, not as what it means")
+
     def test_a_failing_member_outranks_a_clean_one(self):
         """Even when another member is fine, an unrun member decides the exit code."""
         self.remanifest()
@@ -169,6 +179,22 @@ class LanguageLeafTest(ScanBase):
         r = self.run_leaf()
         self.assertEqual(r.returncode, 4, r.stdout)
         self.assertIn("REFUSING TO SCAN", r.stderr)
+
+    def test_a_pack_that_failed_to_load_outranks_the_findings(self):
+        """A partial scan must not exit like a complete one.
+
+        The leaf exited 3 only when there were problems AND no findings, so a pack that failed
+        to verify was invisible whenever anything else happened to match: exit 1, which the
+        aggregator reads as "ran, found something", and nothing anywhere said the definitions
+        were incomplete. The findings still print -- only the code changes."""
+        self.language_packs()
+        (self.release / "packs" / "core" / "naming.broken.pack.json").write_text(
+            "{not json", encoding="utf-8")
+        self.write("a.py", "def BadName(): pass\n")
+        r = self.run_leaf()
+        self.assertEqual(r.returncode, 3, r.stdout + r.stderr)
+        self.assertIn("BadName", r.stdout, "the findings that WERE made must still print")
+        self.assertIn("PROBLEM", r.stdout + r.stderr)
 
     def test_a_language_is_taught_entirely_by_packs(self):
         """The proof that language knowledge is data: a language the script has never heard of."""

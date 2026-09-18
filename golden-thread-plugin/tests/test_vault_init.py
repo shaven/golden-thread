@@ -38,6 +38,13 @@ class VaultInitBase(Sandbox):
         return self.py(VI, *args)
 
     def vi_json(self, *args, expect=0):
+        """`expect` is the exit code, and it is part of the contract, not a formality.
+
+        A mode that either performs its move or does not -- rename, merge, archive -- exits 1
+        when it did not and said why in an error or conflict row. main() used to end in a bare
+        sys.exit(0), so every one of the refusals below reported success to its caller
+        (corrected 2026-09-18). The scaffolding modes still exit 0 while recording advisory
+        error rows, e.g. `fresh` before install.sh has put the hook scripts in place."""
         proc = self.vi(*args)
         self.assertEqual(proc.returncode, expect,
                          f"vault_init {args[0]} exit {proc.returncode}\n{proc.stdout}\n{proc.stderr}")
@@ -155,6 +162,20 @@ class FreshTest(VaultInitBase):
         self.assertTrue(self.actions(res, "conflict"))
         self.assertFalse(b.exists(), "conflicting fresh run still scaffolded the new vault")
         self.assertEqual(self.cfg()["vault_path"], str(a.resolve()))
+
+    def test_fresh_without_installed_hooks_still_exits_zero(self):
+        """The scaffold DID happen; the hooks are a later step install.sh owns.
+
+        The exit code says whether the operation happened, and a `fresh` into a clean
+        directory on a machine where gt has not been installed yet is the documented happy
+        path -- so this advisory error row must not fail the run, while a rename onto a name
+        already taken must (see RenameTest)."""
+        proc = self.vi("fresh", "--vault", self.tmp / "hv", "--domain", "T")
+        self.assertEqual(proc.returncode, 0, proc.stdout + proc.stderr)
+        res = json.loads(proc.stdout)
+        self.assertTrue([r for r in self.actions(res, "error")
+                         if "hook scripts not installed" in r["note"]])
+        self.assertTrue((self.tmp / "hv" / "Knowledge").is_dir(), "the vault was scaffolded")
 
     def test_fresh_without_installed_hooks_reports_error_and_writes_no_settings(self):
         res = self.vi_json("fresh", "--vault", self.tmp / "v", "--domain", "T")
@@ -573,7 +594,8 @@ class RenameTest(VaultInitBase):
         v = self.make_vault()
         self.project(v, "alpha")
         self.project(v, "beta")
-        res = self.vi_json("rename-project", "--vault", v, "--from", "alpha", "--to", "beta")
+        res = self.vi_json("rename-project", "--vault", v, "--from", "alpha", "--to", "beta",
+                           expect=1)
         self.assertTrue(self.actions(res, "conflict"))
         self.assertTrue((v / "Projects" / "alpha" / "idea.md").is_file())
 
@@ -593,7 +615,8 @@ class RenameTest(VaultInitBase):
 
     def test_rename_unknown_project_is_error(self):
         v = self.make_vault()
-        res = self.vi_json("rename-project", "--vault", v, "--from", "ghost", "--to", "x")
+        res = self.vi_json("rename-project", "--vault", v, "--from", "ghost", "--to", "x",
+                           expect=1)
         self.assertTrue(self.actions(res, "error"))
         self.assertFalse((v / "Projects" / "x").exists())
 
@@ -749,7 +772,9 @@ class MergeTest(VaultInitBase):
         before = snap()
         proc = self.py(VI, "merge-project", "--vault", v, "--from", "beta", "--into", "alpha",
                        env={"GT_TEST_FAULT": "merge-decisions"})
-        self.assertEqual(proc.returncode, 0, proc.stderr)
+        # 1: the merge did not happen and the run says so. It exited 0 through 0.16.4, which
+        # told the caller a merge that had been rolled back had succeeded.
+        self.assertEqual(proc.returncode, 1, proc.stdout + proc.stderr)
         res = json.loads(proc.stdout)
         self.assertTrue(self.actions(res, "error"), res)
         self.assertEqual(snap(), before, "a failed merge changed the projects")
@@ -789,9 +814,11 @@ class MergeTest(VaultInitBase):
     def test_merge_into_itself_or_missing_is_error(self):
         v = self.make_vault()
         self.project(v, "alpha")
-        res = self.vi_json("merge-project", "--vault", v, "--from", "alpha", "--into", "alpha")
+        res = self.vi_json("merge-project", "--vault", v, "--from", "alpha", "--into", "alpha",
+                           expect=1)
         self.assertTrue(self.actions(res, "error"))
-        res = self.vi_json("merge-project", "--vault", v, "--from", "ghost", "--into", "alpha")
+        res = self.vi_json("merge-project", "--vault", v, "--from", "ghost", "--into", "alpha",
+                           expect=1)
         self.assertTrue(self.actions(res, "error"))
         self.assertTrue((v / "Projects" / "alpha" / "idea.md").is_file())
 
@@ -818,7 +845,7 @@ class ArchiveTest(VaultInitBase):
 
     def test_archive_unknown_is_error(self):
         v = self.make_vault()
-        res = self.vi_json("archive-project", "--vault", v, "--slug", "ghost")
+        res = self.vi_json("archive-project", "--vault", v, "--slug", "ghost", expect=1)
         self.assertTrue(self.actions(res, "error"))
 
 
@@ -865,10 +892,11 @@ class LifecycleEventsTest(VaultInitBase):
                      ("merge-project", "--vault", v, "--from", "beta", "--into", "alpha"),
                      ("archive-project", "--vault", v, "--slug", "alpha")):
             self.vi_json(*args, "--dry-run")
-        self.vi_json("rename-project", "--vault", v, "--from", "nope", "--to", "x")
-        self.vi_json("rename-project", "--vault", v, "--from", "beta", "--to", "alpha")
-        self.vi_json("merge-project", "--vault", v, "--from", "alpha", "--into", "alpha")
-        self.vi_json("archive-project", "--vault", v, "--slug", "ghost")
+        self.vi_json("rename-project", "--vault", v, "--from", "nope", "--to", "x", expect=1)
+        self.vi_json("rename-project", "--vault", v, "--from", "beta", "--to", "alpha", expect=1)
+        self.vi_json("merge-project", "--vault", v, "--from", "alpha", "--into", "alpha",
+                     expect=1)
+        self.vi_json("archive-project", "--vault", v, "--slug", "ghost", expect=1)
         self.assertEqual(self.kinds(v), before, "a rehearsal or a refusal emitted an event")
 
     def test_event_failure_does_not_fail_the_operation(self):

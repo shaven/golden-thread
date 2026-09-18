@@ -372,8 +372,13 @@ class DemoteTest(unittest.TestCase):
         p.write_bytes(b"# Caf\xe9\n\nnot valid UTF-8\n")
         before = digest(self.vault)
         r = self.run_dem("--file", "global-memory/latin1.md", "--project", "alpha", "--apply")
-        self.assertEqual(r.returncode, 3, r.stdout + r.stderr)
+        # 1, not 3. The two codes mean different things to whoever reads them: 1 is "refused,
+        # and nothing was written", 3 is "an error MID-MOVE, so one of the two ends may hold
+        # something -- go and look". This run prints REFUSING and touches nothing, and spending
+        # 3 on it sent every caller to inspect a vault that had not changed.
+        self.assertEqual(r.returncode, 1, r.stdout + r.stderr)
         self.assertNotIn("Traceback", r.stderr, "a refusal, not a crash")
+        self.assertIn("REFUSING", r.stderr)
         self.assertIn("UTF-8", r.stderr)
         self.assertEqual(digest(self.vault), before)
 

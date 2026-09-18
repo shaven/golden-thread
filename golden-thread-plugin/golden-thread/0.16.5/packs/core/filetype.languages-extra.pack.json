@@ -1,0 +1,47 @@
+{
+  "schema": 1,
+  "slot": "filetype",
+  "name": "languages-extra",
+  "tier": "A",
+  "spdx": "MIT",
+  "provenance": {
+    "origin": "original",
+    "contributor": "Golden Thread <gt@example.com>",
+    "upstream": null
+  },
+  "dco": "Signed-off-by: Golden Thread <gt@example.com>",
+  "entries": [
+    {
+      "match": "*.rb",
+      "lang": "ruby"
+    },
+    {
+      "match": "*.rake",
+      "lang": "ruby"
+    },
+    {
+      "match": "Rakefile",
+      "lang": "ruby"
+    },
+    {
+      "match": "Gemfile",
+      "lang": "ruby"
+    },
+    {
+      "match": "*.php",
+      "lang": "php"
+    },
+    {
+      "match": "*.java",
+      "lang": "java"
+    },
+    {
+      "match": "*.cs",
+      "lang": "csharp"
+    },
+    {
+      "match": "*.sql",
+      "lang": "sql"
+    }
+  ]
+}

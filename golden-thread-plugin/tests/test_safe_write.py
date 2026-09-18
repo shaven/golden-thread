@@ -315,6 +315,70 @@ class SafeWriteTest(Sandbox):
                          "the target was truncated or replaced")
         self.assertEqual(self.ledger(), [])
 
+    # -- the rest of the chain is visible too (regression, 2026-09-18) --------
+    # 0.16.4 made strategy 1's failure loud and stopped there. Strategies 2 and 3
+    # kept their own bare `except Exception: pass`, so a write that ended in a
+    # sidecar or in the ledger directory still could not say what had defeated the
+    # strategies above it. These tests fail against that code.
+    def test_failed_direct_write_reports_its_reason_rather_than_swallowing_it(self):
+        # A directory at the target: the atomic replace fails, the in-place write
+        # fails (IsADirectoryError), and the sidecar is what lands.
+        target = self.work / "clash2"
+        target.mkdir()
+        proc, (path, strategy) = self.write_proc(target, "payload\n")
+        self.assertEqual(strategy, "sidecar")
+        self.assertIn("in-place write", proc.stderr,
+                      "strategy 2 failed and said nothing at all")
+        self.assertIn("IsADirectoryError", proc.stderr,
+                      "the exception that defeated the in-place write was swallowed")
+        led = self.ledger()
+        self.assertEqual(len(led), 1)
+        self.assertTrue(led[0].get("why_not_direct"),
+                        "the sidecar entry does not say why the in-place write failed")
+        self.assertTrue(led[0].get("why_not_atomic"))
+
+    def test_failed_sidecar_reports_its_reason_rather_than_swallowing_it(self):
+        # A read-only directory defeats 1, 2 and 3; only the ledger directory is left.
+        d = self.work / "rodir3"
+        d.mkdir()
+        target = d / "out.json"
+        self.chmod(d, 0o555)
+        proc, (path, strategy) = self.write_proc(target, '{"ok": 1}\n')
+        self.assertEqual(strategy, "ledger-dir")
+        self.assertIn("sidecar write", proc.stderr,
+                      "strategy 3 failed and said nothing at all")
+        self.assertIn("PermissionError", proc.stderr,
+                      "the exception that defeated the sidecar was swallowed")
+        led = self.ledger()
+        self.assertEqual(len(led), 1)
+        for field in ("why_not_atomic", "why_not_direct", "why_not_sidecar"):
+            self.assertTrue(led[0].get(field),
+                            "ledger-dir entry is missing %s" % field)
+
+    def test_replay_never_overwrites_a_target_that_reappeared(self):
+        # The documented promise: "Never deletes a target to make room." os.replace
+        # overwrites an existing destination, so an outstanding entry replayed onto a
+        # path someone had meanwhile rewritten destroyed their file without a word.
+        d = self.work / "rodir4"
+        d.mkdir()
+        target = d / "out.json"
+        self.chmod(d, 0o555)
+        path, strategy = self.write(target, '{"from": "the ledger"}\n')
+        self.assertEqual(strategy, "ledger-dir")
+
+        os.chmod(d, 0o755)
+        target.write_text('{"from": "a human, later"}\n')     # the obstruction cleared
+        res = self.sw_json("print(json.dumps(sw.replay()))")
+        self.assertEqual(len(res), 1)
+        self.assertIn("still-blocked", res[0][1],
+                      "replay reported success while overwriting an occupied target")
+        self.assertEqual(target.read_text(), '{"from": "a human, later"}\n',
+                         "replay overwrote a target that was in the way")
+        self.assertTrue(Path(path).is_file(),
+                        "the pending file was consumed by a move that must not have happened")
+        self.assertEqual(len(self.sw_json("print(json.dumps(sw.outstanding()))")), 1,
+                         "a blocked entry must stay outstanding for a human")
+
 
 if __name__ == "__main__":
     unittest.main()

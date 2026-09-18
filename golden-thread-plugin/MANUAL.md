@@ -3,8 +3,8 @@
 > **Reader:** a daily user — the deepest document, where the *why* lives
 > **Claims last checked against the code:** 2026-09-17 — see *The documents, and what belongs in each* in [`CLAUDE.md`](../CLAUDE.md).
 
-Complete reference for gt's twenty-three skills and its six modules. Written against **gt v0.16.4**
-(gt-wiki 0.2.2; gt-demo, gt-watch, gt-report-card, gt-farm and gt-flow 0.16.4).
+Complete reference for gt's twenty-three skills and its six modules. Written against **gt v0.16.5**
+(gt-wiki 0.2.2; gt-demo, gt-watch, gt-report-card, gt-farm and gt-flow 0.16.5).
 
 ---
 
