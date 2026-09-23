@@ -111,6 +111,7 @@ by `install.sh` while it is on. Since 0.15.0 there are six.
 | `report-card` (`gt-report-card`) | on | none | The session report card at `/compact` and session end, shown at the next session start, and the project close-out question. Settings `report_card`, `closeout_check`. |
 | `farm` (`gt-farm`) | off (kept on when upgrading from a gt that had it) | `/gt-farm:gt-farm` | Route bulk, mechanical, or second-opinion tasks to an external AI service as a self-contained work packet. All four gates (Stateless, Self-contained, Checkable, Releasable) must pass before a task leaves. Results come back unverified. Was `/gt:gt-farm`. |
 | `flow` (`gt-flow`) | on | `/gt-flow:gt-flow` | Render the vault's event stream as one offline HTML page: a lane per project, an arrow each time knowledge climbed a level. Add `--redact` before sharing it. |
+| `usage` (`gt-usage`) | on | `/gt-usage:gt-usage` | Where this account stands against its Claude plan allowance — the 5-hour, weekly and monthly-spend windows. Records a reading a minute and says nothing until one is worth acting on; `usage_alert always` keeps it on screen. |
 
 #### What flow shows
 
@@ -312,7 +313,7 @@ See [INSTALL.md](INSTALL.md) for step-by-step instructions, including how to ins
 
 ```bash
 bash install.sh --vault <vault>     # gt plus every module that is on; then restart Claude Code
-bash install.sh --list-modules      # the six modules, each one's state and why
+bash install.sh --list-modules      # the seven modules, each one's state and why
 bash install.sh --without demo      # leave one out; remembered
 ```
 

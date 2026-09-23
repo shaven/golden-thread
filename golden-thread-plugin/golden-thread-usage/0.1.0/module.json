@@ -1,0 +1,59 @@
+{
+  "schema": 1,
+  "name": "usage",
+  "plugin": "gt-usage",
+  "version": "0.1.0",
+  "requires_gt": ">=0.16.5,<0.17.0",
+  "summary": "Plan-allowance meter: records the 5-hour, weekly and spend windows, speaks only near a ceiling, and reports what a cut would save",
+  "default": "on",
+  "skills": [
+    "gt-usage"
+  ],
+  "scripts": [
+    "gt_usage.py",
+    "gt_usage_brief.py"
+  ],
+  "templates": [],
+  "hooks": [
+    {
+      "event": "SessionStart",
+      "script": "gt_usage_brief.py",
+      "args": [
+        "--hook"
+      ],
+      "kind": "reporter"
+    }
+  ],
+  "hookdir_scripts": [
+    "gt_usage.py",
+    "gt_usage_brief.py"
+  ],
+  "settings": [
+    {
+      "key": "usage_meter",
+      "default": "both",
+      "values": [
+        "off",
+        "status",
+        "login",
+        "both"
+      ],
+      "summary": "Where the plan-allowance meter shows: the status line, the session-start line, both, or nowhere.",
+      "detail": "off     nothing is displayed. Readings are still recorded, so turning it\n        back on later has a history behind it\nstatus  the line under the prompt only, and only near a ceiling\nlogin   one line at session start only\nboth    both of the above  (default)\n\nThe meter is deliberately silent in ordinary use. A line that is always\nthere is read for a day and then never again -- the failure gt_closeout\nalready demonstrated by asking the same question every session until the\nanswer stopped being read. It speaks when a number has crossed a point\nwhere a person would do something about it.\n\nThe status line needs one entry in settings.json that no installer can\nwrite for you, because it is the user's own display:\n\n  \"statusLine\": {\"type\": \"command\",\n                 \"command\": \"python3 ~/.claude/golden-thread/hooks/gt_usage.py\"}"
+    },
+    {
+      "key": "usage_alert",
+      "default": "normal",
+      "values": [
+        "early",
+        "normal",
+        "late",
+        "always"
+      ],
+      "summary": "How close to a ceiling the allowance must be before the meter says anything \u2014 or `always`, to keep it on screen permanently.",
+      "detail": "early   5-hour 50%, weekly 40%, spend 50%, context 70%\nnormal  5-hour 80%, weekly 75%, spend 75%, context 85%  (default)\nlate    5-hour 90%, weekly 90%, spend 90%, context 95%\nalways  show every render, whatever the numbers\n\n`always` is for someone who wants the meter in view while they work, and it\nis deliberately not the default. A line that is always there is read for a\nday and then never again -- the failure gt_closeout demonstrated by asking\nthe same question every session until the answer stopped being read. Chosen\ndeliberately it is useful; arrived at by default it becomes furniture.\n\nA window a plan does not report is never shown, and never shown as 0%:\nabsent and zero are different facts. On a plan with no monthly spend cap the\nspend threshold is wired and inert, which the readout says plainly rather\nthan implying a third alarm is standing guard.\n\nWhat the meter is NOT is a cost saver. Cache writes count toward API rate\nlimits and cache reads do not; whether either touches a subscription\nallowance is undocumented. Measured on one machine over 180 days, 65% of\ncache-write volume was avoidable -- and the weekly window still sat at 13%,\nso the waste was real and the scarcity was not."
+    }
+  ],
+  "requires_modules": [],
+  "replaces_core": []
+}

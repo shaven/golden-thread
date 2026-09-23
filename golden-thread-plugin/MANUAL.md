@@ -3,7 +3,7 @@
 > **Reader:** a daily user — the deepest document, where the *why* lives
 > **Claims last checked against the code:** 2026-09-17 — see *The documents, and what belongs in each* in [`CLAUDE.md`](../CLAUDE.md).
 
-Complete reference for gt's twenty-three skills and its six modules. Written against **gt v0.16.5**
+Complete reference for gt's twenty-three skills and its seven modules. Written against **gt v0.16.5**
 (gt-wiki 0.2.2; gt-demo, gt-watch, gt-report-card, gt-farm and gt-flow 0.16.5).
 
 ---
@@ -446,7 +446,7 @@ python3 $SCRIPTS/gt_upgrade.py --vault <vault> status  # vault upgrades pending
 ```
 
 **Modules (since 0.14.0).** Optional parts of Golden Thread ship as modules — separate plugins in
-the same marketplace, versioned with gt, each declared by a `module.json`. 0.16.2 ships six:
+the same marketplace, versioned with gt, each declared by a `module.json`. 0.16.5 ships seven:
 
 | Module | Plugin | Default | What it adds |
 |---|---|---|---|
@@ -456,6 +456,7 @@ the same marketplace, versioned with gt, each declared by a `module.json`. 0.16.
 | `report-card` | `gt-report-card` | on | the session report card: three hooks (PreCompact, SessionEnd — which declares `"timeout": 15` since 0.16.2 — and SessionStart) and the `report_card` and `closeout_check` settings; no command |
 | `farm` | `gt-farm` | **off** for a fresh install | `/gt-farm:gt-farm`, work packets for an external AI (was `/gt:gt-farm`) |
 | `flow` | `gt-flow` | on | `/gt-flow:gt-flow`, the flow view of the event stream |
+| `usage` | `gt-usage` | on | `/gt-usage:gt-usage`, the plan-allowance meter: a session-start hook, an optional status line, and the `usage_meter` and `usage_alert` settings |
 
 ```bash
 bash install.sh --list-modules          # each module, its state, and why
@@ -1347,6 +1348,8 @@ effect again after `bash install.sh --with <module>`.
 |---|---|---|---|---|
 | `report_card` | `report-card` | `off` · `minimal` · `full` | `minimal` | At `/compact` and session end, summarises session hygiene; the card is shown at the start of your next session, because output at those two events is never displayed |
 | `closeout_check` | `report-card` | `off` · `ask` | `ask` | At `/compact` and session end, names a project that looks finished so you are asked whether to close it |
+| `usage_meter` | `usage` | `off` · `status` · `login` · `both` | `both` | Where the plan-allowance meter shows. `off` still records readings, so turning it back on has a history behind it |
+| `usage_alert` | `usage` | `early` · `normal` · `late` · `always` | `normal` | How near a ceiling the allowance must be before the meter speaks — or `always`, to keep it on screen permanently |
 | `watch` | `watch` | `off` · `report` | `off` | `/gt-watch:gt-watch`: the cron fetch and the session-start report of repo changes |
 
 `report_card` (detail):

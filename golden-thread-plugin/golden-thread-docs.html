@@ -445,6 +445,11 @@ often it would train the guard to be ignored.</p>
 <td><code>flow</code> (<code>gt-flow</code>) · on</td>
 <td>New in 0.15.0. Renders <code>events.jsonl</code> as one offline HTML file: a lane per project, time left to right, an arrow each time an item climbed a level. <code>--redact</code> hashes every name before the page is shared; task events are hidden until <code>--tasks</code> or a click; <code>--project</code>, <code>--since</code>. Never writes the vault.</td>
 </tr>
+<tr>
+<td><code>/gt-usage:gt-usage</code></td>
+<td><code>usage</code> (<code>gt-usage</code>) · on</td>
+<td>New in 0.16.5. Reports the 5-hour, weekly and monthly-spend windows from the readings its status line records, and what ending or cutting a session would save. A window the plan does not report is shown as absent, never as 0%. Settings: <code>usage_meter</code>, <code>usage_alert</code>. Never writes the vault.</td>
+</tr>
 </tbody>
 </table>
 <h3 id="movement-events-0150">Movement events (0.15.0)</h3>

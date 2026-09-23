@@ -172,6 +172,7 @@ costly, so a broken hook announces itself.
 | `golden-thread-plugin/golden-thread-report-card/<ver>/` | Module `report-card` (plugin `gt-report-card`) — the session report card and close-out question |
 | `golden-thread-plugin/golden-thread-farm/<ver>/` | Module `farm` (plugin `gt-farm`) — work packets for an external AI service |
 | `golden-thread-plugin/golden-thread-flow/<ver>/` | Module `flow` (plugin `gt-flow`) — an offline timeline of knowledge moving up the ladder |
+| `golden-thread-plugin/golden-thread-usage/<ver>/` | Module `usage` (plugin `gt-usage`) — the plan-allowance meter, quiet until a window is near its ceiling |
 | `golden-thread-plugin/install.sh` | Installs gt and every module that is on, wires the hooks, applies upgrades |
 
 The vault *content* lives in a separate private repo. This one is the machinery.

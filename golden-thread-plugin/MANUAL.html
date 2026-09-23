@@ -118,7 +118,7 @@ th, td { border:1px solid #ddd; padding:3px 5px; text-align:left; vertical-align
 <p><strong>Reader:</strong> a daily user — the deepest document, where the <em>why</em> lives
 <strong>Claims last checked against the code:</strong> 2026-09-17 — see <em>The documents, and what belongs in each</em> in <a href="../CLAUDE.md"><code>CLAUDE.md</code></a>.</p>
 </blockquote>
-<p>Complete reference for gt's twenty-three skills and its six modules. Written against <strong>gt v0.16.5</strong>
+<p>Complete reference for gt's twenty-three skills and its seven modules. Written against <strong>gt v0.16.5</strong>
 (gt-wiki 0.2.2; gt-demo, gt-watch, gt-report-card, gt-farm and gt-flow 0.16.5).</p>
 <hr />
 <h2 id="the-model">The model</h2>
@@ -555,7 +555,7 @@ once read "+0 lines" over six overwritten ones.</p>
 python3 $SCRIPTS/gt_upgrade.py --vault &lt;vault&gt; status  # vault upgrades pending
 </code></pre>
 <p><strong>Modules (since 0.14.0).</strong> Optional parts of Golden Thread ship as modules — separate plugins in
-the same marketplace, versioned with gt, each declared by a <code>module.json</code>. 0.16.2 ships six:</p>
+the same marketplace, versioned with gt, each declared by a <code>module.json</code>. 0.16.5 ships seven:</p>
 <table>
 <thead>
 <tr>
@@ -601,6 +601,12 @@ the same marketplace, versioned with gt, each declared by a <code>module.json</c
 <td><code>gt-flow</code></td>
 <td>on</td>
 <td><code>/gt-flow:gt-flow</code>, the flow view of the event stream</td>
+</tr>
+<tr>
+<td><code>usage</code></td>
+<td><code>gt-usage</code></td>
+<td>on</td>
+<td><code>/gt-usage:gt-usage</code>, the plan-allowance meter: a session-start hook, an optional status line, and the <code>usage_meter</code> and <code>usage_alert</code> settings</td>
 </tr>
 </tbody>
 </table>
@@ -1692,6 +1698,20 @@ effect again after <code>bash install.sh --with &lt;module&gt;</code>.</p>
 <td><code>off</code> · <code>ask</code></td>
 <td><code>ask</code></td>
 <td>At <code>/compact</code> and session end, names a project that looks finished so you are asked whether to close it</td>
+</tr>
+<tr>
+<td><code>usage_meter</code></td>
+<td><code>usage</code></td>
+<td><code>off</code> · <code>status</code> · <code>login</code> · <code>both</code></td>
+<td><code>both</code></td>
+<td>Where the plan-allowance meter shows. <code>off</code> still records readings, so turning it back on has a history behind it</td>
+</tr>
+<tr>
+<td><code>usage_alert</code></td>
+<td><code>usage</code></td>
+<td><code>early</code> · <code>normal</code> · <code>late</code> · <code>always</code></td>
+<td><code>normal</code></td>
+<td>How near a ceiling the allowance must be before the meter speaks — or <code>always</code>, to keep it on screen permanently</td>
 </tr>
 <tr>
 <td><code>watch</code></td>
