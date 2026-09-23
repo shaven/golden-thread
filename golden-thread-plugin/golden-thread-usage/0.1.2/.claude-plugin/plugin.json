@@ -1,0 +1,9 @@
+{
+  "name": "gt-usage",
+  "version": "0.1.2",
+  "description": "Golden Thread Usage: a quiet meter for the plan allowance. Records the 5-hour, weekly and monthly-spend windows from every render, says nothing until one of them is worth acting on, and can say what a cut would save right now.",
+  "author": {
+    "name": "Stacy Haven",
+    "email": "shaven@shavenconsulting.com"
+  }
+}
