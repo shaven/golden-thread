@@ -293,12 +293,46 @@ class FlowRender(Sandbox):
         order = sorted(data["events"], key=lambda e: e["ts"])
         promotes = [e for e in data["events"] if e["kind"] == "promote"]
         self.assertTrue(any(a["to"] == b["from"] for a in promotes for b in promotes), order)
-        # a fresh salt per render: two renders do not share hashes
+        # A fresh salt per render. Asserted through the MAPPING, not through the sets of
+        # hashes: a redacted name is sha256(salt + value) truncated to 4 hex characters,
+        # so two renders draw from 65,536 values and their sets intersect by chance about
+        # once in a thousand runs at this fixture's size. The old form asserted
+        # `not (h1 & h2)`, which no salt can guarantee -- it failed a release-check on
+        # 2026-09-23 with `{'f-5a76'}`, and its message blamed the salt, sending the
+        # reader to audit the one part that was correct.
+        #
+        # What "a fresh salt" actually means is that the same name hashes differently in
+        # two renders. That is exact, and cannot collide: compare the events in order and
+        # require every redacted value to have moved.
         p2, target2 = self.render(vault, "--redact", out=self.out / "flow2.html")
         self.assertOk(p2)
-        h1 = set(re.findall(r"\bf-[0-9a-f]{4,}\b", page))
-        h2 = set(re.findall(r"\bf-[0-9a-f]{4,}\b", target2.read_text(encoding="utf-8")))
-        self.assertFalse(h1 & h2, "hashes repeat across renders: the salt is not per render")
+        page2 = target2.read_text(encoding="utf-8")
+        data2 = json.loads(re.search(r'id="flow-data">(.*?)</script>', page2, re.S).group(1))
+        first = sorted(data["events"], key=lambda e: (e["ts"], e["kind"]))
+        second = sorted(data2["events"], key=lambda e: (e["ts"], e["kind"]))
+        self.assertEqual(len(first), len(second), "the two renders cover the same events")
+        moved = same = 0
+        for a, b in zip(first, second):
+            for field in ("project", "from", "to", "session", "domain"):
+                x, y = a.get(field), b.get(field)
+                if not x or not y or not isinstance(x, str) or not isinstance(y, str):
+                    continue
+                if not re.match(r"^[a-z]-[0-9a-f]+$", x):
+                    continue                      # not a redacted value; nothing to compare
+                moved += x != y
+                same += x == y
+        # Guard on what was COMPARED, not on what moved: with a shared salt nothing moves,
+        # and a guard written as `assertTrue(moved)` fires first and reports "the fixture
+        # stopped producing redacted fields" -- false, and pointing away from the defect.
+        # That is the same wrong-cause-in-the-message failure this rewrite exists to fix,
+        # reintroduced in the rewrite itself and caught by mutating the salt.
+        self.assertTrue(moved + same, "no redacted value was compared -- the fixture "
+                                      "stopped producing redacted fields, so this test "
+                                      "proves nothing")
+        self.assertEqual(same, 0,
+                         "%d redacted value(s) hashed identically across two renders: the "
+                         "salt is not fresh per render (a truncation collision cannot cause "
+                         "this -- the SAME name is being compared with itself)" % same)
         self.assertEqual(tree_digest(vault), before)
 
     def test_project_and_since_filters(self):
