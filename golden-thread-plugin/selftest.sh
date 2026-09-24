@@ -72,21 +72,79 @@ python3 "$HOOKS/gt_components.py" wiring "$HERE/golden-thread/$VER" >"$TMP/wirin
   && ok "all declared hooks wired in settings.json" \
   || { bad "declared hooks not wired"; sed 's/^/      /' "$TMP/wiring.log"; }
 
-python3 - <<'PY' | while IFS= read -r cmd; do
+# Two defects lived here until 2026-09-24, and each one hid the other.
+#
+#   * `python3 - <<PY | while read` put this loop on the right-hand side of a PIPE,
+#     so it ran in a subshell and every `fail=1` it set was discarded at `done`.
+#     The run that found it printed three FAIL lines and then SELFTEST PASSED,
+#     exit 0. The list goes to a file now and the loop reads from it, in THIS shell.
+#   * The loop asserted that every SessionStart hook emits `systemMessage`. Three
+#     do not, by design, and those were the three FAIL lines -- all false. That is
+#     why the swallowed exit code survived: the only failures it ever hid were
+#     spurious, so the script looked right whichever half you read.
+#
+# Classify per hook, and let the DEFAULT arm require only a clean exit and
+# parseable output. A hook this script has not heard of is reported as
+# unclassified rather than judged by whichever rule happens to fit -- a newly
+# wired hook should become visible here, not be absorbed by a neighbour's rule.
+python3 - >"$TMP/sessionstart.txt" <<'PY'
 import json, os
 d = json.load(open(os.path.expanduser("~/.claude/settings.json")))
 for e in d.get("hooks", {}).get("SessionStart", []):
     for h in e.get("hooks", []): print(h["command"])
 PY
-  name=$(printf '%s' "$cmd" | grep -oE 'gt_[a-z_]+\.py'); out=$(echo '{}' | bash -c "$cmd" 2>/dev/null)
-  if [ "$name" = "gt_watch.py" ]; then
-    # The watch module (0.15.0; in gt before) is wired only while the module is on, and
-    # its `watch` setting defaults off, when the hook must say nothing at all (0.10.0).
-    [ -z "$out" ] && ok "SessionStart $name silent while watch=off" || bad "SessionStart $name spoke while off: $out"
-    continue
-  fi
-  printf '%s' "$out" | grep -q '"systemMessage"' && ok "SessionStart $name emits systemMessage" || bad "SessionStart $name: $out"
-done
+# Same lesson as the wiring check above: a loop over an empty list passes silently.
+[ -s "$TMP/sessionstart.txt" ] || bad "settings.json declares no SessionStart hooks to check"
+
+# Output, when there is any, must be a JSON object. Without this the silence arms
+# below would wave through a hook that printed a traceback to stdout.
+json_ok() { printf '%s' "$1" | python3 -c 'import json,sys
+s = sys.stdin.read().strip()
+sys.exit(0 if not s else (0 if isinstance(json.loads(s), dict) else 1))' 2>/dev/null; }
+speaks()  { printf '%s' "$1" | grep -q "\"$2\""; }
+
+while IFS= read -r cmd; do
+  [ -n "$cmd" ] || continue
+  # Name the hook by its SCRIPT. The old `grep -oE 'gt_[a-z_]+\.py'` could not see
+  # inject_core_rules.sh at all, so that hook reported with an EMPTY name beside a
+  # payload the reader would naturally attribute to whichever hook was named last.
+  name=$(printf '%s' "$cmd" | tr ' ' '\n' | grep -E '\.(py|sh)$' | head -1)
+  name=${name##*/}; [ -n "$name" ] || name="$cmd"
+  out=$(echo '{}' | bash -c "$cmd" 2>/dev/null); rc=$?
+
+  if [ "$rc" != 0 ]; then bad "SessionStart $name exited $rc"; continue; fi
+  if ! json_ok "$out"; then bad "SessionStart $name emitted unparseable output: $out"; continue; fi
+
+  case "$name" in
+    gt_watch.py)
+      # The watch module (0.15.0; in gt before) is wired only while the module is on, and
+      # its `watch` setting defaults off, when the hook must say nothing at all (0.10.0).
+      [ -z "$out" ] && ok "SessionStart $name silent while watch=off" \
+                    || bad "SessionStart $name spoke while off: $out" ;;
+    inject_core_rules.sh)
+      # Injects CONTEXT rather than addressing the user, so it carries
+      # additionalContext and correctly never carries systemMessage.
+      if speaks "$out" additionalContext && printf '%s' "$out" | grep -q 'CORE RULES'; then
+        ok "SessionStart $name injects the Core rules"
+      else bad "SessionStart $name gave no Core rules: $out"; fi ;;
+    gt_components.py|gt_workers.py|gt_version_check.py|gt_push_check.py)
+      # The four startup checks. Each has something true to say about ANY home,
+      # a fresh one included, so silence from these is a real failure.
+      speaks "$out" systemMessage && ok "SessionStart $name emits systemMessage" \
+                                  || bad "SessionStart $name said nothing: $out" ;;
+    gt_report_card.py|gt_usage_brief.py)
+      # Both report on HISTORY -- a prior session's card, a usage record. A throwaway
+      # home has neither, so silence is the correct answer here and speaking is also
+      # correct. Only a crash or unparseable output is a failure, and both are caught
+      # above. Asserting systemMessage here is what produced two of the three false
+      # FAILs this block was rewritten to remove.
+      if [ -z "$out" ]; then ok "SessionStart $name silent (no history in a fresh home)"
+      elif speaks "$out" systemMessage; then ok "SessionStart $name emits systemMessage"
+      else bad "SessionStart $name spoke without a systemMessage: $out"; fi ;;
+    *)
+      ok "SessionStart $name answered (unclassified -- give it an arm above)" ;;
+  esac
+done < "$TMP/sessionstart.txt"
 # The report card is the report-card module since 0.15.0: run it only when the module
 # installed it. Absent while the module is on is a failure; the wiring check above already
 # asserts every ON module's hooks are wired.
