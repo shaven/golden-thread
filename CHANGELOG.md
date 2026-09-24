@@ -11,6 +11,83 @@ release's own summary line, kept short rather than reconstructed after the fact.
 
 ---
 
+## gt-usage 0.1.2 — 2026-09-23
+
+**A new module, on by default: a plan-allowance meter that is silent until one of your
+windows is near its ceiling.** gt itself is unchanged and stays at 0.16.5.
+
+### What it is
+
+How much of a plan allowance has been spent reaches exactly one place: the JSON a **status
+line** receives on stdin, every render. `/usage` prints token counts rather than
+percentages, nothing persists the percentages to disk, no CLI flag exposes them, and there
+is no OpenTelemetry metric for them. So a history of allowance consumption can only be built
+by sampling from a status line — and only from inside a session, because a launchd user
+agent cannot even list `~/.claude/projects` (`PermissionError` on listdir while `stat`
+returns `True`; macOS TCC). A scheduled version of this would fail quietly and for ever.
+
+- `gt_usage.py` — the status line. Records one reading a minute and **displays nothing**
+  until the 5-hour, weekly, monthly-spend or context window crosses its threshold. Never
+  raises, never blocks, always exits 0; renders in 76ms.
+- `gt_usage_brief.py` — one labelled line at session start, carrying the single most useful
+  action and the command that quiets it.
+- `/gt-usage:gt-usage` — on demand: where the allowance stands, what cutting this session
+  would save, four things a person can do, and how to turn any of it off.
+
+Two settings, registered in gt's own registry so `/gt:gt-settings show` lists them beside
+everything else: `usage_meter` (`off` · `status` · `login` · `both`) and `usage_alert`
+(`early` · `normal` · `late` · `always`). `always` keeps the meter on screen permanently and
+is deliberately **not** the default — a line that is always there is read for a day and then
+never again, which is the failure `gt_closeout` had already demonstrated by asking the same
+question every session until the answer stopped being read.
+
+### Three honesty rules, enforced in the code rather than left to prose
+
+- **A window the plan does not report is ABSENT, never 0%.** Absent and zero are different
+  facts, and a meter that shows the second for the first is lying quietly.
+- **A reading older than twelve hours is quoted with its age**, not as current.
+- **No token count is ever converted into a percentage of an allowance.** Cache writes count
+  toward API *rate* limits and cache reads do not; whether either touches a *subscription*
+  allowance is undocumented. Inventing that conversion would be a guess wearing the clothes
+  of a measurement.
+
+### What it is not
+
+A cost saver. Measured over 180 days on one machine, **65% of prompt-cache write volume was
+avoidable** — and the weekly allowance still sat at **13%**. The waste was real and the
+scarcity was not. That sentence is in the setting's own `explain` text, because the person
+most likely to over-read this meter is the one who just installed it.
+
+### 0.1.1 and 0.1.2: the same bug twice
+
+**Whether a thing is SHOWN and what it ADVISES are different questions.** Under
+`usage_alert always` every threshold is negative so the line renders unconditionally — which
+is what `always` means — but the advice attached to it must still be earned from the numbers.
+
+- **0.1.1** — the status line advised *"cutting now is cheap"* at 10% of a context window,
+  where there is nothing to cut. Found within a minute of the meter first being switched on
+  to look at.
+- **0.1.2** — the identical defect in the session-start line, claiming *"the weekly window is
+  the one to watch"* at 13%, in the file the 0.1.1 fix had not reached. Found while
+  disproving a bug report that was itself wrong.
+
+`tests/test_usage_module.py` now asks the question neither file was asked — change **only**
+the display level and the advice must not move — of every surface at every level, plus the
+inverse so the fix cannot degenerate into "never advise". Proven by mutation: each bug fails
+its own named test and nothing else.
+
+### Also
+
+**`gt-flow`'s redaction test asserted something no salt can guarantee.** It required two
+renders' sets of truncated hashes not to intersect; a redacted name is a sha256 cut to four
+hex characters, so at that fixture's size they collide by chance about once in a thousand
+runs. It failed a release check with `{'f-5a76'}` while the code was entirely correct, and
+its message — *"the salt is not per render"* — sent the reader to audit the one part that
+worked. The test now asserts what it means: the same name must hash **differently** across
+two renders, which cannot collide. Widening the hash beyond four characters is filed
+separately; a shared page showing two names under one `f-5a76` is a correctness problem, not
+just a flaky test.
+
 ## gt 0.16.5 — 2026-09-18
 
 **Every defect an adversarial sweep found in 0.16.4, including the two that release
