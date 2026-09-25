@@ -359,8 +359,21 @@ def check(version_dir, keep=False, module_matrix=True):
                                 "vault" % t.name)
 
         # ---- 7. every Core rule reached the vault ----------------------------
+        #
+        # Resolved, not spelled: this pinned the pre-0.17.0 location and so reported all
+        # thirteen rules as "ships but was not installed" the moment the default moved --
+        # a check failing for the one reason it should never fail, that it was looking in
+        # the wrong place rather than that the files were missing.
         rules_src = version_dir / "templates" / "core-rules"
-        rules_dst = vault / "Projects" / "golden-thread" / "core-rules"
+        rules_dst = None
+        for cand in (vault / "core-rules",
+                     vault / "Projects" / "golden-thread" / "core-rules"):
+            if (cand / "core_rule_priority_model.md").is_file():
+                rules_dst = cand
+                break
+        if rules_dst is None:
+            problems.append("no core-rules/ with the priority model was installed into the vault")
+            rules_dst = vault / "core-rules"
         for r in sorted(rules_src.glob("*.md")):
             if not (rules_dst / r.name).is_file():
                 problems.append("core-rules/%s ships but was not installed into the "

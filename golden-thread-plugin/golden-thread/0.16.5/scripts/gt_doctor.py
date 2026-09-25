@@ -401,15 +401,29 @@ def _frontmatter(text):
 
 
 def core_rules_dir(vault):
-    """Where the Core rules live: the conventional path, else the folder holding the
-    priority model (which is what names a core-rules folder, not its name alone)."""
-    conventional = vault / "Projects" / "golden-thread" / "core-rules"
-    if (conventional / "core_rule_priority_model.md").is_file():
-        return conventional
-    for cand in sorted(vault.rglob("core-rules")):
-        if (cand / "core_rule_priority_model.md").is_file():
+    """Where the Core rules live: the canonical path, then the legacy one, else the
+    folder holding the priority model (which is what names a core-rules folder, not its
+    name alone).
+
+    0.17.0: the canonical location is core-rules/ at the vault ROOT. The pre-0.17.0 path
+    is still recognised so an un-migrated vault reports healthy rather than looking
+    broken — doctor's job is to tell the truth about the vault it is given, not to
+    insist on the newest layout.
+    """
+    model = "core_rule_priority_model.md"
+    try:
+        sys.path.insert(0, str(Path(__file__).resolve().parent))
+        from gt_paths import default_core_rules, legacy_core_rules
+        candidates = [default_core_rules(vault), legacy_core_rules(vault)]
+    except Exception:
+        candidates = [vault / "core-rules", vault / "Projects" / "golden-thread" / "core-rules"]
+    for cand in candidates:
+        if (cand / model).is_file():
             return cand
-    return conventional if conventional.is_dir() else None
+    for cand in sorted(vault.rglob("core-rules")):
+        if (cand / model).is_file():
+            return cand
+    return next((c for c in candidates if c.is_dir()), None)
 
 
 def check_core_rules(rep, vault):

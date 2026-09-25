@@ -24,7 +24,7 @@ import unittest
 from contextlib import redirect_stderr, redirect_stdout
 from pathlib import Path
 
-from _harness import GT, load_module
+from _harness import GT, load_module, CORE_RULES as CORE
 
 SCRIPT = GT / "scripts" / "gt_demote.py"
 
@@ -49,7 +49,7 @@ class DemoteTest(unittest.TestCase):
         self.tmp = Path(tempfile.mkdtemp(prefix="gt-dem-"))
         self.vault = self.tmp / "vault"
         for d in ("global-memory", "Knowledge", "Sources",
-                  "Projects/alpha/memory", "Projects/golden-thread/core-rules"):
+                  "Projects/alpha/memory", CORE):
             (self.vault / d).mkdir(parents=True)
 
     def write(self, rel, text=BODY):
@@ -108,7 +108,7 @@ class DemoteTest(unittest.TestCase):
 
     # -- refusals --------------------------------------------------------------------------
     def test_core_rules_is_never_moved(self):
-        rel = "Projects/golden-thread/core-rules/core_x.md"
+        rel = f"{CORE}/core_x.md"
         self.write(rel)
         before = digest(self.vault)
         r = self.run_dem("--file", rel, "--to", "knowledge", "--apply")
@@ -283,7 +283,7 @@ class DemoteTest(unittest.TestCase):
         """A symlinked PARENT escapes just as well as a symlinked file, and the containment
         check used to look only at the leaf: Projects/beta/memory -> core-rules/ made every
         Core rule reachable as an ordinary project note (2026-09-16)."""
-        core = self.vault / "Projects/golden-thread/core-rules"
+        core = self.vault / CORE
         (core / "core_x.md").write_text(BODY, encoding="utf-8")
         (self.vault / "Projects/beta").mkdir(parents=True)
         (self.vault / "Projects/beta/memory").symlink_to(core, target_is_directory=True)
@@ -299,10 +299,14 @@ class DemoteTest(unittest.TestCase):
         if not (self.vault / "SOURCES").exists():
             self.skipTest("case-sensitive volume: these spellings name no file here")
         self.write("Sources/raw.md")
-        self.write("Projects/golden-thread/core-rules/core_x.md")
+        self.write(f"{CORE}/core_x.md")
         before = digest(self.vault)
+        # The case variant must name the SAME file the fixture wrote, so it has to track
+        # wherever this release puts core-rules -- spelling it out pinned the test to the
+        # pre-0.17.0 layout, where the variant then named nothing and the refusal came from
+        # "no such note" rather than from the guard under test.
         for bad in ("sources/raw.md", "SoUrCeS/raw.md",
-                    "Projects/golden-thread/CORE-RULES/core_x.md"):
+                    "%s/core_x.md" % CORE.upper()):
             r = self.run_dem("--file", bad, "--to", "knowledge", "--apply")
             self.assertEqual(r.returncode, 1, "%r was not refused: %s" % (bad, r.stdout + r.stderr))
             # The REASON is the assertion, not the exit code: an odd spelling also falls out of

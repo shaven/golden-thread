@@ -24,6 +24,30 @@ from pathlib import Path
 CONFIG = Path.home() / ".claude" / "vault-config.json"
 MODEL_FILE = "core_rule_priority_model.md"   # the marker that identifies a real core-rules dir
 
+# Where a NEW vault puts its Core rules, and where the 0.17.0 migration moves them to:
+# the vault ROOT. Core rules govern every project in the vault, including projects with
+# nothing to do with golden-thread, so filing them under one project asserted an
+# ownership that was never real and buried the vault's most important files three levels
+# down.
+#
+# Read these constants; do not spell the path. That is this module's entire purpose (see
+# the docstring above), and it was being bypassed by four scripts that hardcoded
+# "Projects/golden-thread/core-rules" -- the precise failure the docstring warns about.
+CORE_RULES_DEFAULT = "core-rules"
+# Where vaults seeded before 0.17.0 keep them. Recognised, so an un-migrated vault keeps
+# working; never written to by anything shipped.
+CORE_RULES_LEGACY = "Projects/golden-thread/core-rules"
+
+
+def default_core_rules(vault: Path) -> Path:
+    """The canonical location for a vault's Core rules. Use when CREATING them."""
+    return Path(vault) / CORE_RULES_DEFAULT
+
+
+def legacy_core_rules(vault: Path) -> Path:
+    """The pre-0.17.0 location. Use only to DETECT a vault that has not migrated."""
+    return Path(vault) / CORE_RULES_LEGACY
+
 
 def read_config() -> dict:
     try:

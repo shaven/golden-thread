@@ -16,7 +16,7 @@ import os
 import shutil
 import unittest
 
-from _harness import Sandbox, HOOKS, SCRIPTS
+from _harness import Sandbox, HOOKS, SCRIPTS, core_rules_dir
 
 HOOK = "guard_protected_paths.sh"
 
@@ -34,7 +34,7 @@ class ProtectedPathsTest(Sandbox):
         self.env["PYTHONDONTWRITEBYTECODE"] = "1"
 
         self.vault = self.tmp / "vault"
-        self.core = self.vault / "Projects" / "golden-thread" / "core-rules"
+        self.core = core_rules_dir(self.vault)
         self.core.mkdir(parents=True)
         (self.core / "core_rule_priority_model.md").write_text("model\n", encoding="utf-8")
         (self.core / "core_example.md").write_text("rule\n", encoding="utf-8")

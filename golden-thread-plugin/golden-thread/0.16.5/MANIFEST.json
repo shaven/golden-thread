@@ -1,8 +1,8 @@
 {
  "files": {
   "hooks/guard_protected_paths.py": {
-   "bytes": 12472,
-   "sha256": "5a788a0fbe49d88facd3a111ee2147549f758062c77c8731e512c23fda40b991"
+   "bytes": 12522,
+   "sha256": "0550fb33c314817259ab3583d1760b5809b3df657d1ca92998056ffd63b11353"
   },
   "hooks/guard_protected_paths.sh": {
    "bytes": 1769,
@@ -37,8 +37,8 @@
    "sha256": "88040501c0de5bfec1bca67cce0b6ca985736f69acc735dbcb436aafb653c287"
   },
   "hooks/validate_response.sh": {
-   "bytes": 8754,
-   "sha256": "e306a150da44292d39124476f5404358cfcc2f1318fb329702a47f138106c05d"
+   "bytes": 8839,
+   "sha256": "4497e3ed45d41b4fccdf498ff0672717995cb6d117a690ba9a9ef2b97dcf6bc1"
   },
   "packs/core/classify.common.pack.json": {
    "bytes": 1281,
@@ -105,8 +105,8 @@
    "sha256": "1c51fb189fb6c80165484e3e760eddcbdc09d518997e77bf8c8ee0d0633f8d6b"
   },
   "scripts/gt_doctor.py": {
-   "bytes": 38102,
-   "sha256": "6bf7a207cf9eb97b9a5f3b978d15c52fc4f5d3794cdb48e60d7c9601ba08d454"
+   "bytes": 38701,
+   "sha256": "4c93d903c9fe718af36cf5fef3a90746ca4fa62d29de04942c82d8cc7f49f43e"
   },
   "scripts/gt_handoff.py": {
    "bytes": 13099,
@@ -133,8 +133,8 @@
    "sha256": "ad7794651a47f6ed83914ef609ab4ffdecc1433b455517e841702dc35c13ccbc"
   },
   "scripts/gt_paths.py": {
-   "bytes": 4579,
-   "sha256": "1e12b716a04605fc157e9a1264d348f8e1d5ab289c34185563e07c3bb65cfb94"
+   "bytes": 5769,
+   "sha256": "86fbd452da8a2bc37dced23e59a04a697cc2c5d7cde618cb0a49f77a58796980"
   },
   "scripts/gt_push_check.py": {
    "bytes": 10614,
@@ -161,8 +161,8 @@
    "sha256": "1089a832bb7bbebcd6d207eb60e36b947e2f97869320fee7a47956624a6af0c3"
   },
   "scripts/gt_upgrade.py": {
-   "bytes": 37018,
-   "sha256": "41f7d8c2114a13c9320386e3694385777db0c6cb2c7860b503b0cc6c7e444ede"
+   "bytes": 42256,
+   "sha256": "7d8b50411b738c04596485729c06c9b92ac2e4146134bee05486d6c0f275a320"
   },
   "scripts/gt_validation.py": {
    "bytes": 14358,
@@ -181,16 +181,16 @@
    "sha256": "d56bbd01ce9ba0e74b36ea2bf15fcfccd5d2d4a1ef8fdbdd33d02ae8c36fb7a0"
   },
   "scripts/vault_init.py": {
-   "bytes": 83107,
-   "sha256": "e7a0dfb2c88c30db5256c10618a8ae018fcfc361404db53326b702eb4c697b10"
+   "bytes": 83996,
+   "sha256": "03512ec54fe1a549c73f852644db3bbe9cb810919f954bcf1bf838417d605d6c"
   },
   "scripts/vault_refresh.py": {
-   "bytes": 11504,
-   "sha256": "f9630a1b948814559ffd0172da21c2b84ae3d4cbce0d3e845d3bf15a975423d9"
+   "bytes": 12370,
+   "sha256": "0ce43ab003d8d080ae0cb9efb4ab54ae29b0a6bd259e95b5cc0cc3eeaaf106d2"
   },
   "templates/CONVENTIONS.md": {
-   "bytes": 19546,
-   "sha256": "5003ec9f6af14e6b8e52c679b2666bdaf360b8513b86906899493289bca37fb2"
+   "bytes": 19500,
+   "sha256": "5d21a7f98585c20dc69c4564c736b62df98d5e276038251ba7acaade760b9c96"
   },
   "templates/INBOX.md": {
    "bytes": 817,
@@ -209,12 +209,12 @@
    "sha256": "dfe407a83c7413960e67fab436f62c92aa5d7756d2d540ad41a259885a1b9073"
   },
   "templates/PROTOCOL.md": {
-   "bytes": 23581,
-   "sha256": "39734351666ab2ccfdb002f5ebfdd48b4164ac268d2f6ee42c96ffe95e07b473"
+   "bytes": 23870,
+   "sha256": "abf85f902fdc2c0b677ae54b424619d51c45567a21b8e0634844c91fde12791f"
   },
   "templates/core-rules/README.md": {
-   "bytes": 3761,
-   "sha256": "046d1837e01f2c1292cb0f4b1fc7045eaf899b5c6de120f6731f21449ae012a9"
+   "bytes": 3738,
+   "sha256": "253223a655083791b719aaeb7b62f00dd3bbd585916b06c2f13c510fa2961bff"
   },
   "templates/core-rules/core_concurrent_session_claim.md": {
    "bytes": 4867,
@@ -333,11 +333,11 @@
    "sha256": "2cf9526da5369434e526da96b263bdea222297b79b330060167b9e33f0e90177"
   },
   "templates/wiki-CLAUDE.md": {
-   "bytes": 7156,
-   "sha256": "36afca49ff7263e1fd2230116d4fb3d7324c5e236a5053d940061dc09f680bfc"
+   "bytes": 7133,
+   "sha256": "05a5e61333b0ba5d6f97866735268f7f99ff354d9502b2b05e0e512a86f82a6b"
   }
  },
- "generated": "2026-09-18T08:04:14",
+ "generated": "2026-09-25T09:20:33",
  "hooks": [
   {
    "args": [

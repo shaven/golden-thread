@@ -17,7 +17,7 @@ import json
 import os
 import tarfile
 
-from _harness import Sandbox, SCRIPTS, TEMPLATES, REPO
+from _harness import Sandbox, SCRIPTS, TEMPLATES, REPO, core_rules_dir
 
 REFRESH = SCRIPTS / "vault_refresh.py"
 
@@ -157,7 +157,7 @@ class HooksPath(Base):
 
 class BackupBeforeWrites(Base):
     def test_backup_holds_the_originals_and_is_kept_only_when_something_changed(self):
-        rule = next((self.vault / "Projects" / "golden-thread" / "core-rules").glob("core_*.md"))
+        rule = next((core_rules_dir(self.vault)).glob("core_*.md"))
         original = rule.read_bytes()
         bak = self.backups / "install-vault-files-test.tar.gz"
         self.assertOk(self.py(REFRESH, "backup", "--vault", self.vault, "--out", bak))

@@ -10,7 +10,7 @@ import shutil
 import unittest
 from pathlib import Path
 
-from _harness import Sandbox, SCRIPTS, ENFORCEMENT_HOOKS, TEMPLATES
+from _harness import Sandbox, SCRIPTS, ENFORCEMENT_HOOKS, TEMPLATES, CORE_RULES as CORE, core_rules_dir, legacy_core_rules_dir
 
 VI = SCRIPTS / "vault_init.py"
 HOOK_NAMES = ENFORCEMENT_HOOKS
@@ -74,18 +74,18 @@ class FreshTest(VaultInitBase):
     def test_fresh_scaffolds_a_complete_vault(self):
         v = self.make_vault()
         for d in ("Knowledge", "Sources", "global-memory", "Projects",
-                  "Projects/golden-thread/core-rules", "Projects/golden-thread/tools", ".githooks"):
+                  CORE, "Projects/golden-thread/tools", ".githooks"):
             self.assertTrue((v / d).is_dir(), d)
         for f in ("CLAUDE.md", "index.md", "log.md", "review-queue.md", "INBOX.md", "TASKS.md",
                   "lint-declines.md", "global-memory/MEMORY.md", "Projects/README.md",
                   "Projects/CONVENTIONS.md", "Projects/PROTOCOL.md", "Projects/INFRASTRUCTURE.md",
                   "Projects/golden-thread/README.md",
-                  "Projects/golden-thread/core-rules/core_rule_priority_model.md",
+                  f"{CORE}/core_rule_priority_model.md",
                   "Projects/golden-thread/tools/gt_tasks.py"):
             self.assertTrue((v / f).is_file(), f)
         cfg = self.cfg()
         self.assertEqual(cfg["vault_path"], str(v.resolve()))
-        self.assertEqual(cfg["core_rules_path"], "Projects/golden-thread/core-rules")
+        self.assertEqual(cfg["core_rules_path"], CORE)
         # domain substituted into the templates
         self.assertIn("Test", (v / "index.md").read_text())
         self.assertNotIn("{{DOMAIN}}", (v / "CLAUDE.md").read_text())
@@ -298,14 +298,14 @@ class InstallCoreRulesTest(VaultInitBase):
         self.fake_hooks()
         v = self.bare_vault()
         res = self.vi_json("install-core-rules", "--vault", v, "--no-hooks")
-        core = v / "Projects" / "golden-thread" / "core-rules"
+        core = core_rules_dir(v)
         self.assertTrue((core / "core_rule_priority_model.md").is_file())
         self.assertTrue(len(list(core.glob("core_*.md"))) >= 5)
         text = (v / "CLAUDE.md").read_text()
         self.assertIn("## First: is enforcement active?", text)
         self.assertLess(text.index("## First: is enforcement active?"),
                         text.index("## How to Read This"), "check not inserted before first H2")
-        self.assertEqual(self.cfg()["core_rules_path"], "Projects/golden-thread/core-rules")
+        self.assertEqual(self.cfg()["core_rules_path"], CORE)
         self.assertFalse((self.home / ".claude" / "settings.json").exists(),
                          "--no-hooks touched settings.json")
         self.assertFalse(self.actions(res, "error"), res)
@@ -354,7 +354,7 @@ class InstallCoreRulesTest(VaultInitBase):
 
     def test_relocated_core_rules_are_found_not_duplicated(self):
         v = self.make_vault()
-        old = v / "Projects" / "golden-thread" / "core-rules"
+        old = core_rules_dir(v)          # wherever this release seeds them
         new = v / "Projects" / "meta" / "core-rules"
         new.parent.mkdir(parents=True)
         old.rename(new)
@@ -369,7 +369,7 @@ class InstallCoreRulesTest(VaultInitBase):
     # back each time, silently. Removal is honoured when recorded in .gt-removed.
     def test_deleted_rule_is_recreated_and_reported_by_name(self):
         v = self.make_vault()
-        rule = v / "Projects" / "golden-thread" / "core-rules" / "core_parallel_when_beneficial.md"
+        rule = core_rules_dir(v) / "core_parallel_when_beneficial.md"
         rule.unlink()
         res = self.vi_json("install-core-rules", "--vault", v, "--no-hooks")
         self.assertTrue(rule.exists())
@@ -377,7 +377,7 @@ class InstallCoreRulesTest(VaultInitBase):
 
     def test_rule_listed_in_gt_removed_stays_removed(self):
         v = self.make_vault()
-        core = v / "Projects" / "golden-thread" / "core-rules"
+        core = core_rules_dir(v)
         (core / "core_parallel_when_beneficial.md").unlink()
         (core / "core_timestamp_every_message.md").unlink()
         (core.parent / ".gt-removed").write_text(
@@ -399,7 +399,7 @@ class InstallCoreRulesTest(VaultInitBase):
         start = text.index("## First: is enforcement active?")
         end = text.index("## How to Read This")
         (v / "CLAUDE.md").write_text(text[:start] + text[end:])
-        (v / "Projects" / "golden-thread" / ".gt-removed").write_text("claude-md-enforcement-section\n")
+        (core_rules_dir(v).parent / ".gt-removed").write_text("claude-md-enforcement-section\n")
         res = self.vi_json("install-core-rules", "--vault", v, "--no-hooks")
         self.assertNotIn("## First: is enforcement active?", (v / "CLAUDE.md").read_text())
         self.assertIn((v / "CLAUDE.md").resolve(),
@@ -585,8 +585,35 @@ class RenameTest(VaultInitBase):
         self.assertOk(self.py(tool, "--vault", v, "merge", "gamma"))
         self.assertEqual(len(re.findall(r"^## ADR-", dec.read_text(), re.M)), 3)
 
-    def test_rename_rerecords_core_rules_path(self):
+    def test_renaming_a_project_no_longer_moves_the_core_rules(self):
+        """Since 0.17.0 the rules live at the vault root, so a project rename cannot
+        relocate them.
+
+        This test used to assert the opposite -- rename golden-thread to gt-meta and
+        core_rules_path became Projects/gt-meta/core-rules -- because the vault's
+        constitution lived inside a project and inherited that project's name. That
+        coupling is the reason the folder moved: the rules govern every project, so no
+        project's name should be able to move them. The rename must still leave a
+        working vault, which is what the second assertion checks.
+        """
         v = self.make_vault()
+        before = self.cfg()["core_rules_path"]
+        self.vi_json("rename-project", "--vault", v, "--from", "golden-thread", "--to", "gt-meta")
+        self.assertEqual(self.cfg()["core_rules_path"], before,
+                         "a project rename moved the Core rules")
+        self.assertTrue((core_rules_dir(v) / "core_rule_priority_model.md").is_file(),
+                        "the rules did not survive the rename")
+
+    def test_rename_rerecords_core_rules_path_when_they_live_under_that_project(self):
+        """A pre-0.17.0 vault that has NOT migrated keeps the old coupling, and the
+        rename must still re-record the path rather than leave a stale one."""
+        v = self.make_vault()
+        legacy = legacy_core_rules_dir(v)
+        legacy.parent.mkdir(parents=True, exist_ok=True)
+        shutil.move(str(core_rules_dir(v)), str(legacy))
+        cfg = json.loads((self.home / ".claude" / "vault-config.json").read_text())
+        cfg["core_rules_path"] = "Projects/golden-thread/core-rules"
+        (self.home / ".claude" / "vault-config.json").write_text(json.dumps(cfg, indent=2))
         self.vi_json("rename-project", "--vault", v, "--from", "golden-thread", "--to", "gt-meta")
         self.assertEqual(self.cfg()["core_rules_path"], "Projects/gt-meta/core-rules")
 

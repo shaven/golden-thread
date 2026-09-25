@@ -23,6 +23,7 @@ import os
 import re
 import shutil
 import subprocess
+import sys
 import tempfile
 import unittest
 from pathlib import Path
@@ -49,6 +50,39 @@ def latest_version_dir(root: Path) -> Path:
 GT = (REPO / "golden-thread" / os.environ["GT_TEST_VERSION"]) if os.environ.get("GT_TEST_VERSION") \
     else latest_version_dir(REPO / "golden-thread")
 WIKI = latest_version_dir(REPO / "golden-thread-wiki")
+
+
+def _shipped_core_rules_paths():
+    """Read the canonical core-rules location from the RELEASE UNDER TEST.
+
+    Imported rather than spelled, deliberately. Before 0.17.0 about 35 occurrences of
+    "Projects/golden-thread/core-rules" were hardcoded across a dozen test files, so
+    moving the default meant editing every one and nothing prevented a 36th appearing. A
+    test that spells the default cannot fail when the default changes -- it goes on
+    asserting the old world, correctly and uselessly.
+    """
+    sys.path.insert(0, str(GT / "scripts"))
+    import gt_paths          # deliberately NOT guarded -- see below
+    return gt_paths.CORE_RULES_DEFAULT, gt_paths.CORE_RULES_LEGACY
+
+
+# No try/except here, on purpose. The first version of this helper wrapped the import and
+# fell back to spelled literals; `sys` was not imported in this module, so it NameError'd
+# into the fallback on every run and nobody noticed -- because the fallback strings were
+# identical to the shipped ones. A silent failure masked by a coincidence, in the helper
+# written to stop tests hardcoding the path. If gt_paths cannot be imported, the harness
+# should fail loudly at import: every test here depends on the release under test.
+CORE_RULES, CORE_RULES_LEGACY = _shipped_core_rules_paths()
+
+
+def core_rules_dir(vault):
+    """Where this release puts a vault's Core rules. Use in fixtures and assertions."""
+    return Path(vault) / CORE_RULES
+
+
+def legacy_core_rules_dir(vault):
+    """The pre-0.17.0 location -- only for tests ABOUT the migration."""
+    return Path(vault) / CORE_RULES_LEGACY
 
 
 def next_minor(version):

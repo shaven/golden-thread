@@ -23,7 +23,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from _harness import GT
+from _harness import GT, CORE_RULES as CORE, core_rules_dir
 
 SCRIPT = GT / "scripts" / "gt_optimize.py"
 
@@ -47,7 +47,7 @@ class OptimizeTest(unittest.TestCase):
         self.tmp = Path(tempfile.mkdtemp(prefix="gt-opt-"))
         self.vault = self.tmp / "vault"
         for d in ("global-memory", "Sources", "Knowledge",
-                  "Projects/alpha/memory", "Projects/golden-thread/core-rules"):
+                  "Projects/alpha/memory", CORE):
             (self.vault / d).mkdir(parents=True)
 
     def write(self, rel, text):
@@ -94,7 +94,7 @@ class OptimizeTest(unittest.TestCase):
             self.assertIn("slug", (r.stderr + r.stdout).lower())
 
     def test_a_symlinked_project_cannot_reach_a_protected_directory(self):
-        os.symlink(str(self.vault / "Projects" / "golden-thread" / "core-rules"),
+        os.symlink(str(core_rules_dir(self.vault)),
                    str(self.vault / "Projects" / "cr"))
         r = self.run_opt("--project", "cr")
         self.assertIn(r.returncode, (0, 1, 2), r.stdout)

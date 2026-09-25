@@ -17,7 +17,7 @@ import shutil
 import unittest
 from pathlib import Path
 
-from _harness import Sandbox, SCRIPTS, GT, ENFORCEMENT_HOOKS
+from _harness import Sandbox, SCRIPTS, GT, ENFORCEMENT_HOOKS, core_rules_dir
 
 
 DOCTOR = SCRIPTS / "gt_doctor.py"
@@ -503,7 +503,7 @@ class DoctorCoreRulesCheck(DoctorBase):
     def setUp(self):
         super().setUp()
         self.vault = self.tmp / "vault"
-        self.rules = self.vault / "Projects" / "golden-thread" / "core-rules"
+        self.rules = core_rules_dir(self.vault)
         self.rules.mkdir(parents=True)
         (self.rules / "core_rule_priority_model.md").write_text(
             "---\nname: core_rule_priority_model\nmetadata:\n  level: core\n"

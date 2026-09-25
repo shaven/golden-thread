@@ -18,7 +18,7 @@ import shutil
 import subprocess
 import unittest
 
-from _harness import Sandbox, SCRIPTS, TEMPLATES
+from _harness import Sandbox, SCRIPTS, TEMPLATES, core_rules_dir, legacy_core_rules_dir
 
 
 UP = SCRIPTS / "gt_upgrade.py"
@@ -211,7 +211,7 @@ class Applying(UpgradeBase):
         self.assertIn("now GENERATED from spool/decisions/", p.stdout)
 
     def test_a_rule_listed_in_gt_removed_is_not_re_added(self):
-        core = self.v / "Projects" / "golden-thread" / "core-rules"
+        core = core_rules_dir(self.v)
         (core / "core_parallel_when_beneficial.md").unlink()
         self.assertIn("core_parallel_when_beneficial.md", self.up("status").stdout)
         (core.parent / ".gt-removed").write_text("core_parallel_when_beneficial.md\n")
@@ -523,3 +523,84 @@ class MergesThatRemoveYourLines(UpgradeBase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class CoreRulesToRoot(UpgradeBase):
+    """The 0.17.0 migration: Core rules move from Projects/golden-thread/ to the root.
+
+    A vault seeded by THIS release already has them at the root, so every test here has
+    to build the pre-0.17.0 layout first — which is the point: the migration only ever
+    runs against a vault the current code would not have created.
+    """
+
+    MODEL = "core_rule_priority_model.md"
+
+    def make_legacy(self, gt_removed=None):
+        """Put this vault's rules back where a pre-0.17.0 vault kept them."""
+        root = core_rules_dir(self.v)
+        legacy = legacy_core_rules_dir(self.v)
+        legacy.parent.mkdir(parents=True, exist_ok=True)
+        shutil.move(str(root), str(legacy))
+        cfg = json.loads((self.home / ".claude" / "vault-config.json").read_text())
+        cfg["core_rules_path"] = str(legacy.relative_to(self.v))
+        (self.home / ".claude" / "vault-config.json").write_text(json.dumps(cfg, indent=2))
+        if gt_removed is not None:
+            (legacy.parent / ".gt-removed").write_text(gt_removed)
+        self.commit_all()   # gt_upgrade refuses a dirty tree; that refusal is tested elsewhere
+        return legacy
+
+    def cfg_path(self):
+        return json.loads((self.home / ".claude" / "vault-config.json").read_text()).get("core_rules_path")
+
+    def test_moves_the_folder_and_repoints_the_config(self):
+        legacy = self.make_legacy()
+        names = sorted(p.name for p in legacy.glob("core_*.md"))
+        self.assertTrue(names, "fixture built no rules")
+        p = self.up("run")
+        self.assertOk(p)
+        root = core_rules_dir(self.v)
+        self.assertTrue((root / self.MODEL).is_file(), p.stdout)
+        self.assertFalse(legacy.exists(), "the old folder survived the move")
+        self.assertEqual(sorted(q.name for q in root.glob("core_*.md")), names,
+                         "the move lost or gained a rule")
+        self.assertEqual(self.cfg_path(), "core-rules")
+
+    def test_gt_removed_travels_with_the_folder(self):
+        """.gt-removed is read from core-rules' PARENT, so leaving it behind would
+        silently re-seed rules the owner had deliberately removed."""
+        self.make_legacy(gt_removed="core_verification_state.md\n")
+        self.assertOk(self.up("run"))
+        self.assertTrue((self.v / ".gt-removed").is_file(),
+                        ".gt-removed did not travel; removed rules would come back")
+
+    def test_refuses_when_rules_exist_in_both_places(self):
+        legacy = self.make_legacy()
+        root = core_rules_dir(self.v)
+        root.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(legacy / self.MODEL, root / self.MODEL)
+        p = self.up("run")
+        self.assertIn("REFUSED", p.stdout + p.stderr)
+        self.assertTrue((legacy / self.MODEL).is_file(), "it moved anyway after refusing")
+
+    def test_refuses_a_non_empty_root_that_is_not_core_rules(self):
+        legacy = self.make_legacy()
+        root = core_rules_dir(self.v)
+        root.mkdir(parents=True, exist_ok=True)
+        (root / "someone-elses-notes.md").write_text("not a core rule\n")
+        p = self.up("run")
+        self.assertIn("REFUSED", p.stdout + p.stderr)
+        self.assertTrue((root / "someone-elses-notes.md").is_file(), "it buried a file")
+        self.assertTrue((legacy / self.MODEL).is_file())
+
+    def test_a_vault_already_at_the_root_is_left_alone(self):
+        self.commit_all()
+        self.assertOk(self.up("run"))
+        self.assertTrue((core_rules_dir(self.v) / self.MODEL).is_file())
+        self.assertEqual(self.cfg_path(), "core-rules")
+
+    def test_dry_run_changes_nothing(self):
+        legacy = self.make_legacy()
+        p = self.up("run", "--dry-run")
+        self.assertIn("would move", p.stdout)
+        self.assertTrue((legacy / self.MODEL).is_file(), "--dry-run moved the folder")
+        self.assertFalse(core_rules_dir(self.v).exists())

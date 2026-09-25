@@ -32,7 +32,7 @@ them by pointing at this folder. Two incorporation levels:
 
 1. **Reference (documentation):** in the project's `CLAUDE.md`, link this folder as
    the authority — e.g. "Core rules and their enforcement are defined in
-   `Projects/golden-thread/core-rules/`; they apply here."
+   `core-rules/`; they apply here."
 2. **Enforce (wiring):** point the project's Claude Code hooks at the installed
    scripts in `~/.claude/golden-thread/hooks/` — never at a path inside the vault
    (see `enforcement.md`). This is what makes the Core/Validated tier real rather

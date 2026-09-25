@@ -98,11 +98,26 @@ def targets(vault):
     for d in [vault / ".githooks", vault / TOOLS_REL]:
         if d.is_dir():
             out += [f.relative_to(vault) for f in sorted(d.iterdir()) if f.is_file()]
+    # Core rules, wherever they are: the vault ROOT since 0.17.0, one or two levels under
+    # Projects/ before that, and anywhere at all after a project rename.
+    #
+    # This searched ONLY under Projects/ until 0.17.0. Moving the folder to the root
+    # silently dropped the Core rules out of targets() -- so backup stopped covering them
+    # and prune stopped noticing when an install overwrote one. Nothing would have
+    # announced that; the vault's most important files would simply have left the safety
+    # net. test_vault_refresh.BackupBeforeWrites caught it, which is exactly why that test
+    # edits a rule and asserts the backup is KEPT rather than just that one gets made.
+    candidates = [vault / "core-rules"]
     projects = vault / "Projects"
     if projects.is_dir():
-        for cand in sorted(list(projects.glob("*/core-rules")) + list(projects.glob("*/*/core-rules"))):
-            if (cand / "core_rule_priority_model.md").is_file():
-                out += [f.relative_to(vault) for f in sorted(cand.glob("*.md"))]
+        candidates += sorted(list(projects.glob("*/core-rules")) + list(projects.glob("*/*/core-rules")))
+    seen = set()
+    for cand in candidates:
+        if cand in seen or not cand.is_dir():
+            continue
+        if (cand / "core_rule_priority_model.md").is_file():
+            seen.add(cand)
+            out += [f.relative_to(vault) for f in sorted(cand.glob("*.md"))]
     return out
 
 

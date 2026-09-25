@@ -19,10 +19,9 @@ import re
 import shutil
 import unittest
 
-from _harness import Sandbox, HOOKS, SCRIPTS, TEMPLATES, load_module
+from _harness import Sandbox, HOOKS, SCRIPTS, TEMPLATES, load_module, CORE_RULES as CORE
 
 STAMP_RE = r"\d{4}-\d{2}-\d{2} \d{2}:\d{2} \S+"
-CORE = "Projects/golden-thread/core-rules"
 PAYLOAD = json.dumps({"session_id": "s1", "hook_event_name": "UserPromptSubmit",
                       "prompt": "hello", "cwd": "/"})
 

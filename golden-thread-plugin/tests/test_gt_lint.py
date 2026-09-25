@@ -9,7 +9,7 @@ import re
 import shutil
 import unittest
 
-from _harness import Sandbox, SCRIPTS, ENFORCEMENT_HOOKS
+from _harness import Sandbox, SCRIPTS, ENFORCEMENT_HOOKS, CORE_RULES as CORE
 
 LINT = SCRIPTS / "gt_lint.py"
 VI = SCRIPTS / "vault_init.py"
@@ -324,22 +324,22 @@ class CoreChecksTest(LintBase):
     def test_core_misplaced_and_no_enforcement(self):
         self.index("Rogue", "Bare")
         self.w("Knowledge/Rogue.md", "---\nlevel: core\nenforcement: reminder\n---\n**Do it.**\n")
-        self.w("Projects/golden-thread/core-rules/core_bare.md", "---\nlevel: core\n---\n**Bare.**\n")
+        self.w(f"{CORE}/core_bare.md", "---\nlevel: core\n---\n**Bare.**\n")
         _, f = self.lint()
         self.assertFinding(f, "core-misplaced", "Knowledge/Rogue.md")
         self.assertNoFinding(f, "core-no-enforcement", "Knowledge/Rogue.md")
-        self.assertFinding(f, "core-no-enforcement", "Projects/golden-thread/core-rules/core_bare.md")
-        self.assertNoFinding(f, "core-misplaced", "Projects/golden-thread/core-rules/core_bare.md")
+        self.assertFinding(f, "core-no-enforcement", f"{CORE}/core_bare.md")
+        self.assertNoFinding(f, "core-misplaced", f"{CORE}/core_bare.md")
 
     def test_core_unenforced_when_nothing_is_wired(self):
         (self.home / ".claude" / "settings.json").write_text("{}")
         proc, f = self.lint()
         self.assertEqual(self.checks(f), {"core-unenforced"}, proc.stdout)
-        self.assertFinding(f, "core-unenforced", "Projects/golden-thread/core-rules")
-        rules = sorted((self.v / "Projects/golden-thread/core-rules").glob("core_*.md"))
+        self.assertFinding(f, "core-unenforced", CORE)
+        rules = sorted((self.v / CORE).glob("core_*.md"))
         core = [r for r in rules if "level: core" in r.read_text()]
         for r in core:
-            self.assertFinding(f, "core-unenforced", f"Projects/golden-thread/core-rules/{r.name}")
+            self.assertFinding(f, "core-unenforced", f"{CORE}/{r.name}")
 
     def hooks_dir(self):
         return self.home / ".claude" / "golden-thread" / "hooks"
@@ -368,12 +368,12 @@ class CoreChecksTest(LintBase):
         self.wire(UserPromptSubmit="/usr/local/bin/somebody-elses-hook.sh",
                   Stop="/usr/local/bin/somebody-elses-hook.sh")
         proc, f = self.lint()
-        cr = self.v / "Projects/golden-thread/core-rules"
+        cr = self.v / CORE
         rules = [p.name for p in sorted(cr.glob("core_*.md")) if "level: core" in p.read_text()]
         self.assertTrue(rules, "the fixture vault ships no core rules")
         for n in rules:
-            self.assertFinding(f, "core-unenforced", f"Projects/golden-thread/core-rules/{n}", proc)
-        self.assertFinding(f, "core-unenforced", "Projects/golden-thread/core-rules", proc)
+            self.assertFinding(f, "core-unenforced", f"{CORE}/{n}", proc)
+        self.assertFinding(f, "core-unenforced", CORE, proc)
         self.assertIn("the event is wired, but to something else", proc.stdout)
 
     def test_core_enforced_when_the_real_script_is_wired_with_arguments(self):
@@ -389,8 +389,8 @@ class CoreChecksTest(LintBase):
         reminder rules are not, and the folder-level 'inert' finding is absent."""
         self.wire(UserPromptSubmit="inject_core_rules.sh")
         proc, f = self.lint()
-        self.assertNoFinding(f, "core-unenforced", "Projects/golden-thread/core-rules")
-        cr = self.v / "Projects/golden-thread/core-rules"
+        self.assertNoFinding(f, "core-unenforced", CORE)
+        cr = self.v / CORE
 
         def enforcement(p):
             fm = re.match(r"^---\s*\n(.*?)\n---", p.read_text(), re.S)
@@ -400,9 +400,9 @@ class CoreChecksTest(LintBase):
         reminder = [p.name for p in cr.glob("core_*.md") if enforcement(p) == "reminder"]
         self.assertTrue(validated and reminder, "template rules changed shape")
         for n in validated:
-            self.assertFinding(f, "core-unenforced", f"Projects/golden-thread/core-rules/{n}", proc)
+            self.assertFinding(f, "core-unenforced", f"{CORE}/{n}", proc)
         for n in reminder:
-            self.assertNoFinding(f, "core-unenforced", f"Projects/golden-thread/core-rules/{n}")
+            self.assertNoFinding(f, "core-unenforced", f"{CORE}/{n}")
 
 
 # ---------------------------------------------------------------------------- attribution

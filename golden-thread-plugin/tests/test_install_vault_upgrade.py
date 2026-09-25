@@ -25,7 +25,7 @@ import os
 import shutil
 import subprocess
 
-from _harness import GIT_ID, TEMPLATES
+from _harness import GIT_ID, TEMPLATES, core_rules_dir
 from test_install_prune import PruneBase
 
 BASE = ("Projects", "golden-thread", ".templates", "PROTOCOL.md")
@@ -405,7 +405,7 @@ class InstallKeepsOwnerVaultFiles(VaultUpgradeBase):
         hook.write_bytes(edited)
         self.list_as_shipped(hook)       # so the install replaces it (an owner edit is kept)
         self.commit(v, "older shipped hook")
-        rule = v / "Projects" / "golden-thread" / "core-rules" / "core_parallel_when_beneficial.md"
+        rule = core_rules_dir(v) / "core_parallel_when_beneficial.md"
         rule.unlink()
         self.commit(v, "owner removed a rule")
         before = len(self.install_backups)
@@ -425,7 +425,7 @@ class InstallKeepsOwnerVaultFiles(VaultUpgradeBase):
 
     def test_restored_core_rule_is_announced_and_a_listed_removal_is_honoured(self):
         v = self.current_vault()
-        rules = v / "Projects" / "golden-thread" / "core-rules"
+        rules = core_rules_dir(v)
         (rules / "core_parallel_when_beneficial.md").unlink()
         self.commit(v, "owner removed a rule")
         p = self.install()

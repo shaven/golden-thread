@@ -89,7 +89,7 @@ If the vault was freshly created (not pre-existing), add:
 
 ## Establish the Core-rule tier
 
-`vault_init.py fresh --vault "<vault>"` now also installs `Projects/golden-thread/core-rules/` and
+`vault_init.py fresh --vault "<vault>"` now also installs `core-rules/` and
 **wires the enforcement hooks** into `~/.claude/settings.json` (`UserPromptSubmit` +
 `Stop`). Both steps matter: copying the module without wiring it produces an inert
 Core tier, which is the exact failure this system exists to prevent.

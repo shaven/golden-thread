@@ -4,7 +4,7 @@ This vault is the single source of truth for AI memory across all projects.
 
 ## First: is enforcement active?
 
-This vault defines **Core rules** in `Projects/golden-thread/core-rules/` that are
+This vault defines **Core rules** in `core-rules/` that are
 meant to hold on every turn, in every project — see `Projects/PROTOCOL.md`. They are
 enforced by hooks living **outside the vault**, at `~/.claude/golden-thread/hooks/`,
 installed by the `gt` plugin.

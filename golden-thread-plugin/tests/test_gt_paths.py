@@ -17,7 +17,7 @@ import unittest
 from pathlib import Path
 from unittest import mock
 
-from _harness import Sandbox, HOOKS, SCRIPTS, load_module
+from _harness import Sandbox, HOOKS, SCRIPTS, load_module, CORE_RULES as CORE, core_rules_dir, legacy_core_rules_dir
 
 MODEL = "core_rule_priority_model.md"
 
@@ -55,7 +55,7 @@ class GtPathsTest(Sandbox):
         super().tearDown()
 
     # -- fixtures ---------------------------------------------------------------
-    def vault(self, name="vault", core_rel="Projects/golden-thread/core-rules"):
+    def vault(self, name="vault", core_rel=CORE):
         v = self.tmp / name
         (v / "Projects").mkdir(parents=True)
         if core_rel:
@@ -102,12 +102,12 @@ class GtPathsTest(Sandbox):
     # -- find_core_rules ----------------------------------------------------------
     def test_recorded_core_rules_path_is_used(self):
         v = self.vault()
-        self.config(vault_path=str(v), core_rules_path="Projects/golden-thread/core-rules")
-        self.assertEqual(self.gp.find_core_rules(), v / "Projects/golden-thread/core-rules")
+        self.config(vault_path=str(v), core_rules_path=CORE)
+        self.assertEqual(self.gp.find_core_rules(), v / CORE)
 
     def test_stale_recorded_path_self_heals_by_marker_search(self):
         v = self.vault(core_rel="Projects/renamed-gt/core-rules")
-        self.config(vault_path=str(v), core_rules_path="Projects/golden-thread/core-rules",
+        self.config(vault_path=str(v), core_rules_path=CORE,
                     other_key="kept")
         before = self.cfg_path.read_text(encoding="utf-8")
         found = self.gp.find_core_rules(record=False)
@@ -141,12 +141,12 @@ class GtPathsTest(Sandbox):
     def test_explicit_vault_argument_is_honoured(self):
         v = self.vault()
         # no config at all: the caller hands the vault in
-        self.assertEqual(self.gp.find_core_rules(v), v / "Projects/golden-thread/core-rules")
+        self.assertEqual(self.gp.find_core_rules(v), v / CORE)
 
     # -- core_rule_files ----------------------------------------------------------
     def test_core_rule_files_only_core_md_sorted(self):
         v = self.vault()
-        c = v / "Projects/golden-thread/core-rules"
+        c = v / CORE
         (c / "core_beta.md").write_text(rule(), encoding="utf-8")
         (c / "README.md").write_text("# readme\n", encoding="utf-8")
         (c / "enforcement.md").write_text("# wiring\n", encoding="utf-8")
@@ -221,13 +221,13 @@ class GtPathsCliTest(Sandbox):
         v = self.make_vault()
         out = self.run_cli()
         self.assertEqual(Path(out["vault"]).resolve(), v.resolve())
-        self.assertTrue(out["core_rules"].endswith("Projects/golden-thread/core-rules"))
+        self.assertTrue(out["core_rules"].endswith(CORE))
         self.assertIn("core_timestamp_every_message", out["rules"])
         self.assertIn("core_rule_priority_model", out["rules"])
 
     def test_cli_records_a_moved_core_rules_folder(self):
         v = self.make_vault()
-        old = v / "Projects" / "golden-thread" / "core-rules"
+        old = core_rules_dir(v)          # wherever this release seeds them
         new = v / "Projects" / "memory-system" / "core-rules"
         new.parent.mkdir(parents=True)
         old.rename(new)

@@ -37,7 +37,7 @@ if python3 "$SCRIPTS/vault_init.py" create-project --vault "$VAULT" --name demo-
 for f in CLAUDE.md INBOX.md TASKS.md log.md index.md Projects/README.md Projects/CONVENTIONS.md Projects/PROTOCOL.md \
          Projects/golden-thread/README.md Projects/golden-thread/tools/gt_tasks.py Projects/golden-thread/tools/gt_closeout.py \
          Projects/golden-thread/tools/gt_session.py Projects/golden-thread/tools/safe_write.py Projects/golden-thread/tools/gt_edits.py \
-         Projects/golden-thread/core-rules/core_rule_priority_model.md Projects/demo-project/README.md; do
+         core-rules/core_rule_priority_model.md Projects/demo-project/README.md; do
   [ -e "$VAULT/$f" ] && ok "vault has $f" || bad "vault lacks $f"
 done
 [ "$(python3 -c "import json,os;print(os.path.realpath(json.load(open(os.path.expanduser('~/.claude/vault-config.json'))).get('vault_path','')))")" = "$(python3 -c "import os,sys;print(os.path.realpath(sys.argv[1]))" "$VAULT")" ] \

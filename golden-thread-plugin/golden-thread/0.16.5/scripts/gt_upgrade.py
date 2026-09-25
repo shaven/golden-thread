@@ -530,11 +530,34 @@ def _removed_rules(dest):
         return set()
 
 
+def _core_rules_here(vault):
+    """Where THIS vault's Core rules are, wherever that is.
+
+    Resolved, never spelled. A vault may be pre-0.17.0 (Projects/golden-thread/core-rules)
+    or migrated (the vault root), and hardcoding either is how this very function used to
+    seed new rules into a directory the hooks had stopped reading.
+    """
+    try:
+        sys.path.insert(0, str(Path(__file__).resolve().parent))
+        from gt_paths import find_core_rules, default_core_rules, legacy_core_rules
+        found = find_core_rules(vault)
+        if found is not None:
+            return found
+        for cand in (default_core_rules(vault), legacy_core_rules(vault)):
+            if cand.is_dir():
+                return cand
+        return default_core_rules(vault)
+    except Exception:
+        # gt_paths is shipped beside this file; if it cannot be imported, prefer the
+        # legacy path — an un-migrated vault is the only one that can still be broken.
+        return vault / "Projects" / "golden-thread" / "core-rules"
+
+
 def pending_core_rules(vault):
     src = TEMPLATES / "core-rules"
     if not src.is_dir():
         return ""
-    dest = vault / "Projects" / "golden-thread" / "core-rules"
+    dest = _core_rules_here(vault)
     if not dest.is_dir():
         return "core-rules/ is not established in this vault"
     removed = _removed_rules(dest)
@@ -546,7 +569,7 @@ def pending_core_rules(vault):
 def run_core_rules(vault, dry):
     """Seeded, never overwritten: a rule the owner has edited stays edited."""
     src = TEMPLATES / "core-rules"
-    dest = vault / "Projects" / "golden-thread" / "core-rules"
+    dest = _core_rules_here(vault)
     added, removed = [], _removed_rules(dest)
     for f in sorted(src.glob("core_*.md")):
         if (dest / f.name).is_file() or f.name in removed:
@@ -559,6 +582,86 @@ def run_core_rules(vault, dry):
                                    ", ".join(added))) if added else "no new Core rules"
 
 
+def _legacy_and_root(vault):
+    sys.path.insert(0, str(Path(__file__).resolve().parent))
+    from gt_paths import default_core_rules, legacy_core_rules, MODEL_FILE
+    return legacy_core_rules(vault), default_core_rules(vault), MODEL_FILE
+
+
+def pending_core_rules_root(vault):
+    try:
+        legacy, root, model = _legacy_and_root(vault)
+    except Exception:
+        return ""
+    if not (legacy / model).is_file():
+        return ""                     # already moved, or never had rules here
+    if (root / model).is_file():
+        return "core-rules/ exists in BOTH places — an owner must decide which is real"
+    return "Core rules move from %s to the vault root" % legacy.relative_to(vault)
+
+
+def run_core_rules_root(vault, dry):
+    """Move core-rules/ to the vault root, and re-point the config at it.
+
+    Refuses rather than guesses. gt_upgrade's own doctrine: "A refusal is a decision for a
+    person." Two ways this can be ambiguous, and neither is safe to resolve automatically:
+    a rules folder in both places (which is authoritative?), and a non-empty root
+    core-rules/ that is not a rules folder (moving onto it would bury someone's files).
+
+    `.gt-removed` travels with the folder: it is read from core-rules' PARENT, so leaving
+    it behind would silently re-seed rules the owner had deliberately removed.
+    """
+    try:
+        legacy, root, model = _legacy_and_root(vault)
+    except Exception as exc:
+        return "REFUSED: cannot resolve the core-rules paths (%s)" % exc
+
+    if not (legacy / model).is_file():
+        return "nothing to move"
+    if (root / model).is_file():
+        return ("REFUSED: core-rules/ exists at BOTH %s and the vault root. An owner must "
+                "decide which is authoritative and remove the other; this migration will "
+                "not merge two sets of Core rules." % legacy.relative_to(vault))
+    if root.exists() and any(root.iterdir()):
+        return ("REFUSED: %s already exists and is not empty, but holds no %s — moving "
+                "onto it could bury files that are not Core rules."
+                % (root.name, model))
+
+    removed_src = legacy.parent / ".gt-removed"
+    if dry:
+        extra = " (and .gt-removed)" if removed_src.is_file() else ""
+        return "would move %s -> %s%s, and re-point core_rules_path" % (
+            legacy.relative_to(vault), root.name, extra)
+
+    moved_removed = False
+    try:
+        root.parent.mkdir(parents=True, exist_ok=True)
+        shutil.move(str(legacy), str(root))
+        if removed_src.is_file() and not (root.parent / ".gt-removed").is_file():
+            shutil.move(str(removed_src), str(root.parent / ".gt-removed"))
+            moved_removed = True
+    except Exception as exc:
+        return "REFUSED: the move failed (%s) — the vault is unchanged" % exc
+
+    # Re-point the config. find_core_rules would self-heal anyway (verified 2026-09-25 in
+    # a throwaway vault), but leaving a stale path means every hook pays for an rglob of
+    # the whole vault until something records the new one.
+    try:
+        from gt_paths import read_config, write_config
+        cfg = read_config()
+        if cfg.get("vault_path") and Path(cfg["vault_path"]).resolve() == Path(vault).resolve():
+            cfg["core_rules_path"] = root.name
+            write_config(cfg)
+            noted = "; core_rules_path -> %s" % root.name
+        else:
+            noted = "; config points at another vault, left alone (self-heal will record it)"
+    except Exception as exc:
+        noted = "; could not update core_rules_path (%s) — self-heal will record it" % exc
+
+    return "moved %s -> %s%s%s" % (legacy.relative_to(vault), root.name,
+                                   " (with .gt-removed)" if moved_removed else "", noted)
+
+
 MIGRATIONS = (
     ("0.11.0", "log-spool", "log.md becomes generated from per-session spool files",
      pending_log_spool, run_log_spool),
@@ -568,6 +671,12 @@ MIGRATIONS = (
      pending_core_rules, run_core_rules),
     ("0.12.0", "doc-merge", "PROTOCOL.md and CONVENTIONS.md take the release's changes",
      pending_doc_merges, run_doc_merges),
+    # Deliberately ordered AFTER the 0.12.0 core-rules seeding. That migration seeds into
+    # wherever this vault's rules currently are; this one then relocates the whole folder,
+    # newly seeded rules included. The reverse order would seed into the old path after
+    # the move and leave two rule directories behind.
+    ("0.17.0", "core-rules-root", "Core rules move from Projects/golden-thread/ to the vault root",
+     pending_core_rules_root, run_core_rules_root),
 )
 
 

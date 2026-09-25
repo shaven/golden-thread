@@ -304,7 +304,13 @@ def install_core_rules(vault: Path, wire_hooks: bool = True, settings_path: Path
         return
 
     # Default location for a fresh vault; an existing one is found wherever it is.
-    dest = _resolve_core_rules(vault) or (vault / "Projects" / "golden-thread" / "core-rules")
+    #
+    # 0.17.0: the default moved to the vault ROOT. Core rules govern every project, so
+    # filing them under one project asserted an ownership that was never real. Existing
+    # vaults are unaffected here — _resolve_core_rules finds them wherever they are, and
+    # the `core-rules-root` migration in gt_upgrade relocates them deliberately rather
+    # than this function relocating them as a side effect of an install.
+    dest = _resolve_core_rules(vault) or _default_core_rules(vault)
     ensure_dir(dest)
     removed = read_removed(dest.parent)
     for f in sorted(src.glob("*.md")):
@@ -462,6 +468,20 @@ def _resolve_core_rules(vault: Path):
             if (cand / "core_rule_priority_model.md").is_file():
                 return cand
         return None
+
+
+def _default_core_rules(vault: Path):
+    """Where a FRESH vault's Core rules go: the vault root, since 0.17.0.
+
+    Read from gt_paths so there is exactly one definition of the default; the fallback
+    spells it only for the case where gt_paths cannot be imported at all.
+    """
+    try:
+        sys.path.insert(0, str(SCRIPT_DIR))
+        from gt_paths import default_core_rules
+        return default_core_rules(vault)
+    except Exception:
+        return vault / "core-rules"
 
 
 def _mentions_slug(md: Path, slug: str) -> bool:

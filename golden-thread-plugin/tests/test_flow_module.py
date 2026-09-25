@@ -25,7 +25,7 @@ import sys
 import unittest
 from pathlib import Path
 
-from _harness import Sandbox, GT, WIKI, REPO, PYTHON, SCRIPTS, load_module, latest_version_dir, gt_requires_range
+from _harness import Sandbox, GT, WIKI, REPO, PYTHON, SCRIPTS, load_module, latest_version_dir, gt_requires_range, CORE_RULES as CORE
 
 FLOW = latest_version_dir(REPO / "golden-thread-flow")
 SCRIPT = FLOW / "scripts" / "gt_flow.py"
@@ -41,7 +41,7 @@ SECRET_PATHS = (
     "Projects/zephyr-orchard/research.md",
     "Knowledge/pollen-cipher-method.md",
     "global-memory/zephyr-pollen-rule.md",
-    "Projects/golden-thread/core-rules/core_zephyr_guard.md",
+    f"{CORE}/core_zephyr_guard.md",
     "Projects/quokka-ledger/decisions.md",
     "Sources/quokka-bank-export.md",
     "Projects/marmot-lab/tundra-probe/design.md",
