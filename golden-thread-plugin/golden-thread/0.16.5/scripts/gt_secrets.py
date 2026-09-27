@@ -33,8 +33,11 @@ import fnmatch
 import json
 import math
 import os
+import shutil
+import subprocess
 import re
 import sys
+import tempfile
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
@@ -222,6 +225,47 @@ def walk(root: Path):
             yield Path(dirpath) / fn
 
 
+def staged_paths(repo: Path):
+    """-> [rel, ...] for what is STAGED for commit: added, copied or modified.
+
+    Deletions are excluded: a commit that REMOVES a credential must never be blocked by
+    the credential it removes, which would leave the only way to fix a leak blocked by
+    the leak.
+    """
+    proc = subprocess.run(
+        ["git", "-C", str(repo), "diff", "--cached", "--name-only", "--diff-filter=ACM",
+         "-z"], capture_output=True, text=True)
+    if proc.returncode != 0:
+        return None
+    return [r for r in proc.stdout.split("\0") if r]
+
+
+def materialise_staged(repo: Path, rels, dest: Path):
+    """Write each staged BLOB into `dest` under its own relative path.
+
+    The staged blob, not the working-tree file, and the difference is the whole point of a
+    commit gate. `git add` a credential, then delete the line in your editor: the worktree
+    is clean, the index is not, and the commit would carry the credential. A gate that read
+    the worktree would pass it. The reverse case matters too -- an unstaged experiment must
+    not block a commit that does not contain it.
+
+    Writing them out rather than scanning in memory means the SAME in_scope() and
+    scan_file() run for a commit as for a tree scan, so the gate cannot drift from the
+    scanner it claims to be.
+    """
+    written = []
+    for rel in rels:
+        proc = subprocess.run(["git", "-C", str(repo), "show", ":" + rel],
+                              capture_output=True)
+        if proc.returncode != 0:
+            continue
+        target = dest / rel
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_bytes(proc.stdout)
+        written.append(rel)
+    return written
+
+
 # Sentinels for scan_file, so the caller can tell the two apart. Conflating them meant a
 # single .DS_Store made every run exit 2 "could not scan part of what it was asked to" --
 # a permanent false failure that would have made this gate the first thing anyone disabled.
@@ -282,6 +326,23 @@ def key_of(f):
 
 
 def main(argv=None):
+    """Wrapper whose only job is to guarantee the temp dir dies.
+
+    --staged writes STAGED BLOB CONTENT to disk, and that content is exactly what this
+    tool exists to find. Leaving it in /tmp for the OS to reap eventually would mean the
+    credential scanner is itself a way credentials end up in a world-readable place --
+    the same class of defect that cut 0.16.0. mkdtemp gives 0700; this makes it temporary
+    in fact and not merely in name, on every exit path including a fatal one.
+    """
+    tmps = []
+    try:
+        return _main(argv, tmps)
+    finally:
+        for t in tmps:
+            shutil.rmtree(t, ignore_errors=True)
+
+
+def _main(argv, tmps):
     ap = argparse.ArgumentParser(description="find credentials in the wrong place")
     ap.add_argument("path", nargs="?", default=".")
     ap.add_argument("--vault")
@@ -292,10 +353,28 @@ def main(argv=None):
     ap.add_argument("--baseline", help="accepted findings; report only what is new")
     ap.add_argument("--write-baseline", metavar="FILE",
                     help="record today's findings as accepted and exit")
+    ap.add_argument("--staged", action="store_true",
+                    help="scan what is STAGED for commit in the git repo at `path`, not the "
+                         "working tree. Exit 1 blocks the commit.")
     a = ap.parse_args(argv)
 
     root = Path(a.path).resolve()
     out = Out(a.json)
+    if a.staged:
+        rels = staged_paths(root)
+        if rels is None:
+            return out.fatal("gt-secrets: CANNOT RUN — `%s` is not a git repository, so there "
+                             "is no index to scan." % root)
+        if not rels:
+            # Nothing staged is not a pass to celebrate, but it IS clean: there is no
+            # content to carry a credential. Said out loud so an empty run is never
+            # mistaken for a scan that happened.
+            out.said("gt-secrets: clean — nothing staged for commit, 0 file(s) scanned")
+            return CLEAN
+        tmp = tempfile.mkdtemp(prefix="gt-secrets-staged-")
+        tmps.append(tmp)
+        root = Path(tmp)
+        materialise_staged(Path(a.path).resolve(), rels, root)
     rules, problems, retracted = rules_from_slot(a.vault)
 
     for where, what in problems:

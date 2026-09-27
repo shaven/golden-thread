@@ -80,9 +80,17 @@ SLOTS = {
     # declared field on every entry, so a language-agnostic pack resolved fine in the registry
     # and was REJECTED at the submission gate -- two tables disagreeing about the same pack,
     # which is the defect class this release keeps finding.
-    "lint":      {"model_reachable": True, "optional": ("lang",),
+    # `rule` is the ast-grep MATCHER OBJECT and is the only nested field in any slot; see
+    # check_matcher for what is allowed inside it and why the key list is closed. `evaluator`
+    # names the tier the rule needs -- deliberately NOT called `tier`, because a pack already
+    # has a `tier` meaning its support level, and two meanings under one name in one file is
+    # how a reader ends up believing a rule declared something it did not.
+    "lint":      {"model_reachable": True,
+                  "optional": ("lang", "files", "evaluator", "note"),
                   "fields": {"lang": "token", "id": "token", "message": "text",
-                             "severity": "enum:info|warn|error"}},
+                             "severity": "enum:info|warn|error", "rule": "matcher",
+                             "files": "path", "note": "text",
+                             "evaluator": "enum:text|stdlib|astgrep|treesitter"}},
     # A language pack is filetype + construct + naming + encoding. All Tier A: every field is a
     # closed grammar (a suffix or glob, a token, a validated regex) with nowhere to put prose,
     # which is what makes a contributed language safe to merge.
@@ -134,6 +142,19 @@ REFUSED_SPDX = {
     "SSPL-1.0": "not OSI-approved", "BUSL-1.1": "not open source",
 }
 MANIFEST_KEYS = ("schema", "slot", "name", "tier", "spdx", "provenance", "dco", "entries")
+# Optional, and `notes` earns its place by a defect: every shipped core pack was expected to
+# pass this validator, and on 2026-09-27 two of them did not. `secrets.common` carried the
+# rationale for its detectors -- why they were written from published prefixes rather than
+# copied from a rule corpus gt is not licensed to redistribute -- in a `notes` field this
+# table did not permit, so the maintainer shipped a pack the gate would have refused from a
+# contributor. Two standards for the same artefact, and the stricter one applied to the
+# people with less context. The rationale is worth keeping, so the key is permitted, capped
+# and scrubbed like any other prose rather than the note being deleted.
+OPTIONAL_KEYS = ("notes",)
+# Deliberately the SAME cap every other string in a pack obeys. A 600-char cap was written
+# first, to fit prose that already existed -- which is raising a limit to match the thing being
+# measured. The long rationale belongs in the design doc; a pack's note is a pointer.
+MAX_NOTES = 300          # == MAX_TEXT, defined below; kept literal to avoid a forward ref
 PROVENANCE_KEYS = ("origin", "contributor", "upstream")
 UPSTREAM_KEYS = ("name", "version", "spdx")
 
@@ -344,7 +365,60 @@ def check_segments(where, value, seps="-_/."):
               % (where, n))
 
 
+MATCHER_KEYS = {"pattern", "kind", "regex", "all", "any", "not", "has", "inside", "stopBy"}
+# Named explicitly so a rule pasted from upstream FAILS rather than silently under-matching --
+# §2.2's discipline: never claim ast-grep compatibility beyond the subset gt implements.
+MATCHER_REJECTED = ("nthChild", "range", "precedes", "follows", "matches", "field")
+MATCHER_MAX_DEPTH = 8
+
+
+def check_matcher(where, value, depth=1):
+    """Validate an ast-grep matcher object: a closed key set, and every string checked.
+
+    The nested shape is the reason `lint` could not be filled before: every other field in
+    every slot is a flat string. What does NOT change is that all text is validated -- each
+    `pattern` and `regex` goes through the same pattern checks as a secrets pattern, so a
+    catastrophic regex cannot arrive inside a matcher just because it is one level down.
+    """
+    if depth > MATCHER_MAX_DEPTH:
+        _fail("bad-matcher", "%s nests deeper than %d levels" % (where, MATCHER_MAX_DEPTH))
+    if not isinstance(value, dict):
+        _fail("bad-matcher", "%s must be an object" % where)
+    for k, v in value.items():
+        if not isinstance(k, str):
+            _fail("bad-matcher", "%s has a non-string key" % where)
+        if k in MATCHER_REJECTED:
+            _fail("unsupported-key", "%s uses %r, which gt does not implement; a rule using "
+                                     "it must fail rather than under-match" % (where, k))
+        if k not in MATCHER_KEYS:
+            _fail("unknown-key", "%s has unknown matcher key %r" % (where, k))
+        sub = "%s.%s" % (where, k)
+        if k in ("all", "any"):
+            if not isinstance(v, list) or not v:
+                _fail("bad-matcher", "%s must be a non-empty list" % sub)
+            for i, item in enumerate(v):
+                check_matcher("%s[%d]" % (sub, i), item, depth + 1)
+        elif k in ("not", "has", "inside"):
+            check_matcher(sub, v, depth + 1)
+        elif k == "stopBy":
+            if v not in ("neighbor", "end"):
+                _fail("bad-matcher", "%s must be 'neighbor' or 'end'" % sub)
+        elif k in ("pattern", "regex"):
+            if not isinstance(v, str):
+                _fail("bad-type", "%s must be a string" % sub)
+            check_text_safety(sub, v)
+            if k == "regex":
+                check_pattern(sub, v)
+            check_not_instruction(sub, v)
+        elif k == "kind":
+            if not isinstance(v, str) or not TOKEN_RE.match(v):
+                _fail("bad-token", "%s is not a short lowercase token" % sub)
+
+
 def check_field(slot, where, kind, value):
+    if kind == "matcher":
+        check_matcher(where, value)
+        return
     if not isinstance(value, str):
         _fail("bad-type", "%s must be a string" % where)
     check_text_safety(where, value)
@@ -402,7 +476,7 @@ def walk_strings(obj, where="pack"):
 
 
 def validate_manifest(d):
-    unknown = sorted(set(d) - set(MANIFEST_KEYS))
+    unknown = sorted(set(d) - set(MANIFEST_KEYS) - set(OPTIONAL_KEYS))
     if unknown:
         _fail("unknown-key", "unknown manifest key(s): %s" % ", ".join(unknown))
     for k in MANIFEST_KEYS:
@@ -418,6 +492,16 @@ def validate_manifest(d):
     if not isinstance(d["name"], str) or not NAME_RE.match(d["name"]):
         _fail("bad-name", "name must match [a-z][a-z0-9-]{1,39}")
     check_not_instruction("name", d["name"].replace("-", " "))
+    if "notes" in d:
+        if not isinstance(d["notes"], str):
+            _fail("bad-type", "notes must be a string")
+        check_text_safety("notes", d["notes"])
+        if len(d["notes"]) > MAX_NOTES:
+            _fail("string-too-long", "notes is %d chars; the cap is %d"
+                  % (len(d["notes"]), MAX_NOTES))
+        # Maintainer prose about the pack, not a definition a reader acts on, so an
+        # imperative here escalates to REVIEW rather than being refused outright.
+        check_not_instruction("notes", d["notes"], hard=False)
     spdx = d["spdx"]
     if not isinstance(spdx, str):                # unhashable spdx escaped as a traceback too
         _fail("licence-unknown", "spdx must be a string, got %s" % type(spdx).__name__)

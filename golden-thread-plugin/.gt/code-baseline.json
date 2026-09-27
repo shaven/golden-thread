@@ -1,0 +1,19 @@
+{
+  "accepted": [
+    [
+      "golden-thread/0.16.5/templates/githooks/post-commit",
+      "sh-missing-nounset",
+      1
+    ],
+    [
+      "golden-thread/0.16.5/templates/githooks/prepare-commit-msg",
+      "sh-missing-nounset",
+      1
+    ]
+  ],
+  "reasons": {
+    "golden-thread/0.16.5/templates/githooks/post-commit::sh-missing-nounset": "DELIBERATE. This hook must fail OPEN -- a commit may never be blocked by attribution bookkeeping -- and `set -u` turns an unset variable into a non-zero exit, which for a commit hook means a blocked commit. The rule's advice is right in general and wrong here, so the code is correct and the finding is accepted. Accepted 2026-09-27.",
+    "golden-thread/0.16.5/templates/githooks/prepare-commit-msg::sh-missing-nounset": "DELIBERATE, same reason as post-commit: fail-open is the contract, and `set -u` would convert a bookkeeping slip into a refused commit. Accepted 2026-09-27."
+  },
+  "_note": "Each accepted finding SHOULD have an entry in `reasons`, keyed \"path::rule\". An accepted finding with no reason is a silenced one, and nobody can tell later which it was."
+}

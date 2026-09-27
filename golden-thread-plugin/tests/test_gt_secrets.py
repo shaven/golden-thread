@@ -10,6 +10,8 @@ The planted tokens below are OBVIOUS FAKES built from public vendor prefixes. No
 is a real credential, and no test asserts on a real one.
 """
 import json
+import os
+import tempfile
 import unittest
 
 from _harness import Sandbox, SCRIPTS
@@ -196,6 +198,103 @@ class FalsePositivesMeasuredOnThisRepo(SecretsBase):
         self.write("e.txt", "%s\n" % FAKE_AWS)
         proc = self.scan("--json", expect=1)
         self.assertEqual(json.loads(proc.stdout)["findings"][0]["rule"], "aws.access-key-id")
+
+
+class TheCommitGate(SecretsBase):
+    """`--staged` scans the INDEX, which is a different question from the working tree.
+
+    The owner asked for "a credential check on commit". A check that runs when someone runs
+    the test suite is not that: it fires only if the suite is run, and the commit is the
+    moment the credential becomes permanent and shared. These tests pin the two cases that
+    make index-vs-worktree the whole point.
+    """
+
+    def git(self, *args):
+        return self.run_cmd(["git", "-C", str(self.tree), *args])
+
+    def repo(self):
+        self.git_init(self.tree)
+        self.git("config", "user.email", "t@example.com")
+        self.git("config", "user.name", "T")
+        return self.tree
+
+    def test_a_staged_credential_blocks_the_commit(self):
+        self.repo()
+        self.write("app/conf.py", 'AWS_KEY = "%s"\n' % FAKE_AWS)
+        self.git("add", "app/conf.py")
+        proc = self.scan("--staged", expect=1)
+        self.assertIn("aws.access-key-id", proc.stdout)
+
+    def test_it_reads_the_index_not_the_worktree(self):
+        """Stage the credential, then remove it from the file. The worktree is clean and the
+        commit still carries the credential. A gate reading the worktree would pass it."""
+        self.repo()
+        p = self.write("app/conf.py", 'AWS_KEY = "%s"\n' % FAKE_AWS)
+        self.git("add", "app/conf.py")
+        p.write_text("AWS_KEY = os.environ['AWS_KEY']\n")     # tidied AFTER staging
+        self.scan("--staged", expect=1)
+        # and the worktree really is clean, so this is not an accident of both being dirty
+        self.scan(expect=0)
+
+    def test_an_unstaged_credential_does_not_block(self):
+        """The reverse, and it matters as much: a commit must not be blocked by content it
+        does not contain, or the gate becomes the thing everyone passes --no-verify to."""
+        self.repo()
+        self.write("clean.py", "x = 1\n")
+        self.git("add", "clean.py")
+        self.write("scratch.py", 'KEY = "%s"\n' % FAKE_AWS)    # never staged
+        self.scan("--staged", expect=0)
+
+    def test_removing_a_credential_is_never_blocked(self):
+        """Otherwise the only way to fix a leak is blocked by the leak."""
+        self.repo()
+        self.write("bad.py", 'AWS_KEY = "%s"\n' % FAKE_AWS)
+        self.git("add", "bad.py")
+        self.git("commit", "-q", "-m", "oops")
+        (self.tree / "bad.py").unlink()
+        self.git("add", "-A")
+        self.scan("--staged", expect=0)
+
+    def test_nothing_staged_is_clean_and_says_so(self):
+        self.repo()
+        proc = self.scan("--staged", expect=0)
+        self.assertIn("nothing staged", proc.stdout)
+        self.assertIn("clean", proc.stdout)
+
+    def test_not_a_git_repo_cannot_run_rather_than_passing(self):
+        """Exit 2, not 0. "There is no index here" is not "there are no credentials"."""
+        proc = self.scan("--staged", expect=2)
+        self.assertIn("CANNOT RUN", proc.stdout + proc.stderr)
+
+    def test_the_gate_leaks_nothing_either(self):
+        """The leak test again, for the new mode. --staged writes staged blob content to
+        disk, so it is the mode most able to leak."""
+        self.repo()
+        self.write(".env", "DB_PASSWORD=%s\n" % FAKE_ASSIGNED)
+        self.git("add", "-f", ".env")
+        proc = self.scan("--staged")
+        for blob in (proc.stdout, proc.stderr):
+            self.assertNotIn(FAKE_ASSIGNED, blob)
+
+    def test_the_materialised_blobs_are_removed(self):
+        """The scanner must not itself become how a credential lands in a shared /tmp.
+
+        The scan gets its OWN TMPDIR, and the assertion is that this directory is empty
+        afterwards. The first version globbed the shared temp dir for `gt-secrets-staged-*`,
+        which passed alone and FAILED in the full suite: 32 workers run concurrently and it
+        was seeing other workers' live scans. A test that passes alone and fails in parallel
+        is worse than no test, because it teaches people to re-run until green.
+        """
+        self.repo()
+        self.write("app/conf.py", 'AWS_KEY = "%s"\n' % FAKE_AWS)
+        self.git("add", "app/conf.py")
+        private = self.tmp / "tmpdir"
+        private.mkdir()
+        proc = self.py(SEC, self.tree, "--staged", env={"TMPDIR": str(private)})
+        self.assertEqual(proc.returncode, 1, proc.stdout + proc.stderr)
+        left = sorted(x.name for x in private.iterdir())
+        self.assertEqual(left, [],
+                         "materialised staged blobs survived the run: %s" % left)
 
 
 class ScopeIsReportedNotSilent(SecretsBase):

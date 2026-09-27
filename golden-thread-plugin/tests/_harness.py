@@ -156,6 +156,13 @@ class Sandbox(unittest.TestCase):
                if not k.startswith(("CLAUDE", "GT_"))}
         env.update(GIT_ID)
         env["HOME"] = str(self.home)
+        # Point the pre-commit credential gate at the release UNDER TEST. Without this the
+        # gate resolves nothing in a throwaway HOME (there is no plugin cache there), and
+        # since it fails closed -- correctly -- every `git commit` in every sandbox refuses.
+        # Seeding a fake cache under the sandbox HOME was the alternative and was rejected:
+        # test_install asserts exactly what install.sh puts in that directory, including
+        # that stale caches are pruned, so a pre-seeded entry would corrupt those tests.
+        env["GT_SECRETS_BIN"] = str(SCRIPTS / "gt_secrets.py")
         self.env = env
 
     def tearDown(self):

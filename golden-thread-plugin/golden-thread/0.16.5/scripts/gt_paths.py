@@ -144,3 +144,36 @@ if __name__ == "__main__":
         "core_rules": str(c) if c else None,
         "rules": [parse_rule(p).get("name") for p in core_rule_files(c)],
     }, indent=2))
+
+
+# ---------------------------------------------------------------------------- report dirs
+# Where a check's report goes, with the same three-step resolution gt_lint_weekly.py has
+# used since 0.13.0: an explicit config key wins; else the pre-0.13.0 folder if it already
+# exists, because an upgrade must never silently move a report to a folder the owner has
+# never seen (owner requirement, 2026-09-14); else the modern default.
+REPORT_DIR_DEFAULT = Path(".gt")
+REPORT_DIR_LEGACY = Path("Projects") / "golden-thread"
+
+
+def report_dir(vault: Path, config: dict | None = None, kind: str = "lint") -> Path:
+    """-> the directory `kind`'s reports belong in, absolute.
+
+    `kind` is a subfolder name ("lint", "checks"), so every check reports into the same
+    tree rather than each inventing a location.
+
+    gt_lint_weekly.py DUPLICATES this resolution and cannot import it: it is installed to
+    ~/.claude/golden-thread/hooks/ and runs standalone from there, with no path to the
+    release's scripts/. The duplication is therefore load-bearing rather than careless --
+    and because today's other bug was a duplicated fixture where only one copy got fixed,
+    test_gt_paths pins the two implementations as equivalent across all three branches.
+    """
+    vault = Path(vault)
+    config = config or {}
+    configured = config.get("lint_report_dir") if kind == "lint" else None
+    if isinstance(configured, str) and configured.strip():
+        # A relative value resolves inside the vault; an absolute one wins the join.
+        return vault / os.path.expanduser(configured.strip())
+    legacy = vault / REPORT_DIR_LEGACY / kind
+    if legacy.is_dir():
+        return legacy
+    return vault / REPORT_DIR_DEFAULT / kind

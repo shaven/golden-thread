@@ -72,6 +72,10 @@
    "bytes": 603,
    "sha256": "8526ae386afa611ba076fb2d924779f44fafab00e91df4bfeffa496dcbb5881e"
   },
+  "packs/core/lint.common.pack.json": {
+   "bytes": 2685,
+   "sha256": "7e753c56ff0b13c6aa2a5ffa05898af9bb3efb9039e9fd361239d57622799b5e"
+  },
   "packs/core/naming.conventions.pack.json": {
    "bytes": 1593,
    "sha256": "cadd417e1089bd7f8fde376c1e2e2fb4ad675f2a6b6ab8597ee38d2face04f35"
@@ -81,8 +85,8 @@
    "sha256": "58e8907f04720b1a2840f1c45ce538f2fa5936fc6ea54614704a6e241fc6ea6c"
   },
   "packs/core/secrets.common.pack.json": {
-   "bytes": 1849,
-   "sha256": "eb034536c2a77fa3be23bc4c4c04e20919a9b77ed2b1b4c7ee529bd36b233692"
+   "bytes": 1959,
+   "sha256": "bb6166ea36382647f4bb65f3cf28ce956945f80f3122dd2ff3a2dd6322c7841b"
   },
   "scripts/gt_aggregate.py": {
    "bytes": 6160,
@@ -95,6 +99,10 @@
   "scripts/gt_allin_commit.py": {
    "bytes": 12377,
    "sha256": "446a7eb5cb8d553562f5b2572a72fe3ff2e30fffc3e7d0886cdbd703e5730442"
+  },
+  "scripts/gt_check_report.py": {
+   "bytes": 7544,
+   "sha256": "c1a48c7f5c9eee67641c29e9aa6936c792305e740e7d4732d9728c9f5c8b678d"
   },
   "scripts/gt_components.py": {
    "bytes": 83753,
@@ -121,8 +129,8 @@
    "sha256": "cea0d9fbd3b1b1c7c8acfa6efd479dde165de962d022926216c5bd34c33ee843"
   },
   "scripts/gt_lint.py": {
-   "bytes": 62685,
-   "sha256": "f30c6e455c2b42880b3b28514f3518a80cd641badf5bd35c4a84d25b4911a9cd"
+   "bytes": 65842,
+   "sha256": "797c597e364d4a5cdb7c71a7c0e1ed5daec54d205d438b1fb5fc884a1c22f6df"
   },
   "scripts/gt_lint_weekly.py": {
    "bytes": 6895,
@@ -137,28 +145,32 @@
    "sha256": "ad7794651a47f6ed83914ef609ab4ffdecc1433b455517e841702dc35c13ccbc"
   },
   "scripts/gt_paths.py": {
-   "bytes": 5769,
-   "sha256": "86fbd452da8a2bc37dced23e59a04a697cc2c5d7cde618cb0a49f77a58796980"
+   "bytes": 7498,
+   "sha256": "1b70934a92c52a4ed966d3c769c66446c16b3fb217aba6b7f8df291b4b7c22cb"
   },
   "scripts/gt_push_check.py": {
    "bytes": 10614,
    "sha256": "97448249bb05b6a3dbb39cf1ab65aa1ca7bc9390ea427fbd5919a70a2954873c"
   },
   "scripts/gt_registry.py": {
-   "bytes": 33305,
-   "sha256": "7515070cd6dd4b05b6af7e195f4bd6aee1e74780c07ef64c964361ba403175c8"
+   "bytes": 36172,
+   "sha256": "59cafa6389a2b018dca155a598a9b6f2046a8f211876dcbb7aa945b6506baa32"
   },
   "scripts/gt_scan.py": {
-   "bytes": 6511,
-   "sha256": "a64c843381706538d7211df110fe023de8c908fdfddf6292caad4279f51a1e1f"
+   "bytes": 6612,
+   "sha256": "2821ce40eaaa88771b1ca7ed23e7bc2a09cd927d646c38dca508ae57cffba0c8"
+  },
+  "scripts/gt_scan_code.py": {
+   "bytes": 35007,
+   "sha256": "f3ae5b5bc3f85f3d62576e849e74754ba17804db15c5b290e492e5d779166ed4"
   },
   "scripts/gt_scan_language.py": {
    "bytes": 18658,
    "sha256": "9e270d06b09a6f15ca1b0a9c6df9ef74ad8908092c96a950814d4724f37ed07e"
   },
   "scripts/gt_secrets.py": {
-   "bytes": 15869,
-   "sha256": "05cec8c31f0e4ad6dadd93f69f42e46c19dcfc2d8da87b60a1e3c55664b46134"
+   "bytes": 19281,
+   "sha256": "499b132801aaecf5519541b9a1291a4947fee2b67539c4120bd7df7f170645bd"
   },
   "scripts/gt_settings.py": {
    "bytes": 39061,
@@ -280,6 +292,10 @@
    "bytes": 979,
    "sha256": "875f2d3fae03e7bc8253b6bfd30fbc79114979b9f2f6f50fab12e9fd047c31f1"
   },
+  "templates/githooks/pre-commit": {
+   "bytes": 8096,
+   "sha256": "b47532153aab6af6ca4b2441528a82626a5a6c18c5c6c14a51b2c39fd4e2a9eb"
+  },
   "templates/githooks/prepare-commit-msg": {
    "bytes": 1653,
    "sha256": "4b1c6197303b70672a1a6adbd8ab7a40a49eaa73f1dee94a066512ed16d46147"
@@ -301,8 +317,8 @@
    "sha256": "7386fa88b225580c3d8172310cfa2f21622e2cc13b3863d5f4517758da45e729"
   },
   "templates/shipped-hashes.json": {
-   "bytes": 3946,
-   "sha256": "f03c5e0b1b46071e9bf02f2a280d9ea031c43ce03de690261afc94d0c8a17368"
+   "bytes": 4181,
+   "sha256": "cfa314af64bb9edcdabd210a56231cdd6dc979b362e499e88603c86d611aa411"
   },
   "templates/source.md": {
    "bytes": 2462,
@@ -349,7 +365,7 @@
    "sha256": "05a5e61333b0ba5d6f97866735268f7f99ff354d9502b2b05e0e512a86f82a6b"
   }
  },
- "generated": "2026-09-27T09:02:02",
+ "generated": "2026-09-27T13:26:31",
  "hooks": [
   {
    "args": [

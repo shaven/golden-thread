@@ -18,6 +18,7 @@ The language leaf's own contract:
 """
 import hashlib
 import json
+import re
 import os
 import shutil
 import subprocess
@@ -51,8 +52,17 @@ class ScanBase(unittest.TestCase):
         (self.release / "scripts").mkdir(parents=True)
         (self.release / "packs" / "core").mkdir(parents=True)
         (self.release / "packs" / "community").mkdir(parents=True)
-        for src in (AGG, LEAF, REGISTRY, AGGREGATE):
-            shutil.copy2(src, self.release / "scripts" / src.name)
+        # The member scripts are DERIVED from gt_scan.MEMBERS, not listed here. A hard-coded
+        # list meant that adding a member to the aggregator left this fixture one leaf behind,
+        # so the new member reported COULD NOT RUN and eleven tests failed for a reason that
+        # had nothing to do with what they check. Same shape as the install fixture that
+        # duplicated its manifest step: the fix exists, and a second copy bypassed it.
+        from _harness import load_module
+        members = load_module(AGG, "gt_scan_for_fixture").MEMBERS
+        for src in [AGG, REGISTRY, AGGREGATE] + [
+                GT / "scripts" / script for script, _ in members.values()]:
+            if src.is_file():
+                shutil.copy2(src, self.release / "scripts" / src.name)
         self.tree = self.tmp / "tree"
         self.tree.mkdir()
         self.vault = self.tmp / "vault"
@@ -84,6 +94,20 @@ class ScanBase(unittest.TestCase):
         self.put_pack(pack("encoding", "e", [
             {"lang": "python", "charset": "utf-8", "eol": "lf", "bom": "never"}]))
 
+    def code_packs(self):
+        """Definitions for the `code` member, so "every member ran" can be true.
+
+        Needed because the aggregator's contract is that an unrun member outranks a clean
+        one -- so a test about findings cannot leave a member with nothing to load.
+        """
+        self.put_pack(pack("lint", "l", [
+            {"id": "py-self-cmp", "lang": "python", "severity": "warn",
+             "message": "a value compared with itself", "rule": {"pattern": "$A == $A"}}]))
+
+    def all_packs(self):
+        self.language_packs()
+        self.code_packs()
+
     def write(self, rel, text):
         p = self.tree / rel
         p.parent.mkdir(parents=True, exist_ok=True)
@@ -110,7 +134,7 @@ class AggregatorTest(ScanBase):
         self.assertEqual(r.returncode, 3, r.stdout + r.stderr)
         self.assertIn("COULD NOT RUN", r.stdout)
         self.assertIn("NOT a pass", r.stdout)
-        self.assertIn("0 of 1", r.stdout)
+        self.assertRegex(r.stdout, r"0 of \d+ member\(s\) ran")
 
     def test_exit_4_from_the_leaf_is_interpreted_not_printed_as_a_number(self):
         """NOTHING_LOADED was declared "so the aggregator interprets rather than guesses" and
@@ -133,19 +157,21 @@ class AggregatorTest(ScanBase):
         self.language_packs()
         self.write("a.py", "def ok(): pass\n")
         r = self.run_agg()
-        self.assertIn("running 1 scan member(s): language", r.stdout)
-        self.assertLess(r.stdout.index("running 1 scan member"),
+        self.assertRegex(r.stdout, r"running \d+ scan member\(s\):")
+        self.assertLess(r.stdout.index("running "),
                         r.stdout.index("member(s) ran"), "announced BEFORE the results")
 
     def test_headline_always_reports_how_many_ran(self):
-        self.language_packs()
+        self.all_packs()
         self.write("a.py", "def ok(): pass\n")
         r = self.run_agg()
-        self.assertIn("1 of 1 member(s) ran", r.stdout)
-        self.assertEqual(r.returncode, 0)
+        m = re.search(r"(\d+) of (\d+) member\(s\) ran", r.stdout)
+        self.assertTrue(m, "the headline did not state how many ran:\n" + r.stdout)
+        self.assertEqual(m.group(1), m.group(2), "not every member ran:\n" + r.stdout)
+        self.assertEqual(r.returncode, 0, r.stdout)
 
     def test_findings_give_exit_1_when_every_member_ran(self):
-        self.language_packs()
+        self.all_packs()
         self.write("a.py", "def BadName(): pass\n")
         r = self.run_agg()
         self.assertEqual(r.returncode, 1, r.stdout)
@@ -167,9 +193,13 @@ class AggregatorTest(ScanBase):
         self.remanifest()
         r = self.run_agg("--json")
         d = json.loads(r.stdout)
-        self.assertEqual(d["asked"], ["language"])
+        # Derived from the aggregator's own member table: asserting a literal list here meant
+        # adding a member broke a test about JSON SHAPE, which is not what it checks.
+        from _harness import load_module
+        expected = sorted(load_module(AGG, "gt_scan_for_json").MEMBERS)
+        self.assertEqual(sorted(d["asked"]), expected)
         self.assertEqual(d["ran"], [])
-        self.assertEqual([m["member"] for m in d["could_not_run"]], ["language"])
+        self.assertEqual(sorted(m["member"] for m in d["could_not_run"]), expected)
 
 
 class LanguageLeafTest(ScanBase):

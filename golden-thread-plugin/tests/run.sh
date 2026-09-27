@@ -69,9 +69,71 @@ secrets_gate() {
     return 1                      # absent means unknown, and unknown is not clean
   fi
   base=(); [ -f secrets-baseline.json ] && base=(--baseline secrets-baseline.json)
-  python3 "$sec" .. "${SECRETS_EXCLUDES[@]}" ${base[@]+"${base[@]}"} || rc=$?
+  local out
+  out=$(python3 "$sec" .. "${SECRETS_EXCLUDES[@]}" ${base[@]+"${base[@]}"} 2>&1) || rc=$?
+  printf '%s\n' "$out"
   [ "$rc" -eq 0 ] || echo "secrets: the tree is not clean — no test receipt will be written" >&2
+  # File the verdict in the vault, so "is this gate running, and is it getting noisier?"
+  # is answerable from history rather than from whoever remembers this run. Bookkeeping:
+  # it never changes rc, because a missing record must not fail a green suite.
+  local verdict count
+  case "$rc" in
+    0) verdict=clean ;;
+    1) verdict=findings ;;
+    *) verdict=cannot-run ;;
+  esac
+  count=$(printf '%s\n' "$out" | sed -n 's/.*[^0-9]\([0-9]\{1,\}\) new finding(s).*/\1/p' | tail -1)
+  check_report secrets "$verdict" "${count:-}" "the plugin tree"
   return $rc
+}
+
+# ── The source-validation gate ─────────────────────────────────────────────────
+#
+# Same posture as the secrets gate above and for the same reason: a check that did not run is
+# not a check that passed. Exit 3 from the leaf means a rule was SKIPPED -- it needed an
+# evaluator tier this machine has not got -- and that is reported, not swallowed.
+#
+# It uses the same archived-release excludes, because this repo keeps 17 version directories
+# and without them every finding is reported once per release.
+code_gate() {
+  local sc base rc=0 out
+  sc=$(ls -d ../golden-thread/*/scripts/gt_scan_code.py 2>/dev/null | sort -V | tail -1)
+  if [ -z "$sc" ]; then
+    echo "code: NOT RUN — no gt_scan_code.py in any release directory" >&2
+    return 1                      # absent means unknown, and unknown is not clean
+  fi
+  base=(); [ -f ../.gt/code-baseline.json ] && base=(--baseline ../.gt/code-baseline.json)
+  out=$(python3 "$sc" .. "${SECRETS_EXCLUDES[@]}" ${base[@]+"${base[@]}"} 2>&1) || rc=$?
+  printf '%s\n' "$out"
+  case "$rc" in
+    0) check_report code clean 0 "the plugin tree" ;;
+    1) echo "code: findings — no test receipt will be written" >&2
+       check_report code findings "$(printf '%s\n' "$out" | sed -n 's/.*[^0-9]\([0-9]\{1,\}\) finding(s).*/\1/p' | tail -1)" "the plugin tree" ;;
+    *) echo "code: the scan was PARTIAL (exit $rc) — a rule was skipped or a pack failed" >&2
+       check_report code cannot-run "" "the plugin tree" ;;
+  esac
+  return $rc
+}
+
+# Record a check's verdict in the vault. Resolves the vault the same way every other tool
+# does -- from vault-config.json -- and stays silent when there is none, because a clone
+# with no vault must still be able to run the tests.
+check_report() {
+  local rep vault
+  rep=$(ls -d ../golden-thread/*/scripts/gt_check_report.py 2>/dev/null | sort -V | tail -1)
+  [ -n "$rep" ] || return 0
+  vault=$(python3 - <<'EOF' 2>/dev/null
+import json, os
+try:
+    print(json.load(open(os.path.expanduser("~/.claude/vault-config.json")))["vault_path"])
+except Exception:
+    pass
+EOF
+)
+  [ -n "$vault" ] || return 0
+  python3 "$rep" record --vault "$vault" --check "$1" --verdict "$2" \
+    ${3:+--count "$3"} ${4:+--scope "$4"} \
+    ${GT_TEST_REF:+--ref "$GT_TEST_REF"} >/dev/null 2>&1 || true
 }
 
 # Only a FULL run is evidence: `tests/run.sh test_gt_lint` proves one module, not the
@@ -84,6 +146,7 @@ if [ "${GT_TEST_SERIAL:-}" = "1" ]; then
   printf '%s\n' "$out"
   if [ $rc -eq 0 ] && [ "$FULL_RUN" = yes ]; then
     secrets_gate || rc=$?
+    [ $rc -eq 0 ] && { code_gate || rc=$?; }
   fi
   if [ $rc -eq 0 ] && [ "$FULL_RUN" = yes ]; then
     receipt "$(printf '%s\n' "$out" | sed -n 's/^Ran \([0-9]*\) test.*/\1/p' | tail -1)"
@@ -99,6 +162,9 @@ python3 prun.py "$@" 2>&1 | tee /tmp/gt-tests-$$.log
 rc=${PIPESTATUS[0]}
 if [ $rc -eq 0 ] && [ "$FULL_RUN" = yes ]; then
   secrets_gate || rc=$?
+fi
+if [ $rc -eq 0 ] && [ "$FULL_RUN" = yes ]; then
+  code_gate || rc=$?
 fi
 if [ $rc -eq 0 ] && [ "$FULL_RUN" = yes ]; then
   receipt "$(sed -n 's/^Ran \([0-9]*\) test.*/\1/p' /tmp/gt-tests-$$.log | tail -1)"

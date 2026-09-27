@@ -122,9 +122,12 @@ CONSUMERS = {
     "vocabulary": "gt_context.py",
     "validation_rules": "gt_context.py",
     "runbook": "gt_context.py",
-    # No consumer yet. Listed so the gap is visible, not so it looks supported:
     "secrets": "gt_secrets.py",   # 0.17.0: the slot shipped in 0.16.0 with no consumer
-    "lint": None,               # the slot cannot express WHAT to detect; needs a pattern field
+    # 0.17.0 too. The old comment here read "the slot cannot express WHAT to detect; needs a
+    # pattern field" -- which was true only because entries had to be flat strings. Entries may
+    # now nest, so the matcher object the slot always needed can live in `rule`, and this slot
+    # is read.
+    "lint": "gt_scan_code.py",
 }
 
 TIERS = ("community", "core", "local")      # low to high precedence
@@ -377,26 +380,80 @@ def _string_problem(label, s, cap):
     return None
 
 
+# A nested matcher may not be arbitrarily deep or wide. Both caps exist so that "every
+# string is checked" cannot be defeated by burying text where a checker gives up, and so a
+# pack cannot cost unbounded work to validate.
+_MAX_DEPTH = 8
+_MAX_NODES = 256
+
+
 def entry_problem(entry):
     """-> a reason string when this entry must not be served, else None.
 
     Field NAMES are checked exactly like field values. Checking only values left the obvious
     hiding place open: the 2026-09-16 review put 147 characters of instruction text, an RLO
     override and a BEL into a JSON KEY and it was served verbatim, problems empty, exit 0.
-    Anything a reader sees is content, and a key is something a reader sees."""
+    Anything a reader sees is content, and a key is something a reader sees.
+
+    NESTING, added 2026-09-27. Until now every value had to be a flat string, which is what
+    made a pack safely readable -- but it also made the `lint` slot impossible to fill: gt's
+    rule format is a documented subset of ast-grep's schema, where the matcher is an OBJECT
+    (`rule: {all: [{kind: ...}, {not: {...}}]}`). Flattening it to a JSON string inside the
+    entry was the cheaper option and was rejected: §2.2 of the design commits to "same names,
+    same nesting, same meanings" as ast-grep, and a rule the user cannot read in its upstream
+    shape gives up the only reason for borrowing a published vocabulary.
+
+    So containers are now walked, and THE SECURITY PROPERTY IS UNCHANGED: every key and every
+    string, at every depth, goes through exactly the same _string_problem as before. What is
+    new is only where they may live. Depth and node caps bound the walk, because a checker
+    that gives up quietly is a hiding place of its own.
+    """
+    seen = [0]
+
+    def walk(node, label, depth):
+        seen[0] += 1
+        if depth > _MAX_DEPTH:
+            return "%s nests deeper than %d levels" % (label, _MAX_DEPTH)
+        if seen[0] > _MAX_NODES:
+            return "entry has more than %d nested value(s)" % _MAX_NODES
+        if isinstance(node, dict):
+            for i, (k, v) in enumerate(node.items()):
+                if not isinstance(k, str):               # json gives str keys; be explicit
+                    return "%s field name #%d is %s, not a string" % (label, i + 1,
+                                                                      type(k).__name__)
+                # The offending name is identified by POSITION, not quoted back. Quoting it
+                # echoed the injection into the PROBLEM line -- read by a terminal and, more
+                # to the point, by a model. A refusal must not become the delivery mechanism.
+                bad = _string_problem("%s field name #%d" % (label, i + 1), k, _MAX_FIELD_NAME)
+                if bad:
+                    return bad
+                # Safe to name k below: it passed the checks immediately above.
+                bad = walk(v, "field %r" % _clean(k, 40), depth + 1)
+                if bad:
+                    return bad
+            return None
+        if isinstance(node, list):
+            for i, v in enumerate(node):
+                bad = walk(v, "%s[%d]" % (label, i), depth + 1)
+                if bad:
+                    return bad
+            return None
+        if isinstance(node, bool) or isinstance(node, int):
+            # ast-grep's `stopBy` and `nthChild` take a keyword or a number, so a scalar that
+            # carries no text is allowed -- it cannot hide a string. Booleans are ints in
+            # Python, hence the explicit first test.
+            return None
+        if not isinstance(node, str):
+            return "%s is %s, not a string" % (label, type(node).__name__)
+        return _string_problem(label, node, _MAX_VALUE)
+
     for i, (k, v) in enumerate(entry.items()):
-        if not isinstance(k, str):                       # json gives str keys; be explicit
+        if not isinstance(k, str):
             return "field name #%d is %s, not a string" % (i + 1, type(k).__name__)
-        # The offending name is identified by POSITION, not quoted back. Quoting it echoed the
-        # injection into the PROBLEM line -- which is read by a terminal and, more to the
-        # point, by a model. A refusal must not become the delivery mechanism.
         bad = _string_problem("field name #%d" % (i + 1), k, _MAX_FIELD_NAME)
         if bad:
             return bad
-        if not isinstance(v, str):
-            return "field %r is %s, not a string" % (k, type(v).__name__)
-        # Safe to name k here: it passed the checks immediately above.
-        bad = _string_problem("field %r" % _clean(k, 40), v, _MAX_VALUE)
+        bad = walk(v, "field %r" % _clean(k, 40), 1)
         if bad:
             return bad
     return None

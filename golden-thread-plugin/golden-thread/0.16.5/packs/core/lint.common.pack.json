@@ -1,0 +1,93 @@
+{
+  "schema": 1,
+  "slot": "lint",
+  "name": "common",
+  "tier": "D",
+  "spdx": "MIT",
+  "provenance": {
+    "origin": "original",
+    "contributor": "Golden Thread <gt@example.com>",
+    "upstream": null
+  },
+  "dco": "Signed-off-by: Golden Thread <gt@example.com>",
+  "notes": "Tier D: a finding's message is printed, so it reaches context. Every rule was MEASURED on this repo before inclusion; two candidates were dropped for firing on house convention rather than defects. Written from scratch; no third-party rule text.",
+  "entries": [
+    {
+      "id": "py-bare-except",
+      "lang": "python",
+      "severity": "warn",
+      "message": "A bare `except:` catches KeyboardInterrupt and SystemExit too, so it swallows Ctrl-C and shutdown. Name the exception.",
+      "rule": {
+        "all": [
+          {
+            "kind": "except_clause"
+          },
+          {
+            "not": {
+              "regex": "^except [A-Za-z(]"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": "py-self-comparison",
+      "lang": "python",
+      "severity": "error",
+      "message": "A value compared with itself is always true or always NaN-false; one side is almost certainly the wrong name.",
+      "rule": {
+        "pattern": "$A == $A"
+      }
+    },
+    {
+      "id": "py-dangerous-call",
+      "lang": "python",
+      "severity": "error",
+      "message": "This call executes or deserialises whatever it is given. Use a safe equivalent, or state why the input cannot be hostile.",
+      "rule": {
+        "any": [
+          {
+            "pattern": "os.system($$$A)"
+          },
+          {
+            "pattern": "eval($$$A)"
+          },
+          {
+            "pattern": "exec($$$A)"
+          },
+          {
+            "pattern": "tempfile.mktemp($$$A)"
+          },
+          {
+            "pattern": "pickle.load($$$A)"
+          },
+          {
+            "pattern": "pickle.loads($$$A)"
+          }
+        ]
+      }
+    },
+    {
+      "id": "py-assert-in-shipped-code",
+      "lang": "python",
+      "severity": "warn",
+      "message": "`assert` is removed entirely under python -O, so an assert used as a runtime check silently stops checking. Raise instead.",
+      "files": "*scripts/*.py",
+      "rule": {
+        "kind": "assert_statement"
+      }
+    },
+    {
+      "id": "sh-missing-nounset",
+      "lang": "shell",
+      "severity": "warn",
+      "message": "A shell script with no `set -u` treats a misspelt variable as empty, so a typo becomes silent wrong behaviour rather than an error.",
+      "evaluator": "text",
+      "rule": {
+        "not": {
+          "regex": "set -[a-z]*u|set -o nounset|set -o +u"
+        }
+      }
+    }
+  ]
+}
