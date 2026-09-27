@@ -45,6 +45,34 @@ except (RuntimeError, OSError):
     DEMO_MODULE = None
 
 
+def build_repo_fixture(case, dest: Path) -> Path:
+    """Copy install.sh + the newest version dirs into `dest`, then make the manifest match.
+
+    THE LAST LINE IS THE WHOLE POINT, and it is why this is one function rather than six
+    lines pasted into each setUp. Since 0.12.7 install.sh REFUSES a source whose executing
+    files disagree with MANIFEST.json, and the working tree's manifest is stale for as long
+    as anyone is mid-edit -- which is most of the time during development.
+
+    `InstallTest` regenerated. Three classes that subclass Sandbox directly --
+    EnforcementHooksOnUpgrade, VaultIsPartOfTheInstall, WiringDoesNotDependOnGit -- had
+    byte-identical copies of the copy step WITHOUT it. On 2026-09-27 that made 12 tests fail
+    with installer refusal text about `scripts/gt_registry.py`, which none of them are about;
+    the same shape had already cost three earlier debugging detours. The fix existed and three
+    fixtures bypassed it, so the duplication was the defect, not the missing line.
+
+    A preflight that skipped the module on a stale working-tree manifest was tried first and
+    rejected: it would skip all 87 tests during normal development, and a silent skip reads
+    exactly like a pass. Making the fixture correct means the tests RUN.
+    """
+    dest.mkdir(parents=True, exist_ok=True)
+    shutil.copy2(INSTALL, dest / "install.sh")
+    shutil.copytree(GT, dest / "golden-thread" / GT.name, ignore=IGNORE)
+    shutil.copytree(WIKI, dest / "golden-thread-wiki" / WIKI.name, ignore=IGNORE)
+    version_dir = dest / "golden-thread" / GT.name
+    case.py(version_dir / "scripts" / "gt_components.py", "manifest", version_dir)
+    return dest
+
+
 def files_under(root: Path, dirs):
     out = set()
     for d in dirs:
@@ -65,12 +93,7 @@ class InstallTest(Sandbox):
         self.repo = self.make_repo_copy(self.tmp / "src" / "golden-thread-plugin")
 
     def make_repo_copy(self, dest: Path) -> Path:
-        dest.mkdir(parents=True)
-        shutil.copy2(INSTALL, dest / "install.sh")
-        shutil.copytree(GT, dest / "golden-thread" / GT.name, ignore=IGNORE)
-        shutil.copytree(WIKI, dest / "golden-thread-wiki" / WIKI.name, ignore=IGNORE)
-        self.regenerate_manifest(dest / "golden-thread" / GT.name)
-        return dest
+        return build_repo_fixture(self, dest)
 
     def regenerate_manifest(self, version_dir: Path):
         """Make the fixture's manifest describe the fixture.
@@ -416,11 +439,7 @@ class EnforcementHooksOnUpgrade(Sandbox):
 
     def setUp(self):
         super().setUp()
-        self.repo = self.tmp / "src" / "golden-thread-plugin"
-        self.repo.mkdir(parents=True)
-        shutil.copy2(INSTALL, self.repo / "install.sh")
-        shutil.copytree(GT, self.repo / "golden-thread" / GT.name, ignore=IGNORE)
-        shutil.copytree(WIKI, self.repo / "golden-thread-wiki" / WIKI.name, ignore=IGNORE)
+        self.repo = build_repo_fixture(self, self.tmp / "src" / "golden-thread-plugin")
 
     def wired(self, event):
         s = json.loads((self.home / ".claude" / "settings.json").read_text())
@@ -603,11 +622,7 @@ class VaultIsPartOfTheInstall(Sandbox):
 
     def setUp(self):
         super().setUp()
-        self.repo = self.tmp / "src" / "golden-thread-plugin"
-        self.repo.mkdir(parents=True)
-        shutil.copy2(INSTALL, self.repo / "install.sh")
-        shutil.copytree(GT, self.repo / "golden-thread" / GT.name, ignore=IGNORE)
-        shutil.copytree(WIKI, self.repo / "golden-thread-wiki" / WIKI.name, ignore=IGNORE)
+        self.repo = build_repo_fixture(self, self.tmp / "src" / "golden-thread-plugin")
 
     def run_install(self, *args):
         return self.sh(self.repo / "install.sh", *args, timeout=300)
@@ -773,11 +788,7 @@ class WiringDoesNotDependOnGit(Sandbox):
 
     def setUp(self):
         super().setUp()
-        self.repo = self.tmp / "src" / "golden-thread-plugin"
-        self.repo.mkdir(parents=True)
-        shutil.copy2(INSTALL, self.repo / "install.sh")
-        shutil.copytree(GT, self.repo / "golden-thread" / GT.name, ignore=IGNORE)
-        shutil.copytree(WIKI, self.repo / "golden-thread-wiki" / WIKI.name, ignore=IGNORE)
+        self.repo = build_repo_fixture(self, self.tmp / "src" / "golden-thread-plugin")
 
     def configure(self, vault, git=False):
         vault.mkdir(parents=True, exist_ok=True)

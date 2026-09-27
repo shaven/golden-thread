@@ -1171,6 +1171,42 @@ def cmd_archive_project(vault: Path, slug: str, reason: str, today: str):
 
 
 
+def seed_daily_notes(vault: Path):
+    """The daily-note template, the folder it writes into, and the Obsidian settings that
+    point one at the other.
+
+    All three, or none of it works. `gt-review` sweeps `<vault>/Daily Notes/` for open
+    `- [ ]` lines carrying no `[[wikilink]]` -- but only if the folder exists, and the
+    folder only fills if Obsidian knows which template to stamp into it. Seeding the
+    template alone leaves a file nobody is ever handed: the inert-artifact failure this
+    release spent a week finding in three other places (a `lint` slot wired to nothing,
+    `selftest.sh` printing PASSED over failures, `gt_doctor` reading an exit code as a
+    verdict).
+
+    This is the ONLY place gt writes under `.obsidian/`, and it writes each file only
+    when ABSENT. That boundary is deliberate: `.obsidian/` is another application's
+    state, and an owner who already keeps daily notes somewhere else has a
+    `daily-notes.json` saying so. Skipping an existing file means their setting wins and
+    gt never silently relocates their journal -- the template still lands, and
+    `gt-review` still finds the folder they actually use.
+    """
+    tmpl = TEMPLATES_DIR / "daily-note.md"
+    if not tmpl.is_file():
+        return
+    ensure_file(vault / "Templates" / "Daily Note.md", tmpl.read_text(encoding="utf-8"))
+    ensure_dir(vault / "Daily Notes")
+    # Obsidian stores these as two separate core-plugin configs; the template is useless
+    # without `templates.json` naming the folder it lives in.
+    ensure_file(vault / ".obsidian" / "daily-notes.json", json.dumps({
+        "folder": "Daily Notes",
+        "format": "YYYY-MM-DD",
+        "template": "Templates/Daily Note",
+        "autorun": False,
+    }, indent=2) + "\n")
+    ensure_file(vault / ".obsidian" / "templates.json",
+                json.dumps({"folder": "Templates"}, indent=2) + "\n")
+
+
 def seed_vault_workspace(vault: Path, seeded: bool = True):
     """Everything a vault needs beyond the rules and the conventions, seeded only when
     absent: the vault tools, the inbox, the git hooks and the rollup.
@@ -1202,6 +1238,8 @@ def seed_vault_workspace(vault: Path, seeded: bool = True):
     inbox = TEMPLATES_DIR / "INBOX.md"
     if inbox.exists():
         ensure_file(vault / "INBOX.md", inbox.read_text(encoding="utf-8"))
+
+    seed_daily_notes(vault)
 
     # How to open this folder in Obsidian, and which plugins the vault's own
     # conventions actually rely on. Seeded INTO the vault rather than left in the

@@ -194,6 +194,67 @@ class FreshTest(VaultInitBase):
             self.assertIn(str(hooks / name), cmds, event)
 
 
+# ---------------------------------------------------------------------------- daily notes
+class DailyNotesTest(VaultInitBase):
+    """The daily-note habit, which is three artifacts or nothing.
+
+    `gt-review` sweeps `Daily Notes/` for open `- [ ]` lines with no `[[wikilink]]`. That
+    sweep shipped first and read a folder no gt vault created, and the template lived only
+    in one owner's vault as a hand-written file -- so the feature was two halves that had
+    never met. These tests assert they are wired to each other, not merely present.
+    """
+
+    def test_all_three_pieces_land_together(self):
+        v = self.make_vault()
+        self.assertTrue((v / "Templates" / "Daily Note.md").is_file())
+        self.assertTrue((v / "Daily Notes").is_dir(),
+                        "gt-review skips silently without this folder, so the sweep would "
+                        "never run and would never say why")
+        self.assertTrue((v / ".obsidian" / "daily-notes.json").is_file())
+        self.assertTrue((v / ".obsidian" / "templates.json").is_file())
+
+    def test_the_settings_actually_point_at_the_template_and_folder(self):
+        """A template nobody is handed is the inert artifact this release keeps finding."""
+        v = self.make_vault()
+        dn = json.loads((v / ".obsidian" / "daily-notes.json").read_text())
+        self.assertEqual(dn["folder"], "Daily Notes")
+        self.assertEqual(dn["template"], "Templates/Daily Note")
+        # Obsidian resolves `template` against the Templates plugin's own folder setting,
+        # so that file is load-bearing too -- without it the path above does not resolve.
+        self.assertEqual(json.loads((v / ".obsidian" / "templates.json").read_text())["folder"],
+                         "Templates")
+        # and the named file is really where the setting says it is
+        self.assertTrue((v / (dn["template"] + ".md")).is_file())
+
+    def test_the_template_produces_the_shape_the_sweep_looks_for(self):
+        """The two halves meet here: the template's unfiled section must emit an open
+        checkbox carrying no wikilink, which is exactly gt-review's match."""
+        body = (self.make_vault() / "Templates" / "Daily Note.md").read_text()
+        self.assertIn("## Noticed", body)
+        unfiled = body.split("## Noticed", 1)[1]
+        lines = [l for l in unfiled.splitlines() if l.strip().startswith("- [ ]")]
+        self.assertTrue(lines, "no open checkbox under the unfiled heading — nothing to sweep")
+        self.assertNotIn("[[", "\n".join(lines),
+                         "a seeded wikilink would make the line read as already captured")
+
+    def test_an_owners_existing_journal_is_never_relocated(self):
+        """`.obsidian/` is another application's state. Someone who already keeps daily
+        notes in Journal/ must keep them: gt writes these files only when ABSENT."""
+        v = self.make_vault()
+        theirs = {"folder": "Journal", "format": "DD-MM-YYYY"}
+        (v / ".obsidian" / "daily-notes.json").write_text(json.dumps(theirs))
+        (v / "Templates" / "Daily Note.md").write_text("MY OWN TEMPLATE\n")
+        self.vi_json("fresh", "--vault", v, "--domain", "Test", "--no-config")
+        self.assertEqual(json.loads((v / ".obsidian" / "daily-notes.json").read_text()), theirs)
+        self.assertEqual((v / "Templates" / "Daily Note.md").read_text(), "MY OWN TEMPLATE\n")
+
+    def test_the_seeded_template_is_the_shipped_one(self):
+        """Not a copy that can drift: byte-identical to templates/daily-note.md."""
+        v = self.make_vault()
+        self.assertEqual((v / "Templates" / "Daily Note.md").read_bytes(),
+                         (TEMPLATES / "daily-note.md").read_bytes())
+
+
 # ---------------------------------------------------------------------------- connect
 class ConnectTest(VaultInitBase):
     def test_connect_existing_folder_seeds_only_what_is_missing(self):

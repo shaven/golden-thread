@@ -422,11 +422,19 @@ class RegistryTest(unittest.TestCase):
         # is checked rather than assumed: `vocabulary` used to stand here, and when 0.16.2
         # corrected CONSUMERS (gt_context.py had read it since 0.16.1) this test would
         # otherwise have quietly begun asserting the opposite of its own name.
-        self.assertIsNone(_registry().CONSUMERS["secrets"],
-                          "secrets now has a consumer -- point this test at a slot that does "
-                          "not, or retire it; do not weaken the assertion")
-        self.put("local", pack("secrets", "mine", [{"id": "alpha", "pattern": "x"}]))
-        r = self.run_reg("show", "secrets")
+        # 0.17.0: `secrets` stood here until gt_secrets.py became its consumer. Per the
+        # instruction the previous author left in this very assertion -- "point this test
+        # at a slot that does not, or retire it; do not weaken the assertion" -- it now
+        # picks the unread slot from CONSUMERS rather than naming one, so the next slot to
+        # gain a consumer moves this test instead of breaking it.
+        unread = sorted(s for s, c in _registry().CONSUMERS.items() if not c)
+        self.assertTrue(unread,
+                        "every slot now has a consumer -- retire this test rather than "
+                        "weakening it; the warning it guards has nothing left to warn about")
+        slot = unread[0]
+        shape = {"lint": {"id": "alpha", "message": "m"}}.get(slot, {"id": "alpha", "pattern": "x"})
+        self.put("local", pack(slot, "mine", [shape]))
+        r = self.run_reg("show", slot)
         self.assertIn("no shipped tool reads", r.stdout)
 
     def test_show_does_not_warn_for_a_slot_that_is_read(self):
@@ -454,3 +462,67 @@ class RegistryTest(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class LintLangIsOptional(RegistryTest):
+    """`lang` is optional in the `lint` slot, and ONLY there.
+
+    A rule like "a TODO with no owner" is language-agnostic. Forcing a language onto it
+    means writing the same rule once per language, and the copies drift.
+    """
+
+    def test_an_entry_with_no_lang_resolves(self):
+        self.put("core", pack("lint", "core", [{"id": "no-todo", "message": "owner?"}]))
+        out = self.show_json("lint")
+        self.assertEqual(len(out["effective"]), 1, out)
+        self.assertEqual(out["problems"], [], "a missing optional key was treated as a fault")
+
+    def test_omitted_and_explicit_star_are_the_same_rule(self):
+        """Otherwise one rule written two ways occupies two slots and neither shadows the
+        other -- the drift this change exists to prevent."""
+        self.put("community", pack("lint", "c", [{"id": "no-todo", "message": "from community"}]))
+        self.put("core", pack("lint", "k", [{"lang": "*", "id": "no-todo", "message": "from core"}]))
+        out = self.show_json("lint")
+        self.assertEqual(len(out["effective"]), 1, "two spellings produced two entries")
+        self.assertEqual(out["effective"][0]["entry"]["message"], "from core")
+        self.assertEqual(len(out["shadowed"]), 1, "the losing spelling must still be visible")
+
+    def test_a_wildcard_rule_answers_a_specific_language_query(self):
+        self.put("core", pack("lint", "core", [{"id": "no-todo", "message": "owner?"}]))
+        out = self.show_json("lint", "--lang", "python")
+        self.assertEqual(len(out["effective"]), 1,
+                         "the wildcard rule was dropped by a --lang query")
+
+    def test_wildcard_and_specific_coexist_and_neither_shadows(self):
+        """Specificity-shadowing was rejected deliberately: a python entry silently
+        disabling a wildcard rule is the quiet removal this module exists to prevent.
+        To switch one off for a language, RETRACT it -- and that is reported."""
+        self.put("core", pack("lint", "core", [
+            {"id": "no-todo", "message": "everywhere"},
+            {"lang": "python", "id": "no-todo", "message": "python only"},
+        ]))
+        out = self.show_json("lint", "--lang", "python")
+        self.assertEqual(len(out["effective"]), 2, out)
+        self.assertEqual(out["shadowed"], [])
+
+    def test_a_specific_rule_does_not_answer_another_language(self):
+        self.put("core", pack("lint", "core", [{"lang": "python", "id": "x", "message": "m"}]))
+        self.assertEqual(len(self.show_json("lint", "--lang", "go")["effective"]), 0)
+
+    def _lang_still_required(self, slot, entry):
+        """The bug this guards: making ONE slot's key optional and quietly making EVERY
+        slot's key optional. An entry with no lang must still be a reported PROBLEM."""
+        self.put("core", pack(slot, "core", [entry]))
+        out = self.show_json(slot)
+        self.assertEqual(len(out["effective"]), 0, "%s served an entry with no lang" % slot)
+        self.assertTrue(any("lang" in str(pr) for pr in out["problems"]),
+                        "%s did not report the missing key: %s" % (slot, out["problems"]))
+
+    def test_naming_still_requires_lang(self):
+        self._lang_still_required("naming", {"construct": "function", "style": "snake"})
+
+    def test_construct_still_requires_lang(self):
+        self._lang_still_required("construct", {"construct": "function", "pattern": "^def "})
+
+    def test_encoding_still_requires_lang(self):
+        self._lang_still_required("encoding", {"charset": "utf-8"})

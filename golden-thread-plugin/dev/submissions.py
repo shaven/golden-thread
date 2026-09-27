@@ -69,8 +69,20 @@ SLOTS = {
                   "charset": "enum:utf-8", "eol": "enum:lf|crlf", "bom": "enum:never|allowed"}},
     "naming":    {"model_reachable": False, "fields": {"lang": "token", "construct": "token",
                   "style": "enum:snake|camel|pascal|kebab|screaming_snake"}},
-    "lint":      {"model_reachable": False, "fields": {"lang": "token", "rule": "token",
-                  "severity": "enum:info|warn|error"}},
+    # Tier D, and the reason is the `message`: a lint finding is printed, so its text reaches
+    # context and the slot cannot claim otherwise. `id` (not `rule`) names the rule, matching
+    # ast-grep's vocabulary, which gt's rule format is a documented subset of -- there `rule`
+    # holds the matcher OBJECT, so keying on it would have made one of the two words mean
+    # something it does not mean upstream. Renamed 2026-09-27, while nothing consumed the slot.
+    #
+    # `lang` is OPTIONAL, mirroring gt_registry.SLOTS: a rule such as "a TODO with no owner"
+    # has no language. Until 2026-09-27 this table had no way to say so and required every
+    # declared field on every entry, so a language-agnostic pack resolved fine in the registry
+    # and was REJECTED at the submission gate -- two tables disagreeing about the same pack,
+    # which is the defect class this release keeps finding.
+    "lint":      {"model_reachable": True, "optional": ("lang",),
+                  "fields": {"lang": "token", "id": "token", "message": "text",
+                             "severity": "enum:info|warn|error"}},
     # A language pack is filetype + construct + naming + encoding. All Tier A: every field is a
     # closed grammar (a suffix or glob, a token, a validated regex) with nowhere to put prose,
     # which is what makes a contributed language safe to merge.
@@ -475,6 +487,9 @@ def validate_entries(d):
     if len(entries) > MAX_ENTRIES:
         _fail("too-many-entries", "%d entries; the cap is %d" % (len(entries), MAX_ENTRIES))
     slot, fields, seen = d["slot"], SLOTS[d["slot"]]["fields"], set()
+    # A field a slot declares OPTIONAL may be absent -- but when present it is validated
+    # exactly as any other, so "optional" buys an omission and never a laxer grammar.
+    optional = SLOTS[d["slot"]].get("optional", ())
     for i, e in enumerate(entries):
         if not isinstance(e, dict):
             _fail("bad-entry", "entries[%d] is not an object" % i)
@@ -483,6 +498,8 @@ def validate_entries(d):
             _fail("unknown-key", "entries[%d] has unknown key(s): %s" % (i, ", ".join(unknown)))
         for k in fields:
             if k not in e:
+                if k in optional:
+                    continue
                 _fail("incomplete", "entries[%d] is missing %r" % (i, k))
             check_field(slot, "entries[%d].%s" % (i, k), fields[k], e[k])
         key = json.dumps(e, sort_keys=True)

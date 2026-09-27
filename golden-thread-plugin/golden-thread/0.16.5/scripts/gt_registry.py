@@ -66,7 +66,27 @@ SLOTS = {
     "classify":         {"mode": "map",   "key": ("path",)},
     "encoding":         {"mode": "map",   "key": ("lang",)},
     "naming":           {"mode": "map",   "key": ("lang", "construct")},
-    "lint":             {"mode": "map",   "key": ("lang", "rule")},
+    # `lang` is OPTIONAL here, and only here. A rule such as "a TODO with no owner" is
+    # language-agnostic: forcing a language onto it would mean writing the same rule once
+    # per language, and the copies would drift. An entry omitting `lang` -- or spelling it
+    # "*" -- is normalised to the wildcard and applies to every language.
+    #
+    # `*` and a specific language are DISTINCT keys, so both are in effect and neither
+    # shadows the other. Specificity-shadowing was considered and rejected: it would mean a
+    # python entry silently disabling a wildcard rule, which is the kind of quiet removal
+    # this module exists to prevent. To switch off a wildcard rule for one language, RETRACT
+    # it -- that path already exists and every retraction is reported.
+    #
+    # The key field is `id`, NOT `rule`, and that is a rename made on 2026-09-27 while
+    # writing the first pack -- the last moment it was free. gt's rule vocabulary is a
+    # documented subset of ast-grep's schema, borrowed verbatim, and there `id` names the
+    # rule while `rule` holds the MATCHER OBJECT (`pattern` / `kind` / `all` / `any`...).
+    # Keying on `rule` would have forced one of the two to mean something else than it does
+    # upstream, which defeats the entire reason for borrowing a published vocabulary: that a
+    # user can read ast-grep's rule reference and have it be true here. Nothing consumed this
+    # slot yet, so the rename cost one test fixture; after a pack ships it would have cost
+    # every pack in the wild.
+    "lint":             {"mode": "map",   "key": ("lang", "id"), "optional": ("lang",)},
     "vocabulary":       {"mode": "map",   "key": ("term",)},
     "validation_rules": {"mode": "map",   "key": ("id",)},
     # What makes a LANGUAGE PACK self-contained. Without these two, a contributed language
@@ -103,7 +123,7 @@ CONSUMERS = {
     "validation_rules": "gt_context.py",
     "runbook": "gt_context.py",
     # No consumer yet. Listed so the gap is visible, not so it looks supported:
-    "secrets": None,            # awaits gt_scan_secrets
+    "secrets": "gt_secrets.py",   # 0.17.0: the slot shipped in 0.16.0 with no consumer
     "lint": None,               # the slot cannot express WHAT to detect; needs a pattern field
 }
 
@@ -392,8 +412,14 @@ def _clean(value, limit=48):
     return out if len(out) <= limit else out[:limit - 1] + "…"
 
 
+WILDCARD = "*"
+
+
 def _key(entry, fields):
-    return tuple(entry.get(f, "") for f in fields)
+    """The map key. An omitted optional field and an explicit "*" MUST produce the same
+    key, or the same rule written two ways would occupy two slots and neither would
+    shadow the other."""
+    return tuple(entry.get(f) or (WILDCARD if f == "lang" else "") for f in fields)
 
 
 def _retract_matches(entry, _spec_fields, pattern):
@@ -427,14 +453,20 @@ def resolve(slot, lang=None, vault=None):
             if bad:
                 problems.append((where, bad))
                 continue
-            missing = [f for f in spec["key"] if not entry.get(f)]
+            optional = spec.get("optional", ())
+            missing = [f for f in spec["key"]
+                       if not entry.get(f) and f not in optional]
             if missing:
                 # Without this an entry missing `lang` keys as ("", ...), never collides with a
                 # real entry, is never shadowed, and answers every --lang query.
                 problems.append((where, "missing key field(s): %s" % ", ".join(missing)))
                 continue
-            if lang and "lang" in spec["key"] and entry.get("lang") != lang:
-                continue
+            if lang and "lang" in spec["key"]:
+                entry_lang = entry.get("lang") or WILDCARD
+                # A wildcard entry answers every language query. Dropping it here was the
+                # whole reason `lang` could not be optional.
+                if entry_lang not in (lang, WILDCARD):
+                    continue
             rec = {"entry": entry, "source": pack["name"], "tier": pack["tier"],
                    "path": pack["path"]}
             if spec["mode"] == "union":

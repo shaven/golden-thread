@@ -37,6 +37,43 @@ receipt() {
   done
 }
 
+# ── The secrets gate ───────────────────────────────────────────────────────────
+#
+# A FULL passing run writes a receipt, and that receipt is what core_test_before_commit
+# reads to license a commit. So this runs BEFORE the receipt: a credential in the tree must
+# not be licensed by a green suite.
+#
+# It BLOCKS rather than warns, and it has earned the right to. Measured 2026-09-27 on this
+# repo: 231 files scanned, ONE finding, and that one is a fixture in the file that tests the
+# secrets rule. A deterministic check at that rate is exactly the kind that should stop a
+# commit; a judgement-based one would not be.
+#
+# The excludes are the ARCHIVED release directories, and they are not cosmetic: without
+# them the scan reported 48 findings, 38 of which were four files counted once per shipped
+# release, because this repo keeps eighteen version directories. An immutable published
+# artefact is a git-history question, not an "am I about to commit this" question.
+#
+# A finding you have decided to accept goes in the baseline, not in a wider exclude:
+#   python3 <release>/scripts/gt_secrets.py . <excludes> --write-baseline tests/secrets-baseline.json
+SECRETS_EXCLUDES=(--exclude 'golden-thread/0.1[0-5].*'
+                  --exclude 'golden-thread/0.16.[0-4]'
+                  --exclude 'golden-thread-*/0.*')
+
+secrets_gate() {
+  local sec base rc=0
+  # The NEWEST release's scanner, the same way install.sh picks a version: a gate that
+  # silently used an old copy of itself would be the very failure this repo keeps finding.
+  sec=$(ls -d ../golden-thread/*/scripts/gt_secrets.py 2>/dev/null | sort -V | tail -1)
+  if [ -z "$sec" ]; then
+    echo "secrets: NOT RUN — no gt_secrets.py in any release directory" >&2
+    return 1                      # absent means unknown, and unknown is not clean
+  fi
+  base=(); [ -f secrets-baseline.json ] && base=(--baseline secrets-baseline.json)
+  python3 "$sec" .. "${SECRETS_EXCLUDES[@]}" ${base[@]+"${base[@]}"} || rc=$?
+  [ "$rc" -eq 0 ] || echo "secrets: the tree is not clean — no test receipt will be written" >&2
+  return $rc
+}
+
 # Only a FULL run is evidence: `tests/run.sh test_gt_lint` proves one module, not the
 # tree, and a receipt from it would wave through a commit nothing had covered.
 FULL_RUN=no; [ $# -eq 0 ] && FULL_RUN=yes
@@ -45,6 +82,9 @@ if [ "${GT_TEST_SERIAL:-}" = "1" ]; then
   if [ $# -gt 0 ]; then exec python3 -m unittest -v "$@"; fi
   out=$(python3 -m unittest discover -s . -p 'test_*.py' -v 2>&1); rc=$?
   printf '%s\n' "$out"
+  if [ $rc -eq 0 ] && [ "$FULL_RUN" = yes ]; then
+    secrets_gate || rc=$?
+  fi
   if [ $rc -eq 0 ] && [ "$FULL_RUN" = yes ]; then
     receipt "$(printf '%s\n' "$out" | sed -n 's/^Ran \([0-9]*\) test.*/\1/p' | tail -1)"
   fi
@@ -57,6 +97,9 @@ fi
 # red suite, which is worse than having no receipt at all.
 python3 prun.py "$@" 2>&1 | tee /tmp/gt-tests-$$.log
 rc=${PIPESTATUS[0]}
+if [ $rc -eq 0 ] && [ "$FULL_RUN" = yes ]; then
+  secrets_gate || rc=$?
+fi
 if [ $rc -eq 0 ] && [ "$FULL_RUN" = yes ]; then
   receipt "$(sed -n 's/^Ran \([0-9]*\) test.*/\1/p' /tmp/gt-tests-$$.log | tail -1)"
 fi
