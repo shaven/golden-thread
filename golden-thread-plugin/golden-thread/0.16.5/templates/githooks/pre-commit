@@ -138,6 +138,52 @@ if [ "$REPORT_ON" = "on" ] && [ -f "$REP" ]; then
   fi
 fi
 
+# ── The source-validation gate ─────────────────────────────────────────────────
+#
+# Runs only when the credential gate passed, because a credential is the more urgent finding
+# and two walls of output at once is how people learn to reach for --no-verify.
+#
+# ONE DELIBERATE ASYMMETRY from the gate above: for gt_secrets, "could not run" BLOCKS --
+# unknown is not clean when the subject is a credential. Here exit 3 means a RULE WAS SKIPPED
+# because this machine lacks an optional evaluator tier, which is the expected state on most
+# machines and says nothing about the staged code. Blocking on it would refuse every commit
+# everywhere ast_grep_py is not installed, and the first thing anyone would do is delete this
+# hook. So a skip is REPORTED and allowed; only a real finding blocks.
+if [ "$RC" -eq 0 ]; then
+  SCAN="${SEC%/gt_secrets.py}/gt_scan_code.py"
+  if [ -f "$SCAN" ]; then
+    CBASE=""
+    [ -f "$ROOT/.gt/code-baseline.json" ] && CBASE="--baseline $ROOT/.gt/code-baseline.json"
+    # shellcheck disable=SC2086  # CBASE is a deliberate two-word expansion or empty
+    COUT=$(python3 "$SCAN" "$ROOT" --staged $CBASE 2>&1)
+    CRC=$?
+    case "$CRC" in
+      0) : ;;                                   # clean; the credential gate prints the summary
+      1)
+        echo "$COUT" >&2
+        cat >&2 <<'MSG'
+
+COMMIT REFUSED — source validation found something in the staged code. Each line above is
+path:line, the rule that fired, and what it is about.
+
+  Rule is wrong?      fix the rule, or accept the finding WITH A REASON:
+                      python3 <gt>/scripts/gt_scan_code.py . --write-baseline .gt/code-baseline.json
+                      then add a `reasons` entry saying why — an accepted finding with no
+                      recorded reason is a silenced one.
+  Commit anyway:      git commit --no-verify
+
+MSG
+        exit 1
+        ;;
+      *)
+        # A skipped rule, a pack problem, or no rules at all. Reported, never fatal.
+        printf '%s\n' "$COUT" | sed -n '/SKIPPED\|PROBLEM\|CANNOT RUN/p' >&2
+        echo "gt-scan-code: PARTIAL (exit $CRC) — some rules did not run here; not blocking" >&2
+        ;;
+    esac
+  fi
+fi
+
 case "$RC" in
   0) echo "$OUT" ;;
   1)

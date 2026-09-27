@@ -54,16 +54,34 @@ class ScanBase(Sandbox):
         (self.packs / ("lint.%s.pack.json" % name)).write_text(
             json.dumps(pack(entries, name), indent=2))
 
-    def scan(self, *extra, expect=None):
-        proc = self.py(SCAN, self.tree, "--vault", self.vault, *extra)
+    def scan(self, *extra, expect=None, env=None):
+        proc = self.py(SCAN, self.tree, "--vault", self.vault, *extra, env=env)
         if expect is not None:
             self.assertEqual(proc.returncode, expect,
                              "exit %d\n%s\n%s" % (proc.returncode, proc.stdout, proc.stderr))
         return proc
 
-    def findings(self, *extra):
-        proc = self.py(SCAN, self.tree, "--vault", self.vault, "--json", *extra)
+    def findings(self, *extra, env=None):
+        proc = self.py(SCAN, self.tree, "--vault", self.vault, "--json", *extra, env=env)
         return json.loads(proc.stdout)
+
+    # The tier list, stated rather than inherited. Tests that need a tier ABSENT force it
+    # absent; tests that need it PRESENT ask for it and skip with a reason if the package is
+    # not importable. Neither depends on what pip last did on the machine running the suite --
+    # which mattered more than expected: ast_grep_py was installed with --user on 2026-09-27
+    # and is INVISIBLE here, because the harness gives every test a throwaway HOME and user
+    # site-packages resolves from HOME. The developer and the suite saw different tiers.
+    STDLIB_ONLY = {"GT_SCAN_TIERS": "text,stdlib"}
+
+    def astgrep_env(self):
+        """Env that makes the astgrep tier real, or skipTest with the reason."""
+        try:
+            import ast_grep_py
+        except Exception:
+            self.skipTest("ast_grep_py is not importable; the astgrep tier cannot be tested")
+        import os as _os
+        site = _os.path.dirname(_os.path.dirname(ast_grep_py.__file__))
+        return {"GT_SCAN_TIERS": "text,stdlib,astgrep", "PYTHONPATH": site}
 
     def mine(self, ids, *extra):
         """Findings from the rule ids this test defined, ignoring the core pack's."""
@@ -79,7 +97,7 @@ class TheSkipContract(ScanBase):
                    "message": "structural shell", "evaluator": "astgrep",
                    "rule": {"kind": "command"}}])
         self.write("ok.sh", "#!/bin/sh\nset -u\necho hi\n")
-        proc = self.scan(expect=3)
+        proc = self.scan(expect=3, env=self.STDLIB_ONLY)
         self.assertIn("SKIPPED", proc.stdout)
         self.assertIn("sh-structural", proc.stdout)
 
@@ -89,7 +107,7 @@ class TheSkipContract(ScanBase):
         self.put([{"id": "x", "lang": "python", "severity": "warn", "message": "m",
                    "evaluator": "treesitter", "rule": {"kind": "call"}}])
         self.write("scripts/a.py", "x = 1\n")
-        self.assertEqual(self.scan().returncode, 3)
+        self.assertEqual(self.scan(env=self.STDLIB_ONLY).returncode, 3)
 
     def test_the_affirmative_says_how_many_ran_out_of_how_many(self):
         """Never just the finding count: "0 findings" from 0 evaluated rules is not a result."""
@@ -98,7 +116,7 @@ class TheSkipContract(ScanBase):
                   {"id": "b", "lang": "python", "severity": "warn", "message": "m",
                    "evaluator": "astgrep", "rule": {"kind": "call"}}])
         self.write("scripts/a.py", "x = 1\n")
-        out = self.scan().stdout
+        out = self.scan(env=self.STDLIB_ONLY).stdout
         m = re.search(r"(\d+) rule\(s\), (\d+) evaluated .*?(\d+) SKIPPED", out)
         self.assertTrue(m, "the affirmative did not state rules/evaluated/skipped:\n" + out)
         total, evaluated, skipped = (int(g) for g in m.groups())
@@ -112,7 +130,7 @@ class TheSkipContract(ScanBase):
                    "message": "m", "evaluator": "astgrep", "rule": {"kind": "command"}}])
         self.write("ok.sh", "#!/bin/sh\nset -u\n")
         out = self.tmp / "r.sarif"
-        self.scan("--sarif", str(out))
+        self.scan("--sarif", str(out), env=self.STDLIB_ONLY)
         inv = json.loads(out.read_text())["runs"][0]["invocations"][0]
         self.assertFalse(inv["executionSuccessful"], "a run with a skipped rule claimed success")
         notes = inv["toolExecutionNotifications"]
@@ -318,3 +336,61 @@ class SarifShape(ScanBase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class TheAstgrepTier(ScanBase):
+    """The optional tier, tested when it is really there.
+
+    Until 2026-09-27 this code path had never executed in a test: the package was not
+    installed, so every astgrep test proved only that gt reports its ABSENCE. A tier whose
+    presence is untested is a tier that works by assumption.
+    """
+
+    def test_a_structural_shell_rule_runs_and_finds(self):
+        """What the tier buys: shell gets real structure, not line matching.
+
+        `[ "$x" = y ]` is a POSIX test command; ast-grep sees it as a command node with a
+        name, which no regex over lines can distinguish from the same text in a comment.
+        """
+        env = self.astgrep_env()
+        self.put([{"id": "sh-eval-call", "lang": "shell", "severity": "error",
+                   "message": "eval in a shell script", "evaluator": "astgrep",
+                   "rule": {"pattern": "eval $ARG"}}])
+        self.write("run.sh", '#!/bin/sh\nset -u\neval "$CMD"\necho done\n')
+        hits = [f for f in self.findings(env=env)["findings"] if f["rule"] == "sh-eval-call"]
+        self.assertEqual(len(hits), 1, "the astgrep tier did not evaluate: %s" % hits)
+        self.assertEqual(hits[0]["line"], 3)
+
+    def test_the_same_rule_is_skipped_when_the_tier_is_absent(self):
+        """Both halves of the contract, same rule, one difference: the tier."""
+        self.put([{"id": "sh-eval-call", "lang": "shell", "severity": "error",
+                   "message": "eval in a shell script", "evaluator": "astgrep",
+                   "rule": {"pattern": "eval $ARG"}}])
+        self.write("run.sh", '#!/bin/sh\nset -u\neval "$CMD"\n')
+        proc = self.scan(expect=3, env=self.STDLIB_ONLY)
+        self.assertIn("SKIPPED", proc.stdout)
+        self.assertIn("sh-eval-call", proc.stdout)
+
+    def test_an_unsupported_language_is_reported_not_crashed(self):
+        """ast-grep-py is a RUST extension: an unknown language raises PanicException, which
+        subclasses BaseException and sails through `except Exception`. Measured on 0.30.0 --
+        asking it for "markdown" panics. One unsupported file must not take the scan down.
+        """
+        env = self.astgrep_env()
+        self.put([{"id": "md-structural", "severity": "warn", "message": "m",
+                   "evaluator": "astgrep", "files": "*.md",
+                   "rule": {"pattern": "$X"}}])
+        self.write("notes.md", "# heading\n")
+        self.write("scripts/a.py", "x = 1\n")
+        proc = self.scan(env=env)
+        self.assertIn(proc.returncode, (0, 1, 3), proc.stdout + proc.stderr)
+        self.assertNotIn("Traceback", proc.stderr)
+        self.assertNotIn("PanicException", proc.stderr)
+
+    def test_forcing_the_tier_list_is_announced(self):
+        """A scan whose tiers were overridden is not a scan of this machine, and must say so."""
+        self.put([{"id": "x", "lang": "python", "severity": "warn", "message": "m",
+                   "rule": {"kind": "call"}}])
+        self.write("scripts/a.py", "f()\n")
+        proc = self.scan(env=self.STDLIB_ONLY)
+        self.assertIn("FORCED", proc.stderr)

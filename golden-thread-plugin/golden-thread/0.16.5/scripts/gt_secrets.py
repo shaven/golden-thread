@@ -42,6 +42,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import gt_registry                                        # noqa: E402
+import gt_staged                                          # noqa: E402
 
 SLOT = "secrets"
 CLEAN, FOUND, CANNOT_RUN = 0, 1, 2
@@ -225,47 +226,6 @@ def walk(root: Path):
             yield Path(dirpath) / fn
 
 
-def staged_paths(repo: Path):
-    """-> [rel, ...] for what is STAGED for commit: added, copied or modified.
-
-    Deletions are excluded: a commit that REMOVES a credential must never be blocked by
-    the credential it removes, which would leave the only way to fix a leak blocked by
-    the leak.
-    """
-    proc = subprocess.run(
-        ["git", "-C", str(repo), "diff", "--cached", "--name-only", "--diff-filter=ACM",
-         "-z"], capture_output=True, text=True)
-    if proc.returncode != 0:
-        return None
-    return [r for r in proc.stdout.split("\0") if r]
-
-
-def materialise_staged(repo: Path, rels, dest: Path):
-    """Write each staged BLOB into `dest` under its own relative path.
-
-    The staged blob, not the working-tree file, and the difference is the whole point of a
-    commit gate. `git add` a credential, then delete the line in your editor: the worktree
-    is clean, the index is not, and the commit would carry the credential. A gate that read
-    the worktree would pass it. The reverse case matters too -- an unstaged experiment must
-    not block a commit that does not contain it.
-
-    Writing them out rather than scanning in memory means the SAME in_scope() and
-    scan_file() run for a commit as for a tree scan, so the gate cannot drift from the
-    scanner it claims to be.
-    """
-    written = []
-    for rel in rels:
-        proc = subprocess.run(["git", "-C", str(repo), "show", ":" + rel],
-                              capture_output=True)
-        if proc.returncode != 0:
-            continue
-        target = dest / rel
-        target.parent.mkdir(parents=True, exist_ok=True)
-        target.write_bytes(proc.stdout)
-        written.append(rel)
-    return written
-
-
 # Sentinels for scan_file, so the caller can tell the two apart. Conflating them meant a
 # single .DS_Store made every run exit 2 "could not scan part of what it was asked to" --
 # a permanent false failure that would have made this gate the first thing anyone disabled.
@@ -361,7 +321,7 @@ def _main(argv, tmps):
     root = Path(a.path).resolve()
     out = Out(a.json)
     if a.staged:
-        rels = staged_paths(root)
+        rels = gt_staged.staged_paths(root)
         if rels is None:
             return out.fatal("gt-secrets: CANNOT RUN — `%s` is not a git repository, so there "
                              "is no index to scan." % root)
@@ -374,7 +334,7 @@ def _main(argv, tmps):
         tmp = tempfile.mkdtemp(prefix="gt-secrets-staged-")
         tmps.append(tmp)
         root = Path(tmp)
-        materialise_staged(Path(a.path).resolve(), rels, root)
+        gt_staged.materialise(Path(a.path).resolve(), rels, root)
     rules, problems, retracted = rules_from_slot(a.vault)
 
     for where, what in problems:

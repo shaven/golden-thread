@@ -63,9 +63,27 @@ class SessionTools(Sandbox):
     def two_registrations(self, sid="two"):
         """One session id with two registrations: the plain name and the stepped-aside
         `-<pid>` one. This is what `--new` makes on purpose and what a same-minute
-        race makes by accident -- and it is the shape H8 resolved by sort order."""
-        self.assertOk(self.gs(sid, "register", "--task", "A", "--files", "a.md"))
-        self.assertOk(self.gs(sid, "register", "--new", "--task", "B", "--files", "b.md"))
+        race makes by accident -- and it is the shape H8 resolved by sort order.
+
+        THE COLLISION IS THE POINT, and it only happens when both registrations land in the
+        same wall-clock minute: the session file is named `<sid>_<date>_<HHMM>.md`, so a
+        second registration one minute later simply gets a fresh plain name and nothing steps
+        aside. This test therefore failed once on 2026-09-27 for no reason but the clock
+        (14:52 -> 14:53), a latent ~1-in-60 flake that grew likelier as the suite got slower.
+
+        Retried rather than fixed in the tool: a `GT_NOW` override would make the clock on an
+        AUDIT RECORD settable from the environment, and session files are exactly that record.
+        Two boundary crossings in a row is ~1 in 3600, and the second attempt starts fresh.
+        """
+        for attempt in (1, 2):
+            self.assertOk(self.gs(sid, "register", "--task", "A", "--files", "a.md"))
+            self.assertOk(self.gs(sid, "register", "--new", "--task", "B", "--files", "b.md"))
+            files = self.files_for(sid)
+            if len(files) == 2 and any(re.search(r"_\d{4}-\d+\.md$", f.name) for f in files):
+                break
+            if attempt == 1:                     # crossed a minute boundary; start over
+                for f in files:
+                    f.unlink()
         files = self.files_for(sid)
         self.assertEqual(len(files), 2, [f.name for f in files])
         stepped = [f for f in files if re.search(r"_\d{4}-\d+\.md$", f.name)]

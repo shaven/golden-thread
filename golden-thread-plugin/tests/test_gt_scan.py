@@ -59,10 +59,25 @@ class ScanBase(unittest.TestCase):
         # duplicated its manifest step: the fix exists, and a second copy bypassed it.
         from _harness import load_module
         members = load_module(AGG, "gt_scan_for_fixture").MEMBERS
-        for src in [AGG, REGISTRY, AGGREGATE] + [
-                GT / "scripts" / script for script, _ in members.values()]:
-            if src.is_file():
-                shutil.copy2(src, self.release / "scripts" / src.name)
+        wanted = [AGG, REGISTRY, AGGREGATE] + [
+            GT / "scripts" / script for script, _ in members.values()]
+        # ...and whatever those scripts IMPORT, resolved transitively. A hand-maintained copy
+        # list has now bitten three times in one day: the install fixture that omitted its
+        # manifest step, this fixture's member list, and this fixture's import list -- a member
+        # grew an `import gt_staged` and the whole unit failed with ModuleNotFoundError, which
+        # looks nothing like "the fixture is incomplete". Deriving it means the next shared
+        # helper costs nobody an afternoon.
+        seen, queue = set(), list(wanted)
+        import re as _re
+        while queue:
+            src = queue.pop()
+            if src in seen or not src.is_file():
+                continue
+            seen.add(src)
+            for name in _re.findall(r"^\s*import (gt_[a-z_]+)", src.read_text(), _re.M):
+                queue.append(GT / "scripts" / ("%s.py" % name))
+        for src in sorted(seen):
+            shutil.copy2(src, self.release / "scripts" / src.name)
         self.tree = self.tmp / "tree"
         self.tree.mkdir()
         self.vault = self.tmp / "vault"

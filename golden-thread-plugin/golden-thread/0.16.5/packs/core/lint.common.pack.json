@@ -10,7 +10,7 @@
     "upstream": null
   },
   "dco": "Signed-off-by: Golden Thread <gt@example.com>",
-  "notes": "Tier D: a finding's message is printed, so it reaches context. Every rule was MEASURED on this repo before inclusion; two candidates were dropped for firing on house convention rather than defects. Written from scratch; no third-party rule text.",
+  "notes": "Tier D: a finding's message is printed. Every rule was MEASURED on this repo first. EVERY RULE HERE RUNS ON A STDLIB-ONLY MACHINE: an astgrep-tier rule in the core pack would make a default install permanently PARTIAL, which teaches people to ignore the skip line. Written from scratch.",
   "entries": [
     {
       "id": "py-bare-except",

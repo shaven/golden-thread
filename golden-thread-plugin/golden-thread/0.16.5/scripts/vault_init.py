@@ -1171,6 +1171,41 @@ def cmd_archive_project(vault: Path, slug: str, reason: str, today: str):
 
 
 
+def seed_code_baseline(vault: Path):
+    """Accept, with a reason, the two findings gt's own seeded files produce.
+
+    WITHOUT THIS, EVERY NEW VAULT IS UNCOMMITTABLE. The pre-commit gate runs source validation
+    over the staged diff; a fresh vault stages `.githooks/post-commit` and
+    `.githooks/prepare-commit-msg`, both of which gt seeds and both of which the
+    `sh-missing-nounset` rule flags -- so the FIRST commit in a brand-new vault was refused by
+    gt's own rule against gt's own file. Found by the test suite immediately, which is the only
+    reason it is not a shipping defect.
+
+    The rule is right in general and wrong for those two files: they must fail OPEN, because a
+    commit may never be blocked by attribution bookkeeping, and `set -u` turns an unset
+    variable into a non-zero exit -- which in a commit hook means a refused commit. So the
+    finding is ACCEPTED with that reason recorded, not suppressed and not worked around by
+    weakening the rule. `reasons` exists because a baselined finding is invisible, and an
+    accepted finding with nobody's reason attached is indistinguishable from a silenced one.
+    """
+    baseline = vault / ".gt" / "code-baseline.json"
+    if baseline.exists():
+        return                      # the owner's, from here on
+    why = ("DELIBERATE: this hook must fail OPEN -- a commit may never be blocked by "
+           "attribution bookkeeping -- and `set -u` turns an unset variable into a non-zero "
+           "exit, which for a commit hook means a blocked commit. The rule is right in "
+           "general and wrong here. Seeded by vault_init.")
+    ensure_file(baseline, json.dumps({
+        "accepted": [[".githooks/post-commit", "sh-missing-nounset", 1],
+                     [".githooks/prepare-commit-msg", "sh-missing-nounset", 1]],
+        "reasons": {".githooks/post-commit::sh-missing-nounset": why,
+                    ".githooks/prepare-commit-msg::sh-missing-nounset": why},
+        "_note": ("Each accepted finding SHOULD have an entry in `reasons`, keyed "
+                  "\"path::rule\". An accepted finding with no reason is a silenced one, and "
+                  "nobody can tell later which it was."),
+    }, indent=2) + "\n")
+
+
 def seed_daily_notes(vault: Path):
     """The daily-note template, the folder it writes into, and the Obsidian settings that
     point one at the other.
@@ -1240,6 +1275,7 @@ def seed_vault_workspace(vault: Path, seeded: bool = True):
         ensure_file(vault / "INBOX.md", inbox.read_text(encoding="utf-8"))
 
     seed_daily_notes(vault)
+    seed_code_baseline(vault)
 
     # How to open this folder in Obsidian, and which plugins the vault's own
     # conventions actually rely on. Seeded INTO the vault rather than left in the

@@ -73,8 +73,8 @@
    "sha256": "8526ae386afa611ba076fb2d924779f44fafab00e91df4bfeffa496dcbb5881e"
   },
   "packs/core/lint.common.pack.json": {
-   "bytes": 2685,
-   "sha256": "7e753c56ff0b13c6aa2a5ffa05898af9bb3efb9039e9fd361239d57622799b5e"
+   "bytes": 2726,
+   "sha256": "e50f630c4b15ff189ebd0bc9d084bd4bc2e41302bce6ff74d3d0b83d9d71694e"
   },
   "packs/core/naming.conventions.pack.json": {
    "bytes": 1593,
@@ -161,20 +161,28 @@
    "sha256": "2821ce40eaaa88771b1ca7ed23e7bc2a09cd927d646c38dca508ae57cffba0c8"
   },
   "scripts/gt_scan_code.py": {
-   "bytes": 35007,
-   "sha256": "f3ae5b5bc3f85f3d62576e849e74754ba17804db15c5b290e492e5d779166ed4"
+   "bytes": 45016,
+   "sha256": "cf34bce25dfb67f3ca6b854e2a1f4ebcc58b10f7208d39d0fae95e85bdd91546"
   },
   "scripts/gt_scan_language.py": {
    "bytes": 18658,
    "sha256": "9e270d06b09a6f15ca1b0a9c6df9ef74ad8908092c96a950814d4724f37ed07e"
   },
   "scripts/gt_secrets.py": {
-   "bytes": 19281,
-   "sha256": "499b132801aaecf5519541b9a1291a4947fee2b67539c4120bd7df7f170645bd"
+   "bytes": 17650,
+   "sha256": "d2fbf97b57eb729ad399672a77c63745aac4e88140f39c7b989ac122bcbfe3b7"
   },
   "scripts/gt_settings.py": {
    "bytes": 39061,
    "sha256": "05df42eb2c767af87050709e0d66e8a80f5062277ecce7e727143fbf973c16dc"
+  },
+  "scripts/gt_staged.py": {
+   "bytes": 3529,
+   "sha256": "b2a0c8e76fbe6ddc0ac86dbc4f9354b61db390952009fdb106246aafbcd03e32"
+  },
+  "scripts/gt_sweep.py": {
+   "bytes": 7461,
+   "sha256": "b03a39a0bd055bbd598ceb14962dbd31832e3a62e9584019dd84f94013f15133"
   },
   "scripts/gt_test_receipt.py": {
    "bytes": 7226,
@@ -201,8 +209,8 @@
    "sha256": "d56bbd01ce9ba0e74b36ea2bf15fcfccd5d2d4a1ef8fdbdd33d02ae8c36fb7a0"
   },
   "scripts/vault_init.py": {
-   "bytes": 85917,
-   "sha256": "f87af35a63f737f543ba69babc4411afb7eeb94641efc234690b09b4c908bfa0"
+   "bytes": 88179,
+   "sha256": "5184281cb09e411d70e7eade962366f5580097b69058d64e59b30242d3666594"
   },
   "scripts/vault_refresh.py": {
    "bytes": 12370,
@@ -293,8 +301,8 @@
    "sha256": "875f2d3fae03e7bc8253b6bfd30fbc79114979b9f2f6f50fab12e9fd047c31f1"
   },
   "templates/githooks/pre-commit": {
-   "bytes": 8096,
-   "sha256": "b47532153aab6af6ca4b2441528a82626a5a6c18c5c6c14a51b2c39fd4e2a9eb"
+   "bytes": 10367,
+   "sha256": "66e65d57c6e4864ab2794fc18227be0d577847c55957c205eb32d687892012df"
   },
   "templates/githooks/prepare-commit-msg": {
    "bytes": 1653,
@@ -317,8 +325,8 @@
    "sha256": "7386fa88b225580c3d8172310cfa2f21622e2cc13b3863d5f4517758da45e729"
   },
   "templates/shipped-hashes.json": {
-   "bytes": 4181,
-   "sha256": "cfa314af64bb9edcdabd210a56231cdd6dc979b362e499e88603c86d611aa411"
+   "bytes": 4252,
+   "sha256": "ca16a015fc338254816668cb2a79f6000e7176451964742cf447ff41af31e3be"
   },
   "templates/source.md": {
    "bytes": 2462,
@@ -365,7 +373,7 @@
    "sha256": "05a5e61333b0ba5d6f97866735268f7f99ff354d9502b2b05e0e512a86f82a6b"
   }
  },
- "generated": "2026-09-27T13:26:31",
+ "generated": "2026-09-27T14:29:57",
  "hooks": [
   {
    "args": [

@@ -382,3 +382,102 @@ class PreCommitCredentialGate(Sandbox):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class PreCommitCodeGate(Sandbox):
+    """The second gate in the same hook: source validation over the staged diff.
+
+    It shares the hook with the credential gate and has ONE deliberate asymmetry from it. For
+    credentials, "could not run" BLOCKS -- unknown is not clean when the subject is a secret.
+    Here a PARTIAL result means a rule needed an evaluator tier this machine has not got, which
+    is the normal state on most machines and says nothing about the staged code. Blocking on it
+    would refuse every commit everywhere ast_grep_py is absent, and the hook would be deleted
+    within the week. Both halves are tested, because the asymmetry is the kind of thing a later
+    edit "makes consistent".
+    """
+
+    def setUp(self):
+        super().setUp()
+        if not shutil.which("git"):
+            self.skipTest("git not installed")
+        self.vault = self.make_vault().resolve()
+        self.env["GIT_EDITOR"] = "true"
+        self.git("add", "-A")
+        self.git("commit", "-q", "-m", "init")
+
+    def git(self, *args, ok=True, env=None):
+        proc = self.run_cmd(["git", *args], cwd=self.vault, env=env)
+        if ok:
+            self.assertOk(proc, "git " + " ".join(str(a) for a in args))
+        return proc
+
+    def commits(self):
+        out = self.run_cmd(["git", "rev-list", "--count", "HEAD"], cwd=self.vault).stdout
+        return int(out.strip() or 0)
+
+    def stage(self, rel, text):
+        (self.vault / rel).parent.mkdir(parents=True, exist_ok=True)
+        (self.vault / rel).write_text(text)
+        self.git("add", rel)
+
+    def test_a_staged_defect_refuses_the_commit(self):
+        """`if a == a` is always true; one side is the wrong name. A real defect class."""
+        before = self.commits()
+        self.stage("scripts/bad.py", "def f(a):\n    if a == a:\n        return 1\n")
+        proc = self.git("commit", "-m", "add bad", ok=False)
+        self.assertNotEqual(proc.returncode, 0, "the commit was not blocked:\n" + proc.stdout)
+        self.assertIn("source validation", proc.stdout + proc.stderr)
+        self.assertEqual(self.commits(), before, "a commit was created despite the refusal")
+
+    def test_clean_code_commits(self):
+        before = self.commits()
+        self.stage("scripts/ok.py", "def f(a, b):\n    if a == b:\n        return 1\n")
+        self.git("commit", "-q", "-m", "ok")
+        self.assertEqual(self.commits(), before + 1)
+
+    def test_it_reads_the_index_not_the_worktree(self):
+        """Stage the defect, then fix the file. The commit still carries the defect."""
+        before = self.commits()
+        p = self.vault / "scripts" / "bad.py"
+        self.stage("scripts/bad.py", "def f(a):\n    if a == a:\n        return 1\n")
+        p.write_text("def f(a, b):\n    if a == b:\n        return 1\n")   # fixed AFTER staging
+        proc = self.git("commit", "-m", "x", ok=False)
+        self.assertNotEqual(proc.returncode, 0,
+                            "the gate read the working tree, not the commit")
+        self.assertEqual(self.commits(), before)
+
+    def test_a_skipped_rule_does_not_block(self):
+        """The asymmetry. A missing optional tier must not refuse every commit on the machine."""
+        packs = self.vault / "Projects" / "golden-thread" / "packs"
+        packs.mkdir(parents=True, exist_ok=True)
+        (packs / "lint.mine.pack.json").write_text(json.dumps({
+            "schema": 1, "slot": "lint", "name": "mine", "tier": "D", "spdx": "MIT",
+            "provenance": {"origin": "original", "contributor": "A Dev <d@e.com>",
+                           "upstream": None},
+            "dco": "Signed-off-by: A Dev <d@e.com>",
+            "entries": [{"id": "needs-a-tier", "lang": "python", "severity": "warn",
+                         "message": "m", "evaluator": "treesitter",
+                         "rule": {"kind": "call"}}]}))
+        before = self.commits()
+        self.stage("scripts/fine.py", "def g():\n    return 2\n")
+        env = dict(self.env)
+        env["GT_SCAN_TIERS"] = "text,stdlib"
+        proc = self.run_cmd(["git", "commit", "-m", "with a skipped rule"],
+                            cwd=self.vault, env=env)
+        self.assertEqual(proc.returncode, 0,
+                         "a rule that could not run blocked the commit:\n"
+                         + proc.stdout + proc.stderr)
+        self.assertEqual(self.commits(), before + 1)
+
+    def test_a_baseline_quiets_an_accepted_defect(self):
+        self.stage("scripts/bad.py", "def f(a):\n    if a == a:\n        return 1\n")
+        self.git("commit", "-m", "blocked", ok=False)
+        base = self.vault / ".gt" / "code-baseline.json"
+        base.parent.mkdir(parents=True, exist_ok=True)
+        self.assertOk(self.run_cmd([
+            PYTHON, str(SCRIPTS / "gt_scan_code.py"), str(self.vault),
+            "--write-baseline", str(base)]))
+        before = self.commits()
+        self.git("commit", "-q", "-m", "accepted")
+        self.assertEqual(self.commits(), before + 1,
+                         "a baselined finding still blocked the commit")

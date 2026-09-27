@@ -23,17 +23,24 @@ THE RULE THIS FILE TURNS ON:
 TIERS, and what is honestly available:
     text       always. Regex over raw lines. Any language, no parser.
     stdlib     always, PYTHON ONLY. Structural matching via the `ast` module.
-    astgrep    only if `ast_grep_py` imports. Structural matching for every language,
-               including shell and markdown.
+    astgrep    only if `ast_grep_py` imports. Structural matching for 23 languages, bash
+               among them -- but NOT markdown or toml; see ASTGREP_SUPPORTED, measured
+               rather than assumed.
     treesitter only if `tree_sitter` plus a grammar imports.
 
-On a machine with neither optional package -- which includes the machine this was written on
-(Python 3.9.6, `self-verified`) -- shell and markdown get line matching only, and a rule
-declaring a structural bash matcher SAYS it did not run. That skip line is the documented
-weaker behaviour gt's use-if-importable pattern requires. It is also the single lesson of
-2026-09-24, when selftest.sh printed PASSED over three failures and a `lint` check wired to
-nothing reported clean: a scanner that quietly evaluates fewer rules than it was given is
-that same defect wearing a new coat.
+WITHOUT ast_grep_py, shell gets line matching only and a rule declaring a structural bash
+matcher SAYS it did not run. That skip line is the documented weaker behaviour gt's
+use-if-importable pattern requires, and it is the lesson of 2026-09-24, when selftest.sh
+printed PASSED over three failures and a `lint` check wired to nothing reported clean: a
+scanner that quietly evaluates fewer rules than it was given is that defect wearing a new coat.
+
+AND THE OPTIONAL TIER IS GENUINELY OPTIONAL, which this machine proved the hard way. On
+2026-09-27 ast_grep_py was installed here to turn the tier on, and the newest release
+(0.45.3) HAS NO cp39 macOS WHEEL -- pip fell back to building from source and failed. 0.30.0
+was the last version shipping one, and this interpreter is 3.9.6. So the primary development
+machine can only have this tier by pinning a version fifteen releases old. That is exactly
+why the rule format may not require it: a format whose meaning exists only when an optional
+native dependency is present would have been undefined here.
 
 WHAT `kind` MEANS HERE, and the honest caveat. ast-grep's node kinds come from tree-sitter
 grammars (`function_definition`); Python's `ast` uses different names (`FunctionDef`). The two
@@ -44,8 +51,13 @@ gt's own and gt maintains it. Three classes of node cannot be mapped at any effo
 concatenation. A rule asking for one of those at the stdlib tier is REFUSED, not under-matched
 -- which is why "a TODO with no owner" is a `text` rule here and not a `kind: comment` rule.
 
-Exit: 0 clean | 1 findings | 2 usage | 3 partial: a rule was skipped or a pack problem was
-reported, so this scan does not cover what it was asked to cover | 4 nothing to scan with.
+Exit: 0 clean, everything ran | 1 FINDINGS (whether or not anything was also skipped) |
+2 usage | 3 nothing found BUT a rule was skipped or a pack problem was reported, so this scan
+does not cover what it was asked to cover | 4 nothing to scan with.
+
+1 outranks 3 deliberately: a caller deciding whether to block needs "was anything found",
+and a run can both skip a rule and find something. Coverage is reported in the affirmative
+line and in SARIF regardless.
 """
 from __future__ import annotations
 
@@ -61,6 +73,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import gt_registry                                       # noqa: E402
+import gt_staged                                         # noqa: E402
 
 SLOT = "lint"
 CLEAN, FINDINGS, USAGE, PARTIAL, NOTHING_LOADED = 0, 1, 2, 3, 4
@@ -458,7 +471,44 @@ def _relational(inner, node, unit, stop_by, descend: bool) -> bool:
 
 
 # ---------------------------------------------------------------------------- rules & tiers
+# What ast-grep-py calls each language gt knows about. gt says "shell"; ast-grep only accepts
+# "bash" -- and asking it for "shell" does not raise a ValueError, it PANICS (see below).
+ASTGREP_LANG = {"python": "python", "shell": "bash", "json": "json", "yaml": "yaml"}
+
+# Measured against ast-grep-py 0.30.0 on 2026-09-27 (`self-verified`). 23 languages parse;
+# `sh`, `shell`, `markdown`, `md`, `toml` and `dart` do not. The list is written down rather
+# than discovered at runtime because discovering it means CALLING it, and a call with an
+# unsupported language does not return an error -- it panics, below.
+ASTGREP_SUPPORTED = {
+    "python", "bash", "json", "yaml", "javascript", "typescript", "tsx", "html", "css",
+    "c", "cpp", "csharp", "go", "java", "kotlin", "lua", "php", "ruby", "rust", "scala",
+    "swift", "elixir", "haskell",
+}
+
+# THE LANGUAGES GT ITSELF VALIDATES RULES FOR, deliberately a short list and deliberately
+# separate from the one above. ast-grep can parse 23 languages here; that is not the same as
+# gt having measured a rule against real code in them. Adding a language means adding rules
+# and measuring their false-positive rate, so the list grows a few at a time -- which is the
+# owner's instruction (2026-09-27) and also the only honest way to grow it.
+#
+# Everything in ASTGREP_SUPPORTED but not here is *reachable*: a user's own pack may target it
+# today, and gt will evaluate it. What gt does not do is ship rules for it and imply coverage.
+LANGUAGES_VALIDATED = ("python", "shell")
+
+
 def available_tiers() -> list:
+    """Which evaluator tiers exist here.
+
+    GT_SCAN_TIERS overrides the answer, as a comma-separated list, and is ANNOUNCED whenever
+    it is in effect. It exists because the skip contract is the most important behaviour in
+    this file and it cannot be tested by waiting for a machine that lacks a package: the tests
+    that prove a missing tier is reported must work on a machine where every tier is present,
+    and the tests that prove a present tier is USED must work where it is not. Without the
+    override those two sets of tests contradict each other depending on what pip did last.
+    """
+    forced = os.environ.get("GT_SCAN_TIERS")
+    if forced is not None:
+        return [t.strip() for t in forced.split(",") if t.strip()]
     tiers = ["text", "stdlib"]
     try:
         import ast_grep_py                                # noqa: F401
@@ -471,6 +521,47 @@ def available_tiers() -> list:
     except Exception:
         pass
     return tiers
+
+
+def astgrep_find(matcher, text: str, lang: str):
+    """-> [line, ...] where `matcher` holds, using ast-grep. [] when it cannot run.
+
+    CATCHES BaseException, and that is not laziness. ast-grep-py is a Rust extension: handing
+    it a language it does not know raises `pyo3_runtime.PanicException`, which subclasses
+    BaseException and therefore sails straight through `except Exception`. Measured: asking
+    0.30.0 for "markdown" panics rather than returning an error. A scanner that crashes on one
+    unsupported file is a scanner nobody runs, so the panic is contained and reported as a
+    rule that could not run -- which is the same contract as a missing tier.
+    """
+    sg_lang = ASTGREP_LANG.get(lang, lang)
+    if sg_lang not in ASTGREP_SUPPORTED:
+        raise RuleError("ast-grep here does not support language %r" % lang)
+    if not isinstance(matcher, dict):
+        raise RuleError("a matcher must be an object")
+    try:
+        from ast_grep_py import SgRoot
+        root = SgRoot(text, sg_lang).root()
+        # `config={"rule": matcher}` is ast-grep's OWN rule-config shape, so gt's matcher goes
+        # across verbatim -- no translation layer, and therefore nothing to drift. That is the
+        # payoff of borrowing the vocabulary rather than inventing one: at this tier the whole
+        # of all/any/not/has/inside/stopBy is evaluated by ast-grep itself, and gt's stdlib
+        # evaluator is the fallback rather than the definition.
+        #
+        # Passing the matcher positionally raises "missing field `rule`" -- an ordinary
+        # Exception, which is how this was found rather than by reading documentation.
+        hits = root.find_all(config={"rule": matcher})
+    except RuleError:
+        raise
+    except BaseException as exc:                          # noqa: BLE001 -- see the docstring
+        raise RuleError("ast-grep could not evaluate this rule (%s)"
+                        % type(exc).__name__)
+    out = []
+    for h in hits:
+        try:
+            out.append(h.range().start.line + 1)
+        except BaseException:
+            continue
+    return out
 
 
 def required_tier(entry) -> str:
@@ -642,6 +733,16 @@ def scan_unit(unit: Unit, rules, findings, skipped_ids):
                                  "text": unit.lines[line - 1].strip()
                                  if 0 < line <= len(unit.lines) else ""})
             continue
+        if r["tier"] == "astgrep":
+            try:
+                for line in astgrep_find(r["matcher"], unit.text, unit.lang):
+                    findings.append({"path": unit.rel, "line": line, "rule": r["id"],
+                                     "message": r["message"], "severity": r["severity"],
+                                     "text": unit.lines[line - 1].strip()
+                                     if 0 < line <= len(unit.lines) else ""})
+            except RuleError as exc:
+                skipped_ids[r["id"]] = str(exc)
+            continue
         if unit.lang != "python" or unit.tree is None:
             continue
         for node in unit.nodes():
@@ -671,12 +772,19 @@ def main(argv=None) -> int:
     ap.add_argument("--exclude", action="append", default=[], metavar="GLOB")
     ap.add_argument("--baseline")
     ap.add_argument("--write-baseline", metavar="FILE")
+    ap.add_argument("--staged", action="store_true",
+                    help="scan what is STAGED for commit in the git repo at `path`, not the "
+                         "working tree. The commit-gate cadence.")
     ap.add_argument("--rules", action="store_true",
                     help="list the rules in effect and the tier each needs, then exit")
     a = ap.parse_args(argv)
 
     rules, problems, retracted = load_rules(a.vault)
     tiers = available_tiers()
+    if os.environ.get("GT_SCAN_TIERS") is not None:
+        # Never silent: a scan whose tier list was overridden is not a scan of this machine.
+        print("gt-scan-code: tiers FORCED by GT_SCAN_TIERS=%s" % ",".join(tiers),
+              file=sys.stderr)
 
     if a.rules:
         for r in rules:
@@ -684,6 +792,17 @@ def main(argv=None) -> int:
             print("%-28s %-6s %-10s %-8s %s" % (r["id"], r["lang"], r["tier"], mark,
                                                 r["source"]))
         print("tiers available here: %s" % ", ".join(tiers))
+        # WHAT GT SHIPS RULES FOR, stated separately from what it can parse. ast-grep can parse
+        # 23 languages when installed; that is not the same claim as gt having measured a rule
+        # against real code in them, and conflating the two is how a tool implies coverage it
+        # does not have. The list grows a few languages at a time, each with rules and a
+        # measured false-positive rate (owner's instruction, 2026-09-27).
+        print("languages gt ships validated rules for: %s" % ", ".join(LANGUAGES_VALIDATED))
+        others = sorted(ASTGREP_SUPPORTED - {ASTGREP_LANG.get(l, l)
+                                             for l in LANGUAGES_VALIDATED})
+        if "astgrep" in tiers and others:
+            print("also EVALUABLE here via ast-grep, with your own packs (no gt rules yet): %s"
+                  % ", ".join(others))
         return CLEAN
 
     if not rules:
@@ -693,6 +812,15 @@ def main(argv=None) -> int:
               "rule set is not a clean scan. Check `gt_registry.py sources`.", file=sys.stderr)
         return NOTHING_LOADED
 
+    unvalidated = sorted({r["lang"] for r in rules
+                          if r["lang"] not in ("*",) + LANGUAGES_VALIDATED})
+    if unvalidated:
+        # Not a refusal: a user's own pack may target any language ast-grep can parse, and
+        # should. It is said out loud so nobody reads a clean run over a language gt has never
+        # measured as evidence that gt covers that language.
+        print("gt-scan-code: NOTE rule(s) target language(s) gt ships no validated rules for: "
+              "%s — your packs, your measurements" % ", ".join(unvalidated), file=sys.stderr)
+
     skipped_ids = {}
     for r in rules:
         if r["tier"] not in tiers:
@@ -701,6 +829,34 @@ def main(argv=None) -> int:
 
     root = Path(a.path).resolve()
     findings, scanned, skipped_files, excluded, unparsed = [], 0, 0, 0, 0
+
+    staged_ctx = None
+    if a.staged:
+        # Shared with gt_secrets.py through gt_staged, deliberately: two commit gates that read
+        # the index in slightly different ways are two gates that disagree with each other.
+        staged_ctx = gt_staged.scan_staged(root, prefix="gt-scan-code-staged-")
+        staged_root, rels = staged_ctx.__enter__()
+        if staged_root is None:
+            staged_ctx.__exit__(None, None, None)
+            if not gt_staged.is_a_repo(root):
+                print("gt-scan-code: CANNOT RUN — %s is not a git repository, so there is no "
+                      "index to scan." % root, file=sys.stderr)
+                return NOTHING_LOADED
+            # Nothing staged IS clean -- there is no content to carry a finding -- but it is
+            # said out loud, so an empty run is never mistaken for a scan that happened.
+            print("gt-scan-code: clean — nothing staged for commit, 0 file(s)")
+            return CLEAN
+        root = staged_root
+
+    try:
+        return _scan_tree(a, root, rules, tiers, skipped_ids, problems, findings)
+    finally:
+        if staged_ctx is not None:
+            staged_ctx.__exit__(None, None, None)
+
+
+def _scan_tree(a, root, rules, tiers, skipped_ids, problems, findings) -> int:
+    scanned = skipped_files = excluded = unparsed = 0
     for p in walk(root):
         rel = str(p.relative_to(root)) if p != root else p.name
         ok, why = in_scope(p, rel, a.exclude)
@@ -793,11 +949,26 @@ def main(argv=None) -> int:
         print("gt-scan-code: %s — %s" % ("clean" if not findings else "findings",
                                          ", ".join(parts)))
 
+    # FINDINGS OUTRANKS PARTIAL, and the reverse was a real defect for about an hour.
+    #
+    # The first version returned PARTIAL whenever anything was skipped, on the reasoning that
+    # "part of this did not run" is the bigger fact. It is the bigger fact about COVERAGE, and
+    # it is the wrong answer for a CALLER, because the two are orthogonal: a run can skip a
+    # rule AND find something. The commit gate read exit 3 as "nothing found, coverage
+    # incomplete, let it through" -- so a genuine finding passed whenever any rule was skipped,
+    # which is the normal state on any machine without the optional evaluator. gt's own test
+    # suite caught it: a self-comparison sailed into a commit because one shell rule needed
+    # ast-grep.
+    #
+    # So the codes now answer one question each, and the skip is still reported in the
+    # affirmative line and in SARIF's notifications either way:
+    #   1  something was found      (act on it, whatever else was true)
+    #   3  nothing was found, and coverage was incomplete
+    if findings:
+        return FINDINGS
     if skips or problems:
-        # PARTIAL outranks FINDINGS: "part of this did not run" is a bigger fact about the
-        # result than "this is what the part that ran found".
         return PARTIAL
-    return FINDINGS if findings else CLEAN
+    return CLEAN
 
 
 if __name__ == "__main__":

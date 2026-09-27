@@ -255,6 +255,48 @@ class DailyNotesTest(VaultInitBase):
                          (TEMPLATES / "daily-note.md").read_bytes())
 
 
+class TheSeededCodeBaselineTest(VaultInitBase):
+    """A brand-new vault must be able to make its first commit.
+
+    It could not, for about ten minutes on 2026-09-27. The pre-commit gate runs source
+    validation over the staged diff; a fresh vault stages `.githooks/post-commit` and
+    `.githooks/prepare-commit-msg`, both seeded by gt, and gt's own `sh-missing-nounset` rule
+    flags both -- so gt refused the first commit of a vault gt had just created. Caught by five
+    unrelated tests failing in setUp, which is the only reason it is not a shipping defect.
+
+    The rule is right in general and wrong for those two files, so the finding is ACCEPTED with
+    the reason recorded rather than the rule being weakened.
+    """
+
+    def test_a_fresh_vault_ships_a_baseline_for_the_debt_it_seeds(self):
+        v = self.make_vault()
+        base = v / ".gt" / "code-baseline.json"
+        self.assertTrue(base.is_file(), "no code baseline was seeded")
+        doc = json.loads(base.read_text())
+        accepted = {(a[0], a[1]) for a in doc["accepted"]}
+        self.assertIn((".githooks/post-commit", "sh-missing-nounset"), accepted)
+        self.assertIn((".githooks/prepare-commit-msg", "sh-missing-nounset"), accepted)
+
+    def test_every_accepted_finding_carries_a_reason(self):
+        """A baselined finding is invisible. One with no reason is indistinguishable from a
+        silenced one, and nobody can tell later which it was."""
+        doc = json.loads((self.make_vault() / ".gt" / "code-baseline.json").read_text())
+        for path, rule, _line in doc["accepted"]:
+            key = "%s::%s" % (path, rule)
+            self.assertIn(key, doc.get("reasons", {}),
+                          "accepted with no recorded reason: " + key)
+            self.assertGreater(len(doc["reasons"][key]), 40,
+                               "the reason for %s says nothing useful" % key)
+
+    def test_an_owners_existing_baseline_is_never_overwritten(self):
+        v = self.make_vault()
+        base = v / ".gt" / "code-baseline.json"
+        mine = json.dumps({"accepted": [], "reasons": {}, "mine": True})
+        base.write_text(mine)
+        self.vi_json("fresh", "--vault", v, "--domain", "Test", "--no-config")
+        self.assertEqual(base.read_text(), mine, "the owner's baseline was replaced")
+
+
 # ---------------------------------------------------------------------------- connect
 class ConnectTest(VaultInitBase):
     def test_connect_existing_folder_seeds_only_what_is_missing(self):
