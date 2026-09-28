@@ -15,12 +15,28 @@ it at startup, look things up while working, and write back what they learn.
 Its distinguishing idea is the second problem, the one most memory systems never
 address: **writing a rule down does not mean it gets followed.**
 
-Plugin **v0.17.1**. Ten Core rules currently enforced, five of them *validated* — a
+Plugin **v0.17.2**. Ten Core rules currently enforced, five of them *validated* — a
 hook inspects the finished reply (`Stop`) or the tool call about to run (`PreToolUse`)
 and blocks it if the rule was broken.
 
 
 > [!IMPORTANT]
+> **0.17.2: what is waiting on you is in front of you when a session starts — and easy to clear.**
+>
+> - **A MUST DO block at every start**, from one table in `<vault>/deadlines.md`: overdue items
+>   🔴, items due within 14 days 🟡, counted down live. Two credential rotations once sat 15 days
+>   overdue at top priority because priority is a sort order, not an alarm.
+> - **Handoffs keep coming back until someone deals with them** — one line each, never the
+>   body — and a count of urgent tasks waiting on you. Switch any of it off in `/gt:gt-settings`.
+> - **Tasks the way a developer writes a TODO.** `/gt:gt-task` adds one, tied to a page or source
+>   if you like; `/gt:gt-task-list` shows them without opening anything; `/gt:gt-task-handle`
+>   clears a backlog — done, dropped with a reason, or deferred to a date. Handoffs get the same
+>   pair: `/gt:gt-handoff-list`, `/gt:gt-handoff-handle`. Nothing is ever deleted.
+> - **Session claims survive a network change** — keyed on a machine id instead of a hostname.
+> - **Known:** macOS blocks scheduled (launchd) runs from reading a vault under CloudStorage; the
+>   health check now says so. Details in the [CHANGELOG](CHANGELOG.md).
+
+> [!NOTE]
 > **0.16.2 closes the seam where the rules went quiet.** Context a hook adds does not
 > survive compaction — project-root `CLAUDE.md` is re-injected from disk, hook context is
 > summarised with everything else — so for the remainder of a turn in which auto-compaction
@@ -165,7 +181,7 @@ costly, so a broken hook announces itself.
 
 | Path | What it is |
 |---|---|
-| `golden-thread-plugin/golden-thread/<ver>/` | The `gt` plugin — 23 skills, scripts, templates, hooks, packs |
+| `golden-thread-plugin/golden-thread/<ver>/` | The `gt` plugin — 28 skills, scripts, templates, hooks, packs |
 | `golden-thread-plugin/golden-thread-wiki/<ver>/` | Module `wiki` (plugin `gt-wiki`) — 5 skills for LLM wiki vaults |
 | `golden-thread-plugin/golden-thread-demo/<ver>/` | Module `demo` (plugin `gt-demo`) — the guided PizzaBot 3000 tour |
 | `golden-thread-plugin/golden-thread-watch/<ver>/` | Module `watch` (plugin `gt-watch`) — follow upstream git repos, P0 on a security fix |
@@ -230,15 +246,15 @@ cannot be reached and the rules are not loaded — the banner names the cause.
 
 ## The skills
 
-Twenty-three skills in gt, plus the skills of its modules (listed after gt's own). Each composes through files rather than through other skills, so
+Twenty-eight skills in gt, plus the skills of its modules (listed after gt's own). Each composes through files rather than through other skills, so
 removing any one leaves the rest working.
 
 | Skill | What it does |
 |---|---|
 | `gt-init` | Sets up the vault and wires it to a project. Writes `vault-config.json`, the pointer every other skill resolves through, and adds the Golden Thread section to your global `CLAUDE.md`. Idempotent — safe to re-run on a new machine. |
 | `gt-create` | Scaffolds a project: slug, domain, topology, tags, optional sub-project parent. Fills `idea.md` from what you actually said, then freezes it — that file is the traceable *why*, and it is never rewritten when the plan changes. |
-| `gt-open` | Loads a project at session start, reading `source.md` first so you know which host serves which role before touching code. Stops at the memory *index* rather than the notes, so a 70-note project costs ~80 lines to open instead of ~2,000. |
-| `gt-work` | Writes the session back: dated findings to `research.md`, stable choices to numbered ADRs in `decisions.md`, architecture rewritten in place in `design.md`, session state to `memory/`. The step people skip, and skipping it is what makes a vault decay. |
+| `gt-open` | Loads a project at session start, reading `source.md` first so you know which host serves which role before touching code. Stops at the memory *index* rather than the notes, so a 70-note project costs ~80 lines to open instead of ~2,000. Since 0.17.2 it also names that project's handoffs still waiting to be dealt with — one line each, without reading them. |
+| `gt-work` | Writes the session back: dated findings to `research.md`, stable choices to numbered ADRs in `decisions.md`, architecture rewritten in place in `design.md`, session state to `memory/`. The step people skip, and skipping it is what makes a vault decay. What did not reach a file it offers to put in a handoff, which the next session is now shown at start. |
 | `gt-promote` | Graduates a fact up a level once a second project proves it general — or *out* to a project's `CLAUDE.md`, where any agent working in that repo reads it with no vault and no setup. Reach picks the level; audience decides whether it also leaves. |
 | `gt-validate` | Re-derives a claim with a validator given only the claim, the rules and the artifact — never the reasoning that produced it. Four classes: `empirical`, `vantage`, `rule-compliance`, `code`. Returns confirmed, refuted, or cannot-verify, and the third never counts as a pass. |
 | `gt-query` | Answers "how does this work?" — reads `index.md`, follows wikilinks into `Knowledge/`, then falls back to grep and project memory. Flags anything returned that is marked `status: stale`. |
@@ -246,16 +262,21 @@ removing any one leaves the rest working.
 | `gt-review` | Empties the inbox: routes each captured-but-unfiled line (INBOX.md, plus daily notes if you keep them) into a tracked project. |
 | `gt-refresh` | Checks `Sources/` for upstream changes. Supersedes with a *new* immutable file carrying `supersedes:` rather than editing the old one, so the record of what you believed and when stays intact. |
 | `gt-upgrade` | Updates the VAULT after `install.sh` updates the plugin — the step that did not exist until a 0.11.0 migration had to be run by hand across 43 projects. Migrations detect their own work, documents are three-way merged against a base the vault carries, and a step that needs a person is reported rather than guessed at. |
-| `gt-doctor` | Answers "is this install healthy?" in one command — version, component drift, hook wiring, pending migrations, stray workers, unpushed commits, publish drift, lint. Every answer is stated relative to the release it was checked against, because a clean report from a check pinned to the wrong version reads exactly like a healthy install. |
+| `gt-doctor` | Answers "is this install healthy?" in one command — version, component drift, hook wiring, the vault's release stamp and pending migrations, the scheduled jobs' last exits, stray workers, unpushed commits, publish drift, lint. Every answer is stated relative to the release it was checked against, because a clean report from a check pinned to the wrong version reads exactly like a healthy install. |
 | `gt-lint` | Runs 19 deterministic health checks — broken links, orphans, index gaps, scope leaks, staleness, superseded sources — plus `core-unenforced`, which catches a rule that is stored but never re-asserted. |
 | `gt-optimize` | Finds what the vault pays for on every turn and gets nothing back for — a fact duplicated across memory files, a dead index row, a `global-memory/` file over budget. Only mechanically safe cases are applied; anything needing judgement is reported, because a wrong deletion here loses knowledge no diff will bring back. Measured against a real vault it went from 1771 findings to 199 once it stopped reporting generated files and recorded artifacts. |
 | `gt-scan` | Checks code against the language definitions this machine actually has — naming and encoding, per language, entirely from packs: a contributed language pack teaches it a new language with no code change. It reports how many checks RAN next to what they found, so a scan that could not load its definitions can never be mistaken for a clean tree. |
-| `gt-allin` | One command for every check, built so a skipped check can never pass for a clean one: the headline is "N of M members ran", and a member that could not execute outranks a member that found something. It does not push — an aggregator is where a partial run is easiest to mistake for a complete one, and pushing there would break the very rule about seeing tests pass that the tool exists to serve. |
+| `gt-allin` | One command for every check, built so a skipped check can never pass for a clean one: the headline is "N of M members ran", and a member that could not execute outranks a member that found something. Since 0.17.2 it also runs the credential scan, the runbook lint and — while gt-wiki is installed — the wiki lint. It does not push — an aggregator is where a partial run is easiest to mistake for a complete one, and pushing there would break the very rule about seeing tests pass that the tool exists to serve. |
 | `gt-context` | Renders what this vault's definitions SAY, for a session to read — the first consumer of the registry's model-reachable tier. Wrapped in an envelope that marks it as data rather than instruction, because a renderer can make content identifiable but cannot make it true. |
 | `gt-validation` | Writes down what a validation established about a file, including what it could NOT determine, stamped with the file's content hash. Edit the file and the recorded definition goes visibly stale — because every serious defect this project has shipped was a claim that outlived its implementation. |
 | `gt-allin-commit` | The separate, deliberate act of committing — kept apart from the sweep so a routine check is never also a write. It verifies a passing test receipt covers every staged file, refuses when a check could not run at all, and stops at the commit: a commit is reversible here, a push is fetched by other people. |
 | `gt-handoff` | Hands the next session what it needs and marks what it must not assume. Facts carry their source and verification state; the design narrative is left blank for the person who did the work, because a handoff that reads finished when it is not gives the next session false confidence instead of none. |
-| `gt-settings` | Shows and changes everything the plugin does on its own — component drift checking, the version check, orphaned-worker detection, the unpushed-commit check, the pre-commit test gate, the parallel-work budget, the protected-path prompt, and the settings each installed module adds (the report card, the close-out question, the upstream watch). Every automatic behaviour is registered here and every one can be switched off. |
+| `gt-task` | Adds a task the way a developer drops a TODO into code: say it in your own words and one well-formed line lands in the project's `## Tasks`, optionally tied to a wiki page, vault page or source that must actually exist. |
+| `gt-task-list` | Shows open tasks — by project, priority, mine, overdue, stale, deferred or ref — without loading any project. Read-only. |
+| `gt-task-handle` | Clears a backlog one task at a time: done, dropped with a reason, deferred to a date (hidden from ranking and escalation until then), or kept. Nothing is deleted, which is what makes clearing safe. |
+| `gt-handoff-list` | Lists the handoffs still waiting — open, or whose deferral date has come — one line each, across every project or one, **without opening any of them**. Being told must cost no project context. Read-only. |
+| `gt-handoff-handle` | Deals with one: you pick it, and only that handoff and the task lines citing it are loaded. Each open item is done, kept as a task, or dropped with a reason; then the handoff is marked handled, or deferred **to a date** — there is no deferral without one. |
+| `gt-settings` | Shows and changes everything the plugin does on its own — component drift checking, the version check, orphaned-worker detection, the unpushed-commit check, the session-start MUST DO and handoff surfacing (and where a waiting handoff is shown: every session, only in its project, or only on request), the pre-commit test gate, the parallel-work budget, the protected-path prompt, and the settings each installed module adds (the report card, the close-out question, the upstream watch). Every automatic behaviour is registered here and every one can be switched off. |
 | `gt-route` | Mid-session: names what the session has actually become, says where its output belongs, and checks you are in the right project. For when a session has drifted from what it opened with, or you cannot name what you are doing. |
 | `gt-runbook-lint` | Finds procedures duplicated across project runbooks and routes them to the right shared layer: `PROTOCOL.md`, a `Knowledge/` page, or a repo `CLAUDE.md`. Duplication across two runbooks is the signal a fact belongs one layer out. |
 
@@ -286,8 +307,9 @@ do them.
 | `gt_log.py merge` · `gt_adr.py merge <project>` | Regenerate `log.md` / `decisions.md` from the spools. Idempotent: running twice changes nothing. |
 | `gt_log.py add "<line>" --event <kind> --item <path>` | The same log line, plus one structured event recording what moved where. `gt-promote` and `gt-refresh` record their moves this way; `gt-review`, `gt-work` and `gt-ingest` call `gt_events.py emit`. |
 | `gt_events.py` | The structured event stream (`events.jsonl`, schema v1) that `/gt-flow:gt-flow` draws. `backfill --dry-run` previews history rebuilt from git and `log.md` for a vault that predates the events. |
+| `gt_task.py add` · `list` · `done` · `drop` · `defer` · `count` | Creates and works tasks through a tool instead of by hand (0.17.2). One store — the README's `## Tasks` — parsed with `gt_tasks.py`'s own rules. IDs are `slug:LINE:HASH` and refused if the line changed; `drop` needs a reason, `defer` a future date; nothing is deleted. Refuses a README another live session has claimed. |
 | `gt_tasks.py` | Regenerates `TASKS.md`, the cross-project task rollup, ranked and computed against the clock rather than stored. |
-| `gt_session.py` | Registers a session, claims the files it is about to write, and reports which other sessions are live. Liveness is checked against the OS, not guessed from a timestamp. |
+| `gt_session.py` | Registers a session, claims the files it is about to write, and reports which other sessions are live. Liveness is checked against the OS, not guessed from a timestamp — and since 0.17.2 "this machine" is a machine id created once in `~/.claude/golden-thread/machine-id`, not a hostname a network change can alter. |
 | `gt_closeout.py` | Names projects whose signals say they may be finished, with the reasons. Closure is asked for, never assumed. |
 | `gt_edits.py` | Per-edit attribution, so a line in a shared file can be traced to the session that wrote it. |
 
@@ -315,7 +337,7 @@ so it reads only what you are adding — but then nothing ever re-examines what 
 there. The sweep is the answer to *what is true of the tree as a whole*, and because it
 surfaces old debt it must never block: a report you read on a Monday, not a wall in front
 of a commit. It exits non-zero only when a member could not run. Run it from launchd
-(`gt_schedule.py`); harmless by hand.
+(`gt_schedule.py install sweep`, which currently refuses — see the scheduler below); harmless by hand.
 
 **The two checks themselves:**
 
@@ -354,7 +376,7 @@ different facts and only one of them is reassuring.
 
 | Command | What it does |
 |---|---|
-| `gt_schedule.py list` · `install <job> --vault V [--repo PATH …] [--hour H] [--minute M]` · `check <job>` · `remove <job>` | Installs, verifies and removes gt's launchd jobs — `daily` and `lint-weekly`. It exists because the weekly lint agent was installed by hand in 2026-09-08, with no `--check` and no rollback. **Validation goes through launchd, not through a terminal run:** `install` does not stop at writing a plist — it bootstraps the job, kickstarts it, waits, then reads launchd's own last exit code and the job's output, because a job that works in a terminal can still fail under launchd. `remove` boots it out and deletes the plist, which is what makes `install` safe to re-run. |
+| `gt_schedule.py list` · `install <job> --vault V [--repo PATH …] [--hour H] [--minute M]` · `check <job>` · `remove <job>` | Installs, verifies and removes gt's launchd jobs — `daily`, `lint-weekly` and `sweep` (0.17.2; its pre-flight currently refuses, because the registry cannot find its packs from the hooks dir). It exists because the weekly lint agent was installed by hand in 2026-09-08, with no `--check` and no rollback. **Validation goes through launchd, not through a terminal run:** `install` does not stop at writing a plist — it bootstraps the job, kickstarts it, waits, then reads launchd's own last exit code and the job's output, because a job that works in a terminal can still fail under launchd. `remove` boots it out and deletes the plist, which is what makes `install` safe to re-run. |
 
 **Session capture:**
 
@@ -362,6 +384,8 @@ different facts and only one of them is reassuring.
 |---|---|
 | `gt_daily.py --vault V [--date YYYY-MM-DD] [--repo PATH …] [--dry-run] [--check]` | Writes the day's **facts** into `Daily Notes/<date>.md`: tasks closed, commits per repo, event counts, wiki item counts, an active span per project. Terse by design — it does not explain, summarise or interpret, because a generated block that editorialised would encode a reading of the day that is not yours. One fenced, clearly-marked block, replaced whole each run, under its own heading; it never touches `## Noticed`, which is your unfiled capture surface and the section `/gt:gt-review` sweeps. Git is the primary source and events are enrichment: on 2026-09-27 the event log held 5 events on a day with 10 commits across three work streams. |
 | `gt_state.py check [--margin N] [--write]` · `write [--reason R]` · `show` · `hook` | Writes the session's state **before** the context runs out, not as it does. **The signal is `ctx_pct` — context fill — and never `rate_limits`**: a real reading was `{"five_hour": 5, "seven_day": 10, "ctx_pct": 91}`, so triggering on the allowance meter would have fired at entirely the wrong moment and looked correct doing it. It fires once per crossing, at a margin (default 5) below the `usage_alert` flag point. PreCompact is the **backstop, not the primary** — it fires when compaction is already starting, so the write competes with the thing it exists to survive — and the write says which one it was. Never fatal, never blocking; a missing usage ledger reads as *cannot tell*, never as *plenty of room*. |
+| `gt_surface.py check [--vault V] [--dry-run] [--json]` · `must-do [--vault V]` · `handoffs --project SLUG [--vault V]` | The **reader** for everything above, run at `SessionStart` (0.17.2). Every session: a **MUST DO** block from `<vault>/deadlines.md` — one table, `\| item \| category \| due \| see \|` — overdue 🔴 or due within 14 days 🟡, counted down from the row's date at run time, never stored. Every session until it is handled or deferred to a date: each waiting handoff, one line — path, project, age, open items — never its body (setting `handoff_surface`: `any` by default, `project` for only when `/gt:gt-open` opens that project, `manual` for only on request). Once each: a state file `gt_state.py` wrote; after a compaction the newest goes back to the model in full. **Surfacing is the alarm; the task is the record** — it never creates or closes a task and never writes the vault, only a machine-local "already shown" ledger. A clean start says "nothing waiting". Setting `surface`. |
+| `gt_handoff_status.py list --vault V [--project SLUG] [--all] [--json]` · `mark FILE --vault V --status handled\|open\|deferred [--until YYYY-MM-DD] [--reason TEXT] [--dry-run]` | Whether a handoff is still waiting on someone (0.17.2). `open` keeps surfacing; `deferred` must carry a future `--until` date and is open again on that date ("later, some time" is `handled` with a reason); `handled` is marked by a person **or** follows when every task citing the handoff's filename is checked off; `history` is a pre-0.17.2 handoff with no status, over a week old, with no open citing task — so an upgrade does not resurface every old one. `mark` appends to the handoff's status log. It never loads a handoff's body. |
 
 ## Typical use
 

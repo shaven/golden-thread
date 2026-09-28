@@ -39,6 +39,20 @@ When you add a command, change behaviour, or remove a feature, update **all** of
 | `BUILD-NOTE.md` | the handoff that TRAVELS. `../CHANGELOG.md` does not reach gt-src, so this is the only account of the release the other machine gets: versions, what changed, what to run, what needs a decision, and what will be misread. Rewrite it for each release rather than appending. |
 | `../SUBMISSIONS.md` | only if the pack format, slots or validator verdicts changed |
 
+### Where a new feature's docs go
+
+A release with a lot of new documentation gets it **structured, not appended** (owner,
+2026-09-28). Each document has one job; put each piece where that job is:
+
+| Document | What a new feature gets there |
+|---|---|
+| `MANUAL.md` | Grouped by **what the user is doing**, not by file. A feature joins the section for that activity (e.g. `## Tasks and handoffs`, after `## Daily work`) — a short model paragraph first, then one `###` per command. Reference detail for a script stays under *Checks and cadences* / *Script reference*, cross-linked both ways. A new workflow also gets a *Typical use cases* entry. |
+| `README.md` (plugin) | A row in the skills table, under the matching group. **One** callout for the release naming its themes — not a changelog. |
+| `../README.md` | The version callout: 3–5 bullets, user-facing only. |
+| `golden-thread-docs.md` | Command reference rows only. |
+| `../CHANGELOG.md` | One section per theme, each saying **what** and **why**; then *Known, and not fixed* and *Measured, and deliberately not built*. |
+| `BUILD-NOTE.md` | Versions, what to run after install, what needs a decision, what will be misread. Rewritten per release. |
+
 Then regenerate, in this order — each step depends on the one before:
 
 ```bash

@@ -27,7 +27,7 @@ import unittest
 from pathlib import Path
 
 from _harness import (Sandbox, REPO, GT, WIKI, WATCH, REPORT_CARD, latest_version_dir,
-                      load_module)
+                      load_module, SCRIPTS)
 
 INSTALL = REPO / "install.sh"
 DEMO = ("skills/gt-demo", "scripts/gt_demo.sh", "templates/demo-pizzabot")
@@ -329,7 +329,12 @@ class InstallTest(Sandbox):
         self.assertTrue(s["enabledPlugins"]["other@x"])
         self.assertIn("echo user-hook", self.registered()["SessionStart"])
         self.assertEqual(self.registered()["Stop"], ["echo user-hook"])
-        self.assertEqual(len(self.registered()["SessionStart"]), 5)   # user hook + 4 gt SessionStart hooks (watch/report-card are modules since 0.15.0)
+        # user hook + gt's own SessionStart hooks, DERIVED from the registration table (was a
+        # literal 5 until 0.17.2 added gt_surface; a literal count is a second copy of the table)
+        comp = load_module(SCRIPTS / "gt_components.py", "gt_components_ss_count")
+        gt_ss = [r for r in comp.HOOK_REGISTRATIONS
+                 if r["event"] == "SessionStart" and r["owner"] == "install.sh"]
+        self.assertEqual(len(self.registered()["SessionStart"]), 1 + len(gt_ss))
         self.assertFalse(old.exists(), "superseded gt cache left behind")
         backups = list((self.home / ".claude" / "golden-thread" / "backups").glob("settings.json.*"))
         self.assertTrue(backups, "pre-existing settings.json was not backed up")

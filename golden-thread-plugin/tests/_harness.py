@@ -187,6 +187,30 @@ class Sandbox(unittest.TestCase):
                          f"{msg}\nexit {proc.returncode}\nstdout:\n{proc.stdout}\nstderr:\n{proc.stderr}")
 
     # -- fixtures ---------------------------------------------------------------
+    def pin_hostname(self, name):
+        """Make socket.gethostname() return `name` in every Python this test starts.
+
+        A test that samples the real hostname at import and compares it against a value a
+        subprocess resolves later is racing the network: on 2026-09-28 DHCP renamed the
+        machine mid-run and two suites failed in parallel for that reason alone. Pin the
+        value instead -- a sitecustomize.py on PYTHONPATH, which every python3 child
+        (hooks and git hooks included) imports at startup. Call again to RENAME the
+        machine between two commands, which is how the rename defect is reproduced.
+        Returns the pinned name so a test can assert against exactly what the tool saw.
+        """
+        shim = self.tmp / "hostname-shim"
+        shim.mkdir(exist_ok=True)
+        (shim / "sitecustomize.py").write_text(
+            "import os, socket\n"
+            "if os.environ.get('GT_TEST_HOSTNAME'):\n"
+            "    socket.gethostname = lambda: os.environ['GT_TEST_HOSTNAME']\n",
+            encoding="utf-8")
+        self.env["PYTHONPATH"] = os.pathsep.join(
+            [str(shim)] + [p for p in self.env.get("PYTHONPATH", "").split(os.pathsep)
+                           if p and p != str(shim)])
+        self.env["GT_TEST_HOSTNAME"] = name
+        return name
+
     def config(self, **values):
         """Write ~/.claude/vault-config.json in the sandbox home."""
         p = self.home / ".claude" / "vault-config.json"

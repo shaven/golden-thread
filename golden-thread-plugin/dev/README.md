@@ -15,7 +15,10 @@ dev/release-check.sh           # everything
 dev/release-check.sh --quick   # skip the test harness and selftest
 ```
 
-The exit code is the number of failed steps. Each step exists because something once
+The exit code is the number of failed steps. Every run, full or `--quick`, ends by filing a dated
+verdict row in `<vault>/.gt/checks/release.md` (`gt_check_report.py --check release`): passed or
+not, N of M checks, the commit, and the names of failed steps. Set `GT_GATE_NO_REPORT=1` to skip
+it (a test harness, a scratch run). Filing never changes the exit code. Each step exists because something once
 shipped broken while everything looked fine.
 
 | Step | Script | What it refuses to let through |

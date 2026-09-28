@@ -7,7 +7,6 @@ the 900000s, and a real kill path is only ever exercised with os.kill patched.
 """
 import json
 import os
-import socket
 import sys
 import time
 import types
@@ -92,6 +91,7 @@ class WorkersCli(Sandbox):
         ps.chmod(0o755)
         self.env["PATH"] = str(self.bin) + os.pathsep + self.env.get("PATH", "")
         self.registry = self.home / ".claude" / "golden-thread" / "workers.jsonl"
+        self.pin_hostname("gt-test-host")
 
     def check(self, *extra, **kw):
         p = self.py(TOOL, "check", *extra, **kw)
@@ -117,7 +117,11 @@ class WorkersCli(Sandbox):
         self.assertOk(p)
         rows = [json.loads(l) for l in self.registry.read_text().splitlines()]
         self.assertEqual({r["pid"] for r in rows}, {900001, 900002})
-        self.assertEqual(rows[0]["host"], socket.gethostname())
+        # Pinned, not sampled a second time (the 2026-09-28 rename race): the label is what
+        # the tool was told, and the identity is the machine id it created.
+        self.assertEqual(rows[0]["host"], "gt-test-host")
+        mid = (self.home / ".claude" / "golden-thread" / "machine-id").read_text().strip()
+        self.assertEqual(rows[0]["machine"], mid)
         self.assertEqual(rows[0]["why"], "crunching the numbers")
         out = self.check()
         self.assertIn("ACTIVE CLAUDE WORKER: python3 crunch.py", out)
@@ -126,6 +130,26 @@ class WorkersCli(Sandbox):
         self.assertIn("declared for: indexing home", out)
         self.assertIn("NOT happening", out)
         self.assertNotIn("UNDECLARED", out)
+
+    def test_a_declaration_survives_a_hostname_change(self):
+        """2026-09-28: DHCP renamed the machine. Keyed on the hostname, every declaration
+        made under the old name became someone else's -- the worker came back as an
+        UNDECLARED alert and the next prune deleted the declaration. Keyed on the machine id
+        it is still this machine's."""
+        self.assertOk(self.py(TOOL, "declare", "900002", "crunching"))
+        self.pin_hostname("printer-room.lan")
+        out = self.check()
+        self.assertIn("crunching", out)
+        self.assertNotIn("UNDECLARED", out)
+        self.assertIn("900002", self.registry.read_text(), "the prune dropped a live declaration")
+
+    def test_a_declaration_from_another_machine_id_is_not_ours(self):
+        row = {"pid": 900002, "host": "gt-test-host", "why": "theirs",
+               "machine": "99999999-8888-4777-8666-555555555555"}
+        self.registry.parent.mkdir(parents=True, exist_ok=True)
+        self.registry.write_text(json.dumps(row) + "\n")
+        self.assertIn("UNDECLARED but ACTIVE — pid 900002", self.check(),
+                      "the same hostname on another machine vouched for a pid here")
 
     def test_clean_says_so_and_counts(self):
         self.ps_out.write_text(PS.splitlines()[0] + "\n")

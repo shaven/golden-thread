@@ -124,6 +124,15 @@ class GitIsThePrimarySource(DailyBase):
         self.assertIn("alpha", out)
         self.assertNotIn("[p:: 2]", out, "the task's dataview fields were not stripped")
 
+    def test_a_crash_is_could_not_run_never_nothing_to_report(self):
+        """Python's uncaught-exception exit is 1 -- this job's "nothing recorded", which
+        gt_schedule treats as a normal night. That is how the weekly lint's crashes went
+        unseen (2026-09-28), so a crash here exits 3."""
+        self.commit("first", {"Projects/alpha/README.md": "# alpha\n"})
+        (self.vault / "Daily Notes" / ("%s.md" % DATE)).mkdir()   # unwritable as a file
+        proc = self.run_daily(expect=3)
+        self.assertIn("COULD NOT RUN", proc.stderr)
+
     def test_a_day_with_nothing_recorded_exits_one_and_writes_nothing(self):
         """"Nothing happened" and "I could not tell" are different answers."""
         proc = self.py(DAILY, "--vault", self.vault, "--date", "2020-01-01")

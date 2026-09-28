@@ -30,6 +30,10 @@ each shipped item where it ended up.
   hooks/*.sh        -> declared in HOOK_REGISTRATIONS, AND present in settings.json
                        with a command path that exists
   HOOK_DIR_SCRIPTS  -> copied into ~/.claude/golden-thread/hooks/
+  gt_schedule.JOBS  -> (0.17.2) every scheduled job's script is in HOOK_DIR_SCRIPTS, and so
+                       reached the hooks dir: gt_schedule runs the installed copy and refuses
+                       a job whose script is not there. The `daily` job and gt_sweep's promised
+                       weekly job both shipped uninstallable because nothing asked (2026-09-28).
   skills/*/SKILL.md -> present in the installed plugin cache
   templates/tools/  -> seeded into <vault>/Projects/golden-thread/tools/
   core-rules/*.md   -> installed into the vault's core-rules/
@@ -185,6 +189,40 @@ def module_findings(repo, home, comp, gt_version=None):
     return problems
 
 
+def schedule_findings(version_dir, comp):
+    """Every gt_schedule.JOBS script must be in HOOK_DIR_SCRIPTS. (0.17.2)
+
+    The table is READ from the release's gt_schedule.py, never listed here, so a job added
+    tomorrow is covered the day it ships. gt_schedule.do_install refuses a job whose script is
+    not in ~/.claude/golden-thread/hooks/, which only HOOK_DIR_SCRIPTS puts there -- so a gap
+    here is a job that can never be installed, however clean every other check reads. Found
+    2026-09-28: `daily` had been in JOBS since 0.17.1 with gt_daily.py in no install list."""
+    import importlib.util
+    path = Path(version_dir) / "scripts" / "gt_schedule.py"
+    if not path.is_file():
+        return []                                  # a release before the scheduler
+    try:
+        spec = importlib.util.spec_from_file_location("gt_schedule_cov", str(path))
+        mod = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(mod)
+        jobs = dict(mod.JOBS)
+    except Exception as exc:                       # noqa: BLE001 -- unreadable is a finding
+        return ["gt_schedule.py could not be read for its JOBS table (%s) -- whether every "
+                "scheduled job can be installed is unknown" % exc]
+    installed = set(getattr(comp, "HOOK_DIR_SCRIPTS", ()))
+    problems = []
+    for job, row in sorted(jobs.items()):
+        script = row[0]
+        if script not in installed:
+            problems.append("scheduled job %r runs %s, which is not in HOOK_DIR_SCRIPTS -- "
+                            "install.sh never puts it in the hooks dir, so gt_schedule can "
+                            "never install the job" % (job, script))
+        elif not (Path(version_dir) / "scripts" / script).is_file():
+            problems.append("scheduled job %r runs scripts/%s, which does not ship"
+                            % (job, script))
+    return problems
+
+
 def module_cache_findings(repo, home, comp, gt_version=None):
     """ON module -> its skills and scripts are in its plugin cache; OFF -> no cache at all."""
     if not hasattr(comp, "module_detail"):
@@ -250,7 +288,8 @@ def check(version_dir, keep=False, module_matrix=True):
     version_dir = Path(version_dir).resolve()
     plugin_root = version_dir.parent.parent
     comp = load_components(version_dir)
-    problems = []
+    # Static, so it is asserted even when the install below fails outright.
+    problems = schedule_findings(version_dir, comp)
 
     sandbox = Path(tempfile.mkdtemp(prefix="gt-wiring-"))
     try:

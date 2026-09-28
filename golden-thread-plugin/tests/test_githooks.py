@@ -22,14 +22,18 @@ And one hook with the OPPOSITE contract, in PreCommitCredentialGate below:
 import json
 import os
 import shutil
-import socket
 import unittest
 
 from _harness import Sandbox, PYTHON, SCRIPTS
 
 SID = "abcdef12-3456-7890-abcd-ef1234567890"
-HOST = socket.gethostname()
-HOST = HOST[:-6] if HOST.endswith(".local") else HOST
+# PINNED, never sampled. This was socket.gethostname() at import, compared against the
+# label the hook subprocess resolved later; on 2026-09-28 DHCP renamed the machine between
+# the two (laptop.office.lan -> printer-room.lan) and the trailer assertion failed. The
+# harness fixes what every child python sees, so the trailer is checked against exactly the
+# name the hook was given -- and `.local` is included so its stripping stays tested.
+PINNED_HOST = "gt-test-host.local"
+HOST = "gt-test-host"
 
 
 class GitHooksTest(Sandbox):
@@ -42,6 +46,7 @@ class GitHooksTest(Sandbox):
         self.ledger = self.vault / ".git" / "gt-edits.jsonl"
         self.env["GT_SESSION_ID"] = SID
         self.env["GIT_EDITOR"] = "true"
+        self.pin_hostname(PINNED_HOST)
         (self.vault / "tracked.md").write_text("v1\n")
         self.git("add", "-A")
         self.git("commit", "-q", "-m", "init")

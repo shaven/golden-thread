@@ -1,12 +1,33 @@
 # Golden Thread Plugin
 
 > **Reader:** someone who has installed it and wants the reference
-> **Claims last checked against the code:** 2026-09-28 (gt 0.17.1) — see *The documents, and what belongs in each* in [`CLAUDE.md`](../CLAUDE.md).
+> **Claims last checked against the code:** 2026-09-28 (gt 0.17.2) — see *The documents, and what belongs in each* in [`CLAUDE.md`](../CLAUDE.md).
 
 A Claude Code plugin that turns an Obsidian vault into the single source of truth for all AI memory across every project and every session.
 
 
 > [!IMPORTANT]
+> **0.17.2 has three themes.** The detail is in the MANUAL; what changed and why is in the CHANGELOG.
+>
+> - **Surfacing at session start.** A new `SessionStart` hook, `gt_surface.py`, shows what is
+>   waiting: a MUST DO block from `<vault>/deadlines.md` (overdue 🔴, due within 14 days 🟡),
+>   every handoff nobody has dealt with, a count of `p:: 1` tasks waiting on you, and the state
+>   written before a compaction. One line per item, never a body; it never writes the vault.
+>   Settings `surface`, `handoff_surface`, `task_surface`. See *What you see at session start*.
+> - **Tasks and handoffs: create, see, handle.** `/gt:gt-task` writes a well-formed task line,
+>   optionally tied to a page or source; `/gt:gt-task-list` and `/gt:gt-handoff-list` show what
+>   is waiting without opening anything; `/gt:gt-task-handle` and `/gt:gt-handoff-handle` work
+>   through it — done, drop with a reason, or defer **to a date**. Nothing is deleted. A handoff
+>   now repeats at session start until it is handled or deferred. See *Tasks and handoffs*.
+> - **Wiring fixes.** Session claims are keyed on a machine id, not a hostname a DHCP lease can
+>   change (Core rule 1). Scheduled jobs install from the hooks dir, a new `sweep` job exists (its
+>   pre-flight currently refuses), a crashed scheduled lint says COULD NOT RUN, `/gt:gt-doctor`
+>   checks the scheduled jobs, and `/gt:gt-allin` also runs `secrets`, `runbooks`, the repo's
+>   `tests`, `validations` and, with gt-wiki, `wiki`; the release gate files its verdict in the vault. macOS still refuses calendar-fired runs a CloudStorage vault — reported, not fixed.
+>
+> After installing, restart Claude Code and run `/gt:gt-upgrade` so the vault gets `gt_task.py`.
+
+> [!NOTE]
 > **0.16.2: the Core rules are re-asserted after a compaction.** Hook-added context is
 > *summarised* during a compaction rather than re-injected from disk, so
 > `inject_core_rules.sh` is now registered on `SessionStart` with matcher `compact` as well
@@ -48,7 +69,7 @@ Facts move up the hierarchy as they prove themselves general. They never move ba
 
 ---
 
-## Twenty-Three Skills (plus modules)
+## Twenty-Eight Skills (plus modules)
 
 ### Setup
 
@@ -61,11 +82,23 @@ Facts move up the hierarchy as they prove themselves general. They never move ba
 
 | Command | What it does |
 |---|---|
-| `/gt:gt-open` | Load a project at the start of a session. Reads all project docs in order (idea → research → decisions → design → spec → runbook → memory), then summarizes the project state and asks where to pick up. |
+| `/gt:gt-open` | Load a project at the start of a session. Reads all project docs in order (idea → research → decisions → design → spec → runbook → memory), then summarizes the project state and asks where to pick up. Since 0.17.2 it also names that project's waiting handoffs, without reading them. |
 | `/gt:gt-route` | Mid-session check: what has this session actually become, where does its output belong, and is it happening in the right project, harness and model? Serves the middle of a session, where `gt-open` cannot see yet and `gt-work` sees too late. Cheap and repeatable — not a gate. |
-| `/gt:gt-work` | Write back session findings at the end of a session. Appends to `research.md`, adds ADRs to `decisions.md`, refines `design.md`, creates `spec.md` when design is complete, and flags content for PROTOCOL.md. |
+| `/gt:gt-work` | Write back session findings at the end of a session. Appends to `research.md`, adds ADRs to `decisions.md`, refines `design.md`, creates `spec.md` when design is complete, and flags content for PROTOCOL.md. Offers a handoff for what did not reach a file — which the next session is now shown at start. |
 | `/gt:gt-ingest` | Bulk-import an existing project's memory files, CLAUDE.md rules, and notes into the vault. External sources are stored immutably in `Sources/` before being synthesized into Knowledge pages. |
 | `/gt:gt-review` | Empty the inbox. Reads `<vault>/INBOX.md` first — the capture point any session drops a line into — and then Obsidian daily notes, but only if the vault is configured for them. Routes each captured item into a tracked project. |
+
+### Tasks and Handoffs
+
+Create, see, handle — seeing never loads a project, and nothing is deleted.
+
+| Command | What it does |
+|---|---|
+| `/gt:gt-task` | Create a task the way a developer drops a TODO into code: one well-formed line in the project README's `## Tasks`, written by the vault tool `gt_task.py`, optionally tied to a `[[page]]`, wiki page or source with `[ref:: …]` (which must resolve). Refuses a README another live session has claimed. |
+| `/gt:gt-task-list` | Show open tasks, filtered — `<slug>`, `p1`/`p2`/`p3`, `mine`, `overdue`, `stale`, `deferred`, `ref:<text>` — without loading any project's context. Read-only. |
+| `/gt:gt-task-handle` | Work through a filtered set one at a time: done, drop (reason required), defer to a future date (hidden from lists, ranking and escalation until then), or keep. IDs are refused if the line changed since it was listed. |
+| `/gt:gt-handoff-list` | List the handoffs still waiting — open, or whose deferral date has come — one line each, across every project or one, without opening any of them. Read-only; `--all` shows every state. |
+| `/gt:gt-handoff-handle` | Deal with one waiting handoff: pick it, load only it and the task lines citing it, settle each open item (done, keep as a task, drop with a reason), then mark it handled or deferred to a date. |
 
 ### Knowledge Management
 
@@ -86,17 +119,17 @@ Facts move up the hierarchy as they prove themselves general. They never move ba
 | Command | What it does |
 |---|---|
 | `/gt:gt-upgrade` | Bring an existing vault up to the installed release: run the migrations it has not had, take the release's changes into `PROTOCOL.md` and `CONVENTIONS.md` without losing local edits, add newly shipped Core rules, stamp the vault. Rehearse with `--dry-run`; it refuses a dirty tree and backs up before applying. |
-| `/gt:gt-doctor` | One report for the whole install: plugin version, component drift, hook wiring, pending vault migrations, stray workers, unpushed commits, publish-destination drift and a lint summary. Exit 2 means a check *could not run*, which is deliberately distinct from clean. |
+| `/gt:gt-doctor` | One report for the whole install: plugin version, component drift, hook wiring, the vault's release stamp and pending migrations, the scheduled jobs' last exits, stray workers, unpushed commits, publish-destination drift and a lint summary. Exit 2 means a check *could not run*, which is deliberately distinct from clean. |
 | `/gt:gt-scan` | Scan code against the language definitions in effect on this machine — naming conventions and encoding, per language, all of it from definition packs rather than from the script, so a contributed language pack teaches it a new language with no code change. An aggregator over leaf scanners: it reports how many members RAN alongside what they found. |
 | `/gt:gt-optimize` | Find vault content that costs context and earns nothing back: a fact duplicated across memory files, an index row pointing at a file that is gone, a `global-memory/` file over budget, a relative date in a file that will be read months later. Reports only — it never edits your notes. |
-| `/gt:gt-allin` | Every check in one command — scan, lint, the optimize report, install health — reporting how many members actually ran, not just what they found. Never pushes and never applies a change. |
+| `/gt:gt-allin` | Every check in one command — scan, lint, the optimize report, install health, the credential scan, the runbook lint, and the wiki lint while gt-wiki is installed — reporting how many members actually ran, not just what they found. Never pushes and never applies a change. |
 | `/gt:gt-allin-commit` | The separate, deliberate act: commit once the checks pass and a test receipt covers every staged file. Refuses on the default branch, refuses without evidence, and never pushes — a commit is reversible, a push is not. |
 | `/gt:gt-handoff` | Write the next session a handoff it can trust: facts gathered from the project and repository, each labelled with its source and whether it was actually verified, plus the questions a script cannot answer. The design narrative is left for the person who did the work. |
 | `/gt:gt-context` | Render the vault's model-reachable definitions for a session to read, inside an explicit untrusted-data envelope. The Tier D slots' first consumer. The envelope is **not a security control** — it provides identifiability, not protection; see *Packs and the registry* below. |
 | `/gt:gt-validation` | Record what a validation established, and what it could not determine, stamped with the file's content hash so the definition expires when the file changes. |
 | `/gt:gt-lint` | Audit the vault for structural problems: broken wikilinks, orphaned pages, missing index entries, unlisted memory files, Knowledge pages citing superseded sources, stale pages, and Core rules that are stored but not enforced. Applies fixes with your approval. |
 | `/gt:gt-runbook-lint` | Scan all project `runbook.md` files for content that has drifted into multiple runbooks. Classifies duplicated content by type and routes it to the right shared layer (PROTOCOL.md, Knowledge page, or repo CLAUDE.md) via `gt-promote`. |
-| `/gt:gt-settings` | View and change what Golden Thread does automatically. Eight settings ship with gt — `component_updates`, `version_check`, `orphan_check`, `push_check`, `protected_paths`, `test_gate`, `parallel_work`, `parallel_max` — plus every setting an installed module adds (`report_card`, `closeout_check`, `watch`). Every automatic behaviour can be switched off. |
+| `/gt:gt-settings` | View and change what Golden Thread does automatically. Eleven settings ship with gt — `component_updates`, `version_check`, `orphan_check`, `push_check`, `surface`, `handoff_surface`, `task_surface`, `protected_paths`, `test_gate`, `parallel_work`, `parallel_max` — plus every setting an installed module adds (`report_card`, `closeout_check`, `watch`). Every automatic behaviour can be switched off. |
 
 ### Modules
 
@@ -320,13 +353,14 @@ bash install.sh --without demo      # leave one out; remembered
 Re-running it upgrades from any older release to the newest, including vault upgrades when your
 vault is committed.
 
-A full install writes **eleven hook registrations across ten scripts** into
+A full install writes **fourteen hook registrations across twelve scripts** into
 `~/.claude/settings.json`, from one declaration (`HOOK_REGISTRATIONS` in `gt_components.py`)
 that the installer registers from and the drift check compares against — so they cannot
-disagree about what "wired" means. `install.sh` owns five of them: the four `SessionStart`
-reporters (`gt_components.py`, `gt_workers.py`, `gt_version_check.py`, `gt_push_check.py`)
-and the `guard_protected_paths.sh` `PreToolUse` guard, which is installer-owned precisely
-because it is tied to no Core rule and needs no vault to be wired.
+disagree about what "wired" means. `install.sh` owns eight of them: the five `SessionStart`
+reporters (`gt_components.py`, `gt_workers.py`, `gt_version_check.py`, `gt_push_check.py`
+and, since 0.17.2, `gt_surface.py`), `gt_state.py` twice (`UserPromptSubmit` and
+`PreCompact`), and the `guard_protected_paths.sh` `PreToolUse` guard, which is
+installer-owned precisely because it is tied to no Core rule and needs no vault to be wired.
 
 The other six are the **enforcement** tier, wired by `/gt:gt-init` — **six registrations
 across five scripts**, because since 0.16.2 `inject_core_rules.sh` is registered twice and
@@ -487,7 +521,7 @@ Python scripts can also be run directly from the command line. One variable, so 
 bump does not strand eight copied paths — from the release tree, or from the install:
 
 ```bash
-GT=golden-thread/0.17.1/scripts
+GT=golden-thread/0.17.2/scripts
 # installed instead:  GT=$(ls -d ~/.claude/plugins/cache/golden-thread-plugin/gt/*/scripts | sort -V | tail -1)
 
 # Create a new vault
@@ -570,7 +604,10 @@ python3 $GT/gt_code_review.py validate findings.json --root ~/Projects/my-projec
 python3 $GT/gt_code_review.py report findings.json --root ~/Projects/my-project \
   --vault ~/my-vault --ledger ~/my-vault/Projects/my-project/review-ledger.jsonl
 
-# Install, verify and remove gt's scheduled (launchd) jobs -- `daily` and `lint-weekly`.
+# Install, verify and remove gt's scheduled (launchd) jobs -- `daily`, `lint-weekly` and
+# `sweep` (0.17.2; the sweep's pre-flight currently refuses: the registry cannot find its
+# packs from the hooks dir). `/gt:gt-doctor`'s `schedule` check reads each installed job's
+# last exit.
 # `install` does not stop at writing a plist: it bootstraps the job, kickstarts it and
 # reads launchd's own exit code, because a job that works in a terminal can still fail
 # under launchd. `remove` is the rollback, which is what makes install safe to re-run.
@@ -579,6 +616,7 @@ python3 $GT/gt_schedule.py install daily --vault ~/my-vault \
   --repo ~/Projects/my-project --hour 22 --minute 0
 python3 $GT/gt_schedule.py check daily
 python3 $GT/gt_schedule.py remove daily
+python3 $GT/gt_schedule.py install sweep --vault ~/my-vault --repo ~/Projects/my-project
 
 # Write the day's FACTS into Daily Notes/<date>.md: tasks closed, commits per repo, event
 # counts, wiki item counts, an active span per project. Terse by design -- it does not
@@ -594,6 +632,19 @@ python3 $GT/gt_daily.py --vault ~/my-vault --check
 python3 $GT/gt_state.py check --margin 5 --json
 python3 $GT/gt_state.py write --reason "handing over"
 python3 $GT/gt_state.py show
+
+# Put what the last session left behind in front of this one (SessionStart, 0.17.2): the
+# MUST DO block from <vault>/deadlines.md every session, new handoffs and state files once
+# each. Never writes the vault. --dry-run leaves the "already shown" ledger untouched.
+python3 $GT/gt_surface.py check --dry-run
+python3 $GT/gt_surface.py must-do --vault ~/my-vault
+python3 $GT/gt_surface.py handoffs --project my-project --vault ~/my-vault   # what /gt:gt-open runs
+
+# Is a handoff still waiting on someone? open / deferred (to a DATE) / handled / history.
+# `list` never loads a handoff's body; `mark` appends to the handoff's status log.
+python3 $GT/gt_handoff_status.py list --vault ~/my-vault [--project my-project] [--all]
+python3 $GT/gt_handoff_status.py mark Projects/my-project/handoff/2026-09-28-handoff.md \
+  --vault ~/my-vault --status deferred --until 2026-10-12 --reason "after the migration"
 
 # Move a note DOWN the cost ladder without deleting it. /gt:gt-promote moves knowledge up
 # by how SETTLED it is; this moves it down by how often it is PAID FOR -- global-memory/

@@ -20,8 +20,10 @@ cd "$(dirname "$0")/.."
 ROOT="$PWD"
 QUICK=no; [ "${1:-}" = "--quick" ] && QUICK=yes
 FAILS=0
-ok()   { printf 'ok    %s\n' "$1"; }
-bad()  { printf 'FAIL  %s\n' "$1"; FAILS=$((FAILS+1)); }
+OKS=0
+FAILED_STEPS=""
+ok()   { printf 'ok    %s\n' "$1"; OKS=$((OKS+1)); }
+bad()  { printf 'FAIL  %s\n' "$1"; FAILS=$((FAILS+1)); FAILED_STEPS="${FAILED_STEPS:+$FAILED_STEPS; }$1"; }
 step() { printf '\n== %s\n' "$1"; }
 # A check that CANNOT RUN here is neither a pass nor a failure and must not print as either.
 # It does not raise the exit code, but it says so every time, so a clean run never quietly
@@ -431,5 +433,26 @@ if [ $FAILS -eq 0 ]; then
   fi
 else
   echo "RELEASE CHECK FAILED — $FAILS step(s)"
+fi
+
+# FILE THE VERDICT IN THE VAULT (owner, 2026-09-28: "write the check ... to the vault for a
+# release"). Until 0.17.2 a release's gate result lived in this terminal and in a
+# machine-local test receipt; the vault got one line in log.md at publish, and only if
+# publish ran. gt_check_report keeps a dated row per run under <vault>/.gt/checks/release.md
+# -- verdict, how many of how many checks passed, the commit, and the NAMES of failed steps,
+# never their output. A --quick run is filed too, labelled as quick, because "the gate was run
+# and failed" is history worth having; it is still never a test receipt. Bookkeeping only:
+# no vault, or a failed write, never changes this script's exit code.
+GATE_VAULT=$(python3 -c "import json,os;print(json.load(open(os.path.expanduser('~/.claude/vault-config.json')))['vault_path'])" 2>/dev/null || true)
+if [ -n "$GATE_VAULT" ] && [ -d "$GATE_VAULT" ] && [ -z "${GT_GATE_NO_REPORT:-}" ]; then
+  if [ $FAILS -eq 0 ]; then GATE_VERDICT=clean; else GATE_VERDICT=findings; fi
+  if [ "$QUICK" = no ]; then GATE_KIND="full gate"; else GATE_KIND="quick gate (no tests, no selftest)"; fi
+  python3 "$GT/scripts/gt_check_report.py" record --vault "$GATE_VAULT" --check release \
+    --verdict "$GATE_VERDICT" --count "$FAILS" \
+    --scope "$PLABEL — $GATE_KIND: $OKS of $((OKS+FAILS)) checks passed" \
+    --ref "$(git rev-parse --short HEAD 2>/dev/null || echo unknown)$( [ -n "$(git status --porcelain 2>/dev/null)" ] && echo '+uncommitted')" \
+    ${FAILED_STEPS:+--detail "failed: $FAILED_STEPS"} >/dev/null 2>&1 \
+    && echo "filed in the vault: .gt/checks/release.md" \
+    || echo "note: could not file the gate verdict in the vault (the gate result above stands)"
 fi
 exit $FAILS

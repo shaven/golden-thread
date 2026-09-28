@@ -8,8 +8,10 @@ Contract:
   * Deny a Write/Edit/MultiEdit/NotebookEdit whose target is inside the vault when
     another LIVE session's file in Projects/golden-thread/sessions/ claims that path
     (exact file, or a claimed directory prefix).
-  * Liveness: same host -> os.kill(pid, 0) decides; otherwise the last_execution
+  * Liveness: same MACHINE -> os.kill(pid, 0) decides; otherwise the last_execution
     heartbeat must be <= 30 minutes old. The caller's own session id never blocks it.
+    "Same machine" is the `machine:` id against ~/.claude/golden-thread/machine-id
+    (0.17.2); only a file with no id (older gt) is judged by its `host:` label.
   * FAIL OPEN: malformed input, other tools, no vault, target outside the vault, no
     sessions dir, python unavailable -> no output, exit 0.
 """
@@ -17,7 +19,6 @@ import datetime
 import json
 import os
 import shutil
-import socket
 import subprocess
 import sys
 import unittest
@@ -26,7 +27,14 @@ from _harness import Sandbox, HOOKS, SCRIPTS, PYTHON
 
 SESSIONS = "Projects/golden-thread/sessions"
 TS_FMT = "%Y-%m-%d %H:%M:%S %Z"
-HOST = socket.gethostname()
+# PINNED, never sampled. This was socket.gethostname() at import, compared against what
+# the guard subprocess resolved later; on 2026-09-28 DHCP renamed the machine between the
+# two and test_with_no_argument_it_still_denies_a_claimed_file got empty output. The race
+# was real and so was the defect behind it (the guard keyed on the hostname), so the value
+# the guard sees is now fixed by the harness rather than hoped to hold still.
+HOST = "gt-test-host.lan"
+MACHINE = "11111111-2222-4333-8444-555555555555"
+OTHER_MACHINE = "99999999-8888-4777-8666-555555555555"
 
 
 def local_stamp(minutes_ago=0):
@@ -47,6 +55,9 @@ class GuardTestBase(Sandbox):
         # this work by accident.
         shutil.copy2(SCRIPTS / "gt_paths.py", self.hooks / "gt_paths.py")
         self.env["PYTHONDONTWRITEBYTECODE"] = "1"
+        self.pin_hostname(HOST)
+        mid = self.home / ".claude" / "golden-thread" / "machine-id"
+        mid.write_text(MACHINE + "\n", encoding="utf-8")
 
     def guard_raw(self, stdin, env=None):
         proc = self.sh(self.hooks / "guard_session_claims.sh", input=stdin, env=env)
@@ -87,8 +98,10 @@ class GuardTest(GuardTestBase):
         self.target = self.vault / "Projects" / "alpha" / "research.md"
 
     def session(self, sid="other", claims=("Projects/alpha/research.md",), host="elsewhere",
-                pid=None, last_execution=None, name=None):
+                pid=None, last_execution=None, name=None, machine=None):
         fm = [f"session_id: {sid}", "task: testing the guard"]
+        if machine is not None:
+            fm.append(f"machine: {machine}")
         if last_execution is not None:
             fm.append(f"last_execution: {last_execution}")
         if pid is not None:
@@ -118,6 +131,53 @@ class GuardTest(GuardTestBase):
     def test_live_pid_wins_over_an_old_heartbeat(self):
         self.session(host=HOST, pid=os.getpid(), last_execution=local_stamp(600))
         self.assertDeny(self.guard(self.target), "a busy session stays live while its pid runs")
+
+    # -- which machine: by id, not by hostname (2026-09-28) --------------------------------
+    def test_a_renamed_machine_still_judges_its_own_pids(self):
+        """THE BUG. A claim written here under the old hostname, by a session whose pid is
+        running but whose heartbeat is 10 hours old (a busy session stays live while its pid
+        runs). Keyed on the hostname, the rename un-judged the pid and the claim lapsed in
+        silence. Keyed on the machine id, it still denies -- and the deny says so."""
+        self.session(host="laptop.office.lan", machine=MACHINE, pid=os.getpid(),
+                     last_execution=local_stamp(600))
+        hso = self.guard(self.target)
+        self.assertDeny(hso, "a hostname change disarmed this machine's own claim")
+        reason = hso["permissionDecisionReason"]
+        self.assertIn("laptop.office.lan", reason)
+        self.assertIn(f"now calls itself '{HOST}'", reason,
+                      "the rename must be reported, not silently absorbed")
+
+    def test_another_machine_under_the_same_hostname_is_not_this_machine(self):
+        """Same name, different id: its pid means nothing here. Recorded as a pid this
+        machine sees DEAD, with a fresh heartbeat -- if the name were trusted the dead pid
+        would release the claim; as another machine's, the heartbeat keeps it live."""
+        self.session(host=HOST, machine=OTHER_MACHINE, pid=self.dead_pid(),
+                     last_execution=local_stamp(1))
+        self.assertDeny(self.guard(self.target),
+                        "another machine's claim was judged by a pid on this one")
+
+    def test_legacy_file_with_no_machine_id_keeps_its_claims_by_label(self):
+        """Migration, not a flag day: a file written by gt <= 0.17.1 carries no machine id.
+        While its host label still matches, it is this machine's exactly as before."""
+        self.session(host=HOST, pid=os.getpid(), last_execution=local_stamp(600))
+        self.assertDeny(self.guard(self.target))
+
+    def test_a_pid_hosting_a_newer_session_does_not_keep_an_older_one_live(self):
+        """A pid is a PROCESS, not a session: 2026-09-28, pid 91999 hosted several sessions
+        in turn. A finished session whose file records the pid we are running inside, with
+        a stale heartbeat, is not live; the same file with a fresh heartbeat still is."""
+        self.session(sid="older", machine=MACHINE, host=HOST, pid=os.getpid(),
+                     last_execution=local_stamp(120))
+        env = {"CLAUDE_PID": str(os.getpid()), "CLAUDE_CODE_SESSION_ID": "newer"}
+        self.assertAllow(self.guard(self.target, env=env),
+                         "our own pid vouched for a session it no longer hosts")
+        self.session(sid="older", machine=MACHINE, host=HOST, pid=os.getpid(),
+                     last_execution=local_stamp(1))
+        self.assertDeny(self.guard(self.target, env=env))
+        # Control: a different process's running pid still decides on its own.
+        self.session(sid="older", machine=MACHINE, host=HOST, pid=os.getpid(),
+                     last_execution=local_stamp(120))
+        self.assertDeny(self.guard(self.target, env={"CLAUDE_CODE_SESSION_ID": "newer"}))
 
     def test_fresh_heartbeat_from_another_host_denies(self):
         self.session(last_execution=local_stamp(5))

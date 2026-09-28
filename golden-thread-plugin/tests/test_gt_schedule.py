@@ -79,12 +79,80 @@ class ScheduleTest(Sandbox):
         self.assertIn("install.sh", proc.stderr, "the refusal does not say how to fix it")
 
     def test_a_normal_outcome_is_not_reported_as_a_failure(self):
-        """The weekly lint exits 1 whenever it finds something, which is most weeks. Calling
-        that broken trains you to ignore the check — it did exactly that for a few minutes on
-        2026-09-27, before BENIGN_EXITS existed."""
+        """gt_daily exits 1 for a day with nothing recorded. Calling that broken trains you to
+        ignore the check — it did exactly that for a few minutes on 2026-09-27, before
+        BENIGN_EXITS existed."""
         m = self.mod()
-        self.assertIn("1", m.BENIGN_EXITS["lint-weekly"])
         self.assertIn("1", m.BENIGN_EXITS["daily"])
+
+    def test_a_crash_code_is_never_benign_for_the_weekly_lint(self):
+        """SUPERSEDED ASSERTION, inverted 2026-09-28. This asserted "1" was benign for
+        lint-weekly on the belief that it exits 1 on findings. It never did (it returns 0 on
+        every path it chooses); 1 was Python's uncaught-exception code, and treating it as
+        normal hid three Mondays of PermissionError crashes."""
+        m = self.mod()
+        self.assertEqual(m.BENIGN_EXITS["lint-weekly"], {"0"})
+        self.assertNotIn("3", m.BENIGN_EXITS["sweep"], "could-not-run is not a normal sweep")
+
+    def fake_agents(self, m, *jobs, code="0", why=None):
+        """Point the module at a sandbox LaunchAgents and stub launchd -- the real domain is
+        the developer's (see SCOPE NOTE), so these tests never ask it anything."""
+        m.AGENTS = self.tmp / "LaunchAgents"
+        m.HOOKS = self.tmp / "hooks"
+        m.AGENTS.mkdir(parents=True, exist_ok=True)
+        m.HOOKS.mkdir(parents=True, exist_ok=True)
+        for job in jobs:
+            m.plist_path(job).write_bytes(b"")
+            (m.HOOKS / m.JOBS[job][0]).write_text("")
+        m.last_exit = lambda job: (code, why)
+
+    def test_job_status_uses_the_benign_table(self):
+        m = self.mod()
+        self.fake_agents(m, "daily", "lint-weekly", code="1")
+        self.assertEqual(m.job_status("daily")[1], [], "exit 1 is a normal night for daily")
+        problems = m.job_status("lint-weekly")[1]
+        self.assertTrue(any("last exit code = 1" in p for p in problems), problems)
+
+    def test_only_installed_jobs_are_listed(self):
+        """A job never installed is a choice; the doctor must not report it."""
+        m = self.mod()
+        self.fake_agents(m, "lint-weekly")
+        self.assertEqual(m.installed_jobs(), ["lint-weekly"])
+
+    def test_the_sweep_job_names_its_vault_and_tree(self):
+        """Under launchd the cwd is `/`; gt_sweep's --path defaults to the cwd."""
+        m = self.mod()
+        doc = m.build_plist("sweep", "/tmp/v", ["/tmp/tree"], *m.JOBS["sweep"][1:4])
+        args = doc["ProgramArguments"]
+        self.assertEqual(args[args.index("--vault") + 1], "/tmp/v")
+        self.assertEqual(args[args.index("--path") + 1], "/tmp/tree")
+        self.assertEqual(doc["StartCalendarInterval"],
+                         {"Hour": 7, "Minute": 30, "Weekday": 1})
+        lint = m.JOBS["lint-weekly"]
+        self.assertNotEqual((lint[1], lint[2]), (7, 30), "sweep collides with lint-weekly")
+
+    def install_sweep_script(self, *extra):
+        hooks = self.home / ".claude" / "golden-thread" / "hooks"
+        hooks.mkdir(parents=True, exist_ok=True)
+        for n in ("gt_sweep.py",) + extra:
+            (hooks / n).write_text((SCRIPTS / n).read_text())
+
+    def test_sweep_install_needs_exactly_one_tree(self):
+        self.install_sweep_script()
+        proc = self.py(SCHED, "install", "sweep", "--vault", str(self.tmp))
+        self.assertEqual(proc.returncode, 2, proc.stdout + proc.stderr)
+        self.assertIn("exactly one --repo", proc.stderr)
+
+    def test_sweep_install_refuses_when_its_members_cannot_run(self):
+        """gt_sweep alone in the hooks dir -- or its members without packs/ -- reports
+        could-not-run on every tree. The pre-flight refuses before anything is scheduled."""
+        self.install_sweep_script()
+        proc = self.py(SCHED, "install", "sweep", "--vault", str(self.tmp),
+                       "--repo", str(self.tmp))
+        self.assertEqual(proc.returncode, 1, proc.stdout + proc.stderr)
+        self.assertIn("CANNOT INSTALL", proc.stderr)
+        self.assertFalse((self.home / "Library" / "LaunchAgents").exists(),
+                         "a plist was written for a job that cannot run")
 
     def test_every_job_has_a_benign_exit_entry(self):
         """A job added without one would have its normal exit read as a failure."""

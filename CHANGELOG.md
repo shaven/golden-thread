@@ -11,6 +11,236 @@ release's own summary line, kept short rather than reconstructed after the fact.
 
 ---
 
+## gt 0.17.2 — 2026-09-28
+
+**gt could write everything a next session needs and put none of it in front of that session.
+Now it does — and it gives tasks and handoffs the same three verbs: create, see, handle.** A new
+SessionStart hook, `gt_surface.py`, shows what is overdue, what a previous session handed over and
+nobody has dealt with, how many urgent tasks wait on you, and what state was written before a
+compaction. Five new skills create, list and work through tasks and handoffs. Plus: session claims keyed
+on a machine id instead of a hostname a DHCP lease can change, and a loose-ends audit that found
+one scheduled job that could never install, one promised and never built, and a third that had
+failed for three weeks while its checker called the crash "findings".
+
+gt-demo, gt-watch, gt-report-card, gt-farm and gt-flow move to 0.17.2 with gt, as they do every
+release (content unchanged; `requires_gt` `>=0.17.2,<0.18.0`). gt-wiki stays at 0.2.3 and gt-usage
+at 0.1.3, on their own trains.
+
+### Tasks and handoffs
+
+The owner called the task list a black hole. Tasks were hand-typed into `## Tasks` in a format
+only a careful writer gets right, and read by nothing but the `TASKS.md` rollup when someone
+asked "what's next". Handoffs were worse: nothing recorded whether anyone had dealt with one.
+0.17.2 gives both the same shape — **create, see, handle** — and the same rules: nothing is
+deleted, a deferral needs a date, and being told costs no project context.
+
+**Tasks — `/gt:gt-task`, `/gt:gt-task-list`, `/gt:gt-task-handle`, and the vault tool
+`gt_task.py`** (`add`, `list`, `done`, `drop`, `defer`, `count`; seeded to
+`Projects/golden-thread/tools/`). In the owner's words: create a task "like a dev would add that
+to code", tied to "a vault entry or a wiki entry or a source entry"; handle them with a parameter;
+list "just shows them".
+
+- **One store, one parser.** Tasks stay in each README's `## Tasks`; `gt_task.py` parses with
+  `gt_tasks.py`'s own rules, so a task written by the tool ranks exactly like a hand-written one.
+  A second parser is how the 2026-09-03 multi-line field bug would come back. Existing
+  hand-written tasks are unchanged.
+- **New optional fields.** `[ref:: …]` ties a task to a `[[page]]` or vault path, and must
+  resolve — the tool refuses a ref to nothing. `[defer:: YYYY-MM-DD]` hides a task until that
+  date; `gt_tasks.py` now keeps a deferred task out of the ranking **and out of escalation**,
+  because the stale-P1 rule kept escalating tasks the owner had explicitly put off.
+- **IDs are `slug:LINE:HASH`**, and every write re-reads the line and refuses if the hash changed,
+  so an ID from a stale list can never close the wrong task.
+- **`drop` needs a reason; `defer` needs a future date and a reason.** Done and dropped tasks are
+  checked off with what settled them, so a dropped task reads as closed to `gt_events` and
+  `gt_daily`, and the line records `dropped: <reason>`. "Later, some time" is a drop, said out loud.
+- **Core rule 1 by the side door, closed.** `gt_task.py` asks `gt_session` whether another live
+  session has claimed the README and refuses if so; a tool that edited a claimed file because it
+  is not the Write tool would disarm the rule.
+- `--inbox` writes to `INBOX.md`, which `/gt:gt-review` routes as normal.
+
+This implements the feature request `2026-09-28-gt-task-add-list-handle`.
+
+**Handoffs — a status, `/gt:gt-handoff-list`, `/gt:gt-handoff-handle`.**
+
+The first cut of this release showed a new handoff **once** and then went quiet, on the
+`gt_closeout` lesson that a question asked every session trains people to scroll past it. The
+owner ruled the same day that the opposite failure is worse: a handoff scrolled past on a busy
+morning is as good as never written. So:
+
+- **An unhandled handoff is shown every session until it is handled or deferred** — one line
+  (path, project, age, open items), never its body, so being told costs no project context. The
+  separate "N open handoff tasks" line is gone; each handoff carries its own count.
+- **`gt_handoff_status.py`** gives each handoff a state. `open` keeps surfacing. `deferred` must
+  carry a future date and is open again on that date — "later, some time" is a decision to drop
+  it, recorded as `handled` with a reason. `handled` is marked by a person **or** follows when
+  every task citing the handoff's filename is checked off, so closing the last task needs no
+  second step. `history` is a pre-0.17.2 handoff with no status, over a week old and with no open
+  citing task, so the upgrade does not resurface every old handoff in the vault. `mark` appends
+  to the handoff's status log; nothing loads a handoff's body. `gt_handoff.py` now writes
+  `status: open` in frontmatter (with `type`, `project`, `created`).
+- **Setting `handoff_surface`** — `any` (default, every session start), `project` (only when
+  `/gt:gt-open` opens that project, via `gt_surface.py handoffs --project`), `manual` (only in
+  `/gt:gt-handoff-handle`). `any` is the default because under `project` a handoff waits until
+  someone happens to open its project.
+- **Two skills.** `/gt:gt-handoff-list` lists what is waiting and reads nothing.
+  `/gt:gt-handoff-handle` loads only the handoff you pick and the task lines citing it, walks
+  each item — done, keep as a task, drop with a reason — then marks it handled or deferred to a
+  date.
+
+`/gt:gt-open` now names the project's waiting handoffs without reading them. `/gt:gt-work` says
+the task it raises **must name the handoff's filename** — that is the join that lets the last
+closed task close the handoff.
+
+With the three task skills that makes **28 skills in gt**.
+
+### Surfacing at session start
+
+By 0.17.1 four things were written for "the next session" and read at the start of it by
+nothing: `gt_handoff.py`'s handoffs, `gt_state.py`'s state files, `gt-work`'s handoff tasks and
+the owner's own dated must-do items. Measured on 2026-09-28: the SessionStart hooks were
+gt_components, gt_workers, gt_version_check, gt_push_check, inject_core_rules and the report
+card, and none of them read a handoff, a state file, `TASKS.md` or any `p::`. Two credential
+rotations sat **15 days overdue** at the vault's top priority, worked around almost daily,
+because priority is a sort order and not an alarm — 60 `p:: 0` tasks existed across ten
+projects, and a 61st alerts nobody.
+
+| Shows | How often |
+|---|---|
+| **MUST DO** — rows of `<vault>/deadlines.md` overdue (🔴) or due within 14 days (🟡); later rows counted, not listed | every session, recomputed live from the row's date |
+| every handoff not yet dealt with — `Projects/<slug>/handoff/*.md`, and hand-written `handoff*.md` beside a project README — one line each: path, project, age, open items, never the body | every session **until handled or deferred to a date** (where: setting `handoff_surface`) |
+| one line counting `p:: 1` tasks waiting on you — overdue, open over a week (setting `task_surface`) | every session while any wait |
+| state files `gt_state.py` wrote | once each; after a compaction (`source: compact`) the newest one's content is handed to the model in full |
+
+`deadlines.md` is one vault-root table, `| item | category | due | see |`, `due` as
+`YYYY-MM-DD`. Adding a category is a row, not code. The detail stays in the file `see` points
+at, because a rotation's danger is its *sequence* and a one-line alarm cannot carry that. A row
+that does not parse is skipped **and counted**; a label shaped like a credential is withheld
+rather than printed, because this output reaches both the terminal and the model's context.
+`gt_surface.py must-do` prints the block on its own.
+
+It never creates, edits or closes a task and **never writes to the vault**. The one thing it
+writes is a machine-local "already shown" ledger, `~/.claude/golden-thread/surface/seen.json`,
+so a state file is announced once.
+A clean run says `nothing waiting` in one line, because silence reads the same as a hook that
+never ran. Every failure exits 0. Setting `surface` (`on` by default, `off` to stop it).
+
+**Why core and not the report card.** The feature request that started this
+(`2026-09-28-cross-project-deadline-alert`) proposed a deadline check in the report-card
+module. It went into core instead: an alarm must not depend on an optional module being
+installed, and the report card shows what the *previous* session computed at its end, where
+a countdown has to be computed live at every start.
+
+### Session identity (Core rule 1)
+
+On 2026-09-28 a laptop moved to a wired network and DHCP gave it a different name. Every claim
+recorded under the old name stopped being recognised as this machine's — not an error: its pid
+simply stopped being judged, and each claim would lapse on the heartbeat clock while its
+session was still running. **Core rule 1, disarmed by a DHCP lease, in silence.**
+
+Identity is now a uuid4 in `~/.claude/golden-thread/machine-id`, created once (atomically, so
+two first runs cannot mint two ids), never overwritten, never synced between machines. The
+hostname stays as a readable label. `gt_session.py`, `guard_session_claims.py` and
+`gt_workers.py` all decide by `gt_paths.same_machine` (the vault tool carries a pinned copy,
+because a vault tool cannot import from the plugin):
+
+- both ids known — the ids decide; the same id under a new name is a **rename, reported once**;
+- a file from gt ≤ 0.17.1 with no id — still counts as this machine's while its label matches
+  (migration, not a flag day); when it does not, its heartbeat decides, **and that is said**.
+  It adopts the id the next time its own session writes it;
+- no id readable here — falls back to the label, and says so.
+
+Worth knowing: the id is per HOME, so **two OS logins on one Mac now get two ids** and judge
+each other's sessions by heartbeat, the cross-machine rule, where before they shared a hostname
+and judged each other's pids. `gt_workers` declarations now record the machine too.
+
+**Fixed alongside it: a pid no longer vouches for someone else's session.** One Claude Code
+process hosts successive sessions, so an older session's file recording *our own* pid looked
+live for as long as we ran, and its claims never lapsed. When the recorded pid is the asker's
+and the session is not, the pid proves nothing and the heartbeat decides.
+
+### Wiring fixes from the loose-ends audit
+
+A loose-ends audit asked of every script: does anything actually run this?
+
+- **The `daily` job could never install.** `gt_schedule` refuses a job whose script is not in
+  the hooks dir (a script under CloudStorage fails under launchd), and `gt_daily.py` was not
+  in `HOOK_DIR_SCRIPTS`. It, `gt_schedule.py`, `gt_sweep.py` and the sweep's members and their
+  imports (`gt_secrets`, `gt_scan_code`, `gt_check_report`, `gt_registry`, `gt_staged`) now
+  install there. The release gate's `check_wiring_coverage` now fails any `gt_schedule` job
+  whose script does not reach the hooks dir — the gap both shipped through.
+- **A `sweep` job**, Mondays 07:30 — `gt_sweep.py`'s docstring had promised a launchd job since
+  it shipped, and there was none. Install runs the new `gt_sweep.py --check` first. **Known
+  limitation: that pre-flight currently refuses**, because `gt_registry` cannot find `packs/`
+  from the hooks dir, so every member would report "could not run". Refusing is what the check
+  is for; the job is not usable until the packs resolve from there.
+- **`lint-weekly`'s "normal" exits were wrong.** It listed `{0, 1}` on the belief that the job
+  exits 1 on findings. It never did — the only way it exited 1 was an uncaught exception — so a
+  crash read as "the lint found something". Now `{0}`. `gt_lint_weekly.py` reports **COULD NOT
+  RUN** and exits 3 when a lint died, instead of writing "Findings: **0**" built from two
+  tracebacks, and writes its report as a new file renamed into place. `gt_daily.py` turns an
+  uncaught exception into exit 3 for the same reason: Python's crash code is its "nothing to
+  report".
+- **`gt_doctor` gains a `schedule` check**: every *installed* job, loaded, script present, last
+  exit judged by `gt_schedule`'s own `BENIGN_EXITS` rather than a copy of it. A job never
+  installed is a choice, not a finding.
+- **`gt_doctor`'s `vault` check delegates to `gt_upgrade`** instead of hand-coding the 0.11.0
+  migrations. It now names the release the vault is stamped at beside the installed release,
+  and sees every migration since, not two.
+- **A project born in the new decisions format is no longer "unmigrated".** A project whose
+  ADRs went through `gt_adr.py` from the first one has no `0000-baseline.md`, and `migrate`
+  refuses a generated file — so the pending step could never clear.
+- **`retired.json` removes a stray `hooks/gt_ingest.py`**, byte-identical to the copy shipped
+  0.6.0–0.9.13 and installed by no release — most likely a hand copy. install.sh backs it up
+  first.
+
+### gt-allin
+
+`secrets` (`gt_secrets.py` over `--repo`), `runbooks` (`gt_lint.py --runbooks`) and `wiki`
+(gt-wiki's `wiki_lint.py`, **only while that module is installed**). Each existed and ran
+nowhere "everything" was run; `gt_secrets` in particular had no aggregator home at all, since it
+is deliberately not a `gt-scan` member. The roster grows from four members to six in core, plus
+`wiki` with gt-wiki installed — the denominator is what this install declares, so switching the
+wiki module off does not produce a "could not run" on every run.
+
+Then the last two checks that existed (owner: *"add all the other checks into allin"*):
+`tests` runs the repo's own suite through the commit guard's discovery table — one table, so
+the command all-in runs is the one the guard wants a receipt for — and records that receipt, so
+a clean all-in is also the evidence `/gt:gt-allin-commit` checks; `validations` reports files
+changed since their recorded validation. A repo with no test command is *could not run*, not
+clean. `gt_code_review.py` stays out on purpose: it plans a review and finds nothing itself, so
+it could only ever report a pass for work nobody did.
+
+### The release gate files its verdict in the vault
+
+`dev/release-check.sh` now ends by filing a dated row in `<vault>/.gt/checks/release.md`
+through `gt_check_report.py`: verdict, how many of how many checks passed, the commit, and the
+names of any failed steps — never their output. Before this a release's gate result lived in a
+terminal and a machine-local receipt; the vault got one `log.md` line at publish, and only if
+publish ran. A `--quick` run is filed too, labelled quick. Filing is bookkeeping and never
+changes the gate's exit code.
+
+### Known, and not fixed
+
+- **Calendar-fired launchd runs are refused the vault.** Every calendar-fired `lint-weekly` run
+  (09-14, 09-21, 09-28) was refused by macOS privacy controls (TCC) reading existing files in
+  the CloudStorage vault; only session-kicked runs ever succeeded. The `daily` 22:00 job will
+  very likely fail the same way. `gt_doctor`'s `schedule` check now *reports* it, and the job
+  says COULD NOT RUN rather than "findings" — but it is not fixed.
+
+- **The `sweep` job cannot be installed yet**: its pre-flight refuses because `gt_registry`
+  cannot find `packs/` from the hooks dir (see *Wiring fixes*).
+
+### Measured, and deliberately not built
+
+**No detector for a session that ended uncaptured.** A feature request of 2026-09-28 asked
+whether `gt-work` could tell on its own that a session lost work and write the handoff
+unasked. Measured across 40 sessions (8 lossy, 32 healthy), no combination of signals
+separated them: the best AND-pairs caught 1 of 8, and 3 lossy sessions fired no signal at
+all. So 0.17.2 keeps the declared trigger — `gt-work` asks — and wires no detector, per the
+request's own rule.
+
+---
+
 ## gt 0.17.1 — 2026-09-28
 
 **The checks gt asks you to run, gt now runs: a credential scan, source validation, a

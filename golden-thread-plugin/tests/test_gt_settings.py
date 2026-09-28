@@ -27,6 +27,10 @@ EXPECTED = {
     "protected_paths": ("ask", ["off", "ask"]),
     "test_gate": ("auto", ["off", "warn", "auto", "block"]),
     "parallel_work": ("on", ["off", "on"]),
+    # 0.17.2: what a session is shown at start (gt_surface).
+    "surface": ("on", ["off", "on"]),
+    "handoff_surface": ("any", ["any", "project", "manual"]),
+    "task_surface": ("on", ["off", "on"]),
     # values None == free-form; `validate` carries the shape instead of a closed list.
     "parallel_max": ("auto", None),
 }

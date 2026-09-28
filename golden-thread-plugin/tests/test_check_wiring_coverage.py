@@ -155,6 +155,43 @@ class WiringCoverage(Sandbox):
         self.assertEqual(p.returncode, 2)
 
 
+class ScheduledJobsReachTheHooksDir(Sandbox):
+    """Every gt_schedule.JOBS script must be in HOOK_DIR_SCRIPTS (0.17.2).
+
+    gt_schedule runs the INSTALLED copy and refuses a job whose script is not in the hooks
+    dir. `daily` shipped in 0.17.1 with gt_daily.py in no install list, so it could never be
+    installed, and every check reported clean (audit 2026-09-28). Judged statically, so these
+    tests need no install."""
+
+    def setUp(self):
+        super().setUp()
+        self.cov = load_module(CHECK, "check_wiring_coverage_jobs_under_test")
+        self.comp = load_module(SCRIPTS / "gt_components.py", "gt_components_jobs_test")
+
+    def test_the_shipped_release_installs_every_job_script(self):
+        self.assertEqual(self.cov.schedule_findings(GT, self.comp), [])
+
+    def test_a_job_whose_script_is_not_installed_fails_the_gate(self):
+        class Comp:
+            HOOK_DIR_SCRIPTS = tuple(n for n in self.comp.HOOK_DIR_SCRIPTS
+                                     if n != "gt_daily.py")
+        problems = self.cov.schedule_findings(GT, Comp)
+        self.assertEqual(len(problems), 1, problems)
+        self.assertIn("'daily'", problems[0])
+        self.assertIn("gt_daily.py", problems[0])
+
+    def test_the_jobs_are_read_from_the_release_not_listed(self):
+        """A job added to a release is covered the day it ships."""
+        _root, vdir = WiringCoverage.plugin_copy(self)
+        sched = vdir / "scripts" / "gt_schedule.py"
+        src = sched.read_text()
+        added = src.replace('JOBS = {', 'JOBS = {\n    "extra": ("gt_nowhere.py", 1, 0, None, "x"),', 1)
+        self.assertNotEqual(added, src, "fixture did not add a job")
+        sched.write_text(added)
+        problems = self.cov.schedule_findings(vdir, self.comp)
+        self.assertTrue(any("gt_nowhere.py" in p for p in problems), problems)
+
+
 class ModuleWiring(Sandbox):
     """A fixture module with a reporter hook: wired when on, absent when off."""
 

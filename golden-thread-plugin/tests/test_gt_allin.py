@@ -38,9 +38,10 @@ class AllInTest(unittest.TestCase):
         self.repo.mkdir()
         (self.repo / "a.py").write_text("def ok():\n    pass\n", encoding="utf-8")
 
-    def run_allin(self, *args):
+    def run_allin(self, *args, home=None):
+        env = dict(os.environ, HOME=str(home)) if home else None
         return subprocess.run([sys.executable, str(SCRIPT)] + list(args),
-                              capture_output=True, text=True)
+                              capture_output=True, text=True, env=env)
 
     # -- the push gate -------------------------------------------------------------------
     def test_there_is_no_flag_that_makes_it_push(self):
@@ -126,7 +127,13 @@ class AllInTest(unittest.TestCase):
         self.assertNotEqual(r.returncode, 0, "a partial install must not exit clean")
         self.assertIn("COULD NOT RUN", r.stdout)
         self.assertNotIn("To push", r.stdout)
-        self.assertRegex(r.stdout, r"\d+ of 4 member\(s\) ran")
+        # Core members are declared whether installed or not; a module's (wiki) only while
+        # that module is installed, so the expected count comes from the module, not a literal.
+        import importlib.util
+        spec = importlib.util.spec_from_file_location("allin_count", str(SCRIPT))
+        mod = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(mod)
+        self.assertRegex(r.stdout, r"\d+ of %d member\(s\) ran" % len(mod.MEMBERS))
 
     def test_duplicate_only_names_do_not_inflate_the_count(self):
         """`--only doctor,doctor,doctor,doctor` read `4 of 4 member(s) ran`."""
@@ -184,6 +191,68 @@ class AllInTest(unittest.TestCase):
         for name in ("scan", "lint", "optimize", "doctor"):
             self.assertIn(name, r.stdout)
         self.assertIn("never pushes", r.stdout)
+
+    # -- the roster covers every check that exists (audit, 2026-09-28) -------------------
+    def test_every_standalone_check_is_a_member(self):
+        """gt_secrets and runbook lint ran nowhere 'everything' was run. Assert the roster
+        against the checks, so a new standalone check has to be placed or refused here."""
+        import importlib.util
+        spec = importlib.util.spec_from_file_location("allin_roster", str(SCRIPT))
+        mod = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(mod)
+        for name in ("scan", "lint", "optimize", "doctor", "secrets", "runbooks", "tests",
+                     "validations"):
+            self.assertIn(name, mod.MEMBERS)
+        cmd = mod.build_cmd("runbooks", mod.MEMBERS["runbooks"], str(self.vault), str(self.repo))
+        self.assertIn("--runbooks", cmd)
+        cmd = mod.build_cmd("secrets", mod.MEMBERS["secrets"], str(self.vault), str(self.repo))
+        self.assertIn(str(self.repo), cmd)
+
+    def test_code_review_is_deliberately_not_a_member(self):
+        """It plans a review for a model to do and finds nothing itself: as a member it could
+        only ever report 'ran, clean' -- a pass for work nobody did."""
+        import importlib.util
+        spec = importlib.util.spec_from_file_location("allin_review", str(SCRIPT))
+        mod = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(mod)
+        self.assertNotIn("review", mod.MEMBERS)
+
+    def test_tests_member_runs_the_suite_and_records_a_receipt(self):
+        import shutil
+        repo = Path(tempfile.mkdtemp(prefix="gt-allin-tests-"))
+        self.addCleanup(shutil.rmtree, repo, True)
+        subprocess.run(["git", "init", "-q", str(repo)], check=True)
+        (repo / "tests").mkdir()
+        run = repo / "tests" / "run.sh"
+        run.write_text("#!/bin/sh\necho suite-ran\nexit 0\n")
+        run.chmod(0o755)
+        home = repo / "home"
+        home.mkdir()
+        r = self.run_allin("--repo", str(repo), "--only", "tests", "--json", home=home)
+        d = json.loads(r.stdout)
+        self.assertEqual(d["ran"], ["tests"], r.stdout)
+        ledger = home / ".claude" / "golden-thread" / "test-runs.jsonl"
+        self.assertIn("gt-allin: tests/run.sh", ledger.read_text(), "no receipt was recorded")
+        self.assertEqual(r.returncode, 0)
+        run.write_text("#!/bin/sh\necho broken\nexit 1\n")
+        r = self.run_allin("--repo", str(repo), "--only", "tests", "--json", home=home)
+        self.assertEqual(r.returncode, 1, "a failing suite is a finding, not a pass")
+
+    def test_a_repo_with_no_test_command_is_could_not_run_not_clean(self):
+        import shutil
+        repo = Path(tempfile.mkdtemp(prefix="gt-allin-notests-"))
+        self.addCleanup(shutil.rmtree, repo, True)
+        subprocess.run(["git", "init", "-q", str(repo)], check=True)
+        r = self.run_allin("--repo", str(repo), "--only", "tests", "--json", home=repo)
+        self.assertEqual(r.returncode, 3)
+        d = json.loads(r.stdout)
+        self.assertIn("no test entry point", d["could_not_run"][0]["detail"])
+
+    def test_secrets_needs_a_repo_and_says_so(self):
+        r = self.run_allin("--only", "secrets", "--json")
+        d = json.loads(r.stdout)
+        self.assertEqual(d["could_not_run"][0]["member"], "secrets")
+        self.assertIn("--repo", d["could_not_run"][0]["detail"])
 
 
 if __name__ == "__main__":

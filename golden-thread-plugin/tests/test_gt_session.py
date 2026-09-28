@@ -18,8 +18,9 @@ import re
 import stat
 import subprocess
 import unittest
+from unittest import mock
 
-from _harness import PYTHON, Sandbox, load_module
+from _harness import PYTHON, SCRIPTS, Sandbox, load_module
 
 TS_FMT = "%Y-%m-%d %H:%M:%S %Z"
 LIVE_PID = str(os.getpid())
@@ -40,6 +41,12 @@ class SessionTools(Sandbox):
         self.tool = self.vault / "Projects" / "golden-thread" / "tools" / "gt_session.py"
         self.sessions = self.vault / "Projects" / "golden-thread" / "sessions"
         self._procs = []
+        # The in-process tests below import the tool, and since 0.17.2 it reads (and on
+        # first use CREATES) ~/.claude/golden-thread/machine-id with HOME taken at call
+        # time. Without this they would write a machine id into the developer's real HOME.
+        home = mock.patch.dict(os.environ, {"HOME": str(self.home)})
+        home.start()
+        self.addCleanup(home.stop)
 
     def tearDown(self):
         for p in self._procs:
@@ -737,3 +744,165 @@ class NoFlockIsAnnouncedTest(SessionTools):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+MACHINE_RE = r"[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}"
+OTHER_MACHINE = "99999999-8888-4777-8666-555555555555"
+
+
+class MachineIdentityTest(SessionTools):
+    """Claim ownership is keyed on a stable machine id, never on the hostname.
+
+    2026-09-28: the owner moved a laptop onto a wired network and DHCP handed it a new
+    name. `_pid_alive` compared `host:` to socket.gethostname(), so every claim written
+    under the old name stopped being this machine's: its running pid was no longer
+    judged, and the claim lapsed the moment its heartbeat aged past --stale-after --
+    with nothing printed anywhere. Core rule 1, disarmed by a DHCP lease.
+
+    Every test pins the hostname through the harness (a sitecustomize shim), so a rename
+    is a deliberate step here, not a race against the network.
+    """
+
+    def setUp(self):
+        super().setUp()
+        self.pin_hostname("laptop.office.lan")
+        self.idfile = self.home / ".claude" / "golden-thread" / "machine-id"
+
+    def fm(self, sid):
+        (f,) = self.files_for(sid)
+        return dict(re.findall(r"^(\w+): (.*)$", f.read_text().split("\n---", 1)[0], flags=re.M))
+
+    def rewrite(self, sid, fn):
+        (f,) = self.files_for(sid)
+        f.write_text(fn(f.read_text()))
+
+    def test_register_records_a_machine_id_and_keeps_host_as_a_label(self):
+        self.assertOk(self.gs("sessA", "register"))
+        mid = self.idfile.read_text().strip()
+        self.assertRegex(mid, "^" + MACHINE_RE + "$", "the machine id is not a uuid")
+        self.assertEqual(self.fm("sessA")["machine"], mid)
+        self.assertEqual(self.fm("sessA")["host"], "laptop.office.lan")
+        self.pin_hostname("printer-room.lan")
+        self.assertOk(self.gs("sessB", "register"))
+        self.assertEqual(self.idfile.read_text().strip(), mid, "the machine id is not stable")
+        self.assertEqual(self.fm("sessB")["machine"], mid)
+        self.assertEqual(self.fm("sessB")["host"], "printer-room.lan")
+
+    def test_a_hostname_change_does_not_disarm_this_machine_s_claims(self):
+        """THE BUG, deterministically. sessA's pid is running and its heartbeat is two
+        hours old: live because its pid is judged. Rename the machine. Keyed on the
+        hostname this read STALE and sessB could take the file."""
+        self.assertOk(self.gs("sessA", "register", "--files", "notes.md"))
+        self.set_heartbeat("sessA", 120)
+        self.pin_hostname("printer-room.lan")
+        self.assertOk(self.gs("sessB", "register", pid="none"))
+        chk = self.gs("sessB", "check", "notes.md", pid="none")
+        self.assertEqual(chk.returncode, 1,
+                         "a hostname change disarmed a live claim:\n" + chk.stdout + chk.stderr)
+        self.assertIn("LIVE  notes.md  held by sessA", chk.stdout)
+        clm = self.gs("sessB", "claim", "notes.md", pid="none")
+        self.assertEqual(clm.returncode, 1, clm.stdout + clm.stderr)
+        self.assertIn("CONFLICT  notes.md  held by sessA", clm.stderr)
+
+    def test_the_rename_is_announced_once_and_the_label_is_updated_by_its_owner(self):
+        self.assertOk(self.gs("sessA", "register", "--files", "notes.md"))
+        self.pin_hostname("printer-room.lan")
+        lst = self.gs("sessB", "list", pid="none")
+        self.assertOk(lst)
+        self.assertEqual(lst.stderr.count("now calls itself 'printer-room.lan'"), 1,
+                         "the rename must be reported exactly once:\n" + lst.stderr)
+        self.assertIn("laptop.office.lan", lst.stderr)
+        # The owning session's next write relabels its file -- and says so.
+        beat = self.gs("sessA", "beat")
+        self.assertOk(beat)
+        self.assertIn("hostname changed from 'laptop.office.lan' to 'printer-room.lan'",
+                      beat.stderr)
+        self.assertEqual(self.fm("sessA")["host"], "printer-room.lan")
+        self.assertNotIn("now calls itself", self.gs("sessB", "list", pid="none").stderr)
+
+    def test_another_machine_is_still_another_machine_under_the_same_name(self):
+        """Same hostname, different id: refused -- the assertion that stops the fix
+        becoming "trust everything". Its pid is one THIS machine sees dead, and its
+        heartbeat is fresh: trusting the name would call it dead and free the file."""
+        self.assertOk(self.gs("sessA", "register", "--files", "notes.md", pid=dead_pid()))
+        self.rewrite("sessA", lambda t: re.sub(r"^machine: .*$", "machine: " + OTHER_MACHINE,
+                                               t, flags=re.M))
+        self.assertOk(self.gs("sessB", "register"))
+        clm = self.gs("sessB", "claim", "notes.md")
+        self.assertEqual(clm.returncode, 1,
+                         "another machine's claim was judged by a pid on this one:\n"
+                         + clm.stdout + clm.stderr)
+        self.assertIn("CONFLICT  notes.md  held by sessA", clm.stderr)
+
+    def test_a_file_from_an_older_gt_keeps_its_claims_and_migrates_itself(self):
+        """Migration, not a flag day. A registration with no machine id (gt <= 0.17.1)
+        whose label matches is this machine's exactly as before. After a rename nothing
+        can prove whose it is: the heartbeat decides, as it always did, and that is SAID.
+        Its own session's next write stamps the id, after which the pid is judged again."""
+        self.assertOk(self.gs("sessA", "register", "--files", "notes.md"))
+        self.rewrite("sessA", lambda t: re.sub(r"^machine: .*\n", "", t, flags=re.M))
+        self.assertNotIn("machine", self.fm("sessA"))
+        self.set_heartbeat("sessA", 120)
+        self.assertOk(self.gs("sessB", "register", pid="none"))
+        chk = self.gs("sessB", "check", "notes.md", pid="none")
+        self.assertEqual(chk.returncode, 1, "a legacy file lost its claims:\n" + chk.stdout)
+
+        self.pin_hostname("printer-room.lan")
+        chk = self.gs("sessB", "check", "notes.md", pid="none")
+        self.assertIn("STALE", chk.stdout)
+        self.assertIn("older gt with no machine id", chk.stderr,
+                      "an unprovable legacy claim lapsed without a word")
+
+        self.assertOk(self.gs("sessA", "beat"))          # its own session, on this machine
+        self.assertEqual(self.fm("sessA")["machine"], self.idfile.read_text().strip())
+        self.set_heartbeat("sessA", 120)
+        chk = self.gs("sessB", "check", "notes.md", pid="none")
+        self.assertEqual(chk.returncode, 1, "the adopted file's pid is not judged:\n" + chk.stdout)
+
+    def test_an_unwritable_home_still_registers_and_says_so(self):
+        gt_dir = self.home / ".claude"
+        gt_dir.chmod(0o500)
+        self.addCleanup(gt_dir.chmod, 0o700)
+        reg = self.gs("sessA", "register", "--files", "notes.md")
+        self.assertOk(reg, "no machine id must never stop a registration")
+        self.assertIn("no machine id", reg.stderr)
+        self.assertNotIn("machine", self.fm("sessA"))
+        self.assertEqual(self.fm("sessA")["host"], "laptop.office.lan")
+
+    def test_a_damaged_machine_id_is_reported_and_never_overwritten(self):
+        self.idfile.parent.mkdir(parents=True, exist_ok=True)
+        self.idfile.write_text("not-a-uuid\n")
+        reg = self.gs("sessA", "register")
+        self.assertOk(reg)
+        self.assertIn("does not hold a machine id", reg.stderr)
+        self.assertEqual(self.idfile.read_text(), "not-a-uuid\n")
+
+    def test_a_pid_that_now_hosts_another_session_does_not_keep_the_old_one_live(self):
+        """A pid identifies a PROCESS, not a session: 2026-09-28, pid 91999 hosted several
+        sessions in turn, so an older session's file recording it looked live for as long
+        as that process ran. Same pid, different session, stale heartbeat -> not live."""
+        self.assertOk(self.gs("older", "register", "--files", "notes.md"))
+        self.set_heartbeat("older", 120)
+        self.assertOk(self.gs("newer", "register"))       # same CLAUDE_PID, next session
+        chk = self.gs("newer", "check", "notes.md")
+        self.assertEqual(chk.returncode, 0, "our own pid vouched for a session it no "
+                                            "longer hosts:\n" + chk.stdout)
+        self.assertIn("STALE", chk.stdout)
+        # A fresh heartbeat still makes it live, and another process's pid still decides.
+        self.set_heartbeat("older", 1)
+        self.assertEqual(self.gs("newer", "check", "notes.md").returncode, 1)
+        self.set_heartbeat("older", 120)
+        self.assertEqual(self.gs("newer", "check", "notes.md", pid="none").returncode, 1)
+
+    def test_the_duplicated_rule_matches_gt_paths(self):
+        """gt_session.py cannot import from the plugin, so it carries a copy of
+        gt_paths.same_machine; the guard and gt_workers use the original. Pin them equal."""
+        tool = load_module(self.tool, "gt_session_rule")
+        paths = load_module(SCRIPTS / "gt_paths.py", "gt_paths_rule")
+        m, o = "11111111-2222-4333-8444-555555555555", OTHER_MACHINE
+        for rec_m in ("", m, o):
+            for rec_h in ("", "a.lan", "b.lan"):
+                for mine in (None, m):
+                    with self.subTest(rec_m=rec_m, rec_h=rec_h, mine=mine):
+                        self.assertEqual(tool._same_machine(rec_m, rec_h, mine, "a.lan"),
+                                         paths.same_machine(rec_m, rec_h, mine, "a.lan"))

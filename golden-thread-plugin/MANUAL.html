@@ -118,8 +118,9 @@ th, td { border:1px solid #ddd; padding:3px 5px; text-align:left; vertical-align
 <p><strong>Reader:</strong> a daily user — the deepest document, where the <em>why</em> lives
 <strong>Claims last checked against the code:</strong> 2026-09-17 — see <em>The documents, and what belongs in each</em> in <a href="../CLAUDE.md"><code>CLAUDE.md</code></a>.</p>
 </blockquote>
-<p>Complete reference for gt's twenty-three skills and its seven modules. Written against <strong>gt v0.17.1</strong>
-(gt-wiki 0.2.3; gt-usage 0.1.3; gt-demo, gt-watch, gt-report-card, gt-farm and gt-flow 0.17.1).</p>
+<p>Complete reference for gt's twenty-eight skills and its seven modules. Written against <strong>gt v0.17.2</strong>
+(gt-wiki 0.2.3; gt-usage 0.1.3; gt-demo, gt-watch, gt-report-card, gt-farm and gt-flow 0.17.2 —
+those five are versioned with gt and move with every release, changed or not).</p>
 <hr />
 <h2 id="the-model">The model</h2>
 <p>Claude forgets everything between sessions. The vault doesn't. Golden Thread's
@@ -483,6 +484,17 @@ be finished, with the reasons, so closing a project is asked about rather than
 forgotten (see <em>Closing a project</em>).</p>
 <p>Tasks at <code>p:: 7</code> or higher are <strong>shelved</strong>: kept in the README as a record, excluded
 from every section and every escalation rule, counted in <em>Project standing</em> only.</p>
+<p>A task deferred with <code>/gt:gt-task-handle</code> (<code>[defer:: YYYY-MM-DD]</code>, 0.17.2) is out of the ranking
+<strong>and</strong> out of escalation until that date, then back on its own — without that, the stale-P1 rule
+would keep escalating a task you had explicitly put off.</p>
+<h3 id="clearing-a-task-backlog">Clearing a task backlog</h3>
+<pre><code>/gt:gt-task-list mine p1          # see what is waiting on you, without opening anything
+/gt:gt-task-handle stale          # then work through a set, one task at a time
+</code></pre>
+<p>Start narrow — <code>stale</code>, <code>overdue</code>, or one project — rather than at the top of everything. Each
+task is <strong>done</strong>, <strong>dropped</strong> with a reason, <strong>deferred</strong> to a date, or kept. Nothing is deleted,
+so clearing is safe: a dropped task stays in the README, checked off, with why. Handoffs clear the
+same way with <code>/gt:gt-handoff-handle</code>. See <a href="#tasks-and-handoffs">Tasks and handoffs</a>.</p>
 <h3 id="bringing-an-existing-project-into-the-vault">Bringing an existing project into the vault</h3>
 <pre><code>/gt:gt-ingest
 </code></pre>
@@ -555,7 +567,7 @@ once read "+0 lines" over six overwritten ones.</p>
 python3 $SCRIPTS/gt_upgrade.py --vault &lt;vault&gt; status  # vault upgrades pending
 </code></pre>
 <p><strong>Modules (since 0.14.0).</strong> Optional parts of Golden Thread ship as modules — separate plugins in
-the same marketplace, versioned with gt, each declared by a <code>module.json</code>. 0.17.1 ships seven:</p>
+the same marketplace, versioned with gt, each declared by a <code>module.json</code>. Seven ship beside gt 0.17.2 (five versioned with gt, their content unchanged since 0.17.1):</p>
 <table>
 <thead>
 <tr>
@@ -960,6 +972,15 @@ fastest read of where the project stands — then <code>source.md</code> → <co
 <code>research.md</code> → <code>decisions.md</code> → <code>design.md</code> → <code>spec.md</code> → <code>runbook.md</code>, the linked
 fleet page, and finally <code>memory/MEMORY.md</code> — <strong>the index only</strong>. Individual memory
 files load on demand.</p>
+<p><strong>Then the project's waiting handoffs</strong> (0.17.2) — it runs
+<code>gt_surface.py handoffs --project &lt;slug&gt;</code>, which prints one line per handoff of this project
+that has not been handled (or whose deferral date has come), and nothing when
+<code>handoff_surface</code> is <code>manual</code>. Each is named in the summary with an offer of
+<a href="#gtgt-handoff-handle"><code>/gt:gt-handoff-handle</code></a>; <strong>its body is not read</strong> unless you want to
+handle it now, because being told must cost no project context. A handoff exists because the
+last session could <em>not</em> capture everything, so its uncaptured items are the ones no other file
+holds. Until 0.17.2 this skill never looked, and a handoff reached the next session only if
+someone remembered it existed.</p>
 <p><strong><code>source.md</code> leads the project docs deliberately.</strong> It says which box serves which
 role in which environment. Acting before reading it is how you edit the wrong host,
 or overwrite a file that exists on three machines.</p>
@@ -1067,6 +1088,11 @@ An offer made every session is one that is always declined — <code>gt_closeout
 that by asking the same question every session until the answer stopped being read. Nothing
 uncaptured, no question, one line saying so. And a <code>no</code> is final: nobody writes a handoff on
 your behalf after you have said those items are not worth a file.</p>
+<p><strong>The next session is told, without anyone asking (0.17.2).</strong> <a href="#gt_surfacepy-what-the-last-session-left-shown-to-the-next"><code>gt_surface.py</code></a>
+runs at <code>SessionStart</code> and names every handoff not yet handled, every session, with its count of
+open items. A handoff counts as <strong>handled</strong> once every task citing it is checked off — so <strong>the
+task must name the handoff's filename</strong>, as in the line above. That filename is the join; a task
+that does not name it is invisible to both the count and the automatic close.</p>
 <h3 id="gtgt-handoff"><code>/gt:gt-handoff</code></h3>
 <p>The session that <em>designs</em> something is rarely the session that builds it. This writes down what
 the next one needs — and marks what it must not assume.</p>
@@ -1074,7 +1100,9 @@ the next one needs — and marks what it must not assume.</p>
 </code></pre>
 <p>Writes <code>Projects/&lt;slug&gt;/handoff/&lt;date&gt;-handoff.md</code>. <code>--json</code> returns the facts without writing a
 file; <code>--force</code> is required to replace an existing handoff, because a handoff is someone's
-record of a session and overwriting one silently loses it.</p>
+record of a session and overwriting one silently loses it. Since 0.17.2 it opens with
+frontmatter — <code>type: handoff</code>, <code>project</code>, <code>status: open</code>, <code>created</code> — and <code>status: open</code> is what
+keeps it in front of people until someone deals with it.</p>
 <p><strong>The script does half the job on purpose.</strong> It gathers <strong>facts</strong> — the project's stated goal,
 its open tasks, its recent decisions, the observed state of the code repository, what is
 uncommitted, what the last commits were — each carrying where it came from, so the next session
@@ -1123,6 +1151,235 @@ filename. Measure first:</p>
 asks where each belongs, files it as a task or project, and checks the inbox line
 off with a pointer. Regenerates the rollup at the end.</p>
 <hr />
+<h2 id="tasks-and-handoffs">Tasks and handoffs</h2>
+<p>Two kinds of "someone has to come back to this": a <strong>task</strong> (one line in a project README's
+<code>## Tasks</code>) and a <strong>handoff</strong> (a file a session wrote because it could not capture everything).
+Since 0.17.2 both work the same way, and five rules hold for both:</p>
+<ul>
+<li><strong>Surfacing is the alarm; the task or handoff is the record.</strong> Session start <em>tells</em> you what is
+  waiting; the README line or the handoff file is what gets changed when you deal with it.</li>
+<li><strong>Three verbs: create, see, handle.</strong> <code>/gt:gt-task</code> creates; <code>/gt:gt-task-list</code> and
+  <code>/gt:gt-handoff-list</code> only show; <code>/gt:gt-task-handle</code> and <code>/gt:gt-handoff-handle</code> work through
+  them. Seeing is kept separate from handling on purpose.</li>
+<li><strong>Nothing is deleted.</strong> Done and dropped tasks are checked off with what settled them; a handled
+  handoff keeps its file and gains a status line. Dropping needs a reason.</li>
+<li><strong>A deferral needs a date.</strong> It hides the item until then and brings it back on its own.
+  "Later, some time" is a drop, said out loud.</li>
+<li><strong>Being told costs no context.</strong> What is shown at start is one line per item or a count — never
+  a handoff's body, never a project opened.</li>
+</ul>
+<h3 id="gtgt-task"><code>/gt:gt-task</code></h3>
+<p>Create a task the way a developer drops a TODO into code: say it in your own words, and the skill
+writes one well-formed line into the project README's <code>## Tasks</code> through the vault tool
+<code>gt_task.py</code>, so it ranks in <code>TASKS.md</code> exactly as a hand-written one would.</p>
+<pre><code class="language-bash">python3 &lt;vault&gt;/Projects/golden-thread/tools/gt_task.py add &quot;&lt;task&gt;&quot; --vault &quot;&lt;vault&gt;&quot; \
+  (--project &lt;slug&gt; | --inbox) [--ref &quot;&lt;[[Page]] or vault path&gt;&quot;] [--p N] \
+  [--waiting user|agent|external|parked] [--due YYYY-MM-DD] [--dry-run]
+</code></pre>
+<p>The skill decides what it can: the project this session is in (or asks once, offering <code>--inbox</code>
+for <code>/gt:gt-review</code> to route later), <code>p:: 2</code> unless you say urgent (<code>1</code>) or someday (<code>3</code>) — never
+<code>p:: 0</code>, which does not exist for tasks — and <code>waiting:: user</code> unless the work is plainly the
+assistant's or someone else's. <code>[since::]</code> is stamped automatically.</p>
+<p><strong>A task can be tied to what it is about</strong> with <code>[ref:: …]</code> — a <code>[[wiki page]]</code> or a vault path
+(<code>Sources/…</code>, <code>Projects/x/design.md</code>). The ref <strong>must resolve</strong>; the tool refuses one that points
+at nothing and says what it looked for.</p>
+<p><strong>One store, one parser.</strong> Tasks stay in the README; <code>gt_task.py</code> is a writer and a reader for that
+section, not a second database, and it parses with <code>gt_tasks.py</code>'s own rules. Hand-written tasks
+are unchanged and work with every command here. <strong>Core rule 1 holds</strong>: the tool refuses to write a
+README another live session has claimed.</p>
+<h3 id="gtgt-task-list"><code>/gt:gt-task-list</code></h3>
+<p>Read-only: open tasks, filtered, without loading any project's context. Most urgent first.</p>
+<pre><code class="language-bash">python3 &lt;vault&gt;/Projects/golden-thread/tools/gt_task.py list --vault &quot;&lt;vault&gt;&quot; [FILTER ...] [--json]
+</code></pre>
+<p>A task must match every filter given:</p>
+<table>
+<thead>
+<tr>
+<th>Filter</th>
+<th>Shows</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>&lt;slug&gt;</code></td>
+<td>one project (sub-project as <code>parent/child</code>), or <code>inbox</code></td>
+</tr>
+<tr>
+<td><code>p1</code> <code>p2</code> <code>p3</code></td>
+<td>that priority</td>
+</tr>
+<tr>
+<td><code>mine</code></td>
+<td><code>waiting:: user</code></td>
+</tr>
+<tr>
+<td><code>overdue</code></td>
+<td><code>due::</code> before today</td>
+</tr>
+<tr>
+<td><code>stale</code></td>
+<td><code>p:: 1</code> open for more than 7 days</td>
+</tr>
+<tr>
+<td><code>deferred</code></td>
+<td>only tasks deferred to a later date — hidden otherwise</td>
+</tr>
+<tr>
+<td><code>ref:&lt;text&gt;</code></td>
+<td>tasks whose <code>ref::</code> contains <code>&lt;text&gt;</code></td>
+</tr>
+</tbody>
+</table>
+<p>Each line starts with an ID, <code>slug:LINE:HASH</code> — the README line number and six hex of the line's
+text. Shelved tasks (<code>p:: 7</code>+) do not show unless a filter asks for them.</p>
+<h3 id="gtgt-task-handle"><code>/gt:gt-task-handle</code></h3>
+<p>The way to clear a backlog: choose a set with the same filters (<code>/gt:gt-task-handle stale</code>,
+<code>… my-project p1</code>), then take the tasks one at a time. Context is loaded only when a decision
+needs it — the file a <code>ref::</code> points at, or one named file, never a full <code>/gt:gt-open</code>.</p>
+<table>
+<thead>
+<tr>
+<th>Decision</th>
+<th>Command</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>done</strong></td>
+<td><code>gt_task.py done &lt;ID&gt; --vault V [--reason "&lt;what settled it&gt;"]</code></td>
+</tr>
+<tr>
+<td><strong>drop</strong></td>
+<td><code>gt_task.py drop &lt;ID&gt; --vault V --reason "&lt;why it no longer matters&gt;"</code> — reason required</td>
+</tr>
+<tr>
+<td><strong>defer</strong></td>
+<td><code>gt_task.py defer &lt;ID&gt; --vault V --until YYYY-MM-DD --reason "&lt;why then&gt;"</code> — future date and reason required</td>
+</tr>
+<tr>
+<td><strong>keep</strong></td>
+<td>nothing; move on</td>
+</tr>
+</tbody>
+</table>
+<p>Done and drop check the box and append <code>— done &lt;stamp&gt;: …</code> or <code>— dropped &lt;stamp&gt;: …</code> to the line.
+Defer adds <code>[defer:: YYYY-MM-DD]</code>: the task is hidden from <code>list</code>, from the <code>TASKS.md</code> ranking
+<strong>and from escalation</strong> until that date, then comes back on its own. <strong>An ID is refused if its
+line has changed</strong> since it was listed — an ID from a stale list can never close the wrong task;
+list again and use the new one. At the end the skill regenerates <code>TASKS.md</code>.</p>
+<p>A dropped task reads as <strong>closed</strong> to everything downstream — <code>gt_events</code>, <code>gt_daily</code> — because
+its box is checked; the line itself records <code>dropped: &lt;reason&gt;</code>.</p>
+<h3 id="gtgt-handoff-list"><code>/gt:gt-handoff-list</code></h3>
+<p>Read-only: the handoffs still waiting — open, or whose deferral date has come — one line each
+(path, project, age, open items), oldest first, across every project or one. <code>--all</code> shows every
+handoff with its state. <strong>No handoff body is read</strong>: listing must cost no project context, which
+is why listing and handling are separate skills.</p>
+<pre><code class="language-bash">python3 $SCRIPTS/gt_handoff_status.py list --vault &quot;&lt;vault&gt;&quot; [--project &lt;slug&gt;] [--all] [--json]
+</code></pre>
+<h3 id="gtgt-handoff-handle"><code>/gt:gt-handoff-handle</code></h3>
+<p>Where a waiting handoff gets dealt with. It lists what is waiting as a menu and <strong>loads nothing
+until you pick one</strong> — then only that handoff and the <code>## Tasks</code> lines citing its filename, not a
+full <code>/gt:gt-open</code>. Each open item is settled one of three ways:</p>
+<ul>
+<li><strong>Done</strong> — the task is checked off with a note of what settled it; a decision goes to
+  <code>decisions.md</code> or <code>research.md</code> through the usual <code>/gt:gt-work</code> path.</li>
+<li><strong>Keep</strong> — the task stays open. It is already <code>p:: 1</code> with a <code>since::</code> date, so it escalates the
+  project on its own after a week.</li>
+<li><strong>Drop</strong> — checked off with the reason. Dropping is a decision, recorded, never a deletion.</li>
+</ul>
+<p>Then the handoff's status is set:</p>
+<pre><code class="language-bash">python3 $SCRIPTS/gt_handoff_status.py mark &lt;handoff&gt; --vault &quot;&lt;vault&gt;&quot; --status handled --reason &quot;&lt;one line&gt;&quot;
+python3 $SCRIPTS/gt_handoff_status.py mark &lt;handoff&gt; --vault &quot;&lt;vault&gt;&quot; --status deferred --until YYYY-MM-DD --reason &quot;&lt;why&gt;&quot;
+</code></pre>
+<p><strong>Four states</strong>, and what decides each:</p>
+<table>
+<thead>
+<tr>
+<th>State</th>
+<th>Meaning</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>open</code></td>
+<td>written by <code>gt_handoff.py</code>, or re-opened. Shown until handled or deferred</td>
+</tr>
+<tr>
+<td><code>deferred</code></td>
+<td>put off <strong>to a date</strong> (<code>--until</code>, which must be in the future). Hidden until then; on that date it is open again. There is no deferral without a date — "later, some time" is a decision to drop it, so it is <code>handled</code> with that reason, said out loud</td>
+</tr>
+<tr>
+<td><code>handled</code></td>
+<td>marked so by a person, <strong>or</strong> every task citing the handoff's filename is checked off — the tasks are the record, so closing the last one needs no second step</td>
+</tr>
+<tr>
+<td><code>history</code></td>
+<td>written before 0.17.2 (no <code>status:</code>), over a week old, with no open task citing it — so an upgrade does not resurface every old handoff in the vault</td>
+</tr>
+</tbody>
+</table>
+<p>A handoff with no <code>status:</code> counts as open while it is under a week old or any open task cites
+it. <code>mark</code> appends a line to the handoff's status log and refuses a file outside the vault. A
+handoff is never deleted — it is someone's record of a session; its status says it is dealt
+with.</p>
+<h3 id="what-you-see-at-session-start">What you see at session start</h3>
+<p><a href="#gt_surfacepy-what-the-last-session-left-shown-to-the-next"><code>gt_surface.py</code></a> runs at
+<code>SessionStart</code> and puts four things in front of the session. A clean start says
+<code>nothing waiting</code> in one line, because silence reads the same as a hook that never ran.</p>
+<table>
+<thead>
+<tr>
+<th>What</th>
+<th>How often</th>
+<th>Setting</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>MUST DO</strong> — rows of <a href="#deadlinesmd-format"><code>deadlines.md</code></a> overdue (🔴 <code>OVERDUE Nd</code>) or due within 14 days (🟡); later rows counted, not listed</td>
+<td>every session, recomputed live</td>
+<td><code>surface</code></td>
+</tr>
+<tr>
+<td><strong>Handoffs</strong> not yet dealt with — one line each: path, project, age, open items; never the body</td>
+<td>every session <strong>until handled or deferred to a date</strong></td>
+<td><code>handoff_surface</code>: <code>any</code> (default) · <code>project</code> (only when <code>/gt:gt-open</code> opens that project) · <code>manual</code> (only in <code>/gt:gt-handoff-handle</code>)</td>
+</tr>
+<tr>
+<td><strong>Tasks</strong> — one line: how many <code>p:: 1</code> tasks wait on you, how many overdue, how many open over a week, and the commands to list and work them</td>
+<td>every session while any wait</td>
+<td><code>task_surface</code> (<code>on</code> · <code>off</code>)</td>
+</tr>
+<tr>
+<td><strong>State files</strong> <code>gt_state.py</code> wrote before a compaction</td>
+<td>once each; right after a compaction the newest one's content is handed to the model in full</td>
+<td><code>surface</code></td>
+</tr>
+</tbody>
+</table>
+<p><strong>Why handoffs repeat.</strong> The first 0.17.2 cut showed a handoff once and went quiet, on the
+<code>gt_closeout</code> lesson that a question asked every session trains people to scroll past it. The
+owner ruled the same day that the opposite failure is worse: a handoff scrolled past on a busy
+morning is as good as never written. So an unhandled handoff comes back every session, and the
+cost is kept to one line. <code>any</code> is the default because under <code>project</code> a handoff waits until
+someone happens to open its project.</p>
+<p><strong>The task line is a count, never the tasks</strong>, and a deferred task is not counted until its date.
+It is counted by the vault's own <code>gt_task.py</code>, so a vault not yet refreshed to 0.17.2 (run
+<code>/gt:gt-upgrade</code>) shows no task line rather than a guess.</p>
+<h3 id="deadlinesmd-format"><code>deadlines.md</code> format</h3>
+<p>One vault-root file with one table, one row per outstanding dated item — a credential rotation, a
+decision with a deadline, a renewal:</p>
+<pre><code class="language-markdown">| item | category | due | see |
+|---|---|---|---|
+| Rotate the relay credentials | rotation | 2026-10-03 | [[pending-rotations]] |
+</code></pre>
+<p><code>due</code> is <code>YYYY-MM-DD</code>. Ages and countdowns are derived from the date at run time, never stored, so
+the block counts itself down and disappears when the last row is deleted. Adding a category is a
+row, not code. The detail — a rotation's ordered steps, a decision's comparison — stays in the file
+<code>see</code> points at, because a rotation's danger is its <em>sequence</em> and a one-line alarm cannot carry
+that. A row that does not parse is skipped <strong>and counted</strong>; the rest still report. A label shaped
+like a credential is <strong>withheld</strong>, never printed, because this output reaches both your terminal
+and the model's context. <code>gt_surface.py must-do</code> prints the block on its own.</p>
 <h2 id="context-management">Context management</h2>
 <h3 id="gt-farmgt-farm"><code>/gt-farm:gt-farm</code></h3>
 <p><em>Module <code>farm</code> (plugin <code>gt-farm</code>). Off for a fresh install — <code>bash install.sh --with farm</code>
@@ -1514,7 +1771,7 @@ python3 $SCRIPTS/gt_doctor.py --fix           # re-wire hooks, and nothing else
 clean report from a check pinned to the wrong release reads exactly like a healthy install —
 that is how 0.9.4 sat uninstalled on 2026-08-30 beside a component check reporting clean
 against 0.6.0. Say the version, then the findings.</p>
-<p>Nine checks, each answering a different question:</p>
+<p>Twelve checks, each answering a different question:</p>
 <table>
 <thead>
 <tr>
@@ -1536,12 +1793,20 @@ against 0.6.0. Say the version, then the findings.</p>
 <td>is every hook the release declares actually in <code>settings.json</code>?</td>
 </tr>
 <tr>
+<td><code>core-rules</code></td>
+<td>does each rule that claims enforcement have its own mechanism wired — the right script, at the installed path, present on disk?</td>
+</tr>
+<tr>
 <td><code>modules</code></td>
 <td>which modules are on or off, does each admit this gt, and is every ON module's plugin installed and enabled? (read-only)</td>
 </tr>
 <tr>
 <td><code>vault</code></td>
-<td>is the vault reachable, and are its generated files migrated?</td>
+<td>is the vault reachable, what release is it stamped at, and does <code>gt_upgrade</code> have anything pending for it?</td>
+</tr>
+<tr>
+<td><code>schedule</code></td>
+<td>has every <strong>installed</strong> scheduled job run, and did it last exit normally? (0.17.2)</td>
 </tr>
 <tr>
 <td><code>workers</code></td>
@@ -1559,8 +1824,21 @@ against 0.6.0. Say the version, then the findings.</p>
 <td><code>lint</code></td>
 <td>what does the vault linter say, in one line?</td>
 </tr>
+<tr>
+<td><code>astgrep</code></td>
+<td>is the optional structural matcher here, and new enough? Absent is fine — its rules are SKIPPED, not silently passed</td>
+</tr>
 </tbody>
 </table>
+<p><strong><code>vault</code> asks <code>gt_upgrade</code> itself (0.17.2).</strong> It used to hand-code the two 0.11.0 migrations,
+so it missed every migration since, never said what release the vault was stamped at, and
+called a project born in the new decisions format unmigrated. It now prints <code>stamped X,
+release Y</code> and lists whatever <code>/gt:gt-upgrade</code> would run, so the doctor and the upgrade cannot
+disagree. A stamp behind the release with nothing pending is a WARN, not a broken vault.</p>
+<p><strong><code>schedule</code> reads launchd's own last exit</strong> for each job <code>gt_schedule.py</code> installed, judged by
+the scheduler's <code>BENIGN_EXITS</code> table rather than a second copy of it. A job never installed is a
+choice, not a finding; no installed job, or not macOS, is SKIPPED — never clean. It exists
+because a weekly lint failed on three Mondays running and nothing surfaced it.</p>
 <table>
 <thead>
 <tr>
@@ -1701,6 +1979,24 @@ is registered here and can be switched off.</p>
 <td><code>off</code> · <code>report</code></td>
 <td><code>report</code></td>
 <td>At session start, reports vault commits not yet pushed</td>
+</tr>
+<tr>
+<td><code>surface</code></td>
+<td><code>off</code> · <code>on</code></td>
+<td><code>on</code></td>
+<td>At session start, shows the MUST DO block from <code>&lt;vault&gt;/deadlines.md</code> and every waiting handoff each session, and pre-compaction state files once each (0.17.2). Never writes the vault. See <a href="#gt_surfacepy-what-the-last-session-left-shown-to-the-next"><code>gt_surface.py</code></a></td>
+</tr>
+<tr>
+<td><code>handoff_surface</code></td>
+<td><code>any</code> · <code>project</code> · <code>manual</code></td>
+<td><code>any</code></td>
+<td>Where a handoff that has not been handled is shown (0.17.2): <code>any</code> every session start, whatever project is opened; <code>project</code> only when <code>/gt:gt-open</code> opens the handoff's own project; <code>manual</code> only in <code>/gt:gt-handoff-handle</code>. <code>project</code> needs <code>/gt:gt-open</code> — a session that never opens the project never sees it, which is why <code>any</code> is the default</td>
+</tr>
+<tr>
+<td><code>task_surface</code></td>
+<td><code>off</code> · <code>on</code></td>
+<td><code>on</code></td>
+<td>At session start, one line counting <code>p:: 1</code> tasks waiting on you — how many overdue, how many open over a week — with the commands to list and work them (0.17.2). A count, never the tasks; deferred tasks are not counted until their date</td>
 </tr>
 <tr>
 <td><code>protected_paths</code></td>
@@ -2009,8 +2305,44 @@ itself there is a third behaviour nobody tests.</p>
 <td>install health: versions, drift, wiring</td>
 <td>—</td>
 </tr>
+<tr>
+<td><code>secrets</code></td>
+<td>credential-shaped values in the tree — names, lines, lengths, never values (0.17.2)</td>
+<td><code>--repo</code></td>
+</tr>
+<tr>
+<td><code>runbooks</code></td>
+<td>runbook lines duplicated across projects, <code>gt_lint.py --runbooks</code> (0.17.2)</td>
+<td><code>--vault</code></td>
+</tr>
+<tr>
+<td><code>wiki</code></td>
+<td>wiki pages: broken links, orphans, stale and unsourced pages — gt-wiki's <code>wiki_lint.py</code>, <strong>only while the gt-wiki module is installed</strong> (0.17.2)</td>
+<td><code>--vault</code></td>
+</tr>
+<tr>
+<td><code>tests</code></td>
+<td>the repo's own test suite, found through the commit guard's discovery table (<code>tests/run.sh</code>, pytest, cargo, go, <code>npm test</code>, <code>make test</code>); a pass records the receipt <code>/gt:gt-allin-commit</code> checks (0.17.2)</td>
+<td><code>--repo</code></td>
+</tr>
+<tr>
+<td><code>validations</code></td>
+<td>files changed since their recorded validation, <code>gt_validation.py list</code> (0.17.2)</td>
+<td><code>--repo</code></td>
+</tr>
 </tbody>
 </table>
+<p><code>tests</code> and <code>validations</code> came last (owner, 2026-09-28: <em>"add all the other checks into
+allin"</em>). A repo with no discoverable test command reports <code>tests</code> as <strong>could not run</strong>, never
+as clean. One check is deliberately NOT a member: <code>gt_code_review.py</code> plans a review for a model
+to perform and finds nothing by itself, so as a member it could only ever report "ran, clean" —
+a pass for work nobody did.</p>
+<p>The last three existed and ran nowhere "everything" was run. <code>gt_secrets</code> in particular had no
+aggregator home at all, because it is deliberately not a <code>/gt:gt-scan</code> member — a credential
+finding must never share a report with findings that print source text. <code>wiki</code> joins the roster
+only while its module is installed: someone who switched the wiki module off must not be told
+"could not run" on every run for a check they chose not to have. So the roster is six members,
+seven with gt-wiki.</p>
 <p><strong>The headline is <em>N of M members ran</em>, and the denominator is the declared set.</strong> A member that
 could not run — not installed, or missing the <code>--repo</code> or <code>--vault</code> it needs — is <strong>reported,
 never silently skipped</strong>, because a short finding list from a run where half the members failed
@@ -2264,6 +2596,7 @@ everything.</p>
 <h3 id="gt_schedulepy-the-scheduled-jobs-installed-by-a-script-rather-than-by-hand"><code>gt_schedule.py</code> — the scheduled jobs, installed by a script rather than by hand</h3>
 <pre><code class="language-bash">python3 $SCRIPTS/gt_schedule.py list
 python3 $SCRIPTS/gt_schedule.py install daily --vault &quot;&lt;vault&gt;&quot; [--repo PATH ...] [--hour H] [--minute M]
+python3 $SCRIPTS/gt_schedule.py install sweep --vault &quot;&lt;vault&gt;&quot; --repo TREE
 python3 $SCRIPTS/gt_schedule.py check   daily
 python3 $SCRIPTS/gt_schedule.py remove  daily
 </code></pre>
@@ -2273,6 +2606,7 @@ python3 $SCRIPTS/gt_schedule.py remove  daily
 <th>Job</th>
 <th>Runs</th>
 <th>What it does</th>
+<th>Normal exits</th>
 </tr>
 </thead>
 <tbody>
@@ -2280,14 +2614,33 @@ python3 $SCRIPTS/gt_schedule.py remove  daily
 <td><code>daily</code></td>
 <td>22:00</td>
 <td><code>gt_daily.py</code> — the day's facts into <code>Daily Notes/&lt;today&gt;.md</code></td>
+<td><code>0</code>, <code>1</code> (nothing to report)</td>
 </tr>
 <tr>
 <td><code>lint-weekly</code></td>
 <td>Mondays 07:00</td>
 <td>vault + wiki lint, reported into the vault</td>
+<td><code>0</code></td>
+</tr>
+<tr>
+<td><code>sweep</code></td>
+<td>Mondays 07:30 (0.17.2)</td>
+<td><code>gt_sweep.py</code> — whole-tree secrets + code sweep, verdict filed in the vault. Takes <code>--vault</code> and exactly one <code>--repo</code></td>
+<td><code>0</code></td>
 </tr>
 </tbody>
 </table>
+<p><strong>A scheduled job runs the installed copy</strong> in <code>~/.claude/golden-thread/hooks/</code> — a script under
+CloudStorage fails under launchd — and <code>install</code> refuses a job whose script is not there. Until
+0.17.2 <code>gt_daily.py</code> was not installed there, so the <code>daily</code> job could never be installed, and
+<code>gt_sweep.py</code> promised a launchd job that did not exist. Both install there now, with the
+sweep's members and their imports, and the release gate fails any job whose script does not
+reach the hooks dir.</p>
+<p><strong><code>install sweep</code> currently refuses — a known limitation.</strong> Before scheduling, <code>install</code> runs the
+job's own <code>--check</code>; for the sweep that proves each member can run from the hooks dir, over an
+empty tree. Today it cannot: <code>gt_registry</code> looks for <code>packs/</code> beside itself and there is none
+there, so every member would report "could not run" every Monday. Refusing to install is the
+check doing its job.</p>
 <p>The weekly lint agent was installed <strong>by hand</strong> in 2026-09-08, and its only record was two lines
 in a runbook: a manual step with no <code>--check</code> and no rollback, on a machine where scheduled jobs
 fail in ways a terminal run cannot reproduce. This retrofits the standing rule that any human
@@ -2295,9 +2648,21 @@ step becomes a script with <code>--check</code>, self-proof and rollback.</p>
 <p><strong><code>check</code> validates through launchd, not through a terminal run</strong>, and reads back launchd's own
 <em>last exit code</em>. That distinction matters on macOS, where a job can run perfectly in your shell
 and be denied the filesystem under launchd. It also knows which exit codes are a <strong>normal
-outcome</strong> for each job — <code>lint-weekly</code> exits <code>1</code> whenever the lint finds something, which is most
-weeks, and an earlier version called the live job broken on exactly that. A check that reports a
-normal result as a failure is worse than no check, because people stop reading it.</p>
+outcome</strong> for each job, because a check that reports a normal result as a failure is worse than
+no check — people stop reading it.</p>
+<p><strong>That table was wrong for <code>lint-weekly</code> until 0.17.2</strong>, in the other direction. It listed <code>1</code> as
+normal on the belief that the job exits 1 when the lint finds something. It never did —
+<code>gt_lint_weekly.py</code> returns 0 on every path it chooses — so the only way it exited 1 was an
+uncaught exception, and a crash read as "findings". Now only <code>0</code> is normal; <code>gt_lint_weekly.py</code>
+exits <code>3</code> and writes <strong>COULD NOT RUN</strong> into its report when a lint died, instead of "Findings: 0"
+built from two tracebacks. <strong>A benign exit code must be one the script returns on purpose, never
+Python's crash code.</strong> <code>gt_daily.py</code> turns an uncaught exception into <code>3</code> for the same reason.</p>
+<p><strong>Known and not fixed: macOS refuses calendar-fired runs the vault.</strong> Every calendar-fired
+<code>lint-weekly</code> run on record (09-14, 09-21, 09-28) was refused by macOS privacy controls (TCC)
+reading existing files in a vault under CloudStorage; only runs kicked from a session succeeded.
+The <code>daily</code> job will very likely fail the same way. The doctor's <code>schedule</code> check reports it;
+the fix — a privacy grant, a vault outside CloudStorage, or no calendar trigger — is the machine
+owner's choice.</p>
 <h3 id="gt_dailypy-the-days-facts-and-nothing-else"><code>gt_daily.py</code> — the day's facts, and nothing else</h3>
 <pre><code class="language-bash">python3 $SCRIPTS/gt_daily.py --vault &quot;&lt;vault&gt;&quot; [--date YYYY-MM-DD] [--repo PATH ...] [--dry-run] [--check]
 </code></pre>
@@ -2309,7 +2674,8 @@ a generated block that editorialised would encode a reading of the day that is n
 the wiki it records how many items and how much time, never what they said.</p>
 <p>It <strong>never touches a line outside its block</strong>, and specifically never touches <code>## Noticed</code> —
 that is the unfiled capture surface <code>/gt:gt-review</code> sweeps, and a tool tidying it would defeat
-the sweep. Exit <code>1</code> means nothing to report for the day, which is not an error. <code>--check</code>
+the sweep. Exit <code>1</code> means nothing to report for the day, which is not an error; a crash
+exits <code>3</code> (0.17.2), never <code>1</code>. <code>--check</code>
 verifies every dependency and exits; <code>--dry-run</code> prints the block and writes nothing.</p>
 <h3 id="gt_statepy-write-the-state-before-the-context-runs-out"><code>gt_state.py</code> — write the state before the context runs out</h3>
 <pre><code class="language-bash">python3 $SCRIPTS/gt_state.py check [--margin N] [--write] [--json]
@@ -2339,6 +2705,82 @@ reads a backstop write as the early one having worked.</p>
 the usage module may not be installed at all, and silence from a source that was never there
 must not read as a measurement saying everything is fine. Every failure path exits <code>0</code>; a state
 write that broke a turn would be worse than the gap it closes.</p>
+<h3 id="gt_surfacepy-what-the-last-session-left-shown-to-the-next"><code>gt_surface.py</code> — what the last session left, shown to the next</h3>
+<pre><code class="language-bash">python3 $SCRIPTS/gt_surface.py check [--vault V] [--dry-run] [--json]   # what SessionStart runs (with --hook)
+python3 $SCRIPTS/gt_surface.py must-do [--vault V]                     # the MUST DO block alone
+python3 $SCRIPTS/gt_surface.py handoffs --project SLUG [--vault V]      # one project's waiting handoffs (/gt:gt-open)
+</code></pre>
+<p>By 0.17.1 gt could <strong>write</strong> everything a next session needs and put none of it in front of that
+session. <code>gt_handoff.py</code> wrote handoffs, <code>gt_state.py</code> wrote state files, <code>/gt:gt-work</code> raised
+tasks citing a handoff, the owner kept dated must-do items — and, measured on 2026-09-28, none of
+the <code>SessionStart</code> hooks read a handoff, a state file, <code>TASKS.md</code> or any <code>p::</code>. Two credential
+rotations sat 15 days overdue at the vault's top priority, worked around almost daily, because
+<strong>priority is a sort order, not an alarm</strong>: sixty tasks already sat at the top tier across ten
+projects, and one more alerts nobody.</p>
+<p><strong>Surfacing is the alarm; the task is the record.</strong> This hook is the alarm. It never creates,
+edits or closes a task, and it never writes to the vault.</p>
+<p>What it shows, how often, and the settings that control each are under
+<a href="#what-you-see-at-session-start">What you see at session start</a>; the file format is
+<a href="#deadlinesmd-format"><code>deadlines.md</code> format</a>. Handoff state comes from <code>gt_handoff_status.py</code>
+(see <a href="#gtgt-handoff-handle"><code>/gt:gt-handoff-handle</code></a>); the task line from the vault's
+<code>gt_task.py count</code> (see <a href="#gtgt-task"><code>/gt:gt-task</code></a>).</p>
+<p><strong>State files are still "once each"</strong>, and that needs memory: a machine-local "already shown"
+ledger at <code>~/.claude/golden-thread/surface/seen.json</code>, the one thing this hook writes.
+<code>--dry-run</code> leaves it alone.</p>
+<p><strong>A clean run says so</strong> — <code>nothing waiting</code>, in one line — because silence reads the same as a
+hook that never ran. <strong>It is never fatal</strong>: any failure exits <code>0</code>, since a <code>SessionStart</code> hook
+that broke startup would be worse than the gap it closes. Switch it off with
+<code>gt_settings.py set surface off</code>.</p>
+<p><strong>Why this is core and not the report card.</strong> The request that led here proposed a deadline check
+in the report-card module. An alarm must not depend on an optional module being installed, and
+the report card shows what the <em>previous</em> session computed at its end, where a countdown has to
+be computed live at every start.</p>
+<h3 id="session-identity-which-machine-wrote-a-claim">Session identity — which machine wrote a claim</h3>
+<p><code>gt_session.py</code> claims a file for a session, and the <code>guard_session_claims</code> hook refuses a write
+to a file another live session holds (Core rule 1). "Live" is judged by the recorded <strong>pid</strong> — but
+a pid only means something on the machine that recorded it. So every reader first asks: <em>was this
+written here?</em></p>
+<p>Until 0.17.2 the answer was "the recorded host equals this hostname". A hostname is not an
+identity. On 2026-09-28 a laptop moved to a wired network, DHCP gave it a new name, and every
+claim written under the old one stopped being this machine's. Nothing failed: the pids simply
+stopped being judged, and each claim would lapse on the heartbeat clock while its session was
+still running — Core rule 1, disarmed by a DHCP lease, with nothing announced.</p>
+<p><strong>Identity is now a machine id</strong>: a uuid4 written once to <code>~/.claude/golden-thread/machine-id</code>,
+created atomically on first use (two first runs cannot mint two ids), never overwritten, never
+synced between machines. Registrations record it as <code>machine:</code>; <code>host:</code> stays as a readable
+label only. The claim guard, <code>gt_session.py</code> and <code>gt_workers.py</code> all apply one rule
+(<code>gt_paths.same_machine</code>; the vault tool carries a pinned copy, because a vault tool cannot
+import from the plugin):</p>
+<table>
+<thead>
+<tr>
+<th>The record has…</th>
+<th>Verdict</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>a machine id, and so do we</td>
+<td>the ids decide. Same id under a new name is a <strong>rename</strong> — reported once, claims still hold</td>
+</tr>
+<tr>
+<td>no machine id (written by gt ≤ 0.17.1)</td>
+<td>ours while its host label matches, exactly as before. If it does not match, nothing can prove whose it is: its heartbeat decides, <strong>and that is said</strong>. It adopts the id the next time its own session writes it</td>
+</tr>
+<tr>
+<td>a machine id, and ours is unreadable</td>
+<td>the host label, as before — and the missing id is announced</td>
+</tr>
+</tbody>
+</table>
+<p><strong>Two OS logins on one Mac are two machines now.</strong> The id lives under each HOME, beside
+<code>workers.jsonl</code>, which is machine-local by the same design. Each login judges the other's
+sessions by heartbeat, the cross-machine rule, where before they shared a hostname and judged
+each other's pids.</p>
+<p><strong>A pid no longer vouches for another session.</strong> One Claude Code process hosts successive
+sessions, so an older session's file recording <em>our own</em> pid looked live for as long as we ran,
+and its claims never lapsed. When the recorded pid is the asker's and the session is not, the pid
+proves nothing about that session, and its heartbeat decides.</p>
 <hr />
 <h3 id="gt-watchgt-watch"><code>/gt-watch:gt-watch</code></h3>
 <p><em>Module <code>watch</code> (plugin <code>gt-watch</code>), installed by default; it was <code>/gt:gt-watch</code> before
@@ -2417,7 +2859,7 @@ lane split into the ladder's levels (memory → research/decisions/design → Kn
 global-memory → Core); an arrow joins the level an item left to the level it reached, so a
 promotion is an arrow climbing. It reads <code>Projects/golden-thread/events.jsonl</code> and never
 writes the vault.</p>
-<pre><code class="language-bash">FLOW=~/.claude/plugins/cache/golden-thread-plugin/gt-flow/0.17.1/scripts
+<pre><code class="language-bash">FLOW=~/.claude/plugins/cache/golden-thread-plugin/gt-flow/0.17.2/scripts
 python3 $FLOW/gt_flow.py render --vault &lt;vault&gt; [--out FILE|DIR] [--redact] \
     [--project &lt;slug&gt; ...] [--since YYYY-MM-DD] [--tasks]
 </code></pre>
@@ -2497,7 +2939,7 @@ answer is not obvious — including when the honest answer is that the fact belo
 project other than the one loaded.</p>
 <hr />
 <h2 id="script-reference">Script reference</h2>
-<pre><code class="language-bash">SCRIPTS=~/.claude/plugins/cache/golden-thread-plugin/gt/0.17.1/scripts
+<pre><code class="language-bash">SCRIPTS=~/.claude/plugins/cache/golden-thread-plugin/gt/0.17.2/scripts
 
 python3 $SCRIPTS/vault_init.py fresh --vault ~/my-vault --domain &quot;My Team&quot;
 
@@ -2552,6 +2994,22 @@ mid-session, it applies from the <em>next</em> session. Same for hooks in
 the finding path; make sure you used the path as the finding reports it.</p>
 <p><strong>"conflict: vault-config.json points to a different vault"</strong> — run
 <code>vault_init.py connect --vault &lt;new-path&gt;</code>.</p>
+<p><strong>A scheduled job fails, or <code>/gt:gt-doctor</code>'s <code>schedule</code> check says FAIL</strong> — read the job's
+<code>.err</code> log the check names. <code>PermissionError</code> on a vault under CloudStorage from a
+calendar-fired run is the known macOS privacy refusal (0.17.2 reports it; it does not fix it):
+a run kicked from a session succeeds where the scheduled one is refused.</p>
+<p><strong><code>gt_schedule.py install sweep</code> refuses</strong> — expected in 0.17.2. Its pre-flight proves every
+member can run from the hooks dir, and they cannot yet find their packs there.</p>
+<p><strong>"no machine id" or "hostname changed" notices</strong> — see
+<a href="#session-identity-which-machine-wrote-a-claim">Session identity</a>. A rename is harmless and
+reported once; a legacy file on a host that no longer matches keeps its claims only while its
+heartbeat is fresh.</p>
+<p><strong>A handoff keeps being shown</strong> — that is intended until it is dealt with: run
+<code>/gt:gt-handoff-handle</code>, mark it handled, or defer it to a date. To see waiting handoffs only in
+their own project, <code>gt_settings.py set handoff_surface project</code>.</p>
+<p><strong>No <code>GOLDEN THREAD surface:</code> line at session start</strong> — the hook is unwired or <code>surface</code> is
+<code>off</code>. Run <code>/gt:gt-doctor</code> (<code>wiring</code>) and <code>gt_settings.py show</code>. A clean run still prints
+"nothing waiting".</p>
 <p><strong><code>core-unenforced</code> finding in lint</strong> — Core rules are stored but not being
 asserted. Run <code>vault_init.py install-core-rules --vault &lt;vault&gt;</code> or wire the
 hooks by hand. Do not suppress this finding.</p>

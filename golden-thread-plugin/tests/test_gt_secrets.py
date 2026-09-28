@@ -13,6 +13,7 @@ import json
 import os
 import tempfile
 import unittest
+from pathlib import Path
 
 from _harness import Sandbox, SCRIPTS
 
@@ -126,12 +127,40 @@ class TheAffirmative(SecretsBase):
 
 
 class Isolation(unittest.TestCase):
-    def test_it_is_not_a_member_of_any_aggregator(self):
-        """Two tools with opposite output rules in one process is how 0.16.0 leaked."""
-        for name in ("gt_scan.py", "gt_allin.py"):
-            src = (SCRIPTS / name).read_text()
-            self.assertNotIn("gt_secrets", src,
-                             "%s references gt_secrets — it must run alone" % name)
+    def test_it_is_not_a_member_of_gt_scan(self):
+        """Two tools with opposite output rules in one process is how 0.16.0 leaked. gt_scan
+        prints source text by design, so gt_secrets must never share its report."""
+        src = (SCRIPTS / "gt_scan.py").read_text()
+        self.assertNotIn("gt_secrets", src, "gt_scan.py references gt_secrets — it must run alone")
+
+    def test_gt_allin_runs_it_only_as_its_own_process(self):
+        """NARROWED 2026-09-28 (owner: "add all the other checks into allin"). This test used to
+        forbid gt_allin from naming gt_secrets at all. The danger it guards is IN-PROCESS
+        sharing -- one emitter, two output rules. gt_allin runs every member as a separate
+        subprocess and only relays that process's own output, so the guard is now exactly
+        that: never imported, and a planted credential never appears in all-in's output."""
+        import ast
+        tree = ast.parse((SCRIPTS / "gt_allin.py").read_text())
+        for node in ast.walk(tree):
+            if isinstance(node, ast.Import):
+                self.assertNotIn("gt_secrets", [a.name for a in node.names])
+            if isinstance(node, ast.ImportFrom):
+                self.assertNotEqual(node.module, "gt_secrets")
+
+    def test_a_planted_credential_never_reaches_allin_output(self):
+        import shutil, subprocess, sys, tempfile
+        repo = Path(tempfile.mkdtemp(prefix="gt-allin-secret-"))
+        self.addCleanup(shutil.rmtree, repo, True)
+        value = "Zq8" + "vN3xL0pWm7Tb" + "Y2cKe9RfUa4Hj"
+        (repo / "settings.py").write_text('API_TOKEN = "%s"\n' % value)
+        env = dict(os.environ, HOME=str(repo), GT_SECRETS_BIN=str(SCRIPTS / "gt_secrets.py"))
+        for fmt in ([], ["--json"]):
+            r = subprocess.run([sys.executable, str(SCRIPTS / "gt_allin.py"), "--repo", str(repo),
+                                "--only", "secrets"] + fmt, capture_output=True, text=True,
+                               env=env)
+            self.assertNotIn(value, r.stdout + r.stderr)
+            self.assertNotIn(value[:8], r.stdout + r.stderr, "a fragment leaked")
+            self.assertIn("secrets", r.stdout)
 
     def test_every_writer_lives_inside_the_single_emitter(self):
         """Not a count -- a location. Every print must sit in class Out, which is the one

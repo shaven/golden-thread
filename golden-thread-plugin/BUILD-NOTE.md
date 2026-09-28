@@ -1,4 +1,4 @@
-# Build note — gt 0.17.1
+# Build note — gt 0.17.2
 
 **Read this first if you are the person taking this tree into the other repository.**
 
@@ -9,169 +9,143 @@ changed that arrives with the code.** Keep it accurate or the drop is opaque on 
 
 ---
 
-## 1. What this drop is
+## 1. Versions
 
 | Plugin | Version | Was |
 |---|---|---|
-| `gt` | **0.17.1** | 0.16.5 |
-| `gt-demo`, `gt-farm`, `gt-flow`, `gt-report-card`, `gt-watch` | **0.17.1** | 0.16.5 |
-| `gt-usage` | **0.1.3** | 0.1.2 |
-| `gt-wiki` | **0.2.3** | 0.2.2 |
+| `gt` | **0.17.2** | 0.17.1 |
+| `gt-demo`, `gt-farm`, `gt-flow`, `gt-report-card`, `gt-watch` | **0.17.2** | 0.17.1 (content unchanged) |
+| `gt-usage` | 0.1.3 | unchanged |
+| `gt-wiki` | 0.2.3 | unchanged |
 
-**Every module moved, and it had to.** Each module's `module.json` carries a `requires_gt`
-range, and every one of them capped at `<0.17.0`. A gt of 0.17.1 is outside all of them, so
-publishing gt alone would have shipped seven modules that refuse to install. They are now
-`>=0.17.1,<0.18.0`.
+**The five gt-versioned modules moved with gt** (their `requires_gt` is now `>=0.17.2,<0.18.0`);
+their content is unchanged. gt-usage and gt-wiki keep their own version trains. Both 0.17.2 and
+0.17.1 are in the tree, deliberately, so `install.sh` can roll back.
 
-**There is no 0.17.0.** It was cut and then held back so that one further change — session
-state written before the context runs out — could go into the same release rather than trail
-it by a day. If you see 0.17.0 named anywhere in a commit message or an older note, it means
-this release.
-
-**Both 0.17.1 and 0.16.5 are in the tree.** `dev/sync-gt-src.sh` publishes the newest release
-of each plugin *and the one before it*, deliberately, so `install.sh` can roll back.
+gt now has **28 skills** (five new) and eleven core settings (three new: `surface`,
+`handoff_surface`, `task_surface`).
 
 ---
 
-## 2. What changed, in one paragraph each
+## 2. What changed
 
-Full detail is in `MANUAL.md` under **Checks and cadences**; this is the shape of it.
+Three themes. The MANUAL has a new top-level section, **Tasks and handoffs**, for the first two.
 
-- **`gt_secrets.py` — a credential scanner that is its own process.** Nothing in that process
-  ever prints matched source text, and no other check runs beside it. A finding is
-  `path:line` + rule id + length: never an excerpt, never a prefix, never a hash. It is
-  deliberately **not** a `gt-scan` member, because every other scanner prints the text it
-  found — there the text *is* the finding, here it is the thing being protected — and two
-  opposite output rules in one process is precisely how an earlier attempt leaked.
-- **`gt_scan_code.py` — source validation.** The second `gt-scan` member. Rules are **data**,
-  from `lint` packs, in a documented subset of ast-grep's rule schema. Each rule declares the
-  evaluator tier it needs, and a rule whose tier is absent is reported **SKIPPED, never
-  silently passed**. Emits SARIF 2.1.0.
-- **Three cadences.** `tests/run.sh` over the scanners' file set (fails the run); a commit gate
-  over the **staged diff only** (denies the commit); `gt_sweep.py` over the **whole tree**,
-  weekly (reports, never blocks).
-- **`gt_check_report.py`** files each check's **verdict, count, scope and ref** into the vault
-  — never a finding's content.
-- **`gt_code_review.py` — a framework that ships zero opinions.** See §5; this is the single
-  most misreadable thing in the release.
-- **`gt_schedule.py`** installs, verifies and removes the launchd jobs, validating **through
-  launchd** rather than through a terminal run.
-- **`gt_daily.py`** writes the day's facts into `Daily Notes/<date>.md` — terse by design, and
-  it never touches the `## Noticed` section.
-- **`gt_state.py`** writes session state **before** the context runs out. Its signal is
-  `ctx_pct` and never the rate-limit meter; the two are unrelated and both look like
-  plausible percentages, which is how that mistake stays hidden.
-- **`gt_demote.py`** is documented for the first time. It shipped in an earlier release and
-  appeared in no document.
+**Tasks and handoffs — create, see, handle.**
+- `/gt:gt-task` creates a task through the new vault tool `gt_task.py` (`add`, `list`, `done`,
+  `drop`, `defer`, `count`), optionally tied to a `[[page]]` or vault path with `[ref:: …]`
+  (must resolve). `/gt:gt-task-list` shows tasks by filter (`<slug>`, `p1`–`p3`, `mine`,
+  `overdue`, `stale`, `deferred`, `ref:<text>`) without loading any project. `/gt:gt-task-handle`
+  works a filtered set: done, drop (reason required), defer (future date and reason required),
+  keep. Tasks stay in README `## Tasks`, parsed with `gt_tasks.py`'s own rules; IDs are
+  `slug:LINE:HASH` and refused if the line changed. `gt_tasks.py` hides a deferred task
+  (`[defer:: YYYY-MM-DD]`) from ranking and escalation until its date. `gt_task.py` refuses a
+  README another live session has claimed.
+- Handoffs have a status (`gt_handoff_status.py`, hooks dir): `open`, `deferred` (future date
+  required), `handled` (marked, or every task citing the handoff's filename checked off),
+  `history` (pre-0.17.2, no status, over a week old, no open citing task). `gt_handoff.py`
+  writes `status: open`. `/gt:gt-handoff-list` (read-only) and `/gt:gt-handoff-handle`.
+  `/gt:gt-open` names the project's waiting handoffs; `/gt:gt-work` requires each task it raises
+  to name the handoff's filename.
+
+**Surfacing at session start** — new SessionStart hook `gt_surface.py`. Every session: a
+MUST DO block from `<vault>/deadlines.md` (`| item | category | due | see |`; overdue 🔴, within
+14 days 🟡), each unhandled handoff as one line (setting `handoff_surface`: `any` default,
+`project`, `manual`), and one line counting `p:: 1` tasks waiting on you (setting
+`task_surface`). Once each: state files from `gt_state.py`, handed to the model in full after a
+compaction. Never loads a handoff body, never writes the vault; a clean start says "nothing
+waiting".
+
+**Wiring fixes.**
+- Session claims keyed on a machine id (`~/.claude/golden-thread/machine-id`), not the hostname;
+  a pid that is the asker's own no longer vouches for another session's file.
+- `gt_daily`, `gt_schedule`, `gt_sweep` and the sweep's members install to the hooks dir; new
+  `sweep` job (Mondays 07:30); `lint-weekly` normal exits corrected to `{0}`; crashes exit 3
+  and say COULD NOT RUN.
+- `gt_doctor` gains `schedule` and asks `gt_upgrade` for the `vault` check.
+- `/gt:gt-allin` gains `secrets`, `runbooks`, `tests` (the repo's suite, records the receipt),
+  `validations` and (with gt-wiki) `wiki`. A repo with no test command reads *could not run*.
+- `dev/release-check.sh` files each run's verdict in `<vault>/.gt/checks/release.md`.
+- `retired.json` removes a stray hand-copied `hooks/gt_ingest.py`.
 
 ---
 
-## 3. What to do on arrival
+## 3. What to run after install
 
 ```bash
-# 1. Confirm you have what you think you have.
 cat SOURCE.json                 # the commit this tree was cut from, and every plugin version
+bash install.sh                 # the only updater; installs the NEWEST version directory
+#   then RESTART Claude Code — plugins and hooks load at session start.
 
-# 2. Install. It always installs the NEWEST version directory present.
-bash install.sh
-#    then restart Claude Code — plugins and hooks load at session start.
-
-# 3. Prove it, from the tree you just installed from.
 ./selftest.sh
-
-# 4. Full release verification, if you are re-publishing rather than just installing.
-bash dev/release-check.sh
-bash tests/run.sh
 ```
 
-`install.sh` is the **only** updater. Do not copy directories into place by hand: the installer
-also removes what older releases left behind, using `retired.json`, and one install from any
-old release must end where a fresh install would.
+Then, in a Claude Code session:
+
+1. **`/gt:gt-upgrade`** — runs pending vault migrations and moves the vault's stamp to 0.17.2.
+   A vault stamped at 0.16.5 or 0.17.1 is behind, and `/gt:gt-doctor`'s `vault` row says so.
+2. **Confirm `<vault>/Projects/golden-thread/tools/gt_task.py` exists.** `install.sh` refreshes
+   the vault tools (through `scripts/vault_refresh.py`) when the vault is a git repository.
+   Until `gt_task.py` is there, the three task skills cannot run and the session-start task line
+   stays silent rather than guessing. To refresh by hand:
+   `python3 <release>/scripts/vault_refresh.py refresh --vault "<vault>"`.
+3. **`/gt:gt-doctor`** — read the `wiring`, `vault` and `schedule` rows.
+4. Start a new session and look for the `GOLDEN THREAD surface:` line: a MUST DO block,
+   handoffs, a task count, or "nothing waiting". **No line means the hook is not wired** (or
+   `surface` is `off`).
+
+`deadlines.md` is optional; without it the MUST DO block is simply not shown.
 
 ---
 
-## 4. The one thing that needs a decision: ast-grep
+## 4. What needs a decision
 
-`gt_scan_code.py`'s `astgrep` evaluator tier shells out to the **ast-grep CLI**, which is
-**optional and not bundled**.
+**Scheduled runs are refused the vault by macOS (TCC). Not fixed.** Every calendar-fired
+`lint-weekly` run — 09-14, 09-21, 09-28 — was refused reading existing files in the CloudStorage
+vault; only runs kicked from a session succeeded. The `daily` 22:00 job will very likely fail the
+same way. 0.17.2 makes the failure visible (exit 3, COULD NOT RUN; the doctor's `schedule` check
+says FAIL). The options — a privacy grant for the interpreter launchd runs, a vault outside
+CloudStorage, or no calendar triggers — are the machine owner's choice.
 
-- **Without it**, rules at that tier are reported **SKIPPED**. The scan still runs, still
-  reports, and still says plainly what it did not cover. Nothing breaks.
-- **With it**, those rules evaluate. `brew install ast-grep` or `npm i -g @ast-grep/cli`.
-- **Below version 0.45.3 it is refused rather than used**, because a partial version silently
-  under-matches — which is the exact failure the skip contract exists to prevent.
-
-`install.sh` **offers** it and never installs it behind your back. The intended long-run
-default is on, with both ways to install offered — but that is the user's choice to make on
-their own machine, not something this drop performs.
-
-The Python binding (`ast-grep-py`) was **removed**. It shipped macOS wheels for cp39 only,
-0.25.0–0.30.0, and 0.30.0 lacked enough of the rule language to be worth keeping. If anything
-downstream imports it, that import is now dead.
+**The `sweep` job cannot be installed yet.** `gt_schedule.py install sweep` runs
+`gt_sweep.py --check` first, and it refuses: `gt_registry` cannot find `packs/` from the hooks
+dir, so every member would report "could not run" every Monday. The refusal is the check working.
+Making the packs resolvable from there is the open question.
 
 ---
 
 ## 5. What will be misread if nobody says it
 
-**`gt_code_review.py` ships ZERO review dimensions, and that is the design, not an omission.**
+**Handoffs now repeat at every session start until handled or deferred. That is by design**
+(owner, 2026-09-28): a handoff scrolled past once is as good as never written. Deal with it in
+`/gt:gt-handoff-handle`, or defer it to a date; to see it only inside its project,
+`gt_settings.py set handoff_surface project`.
 
-gt does not perform the review and cannot: "does this abstraction earn its keep" has no
-mechanical oracle. What gt owns is everything around the judgement — planning the scope,
-validating that a finding is *checkable*, suppressing what was already declined, and reporting
-what was rejected as well as what was kept.
+**Two OS logins on one Mac are now two machines** for session claims — the id lives under each
+HOME — and judge each other's sessions by heartbeat. Before 0.17.2 they shared a hostname and
+judged each other's pids.
 
-The dimensions belong to whoever is reviewing: a `review.*.pack.json` in their own vault, at
-`<vault>/Projects/golden-thread/packs/`. A core review pack would make gt's idea of a good
-review everyone's default, so there is not one, and a test asserts there never quietly becomes
-one.
+**A dropped task counts as closed** in `gt_events`, `gt_daily` and every other reader, because
+its box is checked; the line itself records `dropped: <reason>`. A drop is a decision, not a
+completion — read the line if the difference matters.
 
-**Running it with nothing configured exits `3`, not `0`.** If it reported success, every user
-who had never configured a dimension would be told their code had been reviewed. If you are
-wiring this into anything automated, treat exit 3 from `dimensions` or `plan` as "not
-configured", never as "clean".
+**A task that does not name the handoff's filename is not joined to it**, so it neither counts
+toward the handoff nor closes it.
 
-The same shape runs through the release and is worth stating once: **a check that could not run
-is not a pass.** `gt-scan` reports *N of M members ran* before any finding count; a rule whose
-evaluator tier is missing is SKIPPED, not passed; `gt_secrets.py` ends every successful run with
-an affirmative naming what it covered, because silence and cleanliness print identically.
+**The module versions are not stale.** Nothing in them changed; do not bump them to match gt.
 
----
+**The deadline alarm lives in gt core, not the report card**, so it does not depend on an
+optional module and is computed live at every start.
 
-## 6. Defects fixed in this release that could affect you
+**`lint-weekly` exiting 1 was always a crash**, never "findings". A note saying otherwise is wrong.
 
-- **`install.sh` aborted under `set -e` on any machine without Homebrew or npm**, dying before
-  its final line. If a machine was installed from a build cut between 0.16.5 and this one,
-  re-run `install.sh` from this tree and confirm it prints **"Restart Claude Code"** at the end.
-  That line is now asserted by a regression test under a stripped `PATH`.
-- **`gt_scan.py --all-files` knocked out the `code` member**, reporting "1 of 2 member(s) ran".
-  The aggregator forwarded a flag only the `language` member accepts. Members now declare their
-  flag surface.
-- **`gt_daily.py` mangled the text it quoted** — underscores read as Markdown emphasis, and a
-  commit subject containing bold reduced to a single character.
-- **Two checks that cried wolf**: `gt_daily --check` called a repository subdirectory "not a git
-  repo", and `gt_schedule check` called the live weekly lint job broken for its *normal* exit
-  code.
-- **Core rules moved to the vault root** (`core-rules/`, from `Projects/golden-thread/`). The
-  hooks resolve the folder wherever it is, so an un-migrated vault still works — but if you
-  hold any script or document that hard-codes the old path, it is now wrong.
+**Measured, and not built:** no detector for a session that ended uncaptured. Across 40 sessions
+(8 lossy, 32 healthy) no signal combination separated them — the best AND-pairs caught 1 of 8.
+`/gt:gt-work` still asks; nothing guesses.
 
 ---
 
-## 7. New release gates, if you re-publish from here
-
-Two gates were added to `dev/release-check.sh` and will fail a build that would previously
-have passed:
-
-- **`scripts/*.py` must be documented.** Any script with an `argparse` command line must be
-  named in at least one of `README.md`, `MANUAL.md`, `golden-thread-docs.md` or the repo-root
-  `README.md`. When this gate was written it found **nine** commands documented nowhere.
-- **`dev/check_docstring_flags.py`** — a flag a tool's own usage block advertises must be a flag
-  argparse actually has. It reads **usage lines only**, because docstrings discuss flags in
-  prose and that discussion is often about a flag that deliberately does *not* exist.
-
----
-
-## 8. Where to write back
+## 6. Where to write back
 
 Do not edit this tree to propose a change; only the publishing machine writes here, and the
 next publish replaces whatever it finds. Requests go to `gt-feature-requests/new/` as a single

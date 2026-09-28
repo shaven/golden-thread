@@ -136,5 +136,29 @@ class ItFilesTheResultInTheVault(SweepBase):
         self.assertIn("--vault", proc.stderr)
 
 
+
+class SweepCheck(SweepBase):
+    """--check: can every member run from where this copy lives? (0.17.2)
+
+    gt_schedule's pre-flight for the weekly job. The members resolve their rules from packs/
+    beside the release, so a copy without them reports could-not-run on every tree."""
+
+    def test_check_from_the_release_passes_and_files_nothing(self):
+        before = sorted(self.vault.rglob("*"))
+        proc = self.py(SWEEP, "--vault", self.vault, "--check")
+        self.assertEqual(proc.returncode, 0, proc.stdout + proc.stderr)
+        self.assertIn("2 of 2 member(s) can run", proc.stdout)
+        self.assertEqual(sorted(self.vault.rglob("*")), before, "--check filed a report")
+
+    def test_check_from_a_copy_without_packs_cannot_run(self):
+        lone = self.tmp / "hooks"
+        lone.mkdir()
+        for n in ("gt_sweep.py", "gt_secrets.py", "gt_scan_code.py", "gt_check_report.py",
+                  "gt_registry.py", "gt_staged.py", "gt_paths.py"):
+            (lone / n).write_text((SCRIPTS / n).read_text())
+        proc = self.py(lone / "gt_sweep.py", "--vault", self.vault, "--check")
+        self.assertEqual(proc.returncode, 3, proc.stdout + proc.stderr)
+        self.assertIn("COULD NOT RUN", proc.stdout)
+
 if __name__ == "__main__":
     unittest.main()

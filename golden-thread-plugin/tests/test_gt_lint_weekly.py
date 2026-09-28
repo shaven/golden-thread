@@ -33,9 +33,11 @@ class WeeklyBase(Sandbox):
     def seed_findings(self, v):
         (v / "Knowledge" / "Lonely.md").write_text("see [[Nowhere]]\n")   # index-gap, orphan, broken-link
 
-    def run_weekly(self):
+    def run_weekly(self, expect=0):
         proc = self.py(WEEKLY)
-        self.assertOk(proc, "gt_lint_weekly.py must always exit 0")
+        self.assertEqual(proc.returncode, expect,
+                         "gt_lint_weekly.py exits 0 whenever the lint ran, findings or not, "
+                         "and 3 only when it could not run\n%s\n%s" % (proc.stdout, proc.stderr))
         return proc
 
     def inbox_lines(self, v):
@@ -66,6 +68,35 @@ class WeeklyTest(WeeklyBase):
         # same day again: report refreshed, no second inbox line
         self.run_weekly()
         self.assertEqual(len(self.inbox_lines(v)), 1)
+
+    def test_a_lint_that_cannot_read_the_vault_is_not_zero_findings(self):
+        """2026-09-28: under launchd both linters died on PermissionError reading
+        lint-declines.md, and the report said "Findings: **0**" -- a clean verdict built from
+        two tracebacks -- then the script crashed with exit 1, which the scheduler called
+        normal. Now: COULD NOT RUN in the report, no inbox line, exit 3."""
+        v = self.wired_vault()
+        self.seed_findings(v)
+        declines = v / "lint-declines.md"
+        declines.write_text("suppress: latest.md\n")
+        declines.chmod(0)                  # tearDown's rmtree still removes it: the dir is writable
+        before = (v / "INBOX.md").read_text()
+        self.run_weekly(expect=3)
+        latest = (v / ".gt" / "lint" / "latest.md").read_text()
+        self.assertIn("COULD NOT RUN", latest)
+        self.assertNotIn("Findings: **0**", latest)
+        self.assertEqual((v / "INBOX.md").read_text(), before,
+                         "a run that could not lint filed an inbox line")
+        self.assertIn("COULD NOT RUN", self.log.read_text())
+
+    def test_a_report_that_cannot_be_written_exits_3_not_a_traceback(self):
+        v = self.wired_vault()
+        out = v / ".gt" / "lint"
+        (out / "latest.md").mkdir(parents=True)          # cannot be replaced by a file
+        proc = self.run_weekly(expect=3)
+        self.assertNotIn("Traceback", proc.stderr)
+        self.assertIn("report not written", self.log.read_text())
+        self.assertEqual([p.name for p in out.iterdir() if p.name.endswith(".tmp")], [],
+                         "a failed write left its temporary file in the vault")
 
     def test_clean_vault_writes_report_but_no_inbox_line(self):
         v = self.wired_vault()
