@@ -502,13 +502,28 @@ LANGUAGES_VALIDATED = ("python", "shell")
 # set, different failure mode -- and would need testing as a second backend to be trustworthy.
 ASTGREP_BINS = ("ast-grep", "sg")
 
+# THE MINIMUM VERSION, and why there is one at all.
+#
+# An older ast-grep does not fail -- it answers a DIFFERENT question. 0.30.0 has no markdown,
+# hcl, solidity, nix, dart or swift, so a rule targeting one of those simply never matches, and
+# nothing anywhere says the language was missing rather than the code clean. A version-blind
+# check turned the tier on for whatever was on PATH and then printed "roughly thirty languages",
+# which for 0.30.0 is untrue. That is coverage claimed and not delivered, which is the exact
+# defect class this scanner exists to refuse.
+#
+# The floor is THE VERSION GT IS TESTED AGAINST, not the oldest that might work -- gt cannot
+# honestly claim behaviour it has never run. Lower it only by testing lower and saying so here.
+ASTGREP_MIN = (0, 45, 3)
+ASTGREP_MIN_STR = ".".join(str(n) for n in ASTGREP_MIN)
+VERSION_RE = re.compile(r"(\d+)\.(\d+)\.(\d+)")
 
-def astgrep_binary():
-    """-> a path to a working ast-grep, or None.
 
-    GT_ASTGREP_BIN overrides the search. `sg` is tried second and VERIFIED rather than trusted:
-    on many systems `sg` is util-linux's setgid tool, so finding it on PATH proves nothing. The
-    version string is what settles it.
+def astgrep_status():
+    """-> (path, version, problem). Exactly one of `problem` / usable path is meaningful.
+
+    THREE STATES, kept apart because they need three different fixes: absent (install it), too
+    old (upgrade it), usable. Collapsing "too old" into "absent" would tell someone to install
+    a thing they already have.
     """
     forced = os.environ.get("GT_ASTGREP_BIN")
     if forced:
@@ -516,14 +531,41 @@ def astgrep_binary():
     else:
         import shutil as _sh
         candidates = [c for c in (_sh.which(b) for b in ASTGREP_BINS) if c]
+    if not candidates:
+        return None, None, "no ast-grep on PATH"
+    stale = None
     for path in candidates:
         try:
             out = subprocess.run([path, "--version"], capture_output=True, text=True, timeout=20)
         except (OSError, subprocess.SubprocessError):
             continue
-        if out.returncode == 0 and "ast-grep" in (out.stdout + out.stderr):
-            return path
-    return None
+        text = (out.stdout or "") + (out.stderr or "")
+        # `sg` is util-linux's setgid tool on many systems, so the NAME proves nothing.
+        if out.returncode != 0 or "ast-grep" not in text:
+            continue
+        m = VERSION_RE.search(text)
+        if not m:
+            stale = stale or (path, None,
+                              "ast-grep at %s reports no parseable version" % path)
+            continue
+        found = tuple(int(g) for g in m.groups())
+        if found < ASTGREP_MIN:
+            stale = stale or (path, ".".join(str(n) for n in found),
+                              "ast-grep %s is older than %s, the version gt is tested against; "
+                              "it lacks languages gt's rules may target. Upgrade: brew upgrade "
+                              "ast-grep (or npm install -g @ast-grep/cli)"
+                              % (".".join(str(n) for n in found), ASTGREP_MIN_STR))
+            continue
+        return path, ".".join(str(n) for n in found), None
+    if stale:
+        return stale
+    return None, None, "no usable ast-grep on PATH"
+
+
+def astgrep_binary():
+    """-> a path to a WORKING, new-enough ast-grep, or None."""
+    path, _version, problem = astgrep_status()
+    return None if problem else path
 
 
 def available_tiers() -> list:
@@ -559,9 +601,12 @@ def astgrep_scan(rule, root):
     by its own rules, and a finding in a file gt excluded is a finding gt never agreed to look
     at -- which would make `--exclude` mean something different at this tier than at the others.
     """
-    binary = astgrep_binary()
-    if not binary:
-        raise RuleError("no ast-grep binary found (install it, or set GT_ASTGREP_BIN)")
+    binary, _version, problem = astgrep_status()
+    if problem:
+        # The specific reason travels into the SKIPPED line and into SARIF: "too old" and
+        # "absent" need different actions, and a rule author reading "not installed" about a
+        # binary they can see on their PATH learns to distrust the message.
+        raise RuleError(problem)
     lang = ASTGREP_LANG.get(rule["lang"], rule["lang"])
     if lang == "*":
         raise RuleError("an astgrep rule must name a language")
@@ -827,8 +872,9 @@ def main(argv=None) -> int:
             # binding and would rot silently as the CLI adds languages; the CLI reports an
             # unsupported language itself, as an ordinary error, which is better than gt
             # holding a stale opinion about what the engine can do.
-            print("also EVALUABLE here via ast-grep (%s), with your own packs — it supports "
-                  "roughly thirty languages; ask it, do not ask gt" % astgrep_binary())
+            _bin, _ver, _why = astgrep_status()
+            print("also EVALUABLE here via ast-grep %s (%s), with your own packs — ask it "
+                  "which languages it supports, do not ask gt" % (_ver or "?", _bin))
         return CLEAN
 
     if not rules:
@@ -848,10 +894,17 @@ def main(argv=None) -> int:
               "%s — your packs, your measurements" % ", ".join(unvalidated), file=sys.stderr)
 
     skipped_ids = {}
+    # Resolved ONCE, not per rule: the reason is a property of the machine, not of the rule.
+    astgrep_why = astgrep_status()[2] if "astgrep" not in tiers else None
     for r in rules:
         if r["tier"] not in tiers:
-            skipped_ids[r["id"]] = "requires evaluator tier %r (available: %s)" % (
-                r["tier"], ", ".join(tiers))
+            why = "requires evaluator tier %r (available: %s)" % (r["tier"], ", ".join(tiers))
+            if r["tier"] == "astgrep" and astgrep_why:
+                # Say WHICH problem. "Too old" and "absent" need different actions, and
+                # without this both produced the identical line -- so someone looking at an
+                # ast-grep they can see on their PATH was told only that the tier was missing.
+                why += " — %s" % astgrep_why
+            skipped_ids[r["id"]] = why
 
     root = Path(a.path).resolve()
     findings, scanned, skipped_files, excluded, unparsed = [], 0, 0, 0, 0

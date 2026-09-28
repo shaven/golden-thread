@@ -726,3 +726,55 @@ class AstgrepIsOptionalNotMissing(Sandbox):
         out = self.doctor(extra_path=str(d)).stdout
         self.assertIn("not installed", out,
                       "a look-alike binary was accepted as the structural matcher")
+
+
+class AstgrepMustBeNewEnough(Sandbox):
+    """An older ast-grep does not fail — it answers a DIFFERENT question.
+
+    0.30.0 has no markdown, hcl, solidity, nix, dart or swift. A rule targeting one of those
+    simply never matches, and nothing anywhere says the language was missing rather than the
+    code clean. Before the floor existed, a version-blind check turned the tier on for whatever
+    was on PATH and printed a language claim that was untrue for that binary.
+
+    So the three states are reported as three different things, and the asymmetry is the point:
+    ABSENT is a choice and reports ok; STALE is a trap and reports WARN, because it looks
+    installed.
+    """
+
+    def fake(self, version):
+        d = self.tmp / ("bin-%s" % version.replace(".", "_"))
+        d.mkdir(exist_ok=True)
+        p = d / "ast-grep"
+        p.write_text("#!/bin/sh\necho 'ast-grep %s'\n" % version)
+        p.chmod(0o755)
+        return str(d)
+
+    def doctor(self, path_dir=None):
+        env = {"PATH": "%s:%s" % (path_dir, os.environ["PATH"])} if path_dir else None
+        return self.py(SCRIPTS / "gt_doctor.py", "--only", "astgrep", env=env)
+
+    def test_a_stale_binary_is_a_WARN_because_it_looks_installed(self):
+        out = self.doctor(self.fake("0.30.0")).stdout
+        self.assertIn("WARN", out, "a stale ast-grep was not flagged:\n" + out)
+        self.assertIn("0.30.0", out)
+        self.assertIn("older than", out)
+
+    def test_the_stale_message_says_how_to_UPGRADE_not_how_to_install(self):
+        """Telling someone to install a binary they can see on their PATH teaches them the
+        message is wrong."""
+        out = self.doctor(self.fake("0.30.0")).stdout
+        self.assertIn("upgrade", out.lower())
+
+    def test_a_current_binary_is_ok(self):
+        self.assertIn("ok", self.doctor(self.fake("0.45.3")).stdout)
+
+    def test_a_newer_binary_is_also_ok(self):
+        """A floor is a minimum, not a pin. Newer must pass, or every release breaks gt."""
+        out = self.doctor(self.fake("1.2.0")).stdout
+        self.assertIn("1.2.0", out)
+        self.assertNotIn("WARN", out)
+
+    def test_absent_stays_ok_and_is_not_confused_with_stale(self):
+        out = self.doctor().stdout
+        self.assertIn("not installed", out)
+        self.assertNotIn("WARN", out)

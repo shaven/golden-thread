@@ -423,7 +423,11 @@ class TheBackendIsTheCLI(unittest.TestCase):
         """`sg` is util-linux's setgid tool on many systems, so finding it on PATH proves
         nothing. The version string is what settles it."""
         src = SCAN.read_text()
-        block = src[src.index("def astgrep_binary("):src.index("def available_tiers(")]
+        # The check lives in astgrep_status(), which astgrep_binary() delegates to -- the
+        # version floor added on 2026-09-28 needed the VERSION, not just a yes/no, so the probe
+        # moved there. Asserting on the delegating wrapper passed for a while and then broke
+        # for a reason that had nothing to do with the behaviour.
+        block = src[src.index("def astgrep_status("):src.index("def astgrep_binary(")]
         self.assertIn("--version", block)
         self.assertIn("ast-grep", block)
 
@@ -441,3 +445,74 @@ class TheBackendIsTheCLI(unittest.TestCase):
         one thing at the stdlib tier and another here."""
         src = SCAN.read_text()
         self.assertIn("in_scope_rels", src)
+
+
+class TheVersionFloor(ScanBase):
+    """gt runs the ast-grep it is TESTED against, or none.
+
+    The floor is not defensive pedantry. An older binary supports fewer languages, so a rule
+    targeting one it lacks never matches — and a scanner that reports "clean" because the
+    parser was missing is claiming coverage it did not deliver, which is the one thing this
+    whole file exists to refuse.
+    """
+
+    def fake(self, version):
+        d = self.tmp / ("agbin-%s" % version.replace(".", "_"))
+        d.mkdir(exist_ok=True)
+        p = d / "ast-grep"
+        p.write_text("#!/bin/sh\necho 'ast-grep %s'\n" % version)
+        p.chmod(0o755)
+        return str(p)
+
+    def status(self, binary):
+        from _harness import load_module
+        m = load_module(SCAN, "gt_scan_code_floor")
+        os.environ["GT_ASTGREP_BIN"] = binary
+        try:
+            return m.astgrep_status()
+        finally:
+            os.environ.pop("GT_ASTGREP_BIN", None)
+
+    def test_a_stale_binary_is_refused_with_its_version_named(self):
+        path, version, problem = self.status(self.fake("0.30.0"))
+        self.assertTrue(problem, "a stale ast-grep was accepted")
+        self.assertIn("0.30.0", problem)
+        self.assertIn("0.45.3", problem, "the required version is not stated")
+
+    def test_the_tested_version_is_accepted(self):
+        _p, version, problem = self.status(self.fake("0.45.3"))
+        self.assertIsNone(problem, problem)
+        self.assertEqual(version, "0.45.3")
+
+    def test_a_newer_binary_is_accepted(self):
+        """A floor is a minimum, not a pin: every ast-grep release must not break gt."""
+        _p, version, problem = self.status(self.fake("0.46.0"))
+        self.assertIsNone(problem, problem)
+        self.assertEqual(version, "0.46.0")
+        _p, _v, problem = self.status(self.fake("1.0.0"))
+        self.assertIsNone(problem, "a major-version bump was refused: %s" % problem)
+
+    def test_versions_compare_numerically_not_as_strings(self):
+        """"0.9.0" > "0.45.3" as text, and a string compare would refuse a newer binary."""
+        _p, _v, problem = self.status(self.fake("0.100.0"))
+        self.assertIsNone(problem, "0.100.0 was refused — comparison is lexicographic")
+
+    def test_a_binary_with_no_parseable_version_is_refused_not_assumed_good(self):
+        d = self.tmp / "weird"
+        d.mkdir(exist_ok=True)
+        p = d / "ast-grep"
+        p.write_text("#!/bin/sh\necho 'ast-grep (nightly)'\n")
+        p.chmod(0o755)
+        _p, _v, problem = self.status(str(p))
+        self.assertTrue(problem, "an unparseable version was treated as new enough")
+
+    def test_stale_and_absent_give_DIFFERENT_reasons(self):
+        """They need different actions. Telling someone to install a binary they can see on
+        their PATH is how a message teaches people to distrust it."""
+        _p, _v, stale = self.status(self.fake("0.30.0"))
+        from _harness import load_module
+        m = load_module(SCAN, "gt_scan_code_floor2")
+        _p2, _v2, absent = m.astgrep_status() if not m.astgrep_binary() else (None, None, None)
+        if absent:
+            self.assertNotEqual(stale, absent)
+            self.assertIn("older", stale)

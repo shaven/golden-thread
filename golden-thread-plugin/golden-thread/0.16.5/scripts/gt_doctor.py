@@ -768,33 +768,38 @@ def check_lint(rep, vault):
 
 
 def check_astgrep(rep):
-    """Is the optional structural matcher here? (check: astgrep)
+    """Is the optional structural matcher here, and NEW ENOUGH? (check: astgrep)
 
-    NOT a failure when absent, and that distinction is the whole point. gt is stdlib-default:
-    a rule needing ast-grep is reported SKIPPED by the scanner rather than quietly passing, so
-    nothing is broken without it. What IS a problem is not knowing -- a person whose structural
-    rules have never run has no reason to suspect it, because the scanner's affirmative line is
-    the only place it shows.
+    Three states, three different fixes, so they are reported as three different things:
 
-    So this reports OK when present and a NOTE when not, with the install command. It never
-    returns WARN: warning about a deliberate, documented, working configuration is how a
-    health check teaches people to ignore it.
+      present and current   ok, with the version
+      present but TOO OLD   WARN -- this one IS a problem, because it looks installed. An older
+                            ast-grep supports fewer languages, so a rule targeting one it lacks
+                            never matches and nothing says the language was missing rather than
+                            the code clean. Coverage claimed and not delivered.
+      absent                ok. gt is stdlib-default and reports such rules SKIPPED rather than
+                            quietly passing, so nothing is broken -- warning about a deliberate,
+                            working configuration is how a health check teaches people to
+                            ignore it.
+
+    The asymmetry is deliberate: absent is a choice, stale is a trap.
     """
-    import shutil as _sh
-    for name in ("ast-grep", "sg"):
-        path = _sh.which(name)
-        if not path:
-            continue
-        try:
-            out = subprocess.run([path, "--version"], capture_output=True, text=True, timeout=20)
-        except (OSError, subprocess.SubprocessError):
-            continue
-        # `sg` is util-linux's setgid tool on many systems; the name proves nothing.
-        if out.returncode == 0 and "ast-grep" in (out.stdout + out.stderr):
-            rep.add("astgrep", OK, (out.stdout or out.stderr).strip().splitlines()[0])
-            return
-    rep.add("astgrep", OK, "not installed — structural rules are SKIPPED, not silently passed. "
-                           "brew install ast-grep (or npm install -g @ast-grep/cli)")
+    scripts = os.path.dirname(os.path.abspath(__file__))
+    if scripts not in sys.path:
+        sys.path.insert(0, scripts)
+    try:
+        import gt_scan_code
+    except Exception as exc:
+        rep.add("astgrep", UNKNOWN, "could not load gt_scan_code (%s)" % exc.__class__.__name__)
+        return
+    path, version, problem = gt_scan_code.astgrep_status()
+    if not problem:
+        rep.add("astgrep", OK, "ast-grep %s (%s)" % (version, path))
+    elif version:                       # found, but not usable -- it LOOKS installed
+        rep.add("astgrep", WARN, problem)
+    else:
+        rep.add("astgrep", OK, "not installed — structural rules are SKIPPED, not silently "
+                               "passed. brew install ast-grep (or npm install -g @ast-grep/cli)")
 
 
 CHECKS = ("version", "components", "wiring", "core-rules", "modules", "vault",

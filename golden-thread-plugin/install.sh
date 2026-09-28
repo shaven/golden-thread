@@ -2418,36 +2418,68 @@ fi
 # ── The structural matcher: optional in the code, default-on in this path ──────
 #
 # gt NEVER REQUIRES ast-grep. A rule that needs it is reported SKIPPED, counted in the
-# affirmative line, and placed in SARIF notifications -- the scanner's whole contract is that
-# a check which did not run says so. That must stay true, because gt is stdlib-default and a
-# rule format whose meaning depends on an optional native dependency would be undefined on a
-# machine without it.
+# affirmative line, and placed in SARIF notifications -- the scanner's contract is that a check
+# which did not run says so. That must stay true: gt is stdlib-default, and a rule format whose
+# meaning depended on an optional native dependency would be undefined without it.
 #
 # But "optional" and "off by default" are different decisions. Without the binary, structural
-# rules for bash and the other 26 languages simply never run, and the person who installed gt
-# has no reason to know what they are missing. So this OFFERS it, with yes as the default, and
-# names both routes.
+# rules never run and the person who installed gt has no reason to know what they are missing.
+# So this OFFERS it, with yes as the default, and names both routes.
 #
-# IT NEVER INSTALLS WITHOUT A PERSON PRESENT. A non-interactive run -- CI, an agent, a pipe --
-# skips and says so, rather than reaching onto the machine unattended or hanging on a prompt
-# nobody can answer.
-astgrep_present() {
+# IT NEVER INSTALLS WITHOUT A PERSON PRESENT: a non-interactive run skips and says so.
+#
+# EVERYTHING HERE IS `set -e`-SAFE, and that is not decoration. install.sh runs under
+# `set -euo pipefail`, and the first version of this block used bare `[ -n "$X" ] && echo ...`
+# statements plus `astgrep_present; AG_STATE=$?`. Both abort the script when the left side is
+# false -- so the installer FAILED on any machine without brew or npm, after having installed
+# everything, without printing its final line. Caught by the install suite, which is the only
+# reason it is not in a release. No bare `a && b` statements below; every conditional is an
+# `if`, and every function result is captured with `|| rc=$?`.
+AG_MIN="0.45.3"
+
+ag_version_of() { "$1" --version 2>&1 | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' | head -1 || true; }
+
+ag_ge_min() {   # is $1 >= AG_MIN ?
+  if [ -z "${1:-}" ]; then return 1; fi
+  if [ "$(printf '%s\n%s\n' "$AG_MIN" "$1" | sort -t. -k1,1n -k2,2n -k3,3n | head -1)" = "$AG_MIN" ]; then
+    return 0
+  fi
+  return 1
+}
+
+AG_FOUND=""; AG_FOUND_VER=""
+# 0 = usable, 1 = absent, 2 = present but too old.
+astgrep_state() {
   for b in ast-grep sg; do
-    command -v "$b" >/dev/null 2>&1 || continue
+    if ! command -v "$b" >/dev/null 2>&1; then continue; fi
     # `sg` is util-linux's setgid tool on many systems, so the NAME proves nothing.
-    "$b" --version 2>&1 | grep -qi "ast-grep" && return 0
+    if ! "$b" --version 2>&1 | grep -qi "ast-grep"; then continue; fi
+    AG_FOUND="$(command -v "$b")"
+    AG_FOUND_VER="$(ag_version_of "$b")"
+    if ag_ge_min "$AG_FOUND_VER"; then return 0; fi
+    return 2
   done
   return 1
 }
 
-if astgrep_present; then
+AG_STATE=0
+astgrep_state || AG_STATE=$?
+
+if [ "$AG_STATE" -eq 0 ]; then
   echo ""
-  echo "ast-grep found ($(command -v ast-grep 2>/dev/null || command -v sg)) — structural code"
-  echo "rules are available."
+  echo "ast-grep $AG_FOUND_VER found ($AG_FOUND) — structural code rules are available."
+elif [ "$AG_STATE" -eq 2 ]; then
+  echo ""
+  echo "ast-grep $AG_FOUND_VER is installed at $AG_FOUND, but gt is tested against $AG_MIN."
+  echo "Older builds support fewer languages, so a rule targeting one they lack never matches"
+  echo "and nothing says the language was missing rather than the code clean. gt will report"
+  echo "structural rules as SKIPPED until it is upgraded:"
+  if command -v brew >/dev/null 2>&1; then echo "  brew upgrade ast-grep"; fi
+  if command -v npm  >/dev/null 2>&1; then echo "  npm install -g @ast-grep/cli"; fi
 else
   AG_BREW=""; AG_NPM=""
-  command -v brew >/dev/null 2>&1 && AG_BREW="brew install ast-grep"
-  command -v npm  >/dev/null 2>&1 && AG_NPM="npm install -g @ast-grep/cli"
+  if command -v brew >/dev/null 2>&1; then AG_BREW="brew install ast-grep"; fi
+  if command -v npm  >/dev/null 2>&1; then AG_NPM="npm install -g @ast-grep/cli"; fi
   echo ""
   echo "ast-grep is not installed. It is OPTIONAL: gt works without it, and any rule that"
   echo "needs it is reported as SKIPPED rather than quietly passing. With it, gt can check"
@@ -2458,30 +2490,32 @@ else
     echo "See https://ast-grep.github.io/ for other routes."
   elif [ -t 0 ] && [ -t 1 ]; then
     echo ""
-    [ -n "$AG_BREW" ] && echo "  1) $AG_BREW"
-    [ -n "$AG_NPM" ]  && echo "  2) $AG_NPM"
-    DEFAULT_AG="${AG_BREW:-$AG_NPM}"
-    printf 'Install it now with "%s"? [Y/n or 1/2]: ' "$DEFAULT_AG"
+    if [ -n "$AG_BREW" ]; then echo "  1) $AG_BREW"; fi
+    if [ -n "$AG_NPM" ];  then echo "  2) $AG_NPM"; fi
+    AG_DEFAULT="${AG_BREW:-$AG_NPM}"
+    printf 'Install it now with "%s"? [Y/n or 1/2]: ' "$AG_DEFAULT"
+    AG_ANSWER=""
     read -r AG_ANSWER </dev/tty || AG_ANSWER=""
     AG_CMD=""
     case "$AG_ANSWER" in
-      ""|y|Y|yes|YES) AG_CMD="$DEFAULT_AG" ;;
+      ""|y|Y|yes|YES) AG_CMD="$AG_DEFAULT" ;;
       1)              AG_CMD="$AG_BREW" ;;
       2)              AG_CMD="$AG_NPM" ;;
-      n|N|no|NO)      AG_CMD="" ;;
       *)              AG_CMD="" ;;
     esac
     if [ -n "$AG_CMD" ]; then
       echo "Running: $AG_CMD"
-      # NEVER fails the install. gt is installed and working at this point; a third-party
-      # package manager failing is not a reason to report gt as broken.
-      if $AG_CMD; then
-        astgrep_present \
-          && echo "ast-grep installed — structural rules are now available." \
-          || echo "The command finished but ast-grep is still not on PATH; open a new shell, or install it yourself."
+      AG_RC=0
+      $AG_CMD || AG_RC=$?
+      AG_AFTER=0
+      astgrep_state || AG_AFTER=$?
+      if [ "$AG_RC" -eq 0 ] && [ "$AG_AFTER" -eq 0 ]; then
+        echo "ast-grep $AG_FOUND_VER installed — structural rules are now available."
       else
-        echo "That did not succeed. gt is installed and fine; structural rules will be SKIPPED"
-        echo "until ast-grep is present. Try it yourself later: $AG_CMD"
+        # NEVER fails the install: gt is installed and working by this point, and a
+        # third-party package manager is not a reason to report gt as broken.
+        echo "That did not complete. gt is installed and fine; structural rules will be"
+        echo "SKIPPED until ast-grep is present. Try it yourself later: $AG_CMD"
       fi
     else
       echo "Skipped. Structural rules will be reported as SKIPPED until it is installed:"
@@ -2489,8 +2523,8 @@ else
     fi
   else
     echo "Not a terminal, so nothing was installed. To enable structural rules later:"
-    [ -n "$AG_BREW" ] && echo "  $AG_BREW"
-    [ -n "$AG_NPM" ]  && echo "  $AG_NPM"
+    if [ -n "$AG_BREW" ]; then echo "  $AG_BREW"; fi
+    if [ -n "$AG_NPM" ];  then echo "  $AG_NPM"; fi
   fi
 fi
 

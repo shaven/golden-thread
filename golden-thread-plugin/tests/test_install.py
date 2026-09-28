@@ -977,6 +977,26 @@ class AstgrepOfferIsDefaultOnButNeverUnattended(InstallTest):
     blocked on a prompt, the whole file would hang or start mutating the machine running it.
     """
 
+    def test_the_install_finishes_when_neither_brew_nor_npm_exists(self):
+        """THE REGRESSION THAT NEARLY SHIPPED.
+
+        install.sh runs under `set -euo pipefail`. The first version of the ast-grep offer used
+        bare `[ -n "$X" ] && echo ...` statements and `astgrep_present; AG_STATE=$?`; both abort
+        the script when the left side is false. So on any machine WITHOUT brew or npm — most
+        Linux CI, and any Mac without homebrew — the installer laid everything down and then
+        died before its final line, exiting 1.
+
+        Nothing pinned it, and the mass install failures were nearly written off as a local
+        process error. This asserts the end of the script is reached with a minimal PATH.
+        """
+        p = self.sh(self.repo / "install.sh", "--no-vault",
+                    env={"PATH": "/usr/bin:/bin"}, timeout=300)
+        self.assertEqual(p.returncode, 0,
+                         "install.sh aborted with a minimal PATH:\n" + p.stdout[-800:]
+                         + "\n" + p.stderr[-400:])
+        self.assertIn("Restart Claude Code", p.stdout,
+                      "the installer exited 0 but never reached its final line")
+
     def test_a_non_interactive_install_never_installs_anything(self):
         p = self.install()
         self.assertOk(p)
@@ -1003,6 +1023,33 @@ class AstgrepOfferIsDefaultOnButNeverUnattended(InstallTest):
         not a reason to report gt as broken."""
         self.assertOk(self.install())
 
+    def fake_astgrep(self, version):
+        d = self.tmp / ("agfake-%s" % version.replace(".", "_"))
+        d.mkdir(parents=True, exist_ok=True)
+        (d / "ast-grep").write_text("#!/bin/sh\necho 'ast-grep %s'\n" % version)
+        (d / "ast-grep").chmod(0o755)
+        return d
+
+    def test_a_stale_binary_is_an_upgrade_prompt_not_a_clean_bill(self):
+        """An older ast-grep supports fewer languages, so a rule targeting one it lacks never
+        matches and nothing says the language was missing rather than the code clean. Reporting
+        "found" for it would be the install blessing a configuration that quietly under-reports.
+        """
+        d = self.fake_astgrep("0.30.0")
+        p = self.sh(self.repo / "install.sh", "--no-vault",
+                    env={"PATH": "%s:%s" % (d, os.environ["PATH"])}, timeout=300)
+        self.assertOk(p)
+        self.assertIn("0.30.0", p.stdout)
+        self.assertIn("tested against", p.stdout)
+        self.assertNotIn("structural code rules are available", p.stdout,
+                         "a stale binary was reported as working")
+
+    def test_a_newer_binary_is_accepted_so_a_floor_is_not_a_pin(self):
+        d = self.fake_astgrep("1.2.0")
+        p = self.sh(self.repo / "install.sh", "--no-vault",
+                    env={"PATH": "%s:%s" % (d, os.environ["PATH"])}, timeout=300)
+        self.assertIn("structural code rules are available", p.stdout)
+
     def test_a_present_binary_is_reported_instead_of_offered(self):
         d = self.tmp / "fakebin"
         d.mkdir(parents=True, exist_ok=True)
@@ -1010,5 +1057,8 @@ class AstgrepOfferIsDefaultOnButNeverUnattended(InstallTest):
         (d / "ast-grep").chmod(0o755)
         p = self.sh(self.repo / "install.sh", "--no-vault",
                     env={"PATH": "%s:%s" % (d, os.environ["PATH"])}, timeout=300)
-        self.assertIn("ast-grep found", p.stdout)
+        # The message carries the VERSION since the floor was added, so match on the stable
+        # part rather than on a phrase that moves whenever the wording gains a detail.
+        self.assertIn("structural code rules are available", p.stdout)
+        self.assertIn("0.45.3", p.stdout)
         self.assertNotIn("is not installed", p.stdout)

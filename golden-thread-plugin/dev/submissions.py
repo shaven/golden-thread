@@ -97,6 +97,19 @@ SLOTS = {
     "filetype":  {"model_reachable": False, "fields": {"match": "path", "lang": "token"}},
     "construct": {"model_reachable": False, "fields": {"lang": "token", "construct": "token",
                   "pattern": "pattern"}},
+    # A REVIEW DIMENSION. Tier D, and unavoidably so: a `rubric` is prose written to STEER a
+    # model, which is the most reachable content in the whole registry. So a contributed review
+    # pack lands at REVIEW, never READY -- a human reads the rubric before it can instruct
+    # anything. That is the correct friction for this slot rather than an inconvenience.
+    #
+    # gt ships no dimensions; these fields exist so a company's own pack can be validated by
+    # the same gate as everything else (owner, 2026-09-28).
+    "review":           {"model_reachable": True,
+                         "optional": ("files", "severity_max", "model_intent"),
+                         "fields": {"id": "token", "title": "text", "rubric": "text",
+                                    "files": "path",
+                                    "severity_max": "enum:info|warn|error",
+                                    "model_intent": "enum:fast|balanced|deep"}},
     "vocabulary":       {"model_reachable": True, "fields": {"term": "token", "definition": "text"}},
     "validation_rules": {"model_reachable": True, "fields": {"id": "token", "rule": "text"}},
     "runbook":          {"model_reachable": True, "fields": {"id": "token", "step": "text"}},

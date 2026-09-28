@@ -87,6 +87,15 @@ SLOTS = {
     # slot yet, so the rename cost one test fixture; after a pack ships it would have cost
     # every pack in the wild.
     "lint":             {"mode": "map",   "key": ("lang", "id"), "optional": ("lang",)},
+    # A REVIEW DIMENSION -- one kind of code review, as data. gt ships NO dimensions: the
+    # framework exists and the opinions are the owner's or the company's (owner, 2026-09-28).
+    # That is why this slot is empty by design rather than by omission, and why the tool that
+    # reads it must say "0 dimensions configured" rather than reporting a clean review.
+    #
+    # `map` keyed on `id`, so a local pack REPLACES a shipped dimension of the same name
+    # instead of adding a second one with the same title -- two dimensions both called
+    # "integrity" would double every finding they agree on.
+    "review":           {"mode": "map",   "key": ("id",)},
     "vocabulary":       {"mode": "map",   "key": ("term",)},
     "validation_rules": {"mode": "map",   "key": ("id",)},
     # What makes a LANGUAGE PACK self-contained. Without these two, a contributed language
@@ -128,6 +137,7 @@ CONSUMERS = {
     # now nest, so the matcher object the slot always needed can live in `rule`, and this slot
     # is read.
     "lint": "gt_scan_code.py",
+    "review": "gt_code_review.py",
 }
 
 TIERS = ("community", "core", "local")      # low to high precedence

@@ -104,6 +104,10 @@
    "bytes": 7544,
    "sha256": "c1a48c7f5c9eee67641c29e9aa6936c792305e740e7d4732d9728c9f5c8b678d"
   },
+  "scripts/gt_code_review.py": {
+   "bytes": 15194,
+   "sha256": "b7419f33249edab6cd4dd4c60852bc1d9c162defad2030b8c23b91e7c044788c"
+  },
   "scripts/gt_components.py": {
    "bytes": 83753,
    "sha256": "2ff31a6f50eb2f517e58baac84453ba47198209649f0a9e951702cb9492c0c44"
@@ -121,8 +125,8 @@
    "sha256": "1c51fb189fb6c80165484e3e760eddcbdc09d518997e77bf8c8ee0d0633f8d6b"
   },
   "scripts/gt_doctor.py": {
-   "bytes": 40277,
-   "sha256": "c94b3f57cff52799573f9305a7ed089eadeb070d7dcc3451bb7cc2f57799fe07"
+   "bytes": 40565,
+   "sha256": "6706eaeeb495b13baf536075452e08419596ad80593c86266bf91c29ba5be030"
   },
   "scripts/gt_handoff.py": {
    "bytes": 13099,
@@ -157,16 +161,16 @@
    "sha256": "97448249bb05b6a3dbb39cf1ab65aa1ca7bc9390ea427fbd5919a70a2954873c"
   },
   "scripts/gt_registry.py": {
-   "bytes": 36172,
-   "sha256": "59cafa6389a2b018dca155a598a9b6f2046a8f211876dcbb7aa945b6506baa32"
+   "bytes": 36874,
+   "sha256": "af607a4f8e90247837459e431da4fe60c6fcd714fe8aa7947af8f811656936e9"
   },
   "scripts/gt_scan.py": {
    "bytes": 6612,
    "sha256": "2821ce40eaaa88771b1ca7ed23e7bc2a09cd927d646c38dca508ae57cffba0c8"
   },
   "scripts/gt_scan_code.py": {
-   "bytes": 47322,
-   "sha256": "c7f69807e08ba0582d125181316cadcbd8e2d3dd96b71df0b1b58e2ba8eb556a"
+   "bytes": 50299,
+   "sha256": "485eed08e609b57bf6729442b58151ca36d5e437c86e25d590c703240792fea4"
   },
   "scripts/gt_scan_language.py": {
    "bytes": 18658,
@@ -381,7 +385,7 @@
    "sha256": "05a5e61333b0ba5d6f97866735268f7f99ff354d9502b2b05e0e512a86f82a6b"
   }
  },
- "generated": "2026-09-28T05:41:12",
+ "generated": "2026-09-28T06:42:36",
  "hooks": [
   {
    "args": [
