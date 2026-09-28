@@ -297,6 +297,18 @@ each command you had, adding `(module <name> is off: ./install.sh --with <name>)
 module ends up off. One install over 0.14.0 ends where a fresh 0.15.0 install with the
 same module choices would, and your hook-dir files and your own hooks are left in place.
 
+**Installing from a gt-src copy (0.17.3+):** gt-src has the repository's layout, so run
+`install.sh` from its `golden-thread-plugin/` folder. Before copying anything, `install.sh` checks
+every file against the `SHA256SUMS` at the repository root and names any file that is missing,
+changed or not where the list puts it. **By default it then installs anyway, marked unverified**
+— someone who simply downloaded the repository is never blocked. `--require-checksum` (or
+`GT_REQUIRE_CHECKSUM=1`) turns a mismatch into a refusal (exit 8, nothing copied); use it on the
+machine receiving a publish. A tree with no `SHA256SUMS` installs as it stands.
+
+**Windows** is not a tested platform. `install.sh` and the hooks are bash scripts, so use WSL or
+Git Bash. The repository's `.gitattributes` forces LF line endings on checkout (0.17.3), so a
+Windows clone neither breaks the shell scripts with CRLF nor fails the checksum check.
+
 **Rollback:** the repo (and a gt-src copy) keeps the previous release, so
 `bash install.sh <previous version> --vault <vault>` reinstalls it; your recorded module
 choices and vault are kept. Rolling back to 0.14.0 removes the module plugins it does not

@@ -110,7 +110,7 @@ since everything here was correct and only the copy the other machine reads was 
 
 | Script | What it does |
 |---|---|
-| `sync-gt-src.sh` | publishes the newest release **and the one before it** (so `install.sh <previous>` can roll back) to the shared working copy (`gt-src`) from a **committed** tree, scrubbed and verified. `--dry-run` shows what would change |
+| `sync-gt-src.sh` | publishes the newest release **and the one before it** (so `install.sh <previous>` can roll back) to the shared working copy (`gt-src`) from a **committed** tree, scrubbed and verified, **in the repository's own layout** (repo root + `golden-thread-plugin/`, as GitHub holds it — 0.17.3). Writes `SHA256SUMS` (every file, from the commit) and `tree_sha256` in `SOURCE.json`, re-checks what landed against them, and prints the tree digest for the receiving machine to compare (BUILD-NOTE §3). `--dry-run` shows what would change |
 | `foreign_files.py` | lists files in the publish destination that the publisher did not write, so a second writer is named before `rsync --delete` removes it |
 | `render-pdfs.sh` | re-renders the PDFs after a docs change, in parallel — one Chrome per document, each with its own `--user-data-dir`; workers from `gt_settings.py jobs`, `GT_RENDER_JOBS=1` for serial |
 | `feature_requests.py` | validates the cross-machine feature-request queue |

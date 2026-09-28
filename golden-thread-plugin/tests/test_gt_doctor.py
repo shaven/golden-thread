@@ -374,6 +374,45 @@ class DoctorGtSrcCheck(DoctorBase):
         self.assertIn("deadbeef", row["summary"], "say WHICH commit is published")
 
 
+class DoctorGtSrcChecksums(DoctorGtSrcCheck):
+    """0.17.3: gt-src takes the repository's layout and carries SHA256SUMS, and the doctor checks
+    against that list instead of guessing from top-level names -- the guess called the repo root
+    (docs/, .github/, LICENSE, golden-thread-plugin/) unmanaged."""
+
+    def published(self):
+        import hashlib
+        d = self.dest(**{"SOURCE.json": json.dumps({"commit": "feedface0001", "gt": "0.17.3"}),
+                         "LICENSE": "MIT\n"})
+        for rel, body in (("docs/scenarios.md", "# s\n"), (".github/workflows/r.yml", "on: push\n"),
+                          ("golden-thread-plugin/install.sh", "#!/bin/sh\n")):
+            f = d / rel
+            f.parent.mkdir(parents=True, exist_ok=True)
+            f.write_text(body)
+        lines = []
+        for f in sorted(p for p in d.rglob("*") if p.is_file() and p.name != "SOURCE.json"):
+            lines.append("%s  ./%s" % (hashlib.sha256(f.read_bytes()).hexdigest(),
+                                       f.relative_to(d).as_posix()))
+        (d / "SHA256SUMS").write_text("\n".join(lines) + "\n")
+        return d
+
+    def test_the_repository_layout_is_clean(self):
+        self.published()
+        row = json.loads(self.doctor("--json", "--only", "gt-src").stdout)["checks"][0]
+        self.assertEqual(row["state"], "ok", row)
+        self.assertIn("all 4 files match SHA256SUMS", row["summary"])
+
+    def test_a_changed_a_missing_and_a_foreign_file_are_each_named(self):
+        d = self.published()
+        (d / "LICENSE").write_text("tampered\n")
+        (d / "docs" / "scenarios.md").unlink()
+        (d / "stray.py").write_text("x")
+        row = json.loads(self.doctor("--json", "--only", "gt-src").stdout)["checks"][0]
+        self.assertEqual(row["state"], "warn")
+        for word in ("changed since publish: LICENSE", "missing: docs/scenarios.md",
+                     "not written by sync-gt-src.sh: stray.py"):
+            self.assertIn(word, row["detail"])
+
+
 class DoctorWorkersAndLint(DoctorBase):
     def test_worker_check_is_reported_when_installed(self):
         self.install_hook_scripts(["gt_workers.py"])

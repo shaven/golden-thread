@@ -1,12 +1,16 @@
 # Golden Thread Plugin
 
 > **Reader:** someone who has installed it and wants the reference
-> **Claims last checked against the code:** 2026-09-28 (gt 0.17.2) — see *The documents, and what belongs in each* in [`CLAUDE.md`](../CLAUDE.md).
+> **Claims last checked against the code:** 2026-09-28 (gt 0.17.3) — see *The documents, and what belongs in each* in [`CLAUDE.md`](../CLAUDE.md).
 
 A Claude Code plugin that turns an Obsidian vault into the single source of truth for all AI memory across every project and every session.
 
 
 > [!IMPORTANT]
+> **0.17.3** is a publishing release on top of 0.17.2: gt-src now takes the GitHub repository's
+> layout and carries `SHA256SUMS` plus a single `tree_sha256`, so the receiving machine can prove
+> it holds every file unchanged; `/gt:gt-doctor` checks gt-src against that list.
+>
 > **0.17.2 has three themes.** The detail is in the MANUAL; what changed and why is in the CHANGELOG.
 >
 > - **Surfacing at session start.** A new `SessionStart` hook, `gt_surface.py`, shows what is
@@ -521,7 +525,7 @@ Python scripts can also be run directly from the command line. One variable, so 
 bump does not strand eight copied paths — from the release tree, or from the install:
 
 ```bash
-GT=golden-thread/0.17.2/scripts
+GT=golden-thread/0.17.3/scripts
 # installed instead:  GT=$(ls -d ~/.claude/plugins/cache/golden-thread-plugin/gt/*/scripts | sort -V | tail -1)
 
 # Create a new vault

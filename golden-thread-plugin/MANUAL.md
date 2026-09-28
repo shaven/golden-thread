@@ -3,8 +3,8 @@
 > **Reader:** a daily user — the deepest document, where the *why* lives
 > **Claims last checked against the code:** 2026-09-17 — see *The documents, and what belongs in each* in [`CLAUDE.md`](../CLAUDE.md).
 
-Complete reference for gt's twenty-eight skills and its seven modules. Written against **gt v0.17.2**
-(gt-wiki 0.2.3; gt-usage 0.1.3; gt-demo, gt-watch, gt-report-card, gt-farm and gt-flow 0.17.2 —
+Complete reference for gt's twenty-eight skills and its seven modules. Written against **gt v0.17.3**
+(gt-wiki 0.2.3; gt-usage 0.1.3; gt-demo, gt-watch, gt-report-card, gt-farm and gt-flow 0.17.3 —
 those five are versioned with gt and move with every release, changed or not).
 
 ---
@@ -1475,7 +1475,7 @@ Twelve checks, each answering a different question:
 | `schedule` | has every **installed** scheduled job run, and did it last exit normally? (0.17.2) |
 | `workers` | are background processes running that nobody declared? |
 | `push` | do this machine's commits exist anywhere else? |
-| `gt-src` | does the publish destination still hold only what was published? (only where `$GT_SRC` or `gt_src` in `vault-config.json` names one) |
+| `gt-src` | does the publish destination still match what was published? Since 0.17.3 every file is checked against gt-src's `SHA256SUMS`, and files changed since publish, missing, or not written by the publisher are each named (only where `$GT_SRC` or `gt_src` in `vault-config.json` names one) |
 | `lint` | what does the vault linter say, in one line? |
 | `astgrep` | is the optional structural matcher here, and new enough? Absent is fine — its rules are SKIPPED, not silently passed |
 
@@ -2396,7 +2396,7 @@ promotion is an arrow climbing. It reads `Projects/golden-thread/events.jsonl` a
 writes the vault.
 
 ```bash
-FLOW=~/.claude/plugins/cache/golden-thread-plugin/gt-flow/0.17.2/scripts
+FLOW=~/.claude/plugins/cache/golden-thread-plugin/gt-flow/0.17.3/scripts
 python3 $FLOW/gt_flow.py render --vault <vault> [--out FILE|DIR] [--redact] \
     [--project <slug> ...] [--since YYYY-MM-DD] [--tasks]
 ```
@@ -2447,7 +2447,7 @@ project other than the one loaded.
 ## Script reference
 
 ```bash
-SCRIPTS=~/.claude/plugins/cache/golden-thread-plugin/gt/0.17.2/scripts
+SCRIPTS=~/.claude/plugins/cache/golden-thread-plugin/gt/0.17.3/scripts
 
 python3 $SCRIPTS/vault_init.py fresh --vault ~/my-vault --domain "My Team"
 

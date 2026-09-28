@@ -11,6 +11,56 @@ release's own summary line, kept short rather than reconstructed after the fact.
 
 ---
 
+## gt 0.17.3 — 2026-09-28
+
+**A publishing release on top of 0.17.2, the same day.** Nothing a session does changes; what
+changes is what the other machine receives and how it can prove it received all of it.
+
+### gt-src takes the repository's layout
+
+The owner asked for gt-src to hold the files *"just as they should go into github"*. It did not:
+it was the `golden-thread-plugin/` folder alone, so the repo root — `README.md`, `CHANGELOG.md`,
+`LICENSE`, `CLAUDE.md`, `SUBMISSIONS.md`, `docs/`, `.github/` — never travelled, and the other
+side's copy of the CHANGELOG was whatever someone remembered to carry. `dev/sync-gt-src.sh` now
+publishes the whole tracked repository in its own layout, minus release directories older than
+the previous one (rollback still works). `SOURCE.json` records `"layout": "repository"`.
+
+### gt-src carries checksums
+
+`dev/sync-gt-src.sh` now writes `SHA256SUMS` (every published file, hashed from the commit) and a
+single `tree_sha256` in `SOURCE.json`, re-verifies what landed against them, and prints the tree
+digest. The receiving machine runs `shasum -a 256 -c SHA256SUMS` before installing — BUILD-NOTE
+§3 makes it the first step — so it can tell it holds every file of the newest release, unchanged.
+
+### `install.sh` verifies the checksums itself — and never blocks a plain download
+
+Owner: *"I want the checksum to be automatic ... that way we know all the files are there and in
+the right places"* — and, the same hour, *"someone who downloads it from github [must not] have an
+issue."* Before copying anything, `install.sh` finds `SHA256SUMS` at the repository root and
+checks every listed path. A file missing, changed, or not where the list puts it is **named**; by
+default the install continues, marked unverified, because the receiving repository's later
+commits, a Windows CRLF checkout or a missing hash tool must not turn a stranger's honest install
+into a failure. `--require-checksum` (or `GT_REQUIRE_CHECKSUM=1`) makes it a refusal — exit 8,
+nothing copied — and the build note tells the receiving machine to use it. A tree with no
+`SHA256SUMS` installs as it stands.
+
+A first cut refused by default; it was changed before release on exactly that objection.
+
+### `.gitattributes`: LF everywhere
+
+Every text file now checks out with LF on every platform. On Windows, git's default CRLF
+conversion broke the bash scripts outright and would have made every published file fail its
+checksum.
+
+### `/gt:gt-doctor` checks gt-src against `SHA256SUMS`
+
+The doctor's gt-src check guessed "unmanaged" from top-level names it knew, and knew only the old
+layout — it would have flagged the whole repo root the moment gt-src took the new one. Where
+`SHA256SUMS` exists it now reports exactly: files changed since publish, files missing, and files
+the publisher did not write. The name-based guess remains only for a gt-src published before
+0.17.3. The first cut of the checksum writer listed its own half-written temp file; the new test
+caught it.
+
 ## gt 0.17.2 — 2026-09-28
 
 **gt could write everything a next session needs and put none of it in front of that session.

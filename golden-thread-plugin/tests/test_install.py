@@ -1093,3 +1093,85 @@ class AstgrepOfferIsDefaultOnButNeverUnattended(InstallTest):
         self.assertIn("structural code rules are available", p.stdout)
         self.assertIn("0.45.3", p.stdout)
         self.assertNotIn("is not installed", p.stdout)
+
+
+class ChecksumBeforeInstall(Sandbox):
+    """0.17.3 (owner): "I want the checksum to be automatic ... that way we know all the files
+    are there and in the right places." A published tree carries SHA256SUMS at the repository
+    root; install.sh checks it BEFORE copying anything and stops (exit 8) on a mismatch.
+
+    Own class, not an InstallTest subclass: every subclass re-runs InstallTest's whole body."""
+
+    def setUp(self):
+        super().setUp()
+        self.root = self.tmp / "src"
+        self.repo = build_repo_fixture(self, self.root / "golden-thread-plugin")
+        (self.root / "README.md").write_text("# repo root\n")
+
+    def publish_sums(self):
+        import hashlib
+        lines = []
+        for f in sorted(p for p in self.root.rglob("*")
+                        if p.is_file() and p.name not in ("SHA256SUMS", "SOURCE.json")
+                        and "__pycache__" not in p.parts):
+            lines.append("%s  ./%s" % (hashlib.sha256(f.read_bytes()).hexdigest(),
+                                       f.relative_to(self.root).as_posix()))
+        (self.root / "SHA256SUMS").write_text("\n".join(lines) + "\n")
+
+    def install(self, *args):
+        return self.sh(self.repo / "install.sh", "--no-vault", *args, timeout=300)
+
+    def gt_cache(self):
+        return self.home / ".claude" / "plugins" / "cache" / "golden-thread-plugin" / "gt"
+
+    def test_a_matching_tree_installs_and_says_it_was_verified(self):
+        self.publish_sums()
+        p = self.install()
+        self.assertOk(p)
+        self.assertIn("published files present, in place and unchanged", p.stdout)
+        self.assertIn("tree_sha256", p.stdout)
+
+    def test_a_changed_file_is_named_but_a_plain_download_still_installs(self):
+        """Owner: someone who downloads it from GitHub must not have an issue. A mismatch is
+        named and the install continues, marked unverified."""
+        self.publish_sums()
+        (self.root / "README.md").write_text("# edited after publish\n")
+        p = self.install()
+        self.assertOk(p)
+        self.assertIn("README.md", p.stdout)
+        self.assertIn("NOT verified", p.stdout)
+        self.assertTrue(self.gt_cache().exists())
+
+    def test_require_checksum_stops_a_changed_tree_before_anything_is_copied(self):
+        self.publish_sums()
+        (self.root / "README.md").write_text("# edited after publish\n")
+        p = self.install("--require-checksum")
+        self.assertEqual(p.returncode, 8, p.stdout + p.stderr)
+        self.assertIn("README.md", p.stdout)
+        self.assertIn("NOTHING was installed", p.stdout)
+        self.assertFalse(self.gt_cache().exists(), "a refused install must copy nothing")
+
+    def test_a_file_in_the_wrong_place_is_caught(self):
+        self.publish_sums()
+        (self.root / "README.md").rename(self.root / "docs-README.md")
+        p = self.install("--require-checksum")
+        self.assertEqual(p.returncode, 8)
+        self.assertIn("README.md", p.stdout)
+
+    def test_require_checksum_with_no_sums_refuses(self):
+        p = self.install("--require-checksum")
+        self.assertEqual(p.returncode, 8)
+        self.assertIn("nothing to verify against", p.stdout)
+
+    def test_a_download_with_no_sums_installs_as_it_stands(self):
+        p = self.install()
+        self.assertOk(p)
+        self.assertIn("installed as it stands", p.stdout)
+
+    def test_an_extra_file_is_named_not_refused(self):
+        self.publish_sums()
+        (self.root / "local-notes.md").write_text("mine\n")
+        p = self.install("--require-checksum")
+        self.assertOk(p)
+        self.assertIn("not part of the publish", p.stdout)
+        self.assertIn("local-notes.md", p.stdout)

@@ -1,11 +1,17 @@
-# Build note — gt 0.17.2
+# Build note — gt 0.17.3 (with 0.17.2 underneath)
 
 **Read this first if you are the person taking this tree into the other repository.**
 
-This file travels with the publish. `SOURCE.json`, beside it, names the exact commit this tree
-was cut from. The project CHANGELOG does **not** travel — it lives in the parent directory of
-the publishing repo, outside the published set — so **this file is the only record of what
-changed that arrives with the code.** Keep it accurate or the drop is opaque on arrival.
+This file travels with the publish. `SOURCE.json`, at the root of gt-src, names the exact commit
+this tree was cut from.
+
+> **gt-src changed shape in 0.17.3 — read this before copying.** It now mirrors the GitHub
+> repository's layout: the repo root (`README.md`, `CHANGELOG.md`, `LICENSE`, `CLAUDE.md`,
+> `SUBMISSIONS.md`, `docs/`, `.github/`) with the plugin under `golden-thread-plugin/` —
+> exactly where GitHub holds each file, minus release directories older than the previous one.
+> Until 0.17.2 gt-src was the plugin folder alone, so a copy step written for that shape will put
+> files one level too high. **Copy gt-src as a whole onto the repository root.** The CHANGELOG
+> now travels too, so this note no longer has to stand in for it.
 
 ---
 
@@ -13,14 +19,16 @@ changed that arrives with the code.** Keep it accurate or the drop is opaque on 
 
 | Plugin | Version | Was |
 |---|---|---|
-| `gt` | **0.17.2** | 0.17.1 |
-| `gt-demo`, `gt-farm`, `gt-flow`, `gt-report-card`, `gt-watch` | **0.17.2** | 0.17.1 (content unchanged) |
+| `gt` | **0.17.3** | 0.17.2 (released the same day; see §2) |
+| `gt-demo`, `gt-farm`, `gt-flow`, `gt-report-card`, `gt-watch` | **0.17.3** | 0.17.2 (content unchanged) |
 | `gt-usage` | 0.1.3 | unchanged |
 | `gt-wiki` | 0.2.3 | unchanged |
 
-**The five gt-versioned modules moved with gt** (their `requires_gt` is now `>=0.17.2,<0.18.0`);
-their content is unchanged. gt-usage and gt-wiki keep their own version trains. Both 0.17.2 and
-0.17.1 are in the tree, deliberately, so `install.sh` can roll back.
+**The five gt-versioned modules moved with gt** (their `requires_gt` is now `>=0.17.3,<0.18.0`);
+their content is unchanged. gt-usage and gt-wiki keep their own version trains. Both 0.17.3 and
+0.17.2 are in the tree, deliberately, so `install.sh` can roll back. **0.17.3 changes only the
+publish (layout + checksums) and `/gt:gt-doctor`'s gt-src check**; everything in §2 below arrived
+in 0.17.2 and is unchanged in 0.17.3.
 
 gt now has **28 skills** (five new) and eleven core settings (three new: `surface`,
 `handoff_surface`, `task_surface`).
@@ -72,9 +80,34 @@ waiting".
 
 ## 3. What to run after install
 
+**The checksum check is automatic — and on this machine, make it strict.** gt-src ships
+`SHA256SUMS` (a sha256 per file, by path) and `SOURCE.json` carries `tree_sha256` — the sha256 of
+`SHA256SUMS`, one value for the whole release. Both are computed from the commit, not from the
+copy. `install.sh` checks every listed file before it copies anything. By default a mismatch is
+named and the install continues (so a stranger's download is never blocked); **here, run it with
+`--require-checksum`**, which stops with **exit 8**, naming the file, if one is missing, changed,
+or not where the list puts it. On success it prints
+`checksum: all N published files present, in place and unchanged (tree_sha256 …)`.
+**Compare that tree_sha256 with the one the publishing machine printed** — that is the check
+that you have the newest release, not just an intact older one. If it fails: copy gt-src again,
+whole, onto the repository root.
+
+To check by hand without installing:
+
+```bash
+shasum -a 256 -c --quiet SHA256SUMS   # Linux: sha256sum -c --quiet SHA256SUMS
+shasum -a 256 SHA256SUMS              # = "tree_sha256" in SOURCE.json
+```
+
+A file present but not in `SHA256SUMS` is not refused — the receiving repository has its own
+(`.git`, local notes) — but `install.sh` names up to ten of them.
+
+Then:
+
 ```bash
 cat SOURCE.json                 # the commit this tree was cut from, and every plugin version
-bash install.sh                 # the only updater; installs the NEWEST version directory
+cd golden-thread-plugin         # since 0.17.3 the plugin sits one level down, as on GitHub
+bash install.sh --require-checksum   # the only updater; verifies every file, then installs NEWEST
 #   then RESTART Claude Code — plugins and hooks load at session start.
 
 ./selftest.sh

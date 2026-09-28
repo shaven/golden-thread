@@ -793,6 +793,7 @@ VAULT_ARG="${GT_VAULT:-}"
 FORCE_MANIFEST=no
 NO_VAULT=no
 LIST_PLUGINS=no
+REQUIRE_CHECKSUM="${GT_REQUIRE_CHECKSUM:+yes}"; REQUIRE_CHECKSUM="${REQUIRE_CHECKSUM:-no}"
 LIST_MODULES=no
 MODULE_FLAGS=()          # "with:NAME" / "without:NAME", in the order given
 ORIG_ARGS=("$@")         # kept for the re-run after a migration changes a module choice
@@ -812,6 +813,7 @@ while [ $# -gt 0 ]; do
     --vault)    VAULT_ARG="${2:-}"; shift 2 || true ;;
     --vault=*)  VAULT_ARG="${1#--vault=}"; shift ;;
     --no-vault) NO_VAULT=yes; shift ;;
+    --require-checksum) REQUIRE_CHECKSUM=yes; shift ;;
     -h|--help)
       cat <<'USAGE'
 install.sh — install the Golden Thread Claude Code plugins (gt and every plugin
@@ -825,6 +827,8 @@ install.sh — install the Golden Thread Claude Code plugins (gt and every plugi
                                       install even when shipped files disagree with
                                       MANIFEST.json (see below)
   ./install.sh --no-vault             install the plugin only, on purpose
+  ./install.sh --require-checksum     REFUSE to install unless every file matches the tree's
+                                      SHA256SUMS (see below); also GT_REQUIRE_CHECKSUM=1
   ./install.sh --list-plugins         print "<dir> <version> <name>" for every plugin
                                       this tree ships, install nothing
   ./install.sh --with NAME            install module NAME (repeatable); remembered
@@ -832,6 +836,13 @@ install.sh — install the Golden Thread Claude Code plugins (gt and every plugi
                                       remembered in ~/.claude/golden-thread/install-choices.json
   ./install.sh --list-modules         print each module, its state and why, install nothing
   ./install.sh --help                 this text
+
+A tree published by dev/sync-gt-src.sh carries SHA256SUMS at the repository root. Before
+anything is installed, every file listed there is checked, and a file missing, changed, or not
+where the list puts it is NAMED. By default the install then continues -- someone who simply
+downloaded the repository is never blocked by it. With --require-checksum a mismatch (or no
+SHA256SUMS, or no hash tool) stops the install with exit 8 before anything is copied: use it
+on the machine that receives a publish. A tree with no SHA256SUMS installs as it stands.
 
 Modules are the optional plugins beside gt (wiki, demo, watch, report-card, farm, flow). State is, in
 order: --with/--without in this run, your recorded choice, the module's default. gt
@@ -859,6 +870,80 @@ done
 if [ "$LIST_PLUGINS" = yes ]; then
   discover_plugins "$SCRIPT_DIR" | tr '\t' ' '
   exit 0
+fi
+
+# ── Checksum: confirm the tree is the one that was published (0.17.3) ─────────
+#
+# Owner, 2026-09-28: "I want the checksum to be automatic ... that way we know all the files
+# are there and in the right places" -- and, the same hour, "someone who downloads it from
+# github [must not] have an issue". Both hold: dev/sync-gt-src.sh writes SHA256SUMS at the
+# REPOSITORY root (one level above this script since gt-src took the repo layout), hashed
+# from the commit, and every path in it is checked here before anything is copied. A mismatch
+# is NAMED, loudly. It only STOPS the install under --require-checksum (GT_REQUIRE_CHECKSUM=1),
+# which the build note tells the receiving machine to use. Without it a stranger's download is
+# never refused -- a later commit to the receiving repo, a CRLF checkout on Windows or a
+# missing hash tool would otherwise turn an honest install into exit 8. Files present but NOT
+# listed are named, never refused: the receiving repository may hold its own.
+#
+# Every conditional is an `if`: this script runs under set -e, where a bare `a && b` whose
+# left side is false aborts the install (the 0.17.1 installer bug).
+checksum_problem() {   # $1 = what went wrong; stops only when verification was required
+  if [ "$REQUIRE_CHECKSUM" = yes ]; then
+    echo "✗ checksum: $1 -- NOTHING was installed (--require-checksum)."
+    echo "  Copy gt-src again (the whole tree, onto the repository root), or drop --require-checksum."
+    exit 8
+  fi
+  echo "⚠ checksum: $1 -- installing anyway. This install is NOT verified;"
+  echo "  pass --require-checksum to refuse instead."
+}
+checksum_block() {
+  SUMS_ROOT=""
+  for _d in "$SCRIPT_DIR/.." "$SCRIPT_DIR"; do
+    if [ -f "$_d/SHA256SUMS" ]; then SUMS_ROOT="$(cd "$_d" && pwd)"; break; fi
+  done
+  if [ -z "$SUMS_ROOT" ]; then
+    if [ "$REQUIRE_CHECKSUM" = yes ]; then
+      checksum_problem "no SHA256SUMS beside this tree, so there is nothing to verify against"
+    fi
+    echo "checksum: no SHA256SUMS beside this tree -- not a published gt-src; installed as it stands"
+  else
+    SUMCMD=""
+    if command -v shasum >/dev/null 2>&1; then SUMCMD="shasum -a 256"
+    elif command -v sha256sum >/dev/null 2>&1; then SUMCMD="sha256sum"; fi
+    if [ -z "$SUMCMD" ]; then
+      checksum_problem "neither shasum nor sha256sum is installed, so SHA256SUMS cannot be checked"
+    else
+      SUMS_OUT=""
+      SUMS_RC=0
+      SUMS_OUT=$(cd "$SUMS_ROOT" && $SUMCMD -c --quiet SHA256SUMS 2>&1) || SUMS_RC=$?
+      SUMS_TREE=$($SUMCMD "$SUMS_ROOT/SHA256SUMS" | cut -d' ' -f1)
+      if [ "$SUMS_RC" -ne 0 ]; then
+        echo "checksum: these files do not match the SHA256SUMS this tree was published with:"
+        printf '%s\n' "$SUMS_OUT" | head -25 | sed 's/^/    /'
+        checksum_problem "a file above is missing, changed, or not where it belongs"
+      else
+        SUMS_N=$(grep -c . "$SUMS_ROOT/SHA256SUMS" || true)
+        echo "checksum: all $SUMS_N published files present, in place and unchanged (tree_sha256 $SUMS_TREE)"
+      fi
+      SUMS_EXTRA=$(cd "$SUMS_ROOT" && find . -type f ! -path './.git/*' ! -path '*/__pycache__/*' \
+                     ! -name .DS_Store ! -name SHA256SUMS ! -name SOURCE.json | LC_ALL=C sort \
+                   | LC_ALL=C comm -23 - <(sed 's/^[0-9a-f]*  //' SHA256SUMS | LC_ALL=C sort) || true)
+      if [ -n "$SUMS_EXTRA" ]; then
+        echo "checksum: $(printf '%s\n' "$SUMS_EXTRA" | grep -c .) file(s) here were not part of the publish (left in place):"
+        printf '%s\n' "$SUMS_EXTRA" | head -10 | sed 's/^/    /'
+      fi
+    fi
+  fi
+}
+# Run it NOW, before anything is copied, but hold its report until after the "Installing ..."
+# line: that line is the installer's first line by contract (callers and tests read it).
+# A refusal (exit 8) prints at once -- then the refusal IS the first thing to say.
+CHECKSUM_REPORT=""
+CHECKSUM_RC=0
+CHECKSUM_REPORT=$(checksum_block) || CHECKSUM_RC=$?
+if [ "$CHECKSUM_RC" -ne 0 ]; then
+  printf '%s\n' "$CHECKSUM_REPORT"
+  exit "$CHECKSUM_RC"
 fi
 
 REQUESTED="${POSITIONAL:-${GT_VERSION:-}}"
@@ -1070,6 +1155,7 @@ if [ -n "$REQUESTED" ]; then
 else
   echo "Installing gt $VERSION (newest version directory)$OTHERS"
 fi
+if [ -n "$CHECKSUM_REPORT" ]; then printf '%s\n' "$CHECKSUM_REPORT"; fi
 [ -n "$PICK_NOTES" ] && printf '%s' "$PICK_NOTES"
 [ -n "$SKIP_NOTES" ] && printf '%s' "$SKIP_NOTES"
 

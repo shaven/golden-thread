@@ -1,0 +1,7 @@
+# Every text file checks out with LF line endings on every platform, Windows included (0.17.3).
+#
+# Why: git on Windows defaults to converting LF to CRLF on checkout. A CRLF shell script fails
+# under bash ("$'\r': command not found"), and a converted file no longer matches the
+# SHA256SUMS a published tree carries, so install.sh would flag every file of an honest
+# download. `text=auto` leaves binaries (PDFs, images, zips) untouched.
+* text=auto eol=lf

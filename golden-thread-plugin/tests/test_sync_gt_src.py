@@ -39,6 +39,7 @@ class SyncGtSrcTest(Sandbox):
                 (d / "skills" / "note.md").write_text(f"{plugin} {v}\n")
         (r / "install.sh").write_text("#!/bin/sh\necho hi\n")
         (r / "MANUAL.md").write_text("# manual\n")
+        (r.parent / "CHANGELOG.md").write_text("# changelog\n")   # a repo-root file
         (r / "golden-thread-plugin.zip").write_text("build artifact\n")
         (r / ".gitignore").write_text("*.zip\n")
         self.repo = r
@@ -51,7 +52,17 @@ class SyncGtSrcTest(Sandbox):
                        env={"GT_SRC": str(self.dest), "GT_SCRUB_TERMS": str(self.terms)})
 
     def files(self):
-        return sorted(str(p.relative_to(self.dest)) for p in self.dest.rglob("*") if p.is_file())
+        """Paths relative to the published PLUGIN root (gt-src/golden-thread-plugin/ since 0.17.3),
+        so the release-selection assertions below read as before; repo-root files keep their
+        own path prefixed with '../'."""
+        out = []
+        for p in self.dest.rglob("*"):
+            if not p.is_file():
+                continue
+            rel = p.relative_to(self.dest).as_posix()
+            out.append(rel[len("golden-thread-plugin/"):] if rel.startswith("golden-thread-plugin/")
+                       else "../" + rel)
+        return sorted(out)
 
     def test_publishes_tracked_files_of_the_newest_release_and_the_one_before(self):
         # Newest + previous travel, so a machine installing from gt-src can roll back with
@@ -70,6 +81,32 @@ class SyncGtSrcTest(Sandbox):
         self.assertNotIn("golden-thread-plugin.zip", got, "untracked build artifacts must not publish")
         src = json.loads((self.dest / "SOURCE.json").read_text())
         self.assertEqual((src["gt"], src["gt_wiki"], src["gt_extra"]), ("0.10.0", "0.1.2", "1.2.0"))
+        self.assertEqual(src["layout"], "repository")
+        # 0.17.3 (owner): gt-src takes the GitHub repo's layout, repo root included
+        self.assertIn("../CHANGELOG.md", got, "repo-root files must publish at gt-src's root")
+
+    def test_checksums_let_the_receiving_machine_verify_every_file(self):
+        """Owner, 2026-09-28: the installing machine must be able to tell it has the newest
+        version of every file. SHA256SUMS covers each published file, and its own sha256 is the
+        single tree digest in SOURCE.json."""
+        import hashlib, subprocess
+        self.assertOk(self.sync("--no-verify"))
+        sums = (self.dest / "SHA256SUMS").read_text()
+        listed = {l.split("  ", 1)[1][2:] for l in sums.splitlines()}
+        on_disk = {p.relative_to(self.dest).as_posix() for p in self.dest.rglob("*")
+                   if p.is_file()} - {"SHA256SUMS", "SOURCE.json"}
+        self.assertEqual(listed, on_disk, "SHA256SUMS must list exactly the published files")
+        src = json.loads((self.dest / "SOURCE.json").read_text())
+        self.assertEqual(src["tree_sha256"],
+                         hashlib.sha256((self.dest / "SHA256SUMS").read_bytes()).hexdigest())
+        ok = subprocess.run(["shasum", "-a", "256", "-c", "--quiet", "SHA256SUMS"],
+                            cwd=self.dest, capture_output=True, text=True)
+        self.assertEqual(ok.returncode, 0, ok.stdout + ok.stderr)
+        # a changed file must be caught by the receiving side's own check
+        (self.dest / "golden-thread-plugin" / "install.sh").write_text("tampered\n")
+        bad = subprocess.run(["shasum", "-a", "256", "-c", "--quiet", "SHA256SUMS"],
+                             cwd=self.dest, capture_output=True, text=True)
+        self.assertNotEqual(bad.returncode, 0)
 
     def test_refuses_dirty_tree(self):
         (self.repo / "MANUAL.md").write_text("# edited\n")
@@ -82,7 +119,7 @@ class SyncGtSrcTest(Sandbox):
         self.run_cmd(["git", "-C", self.tmp / "repo", "commit", "-qam", "leak"])
         proc = self.sync()
         self.assertEqual(proc.returncode, 1)
-        self.assertFalse((self.dest / "MANUAL.md").exists())
+        self.assertFalse((self.dest / "golden-thread-plugin" / "MANUAL.md").exists())
 
     def test_dry_run_writes_nothing(self):
         self.assertOk(self.sync("--dry-run"))
@@ -93,16 +130,16 @@ class SyncGtSrcTest(Sandbox):
         # half-populated gt-src found on 2026-09-11. Publishing it must not report success.
         proc = self.sync(verify=True)
         self.assertEqual(proc.returncode, 3, proc.stdout)
-        self.assertIn("missing selftest.sh", proc.stdout)
+        self.assertIn("missing golden-thread-plugin/selftest.sh", proc.stdout)
         self.assertIn("is empty", proc.stdout)
-        self.assertIn("missing gt-extra/1.2.0/MANIFEST.json", proc.stdout,
+        self.assertIn("missing golden-thread-plugin/gt-extra/1.2.0/MANIFEST.json", proc.stdout,
                       "every plugin must arrive with its MANIFEST.json")
 
     def test_backs_up_and_deletes_stray_files(self):
         self.dest.mkdir()
         (self.dest / "stray.txt").write_text("left by someone else\n")
         self.assertOk(self.sync())
-        self.assertNotIn("stray.txt", self.files())
+        self.assertNotIn("../stray.txt", self.files())
         backups = list((self.home / ".claude" / "golden-thread" / "backups").glob("gt-src-*.tar.gz"))
         self.assertEqual(len(backups), 1)
         with tarfile.open(backups[0]) as t:

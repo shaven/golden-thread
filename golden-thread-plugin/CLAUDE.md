@@ -36,7 +36,7 @@ When you add a command, change behaviour, or remove a feature, update **all** of
 | `MANUAL.md` | the full manual |
 | `golden-thread-docs.md` | the command reference table |
 | `../CHANGELOG.md` | what changed and **why**, including anything removed and what it did wrong |
-| `BUILD-NOTE.md` | the handoff that TRAVELS. `../CHANGELOG.md` does not reach gt-src, so this is the only account of the release the other machine gets: versions, what changed, what to run, what needs a decision, and what will be misread. Rewrite it for each release rather than appending. |
+| `BUILD-NOTE.md` | the handoff that TRAVELS, read first by whoever takes gt-src into the other repository: versions, what changed, what to run (starting with the checksum check), what needs a decision, and what will be misread. Since 0.17.3 gt-src carries the whole repository layout, so `../CHANGELOG.md` travels too; BUILD-NOTE is the short operational account, not a substitute for it. Rewrite it for each release rather than appending. |
 | `../SUBMISSIONS.md` | only if the pack format, slots or validator verdicts changed |
 
 ### Where a new feature's docs go

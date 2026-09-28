@@ -16,9 +16,14 @@
 #   * never a single employer- or machine-specific string: dev/scrub_check.py runs on
 #     the staged set first, and any hit — or any file it could not scan — aborts
 #
-# gt-src mirrors this plugin root's layout, so install.sh, selftest.sh and
-# tests/run.sh run from it unchanged. Only this machine writes gt-src; other machines
-# read it and write only to gt-feature-requests/new/.
+# gt-src mirrors the REPOSITORY's layout -- the repo root (README.md, CHANGELOG.md, LICENSE,
+# docs/, .github/ ...) with golden-thread-plugin/ beneath it -- exactly as GitHub holds it,
+# minus release directories older than the previous one (owner, 2026-09-28: "put the files into
+# the gt-src just as they should go into github"). Until then gt-src was the plugin folder
+# alone, so the other side never received CHANGELOG.md, the front-door README or LICENSE.
+# install.sh, selftest.sh and tests/run.sh run from gt-src/golden-thread-plugin/ unchanged.
+# Only this machine writes gt-src; other machines read it and write only to
+# gt-feature-requests/new/.
 #
 # Destination: $GT_SRC, else ~/Library/CloudStorage/OneDrive-Personal/Projects2/gt-src
 set -euo pipefail
@@ -45,13 +50,14 @@ while read -r d v n; do
 done < <("$PY" dev/plugins.py list)
 [ "${#PDIRS[@]}" -gt 0 ] || { echo "REFUSED: no installable plugin version directory found"; exit 2; }
 
-if [ -n "$(git status --porcelain -- .)" ]; then
-  echo "REFUSED: the plugin tree has uncommitted changes — commit first, so gt-src equals a commit."
-  git status --short -- . | head -20
+ROOT=$(git rev-parse --show-toplevel)
+if [ -n "$(git -C "$ROOT" status --porcelain)" ]; then
+  echo "REFUSED: the repository has uncommitted changes — commit first, so gt-src equals a commit."
+  git -C "$ROOT" status --short | head -20
   exit 2
 fi
 COMMIT=$(git rev-parse HEAD)
-PREFIX=$(git rev-parse --show-prefix)       # e.g. golden-thread-plugin/
+PREFIX=$(git rev-parse --show-prefix)       # e.g. golden-thread-plugin/ -- where the plugin sits in the repo
 
 # Which release directories travel: newest + the one before, per plugin, space-joined.
 KEEP=()
@@ -60,16 +66,16 @@ for i in "${!PDIRS[@]}"; do
 done
 
 STAGE=$(mktemp -d); VCOPY=""; trap 'rm -rf "$STAGE" "$VCOPY"' EXIT
-git ls-files -z -- . | while IFS= read -r -d '' f; do
+git -C "$ROOT" ls-files -z | while IFS= read -r -d '' f; do  # the WHOLE repo, root-relative
   for i in "${!PDIRS[@]}"; do                                 # older releases stay home
     case "$f" in
-      "${PDIRS[$i]}"/*)
-        rel=${f#"${PDIRS[$i]}"/}; ver=${rel%%/*}
+      "$PREFIX${PDIRS[$i]}"/*)
+        rel=${f#"$PREFIX${PDIRS[$i]}"/}; ver=${rel%%/*}
         case " ${KEEP[$i]}" in *" $ver "*) ;; *) continue 2 ;; esac ;;
     esac
   done
   mkdir -p "$STAGE/$(dirname "$f")"
-  cp -p "$f" "$STAGE/$f"
+  cp -p "$ROOT/$f" "$STAGE/$f"
 done
 N=$(find "$STAGE" -type f | wc -l | tr -d ' ')
 [ "$N" -gt 0 ] || { echo "REFUSED: staged 0 files — refusing to publish an empty tree"; exit 2; }
@@ -80,9 +86,25 @@ if ! "$PY" dev/scrub_check.py "$STAGE"; then
   exit 1
 fi
 
+# CHECKSUMS (owner, 2026-09-28: "give a checksum for gt-src so the machine doing the install
+# knows if it has the newest version of all the files"). SHA256SUMS lists every published file
+# in the format BOTH `shasum -a 256 -c` (macOS) and `sha256sum -c` (Linux) read, and its own
+# sha256 is the TREE digest in SOURCE.json -- one value to compare across machines, which
+# changes if any file, name or count changes. The receiving side checks with:
+#     shasum -a 256 -c SHA256SUMS          # or: sha256sum -c SHA256SUMS
+#     shasum -a 256 SHA256SUMS             # must equal SOURCE.json "tree_sha256"
+# Written from the STAGE, i.e. from the commit, never from what landed -- a checksum computed
+# from the destination would vouch for whatever the copy happened to produce.
+# The list is built OUTSIDE the stage and moved in: written inside it, the half-written list
+# was itself found by `find` and listed (the test caught SHA256SUMS.tmp in its own output).
+SUMS_TMP=$(mktemp)
+(cd "$STAGE" && find . -type f ! -name SHA256SUMS ! -name SOURCE.json -print0 | LC_ALL=C sort -z \
+   | xargs -0 shasum -a 256) > "$SUMS_TMP" && mv "$SUMS_TMP" "$STAGE/SHA256SUMS"
+TREE_SHA=$(shasum -a 256 "$STAGE/SHA256SUMS" | cut -d' ' -f1)
+
 cat > "$STAGE/SOURCE.json" <<EOF
-{"commit": "$COMMIT", "path": "$PREFIX", $PJSON
- "synced_at": "$(date '+%Y-%m-%dT%H:%M:%S%z')", "files": $N}
+{"commit": "$COMMIT", "layout": "repository", "plugin_path": "$PREFIX", $PJSON
+ "synced_at": "$(date '+%Y-%m-%dT%H:%M:%S%z')", "files": $N, "tree_sha256": "$TREE_SHA"}
 EOF
 
 # A file in the destination that this publisher did not write is the signal that
@@ -132,26 +154,37 @@ echo "== verify $DEST"
 VFAIL=0
 vok()  { printf 'ok    %s\n' "$1"; }
 vbad() { printf 'FAIL  %s\n' "$1"; VFAIL=$((VFAIL+1)); }
-GOT=$(find "$DEST" -type f ! -name .DS_Store ! -name SOURCE.json | wc -l | tr -d ' ')
+GOT=$(find "$DEST" -type f ! -name .DS_Store ! -name SOURCE.json ! -name SHA256SUMS | wc -l | tr -d ' ')
 [ "$GOT" = "$N" ] && vok "$GOT files, matching the commit" || vbad "gt-src holds $GOT files, the commit $N"
+if (cd "$DEST" && shasum -a 256 -c --quiet SHA256SUMS >/dev/null 2>&1); then
+  vok "every file matches SHA256SUMS (tree $TREE_SHA)"
+else
+  vbad "a file in gt-src does not match SHA256SUMS"
+fi
+[ "$(shasum -a 256 "$DEST/SHA256SUMS" | cut -d' ' -f1)" = "$TREE_SHA" ] || vbad "SHA256SUMS changed in transit"
+P="$DEST/$PREFIX"                     # the plugin root inside the published repo layout
 for f in install.sh selftest.sh build-docs.py README.md MANUAL.md INSTALL.md tests/run.sh dev/release-check.sh dev/plugins.py; do
-  [ -f "$DEST/$f" ] || vbad "missing $f"
+  [ -f "$P$f" ] || vbad "missing $PREFIX$f"
+done
+# The repo root arrives too -- the reason the layout changed (2026-09-28).
+for f in $(git -C "$ROOT" ls-files --full-name -- ':(top)*' | grep -v / ); do
+  [ -f "$DEST/$f" ] || vbad "missing repo-root file $f"
 done
 # Every plugin arrives with its metadata AND its MANIFEST.json (hash trust, since 0.13.0).
 for i in "${!PDIRS[@]}"; do
   for f in .claude-plugin/plugin.json MANIFEST.json; do
-    [ -f "$DEST/${PDIRS[$i]}/${PVERS[$i]}/$f" ] || vbad "missing ${PDIRS[$i]}/${PVERS[$i]}/$f"
+    [ -f "$P${PDIRS[$i]}/${PVERS[$i]}/$f" ] || vbad "missing $PREFIX${PDIRS[$i]}/${PVERS[$i]}/$f"
   done
 done
 if [ -n "$GTV" ]; then
   for d in hooks scripts skills templates; do
-    [ -n "$(ls -A "$DEST/golden-thread/$GTV/$d" 2>/dev/null)" ] || vbad "golden-thread/$GTV/$d is empty"
+    [ -n "$(ls -A "${P}golden-thread/$GTV/$d" 2>/dev/null)" ] || vbad "${PREFIX}golden-thread/$GTV/$d is empty"
   done
 else
   vbad "no golden-thread release in the published tree"
 fi
 while IFS= read -r f; do bash -n "$f" 2>/dev/null || vbad "bash -n $f"; done < <(find "$DEST" -name '*.sh')
 VCOPY=$(mktemp -d); cp -Rp "$DEST/." "$VCOPY/"
-if OUT=$(cd "$VCOPY" && ./selftest.sh 2>&1); then vok "$(echo "$OUT" | tail -1) — run from a copy of gt-src"; else echo "$OUT" | grep FAIL | head || true; vbad "selftest.sh from gt-src"; fi
+if OUT=$(cd "$VCOPY/$PREFIX" && ./selftest.sh 2>&1); then vok "$(echo "$OUT" | tail -1) — run from a copy of gt-src"; else echo "$OUT" | grep FAIL | head || true; vbad "selftest.sh from gt-src"; fi
 rm -rf "$VCOPY"
-[ $VFAIL -eq 0 ] && echo "gt-src VERIFIED" || { echo "gt-src FAILED verification ($VFAIL) — do not let the other machine copy it"; exit 3; }
+[ $VFAIL -eq 0 ] && echo "gt-src VERIFIED — tree_sha256 $TREE_SHA (compare on the receiving machine: shasum -a 256 SHA256SUMS)" || { echo "gt-src FAILED verification ($VFAIL) — do not let the other machine copy it"; exit 3; }

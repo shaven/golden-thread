@@ -1,0 +1,319 @@
+---
+name: gt-work
+description: "Capture session findings into the vault at the end of a work session — append to research.md, add ADRs to decisions.md, refine design.md, create spec.md when design is complete, update PROTOCOL.md for cross-project process rules."
+---
+
+# Golden Thread Work
+
+Write back this session's findings into the vault. Run at the end of any meaningful work session.
+
+## Context
+
+Use `$GT_VAULT` if it is set (a session pinned to one vault, such as the demo); otherwise read `~/.claude/vault-config.json` for the vault path. If neither gives a vault → tell user to run `/gt:gt-init`.
+
+Ask if not obvious: "Which project are we writing back to?" (show available project slugs from `<vault>/Projects/`)
+
+## Scope Classification
+
+Before writing anything, classify each finding:
+
+| Scope | Where to write | Test |
+|---|---|---|
+| Session-only | Don't write | Won't need it again |
+| This project | `research.md` / `decisions.md` / `design.md` / `runbook.md` | Specific to this codebase, team, or service |
+| Cross-project | `Knowledge/` wiki page | Platform constraint, infra fact, or tool truth that applies beyond this project |
+| Every session | `global-memory/` | Constant needed in ALL projects, regardless of codebase |
+
+**Rule:** when in doubt, write to the project first. Facts earn their way up the hierarchy by recurring. A single incident is not enough for `global-memory/` — flag it in `research.md` and promote after it applies in a second unrelated project.
+
+## What Gets Written Where
+
+### research.md — append-only findings
+
+New discoveries, gotchas, measured behaviors, or anything surprising goes here.
+
+```markdown
+## YYYY-MM-DD: <short title>
+<finding in plain language — what you learned, what broke, what the fix was>
+```
+
+Rules:
+- Append only — never edit or remove existing entries
+- One entry per finding, date-stamped
+- If a finding supersedes an earlier one, note it: "Supersedes 2026-01-15 entry"
+
+### decisions.md — generated from atomically allocated ADRs
+
+**Allocate the number before writing the ADR.** Two sessions that both read "the
+highest is 5" will both write ADR-6; allocation makes that impossible. The command
+prints the number it reserved, and reserving it creates the file that holds it:
+
+```bash
+python3 <vault>/Projects/golden-thread/tools/gt_adr.py --vault "<vault>" allocate <project> --title "<title>"
+```
+
+Write the body into the slot it names, then `gt_adr.py --vault "<vault>" merge <project>`. Never pick a
+number by reading `decisions.md` and adding one. `allocate` emits the `adr` event
+itself — do not emit another.
+
+
+New or revised technical decisions.
+
+```markdown
+## ADR-N: <title>
+- **Decision**: What was decided
+- **Context**: Why — the constraint, incident, or requirement that drove this
+- **Rejected alternatives**: What else was considered and why it lost
+```
+
+Rules:
+- Append only, sequential numbering
+- To reverse a decision, add a new ADR that supersedes it — never edit the old one
+- Only write here if the decision is stable and won't change next session
+
+### design.md — iteratively refineable
+
+Current architecture, component relationships, data flow. Unlike the others, this file is updated in place as the design evolves.
+
+Rules:
+- Rewrite sections that changed this session
+- Keep it current — it should always describe NOW, not history
+- History goes in research.md or decisions.md, not here
+- Mark open questions clearly; move resolved ones to a "Resolved" section (don't delete)
+
+### spec.md — handoff artifact (create when design is complete)
+
+A spec is a self-contained implementation document designed to be handed to another session, developer, or agent with zero prior context. Create it when all open design questions in `design.md` are resolved.
+
+Ask: "Is the design settled enough to write a spec?" If yes:
+
+```markdown
+# <Project> Implementation Spec
+
+## What to change
+<exact files, functions, or systems to modify>
+
+## Expected behavior
+<precise description of what the code/system should do when done>
+
+## Tests to write
+<what tests to add and what they must verify>
+
+## Acceptance criteria
+- [ ] <specific, verifiable condition>
+- [ ] <specific, verifiable condition>
+```
+
+Rules:
+- A spec must be implementable by someone reading ONLY the spec — no assumed prior context
+- Reference research.md and decisions.md for "why" — don't duplicate their content
+- Update a spec only when scope changes; completed items get checked off, not deleted
+- Once all acceptance criteria are checked, the project stage is "done"
+
+### runbook.md — operational procedures (if it exists)
+
+Add project-specific operational steps, environment setup, or deployment notes. This file is for project-specific HOW-TO — process rules that apply across projects go in PROTOCOL.md instead.
+
+Rules:
+- Append new procedures; update existing ones in place if they changed
+- If a procedure also applies to other projects, flag it for `/gt:gt-runbook-lint`
+
+### memory/ files — update in place
+
+Session memory files (feedback.md, project-state.md, etc.) are updated in place. These are the most frequently changing files.
+
+### PROTOCOL.md — cross-project process rules
+
+`<vault>/Projects/PROTOCOL.md` holds rules that apply across ALL projects — not project-specific facts, not one-time incidents.
+
+Write here when a ruling from this session will apply to future sessions and has been proven across more than one context (one incident is not enough — flag it in research.md and let it recur once before promoting).
+
+Format: short imperative rules, grouped by concern. Strip incident-specific details — those stay where they originated.
+
+Rules:
+- Never add project-specific facts to PROTOCOL.md — those go in decisions.md or runbook.md
+- PROTOCOL.md is not a CLAUDE.md — no tool or platform facts
+- When in doubt, leave it in the project and flag for `/gt:gt-promote` after it recurs
+
+## Promotion Candidates
+
+After writing, check: does any finding apply beyond this project?
+
+- A platform constraint (Kubernetes, auth, infra) → candidate for `Knowledge/`
+- A cross-project tool or config fact → candidate for `global-memory/`
+- An idea for a separate project → candidate for a new project scaffold
+- A rule that has now applied in multiple projects → candidate for `PROTOCOL.md`
+
+Ask: "This looks like it applies beyond `<project-slug>`. Should I add it now, or flag for `/gt:gt-promote` later?"
+
+## Log Entry
+
+Add the line with the tool — **never append to `log.md` by hand.** It is generated
+from per-session spool files, so a hand append is lost at the next merge:
+
+```bash
+python3 <vault>/Projects/golden-thread/tools/gt_log.py --vault "<vault>" add "<the line>"
+```
+
+The line it records:
+```
+<YYYY-MM-DD HH:MM TZ> [work] <project-slug>[, <other-slug>...] — wrote N finding(s), M ADR(s), updated design[, created spec]
+```
+
+### Events for what this session captured
+
+`allocate` already emitted each ADR's event, and `gt_tasks.py` emits task events from
+the README. What only you know is that a finding left the conversation. Right after
+writing each `research.md` entry (level 3) or new `memory/` note (level 2), run:
+```bash
+python3 "<vault>/Projects/golden-thread/tools/gt_events.py" --vault "<vault>" emit \
+  --kind capture --item "Projects/<slug>/research.md" --to "Projects/<slug>/research.md" \
+  --level-from 1 --level-to 3 --project <slug> --note "<entry title>"
+```
+(`--item`/`--to` the memory file and `--level-to 2` for a memory note.) A refused
+event is one stderr line; the write it describes stands.
+
+`gt_closeout.py` reads this line to date each project's last write-back, so keep its
+shape: the date first (time and zone after it are optional), then `[work]`, then the
+exact slug — several comma-separated when the work spans projects — then ` — `.
+
+## Ask whether anything is leaving with you
+
+You have just classified every finding and written the ones that belong in a file. Some
+will not have made it: a decision that needs the user, something mid-flight, a question
+raised and never answered. Those live only in this conversation, and this conversation is
+about to end.
+
+`gt_handoff.py` exists for exactly that and is reached by one caller — the user typing
+`/gt:gt-handoff`. Which means it is offered at the moment a person happens to think of it,
+rather than the moment it is needed.
+
+**So state the list, then ask.** As you write the sections above, keep the items you
+identified and did *not* write, each with the reason. At the end:
+
+- **The list is empty** — say so in one line and stop. Do not ask. An offer made every
+  session is one that is always declined, which is how `gt_closeout` taught the same lesson:
+  it asked every session until the answer stopped being read. Nothing uncaptured, no question.
+- **The list is not empty** — name the items, then ask:
+
+  > "These did not reach a file: <item>, <item>. Write a handoff so the next session has
+  > them? **yes** / **no**"
+
+**Only on yes:**
+
+```bash
+python3 <scripts>/gt_handoff.py --vault "<vault>" --project <slug> [--repo <path>]
+```
+
+It gathers the facts and labels each one `verified` / `unverified` / `unknown`. **You write
+the narrative** — what was decided, why, and what to do next. The script deliberately will
+not: a document that reads finished when it is not hands the next session false confidence,
+which is worse than handing it none. Put the uncaptured items in that narrative; they are
+the reason the file exists.
+
+An existing handoff is **refused, not overwritten** — it is someone's record of a session.
+If one exists for today, say so and ask before passing `--force`.
+
+### Then make sure it gets picked up
+
+**A handoff nobody is told to read is write-only.** The file is not the mechanism; the task
+is. So after writing one, add **one task per unresolved item** to the project's `## Tasks` in
+`README.md`:
+
+```markdown
+- [ ] <the unresolved thing, as a decision or an action> — context in <handoff file> [p:: 1] [waiting:: user] [since:: YYYY-MM-DD]
+```
+
+Three things about that line are deliberate:
+
+- **`p:: 1`, not `p:: 0`.** There is no `p:: 0`. Task priority is `1` urgent, `2` normal,
+  `3` someday, `7`+ shelved; `0` exists only at PROJECT level (`pp:`), where
+  `Projects/CONVENTIONS.md` defines it as *"active harm accruing right now — nothing sits here
+  permanently."* A handoff task parked there for ever would make that tier a place things live.
+- **`since:: <today>` is what makes it escalate.** The stale-P1 rule raises the project one
+  level once a `p:: 1` is seven days old, computed against the clock. Read the handoff tomorrow
+  and nothing happens; ignore it for a week and the project climbs on its own. That is stronger
+  than a fixed top priority, because it decays correctly and needs no cleanup.
+- **One task per item, naming the item.** Never a single "review the handoff" line: that
+  competes with real work while saying nothing, and if five things are hanging it hides four of
+  them. The handoff is the context; the task is the thing to do.
+
+`waiting:: user` puts them on the human's list, which is correct — these are the items that
+needed a person, which is why they did not reach a file.
+
+**The next session is told, without anyone asking** (since 0.17.2). `gt_handoff.py` writes
+`status: open`, and an open handoff is shown — one line, never its body — at every session start
+or when its project is opened (setting `handoff_surface`) until it is handled or deferred to a
+date through `/gt:gt-handoff-handle`. It also counts as handled once every task citing it is
+checked off, so **the task must name the handoff's filename** — that is how the two are joined.
+
+**Never write one on the user's behalf after a no.** They have just told you these items
+are not worth a file, and that is theirs to decide.
+
+## Ask whether the project is finished
+
+Closing a project is a decision nobody makes unless asked. Two moments call for it:
+
+1. **You just checked off a task** and it was the last open one at `p:: 2` or better,
+   or the last task with a due date.
+2. **The close-out probe names this project.** Run it — it is cheap:
+   ```bash
+   python3 <vault>/Projects/golden-thread/tools/gt_closeout.py --vault "<vault>" signals <slug>
+   ```
+   If any rule fires (`R1` most tasks past due, `R2` most tasks done and nothing
+   urgent, `R3` three quiet weeks, `R4` nothing open), record that you are asking and
+   then ask:
+   ```bash
+   python3 <vault>/Projects/golden-thread/tools/gt_closeout.py --vault "<vault>" ask <slug> gt-work
+   ```
+   > "`<slug>` looks finished: <reasons>. Close it? **yes** / **no** / **later** — and why?"
+
+Record the answer, whatever it is; the record is how the thresholds get tuned to the
+user's own pattern rather than a guess:
+```bash
+python3 <vault>/Projects/golden-thread/tools/gt_closeout.py --vault "<vault>" answer <slug> yes|no|later "<their words>"
+```
+
+**If yes, closing means:** `stage: complete` in `README.md` frontmatter (`archived`
+only once nothing at all remains); every leftover open task moved to `[p:: 7]` so
+it stays in the README as a record but leaves the rollup and stops escalating the
+project; `pp:` lowered to `3`; a final `research.md` entry saying what shipped; then
+the promotion check below, because a finished project is where the vault's most
+general lessons usually are.
+
+**Never delete a task to close a project.** Shelve it (`p:: 7`) or check it off with
+a pointer to what superseded it.
+
+## Keep the project's properties current
+
+`README.md` frontmatter drives the vault's index views. When a session changes
+the project's reality, update the property too — not just the prose:
+
+| If this changed | Update |
+|---|---|
+| The project moved phase (idea → research → design → active → complete) | `stage:` |
+| Where the code lives, or a new host was added | `topology:` and `source.md` |
+| The project's grouping | `domain:` |
+
+The `## Stage` heading in the body and the `stage:` property must agree. If they
+disagree, the property is what the Dataview views show, so fix the property and
+make the prose match it.
+
+## Tier every rule you write
+
+Memory files carry `level` and `enforcement` in frontmatter so a rule's durability is
+explicit from the moment it is written:
+
+```yaml
+metadata:
+  type: core | feedback | user | reference
+  level: core | context | generic      # default generic
+  enforcement: validated | reminder    # required iff level: core
+```
+
+Default to `generic`. Do **not** set `level: core` here — Core is a promotion, and it
+requires wiring an enforcement hook, which is `/gt:gt-promote`'s job. A file marked
+`level: core` without that wiring is exactly what `gt-lint`'s `core-unenforced` check
+exists to catch.
+
+Template: `templates/memory-file.md`.
