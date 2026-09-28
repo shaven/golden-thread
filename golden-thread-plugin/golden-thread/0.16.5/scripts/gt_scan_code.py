@@ -23,9 +23,10 @@ THE RULE THIS FILE TURNS ON:
 TIERS, and what is honestly available:
     text       always. Regex over raw lines. Any language, no parser.
     stdlib     always, PYTHON ONLY. Structural matching via the `ast` module.
-    astgrep    only if `ast_grep_py` imports. Structural matching for 23 languages, bash
-               among them -- but NOT markdown or toml; see ASTGREP_SUPPORTED, measured
-               rather than assumed.
+    astgrep    only if the ast-grep CLI is on PATH (or GT_ASTGREP_BIN names it). Structural
+               matching for ~30 languages including bash and markdown. Not toml -- which is
+               config, and §5 of the design gives document shape to JSON Schema, not to a
+               code matcher.
     treesitter only if `tree_sitter` plus a grammar imports.
 
 WITHOUT ast_grep_py, shell gets line matching only and a rule declaring a structural bash
@@ -68,6 +69,7 @@ import fnmatch
 import json
 import os
 import re
+import subprocess
 import sys
 from pathlib import Path
 
@@ -471,50 +473,74 @@ def _relational(inner, node, unit, stop_by, descend: bool) -> bool:
 
 
 # ---------------------------------------------------------------------------- rules & tiers
-# What ast-grep-py calls each language gt knows about. gt says "shell"; ast-grep only accepts
-# "bash" -- and asking it for "shell" does not raise a ValueError, it PANICS (see below).
-ASTGREP_LANG = {"python": "python", "shell": "bash", "json": "json", "yaml": "yaml"}
+# What ast-grep calls each language gt knows about. gt says "shell"; ast-grep says "bash".
+ASTGREP_LANG = {"python": "python", "shell": "bash", "json": "json", "yaml": "yaml",
+                "markdown": "markdown"}
 
-# Measured against ast-grep-py 0.30.0 on 2026-09-27 (`self-verified`). 23 languages parse;
-# `sh`, `shell`, `markdown`, `md`, `toml` and `dart` do not. The list is written down rather
-# than discovered at runtime because discovering it means CALLING it, and a call with an
-# unsupported language does not return an error -- it panics, below.
-ASTGREP_SUPPORTED = {
-    "python", "bash", "json", "yaml", "javascript", "typescript", "tsx", "html", "css",
-    "c", "cpp", "csharp", "go", "java", "kotlin", "lua", "php", "ruby", "rust", "scala",
-    "swift", "elixir", "haskell",
-}
-
-# THE LANGUAGES GT ITSELF VALIDATES RULES FOR, deliberately a short list and deliberately
-# separate from the one above. ast-grep can parse 23 languages here; that is not the same as
-# gt having measured a rule against real code in them. Adding a language means adding rules
-# and measuring their false-positive rate, so the list grows a few at a time -- which is the
-# owner's instruction (2026-09-27) and also the only honest way to grow it.
+# THE LANGUAGES GT ITSELF VALIDATES RULES FOR. Deliberately short, and deliberately separate
+# from what the engine CAN parse -- ast-grep handles roughly thirty. That is not the same claim
+# as gt having measured a rule against real code in them. Adding a language means adding rules
+# and measuring their false-positive rate, so the list grows a few at a time (owner, 2026-09-27).
 #
-# Everything in ASTGREP_SUPPORTED but not here is *reachable*: a user's own pack may target it
-# today, and gt will evaluate it. What gt does not do is ship rules for it and imply coverage.
+# Anything the engine supports but gt ships no rules for is still *reachable*: a user's own pack
+# may target it and gt will evaluate it. What gt does not do is ship rules and imply coverage.
 LANGUAGES_VALIDATED = ("python", "shell")
+
+# THE CLI, NOT THE PYTHON BINDING, and the reason is availability rather than taste.
+# `ast-grep-py` shipped cp39 macOS wheels for 0.25.0 -> 0.30.0 only -- about four months -- and
+# dropped cp39 at 0.30.1; everything since is cp311+. This machine's python3 is 3.9.6, so the
+# binding pinned gt fifteen releases back: no markdown, and a Rust PanicException (a
+# BaseException, which `except Exception` does not catch) on any unsupported language.
+#
+# The CLI is MIT, currently 0.45.3, installs from brew or npm, and does not involve Python at
+# all. It takes gt's matcher VERBATIM: `--inline-rules` accepts the rule document as a string,
+# and JSON is valid YAML, so a pack entry goes straight in with no temp file and no translation
+# layer. Findings return as JSON on stdout.
+#
+# The binding was REMOVED rather than kept as a fallback (owner, 2026-09-28). A fallback fifteen
+# releases old answers a different question from the one the CLI answers -- different language
+# set, different failure mode -- and would need testing as a second backend to be trustworthy.
+ASTGREP_BINS = ("ast-grep", "sg")
+
+
+def astgrep_binary():
+    """-> a path to a working ast-grep, or None.
+
+    GT_ASTGREP_BIN overrides the search. `sg` is tried second and VERIFIED rather than trusted:
+    on many systems `sg` is util-linux's setgid tool, so finding it on PATH proves nothing. The
+    version string is what settles it.
+    """
+    forced = os.environ.get("GT_ASTGREP_BIN")
+    if forced:
+        candidates = [forced]
+    else:
+        import shutil as _sh
+        candidates = [c for c in (_sh.which(b) for b in ASTGREP_BINS) if c]
+    for path in candidates:
+        try:
+            out = subprocess.run([path, "--version"], capture_output=True, text=True, timeout=20)
+        except (OSError, subprocess.SubprocessError):
+            continue
+        if out.returncode == 0 and "ast-grep" in (out.stdout + out.stderr):
+            return path
+    return None
 
 
 def available_tiers() -> list:
     """Which evaluator tiers exist here.
 
-    GT_SCAN_TIERS overrides the answer, as a comma-separated list, and is ANNOUNCED whenever
-    it is in effect. It exists because the skip contract is the most important behaviour in
-    this file and it cannot be tested by waiting for a machine that lacks a package: the tests
-    that prove a missing tier is reported must work on a machine where every tier is present,
-    and the tests that prove a present tier is USED must work where it is not. Without the
-    override those two sets of tests contradict each other depending on what pip did last.
+    GT_SCAN_TIERS overrides the answer, as a comma-separated list, and is ANNOUNCED whenever it
+    is in effect. It exists because the skip contract is the most important behaviour in this
+    file and cannot be tested by waiting for a machine that happens to lack something: the tests
+    that prove a missing tier is REPORTED must run where every tier is present, and those that
+    prove a present tier is USED must run where it is not.
     """
     forced = os.environ.get("GT_SCAN_TIERS")
     if forced is not None:
         return [t.strip() for t in forced.split(",") if t.strip()]
     tiers = ["text", "stdlib"]
-    try:
-        import ast_grep_py                                # noqa: F401
+    if astgrep_binary():
         tiers.append("astgrep")
-    except Exception:
-        pass
     try:
         import tree_sitter                                # noqa: F401
         tiers.append("treesitter")
@@ -523,43 +549,49 @@ def available_tiers() -> list:
     return tiers
 
 
-def astgrep_find(matcher, text: str, lang: str):
-    """-> [line, ...] where `matcher` holds, using ast-grep. [] when it cannot run.
+def astgrep_scan(rule, root):
+    """Run ONE rule over a whole tree with the CLI. -> [(rel, line), ...].
 
-    CATCHES BaseException, and that is not laziness. ast-grep-py is a Rust extension: handing
-    it a language it does not know raises `pyo3_runtime.PanicException`, which subclasses
-    BaseException and therefore sails straight through `except Exception`. Measured: asking
-    0.30.0 for "markdown" panics rather than returning an error. A scanner that crashes on one
-    unsupported file is a scanner nobody runs, so the panic is contained and reported as a
-    rule that could not run -- which is the same contract as a missing tier.
+    One subprocess per RULE, not per file: the CLI scans a tree natively, so per-file invocation
+    would multiply process spawns by the file count for nothing.
+
+    The CALLER filters these against the files gt decided were in scope. The CLI walks the tree
+    by its own rules, and a finding in a file gt excluded is a finding gt never agreed to look
+    at -- which would make `--exclude` mean something different at this tier than at the others.
     """
-    sg_lang = ASTGREP_LANG.get(lang, lang)
-    if sg_lang not in ASTGREP_SUPPORTED:
-        raise RuleError("ast-grep here does not support language %r" % lang)
-    if not isinstance(matcher, dict):
-        raise RuleError("a matcher must be an object")
+    binary = astgrep_binary()
+    if not binary:
+        raise RuleError("no ast-grep binary found (install it, or set GT_ASTGREP_BIN)")
+    lang = ASTGREP_LANG.get(rule["lang"], rule["lang"])
+    if lang == "*":
+        raise RuleError("an astgrep rule must name a language")
+    # JSON is valid YAML, so gt's pack entry IS the rule document -- no temp file, no rewriting.
+    doc = json.dumps({
+        "id": rule["id"], "language": lang,
+        "severity": {"info": "info", "warn": "warning", "error": "error"}.get(
+            rule["severity"], "warning"),
+        "message": rule["message"], "rule": rule["matcher"]})
     try:
-        from ast_grep_py import SgRoot
-        root = SgRoot(text, sg_lang).root()
-        # `config={"rule": matcher}` is ast-grep's OWN rule-config shape, so gt's matcher goes
-        # across verbatim -- no translation layer, and therefore nothing to drift. That is the
-        # payoff of borrowing the vocabulary rather than inventing one: at this tier the whole
-        # of all/any/not/has/inside/stopBy is evaluated by ast-grep itself, and gt's stdlib
-        # evaluator is the fallback rather than the definition.
-        #
-        # Passing the matcher positionally raises "missing field `rule`" -- an ordinary
-        # Exception, which is how this was found rather than by reading documentation.
-        hits = root.find_all(config={"rule": matcher})
-    except RuleError:
-        raise
-    except BaseException as exc:                          # noqa: BLE001 -- see the docstring
-        raise RuleError("ast-grep could not evaluate this rule (%s)"
-                        % type(exc).__name__)
+        proc = subprocess.run([binary, "scan", "--inline-rules", doc, "--json=compact",
+                               str(root)], capture_output=True, text=True, timeout=300)
+    except (OSError, subprocess.SubprocessError) as exc:
+        raise RuleError("ast-grep could not be run (%s)" % exc.__class__.__name__)
+    if proc.returncode not in (0, 1):
+        # An unsupported language, a malformed rule, a key the CLI rejects. Reported as a rule
+        # that could not run -- the same contract as a missing tier -- and never swallowed.
+        detail = " ".join((proc.stderr or proc.stdout).split())[:160]
+        raise RuleError("ast-grep refused this rule: %s"
+                        % (detail or "exit %d" % proc.returncode))
+    try:
+        rows = json.loads(proc.stdout or "[]")
+    except ValueError:
+        raise RuleError("ast-grep produced output that is not JSON")
     out = []
-    for h in hits:
+    for row in rows:
         try:
-            out.append(h.range().start.line + 1)
-        except BaseException:
+            out.append((os.path.relpath(row["file"], str(root)),
+                        int(row["range"]["start"]["line"]) + 1))
+        except (KeyError, TypeError, ValueError):
             continue
     return out
 
@@ -734,15 +766,7 @@ def scan_unit(unit: Unit, rules, findings, skipped_ids):
                                  if 0 < line <= len(unit.lines) else ""})
             continue
         if r["tier"] == "astgrep":
-            try:
-                for line in astgrep_find(r["matcher"], unit.text, unit.lang):
-                    findings.append({"path": unit.rel, "line": line, "rule": r["id"],
-                                     "message": r["message"], "severity": r["severity"],
-                                     "text": unit.lines[line - 1].strip()
-                                     if 0 < line <= len(unit.lines) else ""})
-            except RuleError as exc:
-                skipped_ids[r["id"]] = str(exc)
-            continue
+            continue            # run once per rule over the whole tree; see _scan_tree
         if unit.lang != "python" or unit.tree is None:
             continue
         for node in unit.nodes():
@@ -798,11 +822,13 @@ def main(argv=None) -> int:
         # does not have. The list grows a few languages at a time, each with rules and a
         # measured false-positive rate (owner's instruction, 2026-09-27).
         print("languages gt ships validated rules for: %s" % ", ".join(LANGUAGES_VALIDATED))
-        others = sorted(ASTGREP_SUPPORTED - {ASTGREP_LANG.get(l, l)
-                                             for l in LANGUAGES_VALIDATED})
-        if "astgrep" in tiers and others:
-            print("also EVALUABLE here via ast-grep, with your own packs (no gt rules yet): %s"
-                  % ", ".join(others))
+        if "astgrep" in tiers:
+            # No hardcoded language list any more. The old one was measured against the
+            # binding and would rot silently as the CLI adds languages; the CLI reports an
+            # unsupported language itself, as an ordinary error, which is better than gt
+            # holding a stale opinion about what the engine can do.
+            print("also EVALUABLE here via ast-grep (%s), with your own packs — it supports "
+                  "roughly thirty languages; ask it, do not ask gt" % astgrep_binary())
         return CLEAN
 
     if not rules:
@@ -857,6 +883,7 @@ def main(argv=None) -> int:
 
 def _scan_tree(a, root, rules, tiers, skipped_ids, problems, findings) -> int:
     scanned = skipped_files = excluded = unparsed = 0
+    in_scope_rels = {}          # rel -> its lines, for the tree-level astgrep pass below
     for p in walk(root):
         rel = str(p.relative_to(root)) if p != root else p.name
         ok, why = in_scope(p, rel, a.exclude)
@@ -879,7 +906,28 @@ def _scan_tree(a, root, rules, tiers, skipped_ids, problems, findings) -> int:
             unparsed += 1
             continue
         scan_unit(unit, rules, findings, skipped_ids)
+        in_scope_rels[rel] = unit.lines
         scanned += 1
+
+    # The astgrep tier, once per rule over the whole tree rather than once per file.
+    for r in rules:
+        if r["tier"] != "astgrep" or r["id"] in skipped_ids:
+            continue
+        try:
+            hits = astgrep_scan(r, root)
+        except RuleError as exc:
+            skipped_ids[r["id"]] = str(exc)
+            continue
+        for rel, line in hits:
+            # FILTERED to what gt accepted. The CLI walks the tree by its own rules, so without
+            # this an --exclude would mean one thing at the stdlib tier and another here, and a
+            # finding could surface in a file gt never agreed to open.
+            if rel not in in_scope_rels:
+                continue
+            lines = in_scope_rels[rel]
+            findings.append({"path": rel, "line": line, "rule": r["id"],
+                             "message": r["message"], "severity": r["severity"],
+                             "text": lines[line - 1].strip() if 0 < line <= len(lines) else ""})
 
     base = None
     if a.baseline and Path(a.baseline).is_file():

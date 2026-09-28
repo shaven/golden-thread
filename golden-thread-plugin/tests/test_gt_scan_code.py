@@ -11,6 +11,7 @@ The load-bearing tests here are not the detection ones. They are:
     "no rules exist".
 """
 import json
+import os
 import re
 import unittest
 
@@ -74,14 +75,18 @@ class ScanBase(Sandbox):
     STDLIB_ONLY = {"GT_SCAN_TIERS": "text,stdlib"}
 
     def astgrep_env(self):
-        """Env that makes the astgrep tier real, or skipTest with the reason."""
-        try:
-            import ast_grep_py
-        except Exception:
-            self.skipTest("ast_grep_py is not importable; the astgrep tier cannot be tested")
-        import os as _os
-        site = _os.path.dirname(_os.path.dirname(ast_grep_py.__file__))
-        return {"GT_SCAN_TIERS": "text,stdlib,astgrep", "PYTHONPATH": site}
+        """Env that makes the astgrep tier real, or skipTest with the reason.
+
+        Looks for the ast-grep BINARY, not a Python module: the tier runs the CLI now. The
+        Python binding was dropped on 2026-09-28 because it shipped cp39 wheels for only four
+        months and pinned gt fifteen releases back.
+        """
+        import shutil as _sh
+        binary = os.environ.get("GT_ASTGREP_BIN") or _sh.which("ast-grep") or _sh.which("sg")
+        if not binary:
+            self.skipTest("no ast-grep binary on PATH; the astgrep tier cannot be tested "
+                          "(brew install ast-grep, or set GT_ASTGREP_BIN)")
+        return {"GT_SCAN_TIERS": "text,stdlib,astgrep", "GT_ASTGREP_BIN": binary}
 
     def mine(self, ids, *extra):
         """Findings from the rule ids this test defined, ignoring the core pack's."""
@@ -372,9 +377,11 @@ class TheAstgrepTier(ScanBase):
         self.assertIn("sh-eval-call", proc.stdout)
 
     def test_an_unsupported_language_is_reported_not_crashed(self):
-        """ast-grep-py is a RUST extension: an unknown language raises PanicException, which
-        subclasses BaseException and sails through `except Exception`. Measured on 0.30.0 --
-        asking it for "markdown" panics. One unsupported file must not take the scan down.
+        """With the binding this was a Rust PanicException — a BaseException that sailed
+        through `except Exception` and would have taken the scan down. The CLI cannot do that
+        to us: it is a subprocess, and an unsupported language comes back as a non-zero exit
+        with a message. The test stays, because the CONTRACT is the same either way: one file
+        gt cannot handle must not end the scan.
         """
         env = self.astgrep_env()
         self.put([{"id": "md-structural", "severity": "warn", "message": "m",
@@ -394,3 +401,43 @@ class TheAstgrepTier(ScanBase):
         self.write("scripts/a.py", "f()\n")
         proc = self.scan(env=self.STDLIB_ONLY)
         self.assertIn("FORCED", proc.stderr)
+
+
+class TheBackendIsTheCLI(unittest.TestCase):
+    """The Python binding was removed on 2026-09-28, not merely de-preferred.
+
+    `ast-grep-py` shipped cp39 macOS wheels for 0.25.0 -> 0.30.0 only — about four months —
+    and dropped cp39 at 0.30.1. On a 3.9 interpreter that pinned gt fifteen releases back: no
+    markdown, and a Rust PanicException on any unsupported language. Keeping it as a fallback
+    was considered and rejected: a fallback that old answers a different question (different
+    language set, different failure mode) and would need testing as a second backend to be
+    worth having.
+    """
+
+    def test_the_scanner_does_not_import_the_python_binding(self):
+        src = SCAN.read_text()
+        self.assertNotIn("import ast_grep_py", src)
+        self.assertNotIn("from ast_grep_py", src)
+
+    def test_it_verifies_the_binary_rather_than_trusting_the_name(self):
+        """`sg` is util-linux's setgid tool on many systems, so finding it on PATH proves
+        nothing. The version string is what settles it."""
+        src = SCAN.read_text()
+        block = src[src.index("def astgrep_binary("):src.index("def available_tiers(")]
+        self.assertIn("--version", block)
+        self.assertIn("ast-grep", block)
+
+    def test_a_rule_is_passed_as_data_not_written_to_a_temp_file(self):
+        """gt's pack entry IS the rule document: JSON is valid YAML, so --inline-rules takes
+        it verbatim. A temp file would be a second place for a rule to exist."""
+        src = SCAN.read_text()
+        self.assertIn("--inline-rules", src)
+        block = src[src.index("def astgrep_scan("):src.index("def required_tier(")]
+        self.assertNotIn("NamedTemporaryFile", block)
+        self.assertNotIn("mkstemp", block)
+
+    def test_findings_are_filtered_to_what_gt_accepted_as_in_scope(self):
+        """The CLI walks the tree by its own rules. Without the filter an --exclude would mean
+        one thing at the stdlib tier and another here."""
+        src = SCAN.read_text()
+        self.assertIn("in_scope_rels", src)
