@@ -27,8 +27,13 @@ N_HOOKS = len(_REGS)
 N_INSTALL_SH = sum(1 for r in _REGS if r["owner"] == "install.sh")
 N_ENFORCEMENT = N_HOOKS - N_INSTALL_SH
 # gt_watch.py and gt_report_card.py left gt in 0.15.0 (watch / report-card modules).
-HOOKDIR_SCRIPTS = ("gt_components.py", "gt_workers.py", "gt_version_check.py",
-                   "gt_push_check.py")
+# DERIVED from the module, not listed here. A hand-maintained copy is the fourth instance of
+# this defect in one day (the install fixture's manifest step, test_gt_scan's member list, then
+# its import list, now this): adding gt_state.py to HOOK_DIR_SCRIPTS left the fixture one file
+# behind, and ten tests failed reporting "drift" that was the fixture's, not the product's.
+HOOKDIR_SCRIPTS = tuple(
+    n for n in load_module(SCRIPTS / "gt_components.py", "gt_components_hookdir")
+    .HOOK_DIR_SCRIPTS if n != "gt_paths.py")
 MOVED_TO_MODULES = ("gt_watch.py", "gt_report_card.py")
 
 

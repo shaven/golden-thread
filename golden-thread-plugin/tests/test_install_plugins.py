@@ -24,9 +24,15 @@ import shutil
 import subprocess
 import unittest
 
-from _harness import Sandbox, REPO, GT, WIKI
+from _harness import Sandbox, REPO, GT, WIKI, load_module
 
 INSTALL = REPO / "install.sh"
+# DERIVED from the declaration install.sh registers FROM. A literal count here tests only
+# that somebody remembered to edit it -- 0.17.1 took it from 5 to 7 (gt_state.py on
+# UserPromptSubmit and PreCompact) and this test failed for a reason it is not about.
+N_GT_HOOKS = sum(1 for r in load_module(GT / "scripts" / "gt_components.py",
+                                        "gt_components_plugin_counts").HOOK_REGISTRATIONS
+                 if r["owner"] == "install.sh")
 IGNORE = shutil.ignore_patterns("__pycache__", "*.pyc", ".DS_Store")
 EXTRA_DIR, EXTRA_VER, EXTRA_NAME = "gt-extra", "1.0.0", "gt-extra"
 
@@ -173,7 +179,8 @@ class InstallsAThirdPlugin(Base):
         flat = [h.get("command", "") for bl in settings.get("hooks", {}).values()
                 for b in bl for h in b.get("hooks", [])]
         self.assertFalse([c for c in flat if EXTRA_NAME in c or "extra_tool" in c], flat)
-        self.assertIn("Registered 5 hooks", p.stdout, "hook registration count changed")
+        self.assertIn("Registered %d hooks" % N_GT_HOOKS, p.stdout,
+                      "a third plugin changed gt's hook registration count")
 
     def test_a_superseded_cache_of_the_third_plugin_is_pruned(self):
         old = self.plugins / "cache" / "golden-thread-plugin" / EXTRA_NAME / "0.9.0"

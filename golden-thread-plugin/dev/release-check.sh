@@ -165,6 +165,14 @@ step "cli contract"
 OUT=$(python3 dev/check_cli_contract.py "$GT" 2>&1); rc=$?
 [ $rc -eq 0 ] && ok "$OUT" || { echo "$OUT" | tail -20; bad "a vault tool can write without being told which vault"; }
 
+step "docstring flags"
+# The same failure one level out: there a RULE named a flag nothing implemented, here a tool's
+# own usage block does. gt_state.py advertised `write --force`, which has never existed, and
+# hid `check --write`, which the hook passes. Found by an agent sent to document the tool --
+# the only activity that reads a usage block closely, and it happens once per release.
+OUT=$(python3 dev/check_docstring_flags.py "$GT" 2>&1); rc=$?
+[ $rc -eq 0 ] && ok "$OUT" || { echo "$OUT" | tail -20; bad "a usage block advertises a flag argparse does not have"; }
+
 step "retired"
 # An upgrade from ANY older release must converge on a fresh install (owner requirement,
 # 2026-09-14). install.sh can only remove what an older release left behind if the new
@@ -230,6 +238,35 @@ for tool in sorted(t.name for t in (gt / "templates" / "tools").glob("gt_*.py"))
     if not any(stem in t for t in docs.values()):
         out.append(f"vault tool {tool} documented nowhere (README/MANUAL/docs)")
 
+# A USER-FACING SCRIPT is one with a command line. Skills and templates/tools were covered;
+# scripts/ was not -- and on 2026-09-28 that meant NINE commands with argparse CLIs were
+# documented in zero files while this gate passed, one of them (gt_demote.py) shipped long
+# before. A release that adds a command nobody can discover has added nothing.
+#
+# The test is `argparse.ArgumentParser`, because that is what makes a script something a
+# person runs rather than something another script imports. INTERNAL_SCRIPTS is the explicit
+# exemption list: a helper with no CLI needs no entry, and anything added here should be
+# justified in one line rather than quietly appended.
+INTERNAL_SCRIPTS = {
+    "gt_staged.py",        # shared index reader, imported by the two commit gates
+    "gt_aggregate.py",     # aggregation helper for gt_scan / gt_allin
+    "gt_paths.py",         # path resolution, imported everywhere
+    "gt_settings.py",      # settings accessor, imported
+}
+for script in sorted(p.name for p in (gt / "scripts").glob("gt_*.py")):
+    if script in INTERNAL_SCRIPTS:
+        continue
+    try:
+        body = (gt / "scripts" / script).read_text(encoding="utf-8")
+    except OSError:
+        continue
+    if "argparse.ArgumentParser" not in body:
+        continue                      # no command line: not a thing a person runs
+    stem = script[:-3]
+    if not any(stem in t for t in docs.values()):
+        out.append(f"command {script} has a CLI but is documented nowhere "
+                   f"(README/MANUAL/docs)")
+
 # The release MACHINERY needs documenting too, for the same reason the tools do: on
 # 2026-09-12 three new gates and a parallel test runner shipped, and the only place any
 # of them was mentioned was a changelog entry. dev/README.md is where they belong, and
@@ -258,7 +295,10 @@ PY
 [ -z "$MISSING" ] && ok "every skill in README, MANUAL, golden-thread-docs; every setting in MANUAL" || { echo "$MISSING"; bad "docs do not cover the release"; }
 # ../CHANGELOG.md is included deliberately: a changelog nobody checks is the first
 # document to go stale, and it is the one a stranger trusts most.
-STALE=$(for f in README.md MANUAL.md golden-thread-docs.md ONBOARDING.md ../README.md ../CHANGELOG.md; do
+# BUILD-NOTE.md is in this list for a reason the others are not: the project CHANGELOG
+# does NOT travel to gt-src, so the build note is the only account of the release that
+# reaches the other machine. One naming the previous version is worse than none.
+STALE=$(for f in README.md MANUAL.md golden-thread-docs.md ONBOARDING.md BUILD-NOTE.md ../README.md ../CHANGELOG.md; do
   [ -f "$f" ] || continue
   grep -q "$GTV" "$f" || echo "$f never names $GTV"
 done)

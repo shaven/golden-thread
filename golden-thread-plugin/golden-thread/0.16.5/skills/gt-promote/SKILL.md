@@ -127,7 +127,7 @@ The log line shapes:
 
 ## Promoting to Core (the top tier)
 
-`core-rules/` is the top of the hierarchy, above
+`Projects/golden-thread/core-rules/` is the top of the hierarchy, above
 `global-memory/`. Promote here only when a rule must hold on **every turn, in every
 project**.
 
@@ -182,7 +182,7 @@ Steps, in order:
      promoted: <today>
      supersedes: <old-filename-if-any>
    ```
-3. **Move the file** to `core-rules/`, renamed `core_<topic>.md`.
+3. **Move the file** to `Projects/golden-thread/core-rules/`, renamed `core_<topic>.md`.
 4. **Wire or confirm the mechanism.** The hooks live at
    `~/.claude/golden-thread/hooks/` — **outside the vault**, so the absolute path in
    `settings.json` survives project renames and vault moves.

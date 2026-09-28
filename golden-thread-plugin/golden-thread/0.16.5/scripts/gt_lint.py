@@ -36,8 +36,6 @@ Checks:
   generated-hand-edited  log.md/decisions.md edited by hand instead of merged
   attribution-unwired  git's core.hooksPath does not reach the attribution hooks, so
                        per-edit attribution never reaches a commit message
-  secrets-gate-unwired  .githooks/pre-commit exists but core.hooksPath does not reach
-                       it, so the credential gate is shipped and never runs
   project-missing      A link points at a project folder that no longer exists
 
 Suppression: reads <vault>/lint-declines.md — lines starting with "suppress:". One rule,
@@ -1156,66 +1154,6 @@ def check_attribution_wired(vault: Path, findings: list, suppressed: set):
             })
 
 
-def check_secrets_gate_wired(vault: Path, findings: list, suppressed: set):
-    """Is the pre-commit credential gate REACHABLE? (check: secrets-gate-unwired)
-
-    Deliberately a separate check from check_attribution_wired above, rather than one more
-    hook name in its loop, because the two have different subjects and different stakes.
-    That function reports `attribution-unwired` and is gated on gt_edits.py being adopted;
-    filing a credential gate under that name would describe a security exposure as a
-    bookkeeping gap, and whoever read the finding would triage it accordingly.
-
-    The failure this catches is the one this release keeps meeting: `.githooks/pre-commit`
-    is TRACKED, so it travels with every clone, but `core.hooksPath` is per-clone LOCAL
-    config that does not travel and whose absence nothing announces. In that state the gate
-    sits in the repo looking installed and never runs once -- a shipped-but-inert control,
-    which is worse than none, because its presence is taken for coverage.
-    """
-    if not (vault / ".git").exists():
-        return
-    if not (vault / ".githooks" / "pre-commit").exists():
-        return                      # this vault predates the gate; nothing to be wired
-
-    hookspath = None
-    try:
-        import subprocess
-        out = subprocess.run(["git", "-C", str(vault), "config", "--get", "core.hooksPath"],
-                             capture_output=True, text=True, timeout=10)
-        if out.returncode == 0:
-            hookspath = out.stdout.strip() or None
-    except Exception:
-        return                      # cannot tell: stay silent rather than cry wolf
-
-    if not hookspath:
-        findings.append({
-            "check": "secrets-gate-unwired",
-            "path": ".git/config",
-            "message": (".githooks/pre-commit exists but core.hooksPath is unset, so the "
-                        "credential gate never runs — a commit carrying a credential would "
-                        "not be stopped, and nothing would say so"),
-            "proposed_fix": "git -C <vault> config core.hooksPath .githooks",
-        })
-        return
-
-    live = vault / hookspath / "pre-commit"
-    if not live.exists():
-        findings.append({
-            "check": "secrets-gate-unwired",
-            "path": f"{hookspath}/pre-commit",
-            "message": (f"core.hooksPath is {hookspath} but the credential gate is not there, "
-                        f"so it never runs"),
-            "proposed_fix": "re-run the plugin install.sh to restore the git hooks",
-        })
-    elif not (live.stat().st_mode & 0o111):
-        findings.append({
-            "check": "secrets-gate-unwired",
-            "path": f"{hookspath}/pre-commit",
-            "message": ("the credential gate is present but not executable, so git skips it "
-                        "in silence"),
-            "proposed_fix": f"chmod +x {hookspath}/pre-commit",
-        })
-
-
 # ---------------------------------------------------------------------------- runbooks
 RUNBOOK_MIN_CHARS = 25
 RUNBOOK_NEAR_RATIO = 0.9
@@ -1407,7 +1345,6 @@ def main():
     check_superseded_cited(vault, findings, suppressed)
     check_stale(vault, findings, suppressed)
     check_attribution_wired(vault, findings, suppressed)
-    check_secrets_gate_wired(vault, findings, suppressed)
     check_adr_collision(vault, findings, suppressed)
     check_generated_hand_edited(vault, findings, suppressed)
 

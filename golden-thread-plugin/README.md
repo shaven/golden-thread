@@ -1,7 +1,7 @@
 # Golden Thread Plugin
 
 > **Reader:** someone who has installed it and wants the reference
-> **Claims last checked against the code:** 2026-09-18 (gt 0.16.5) — see *The documents, and what belongs in each* in [`CLAUDE.md`](../CLAUDE.md).
+> **Claims last checked against the code:** 2026-09-28 (gt 0.17.1) — see *The documents, and what belongs in each* in [`CLAUDE.md`](../CLAUDE.md).
 
 A Claude Code plugin that turns an Obsidian vault into the single source of truth for all AI memory across every project and every session.
 
@@ -354,9 +354,9 @@ If you ever need to rewire them manually:
 python3 <scripts>/vault_init.py install-core-rules --vault <vault>
 ```
 
-### Standing behaviour: parallel work, and the test gate
+### Standing behaviour: parallel work, and the gates
 
-Both of these shipped earlier and both are still on by default. They surprise people the
+These shipped earlier and are all on by default. They surprise people the
 first time, so they are written down here rather than only in the changelog.
 
 > [!NOTE]
@@ -382,6 +382,42 @@ first time, so they are written down here rather than only in the changelog.
 > --what <suite> --ok`). If a repo has no tests, exempt it once with `touch .gt-no-test-gate`; for a
 > single commit, `GT_TEST_GATE=off git commit …`; to switch it off entirely,
 > `gt_settings.py set test_gate off`. Docs-only commits are never blocked.
+>
+> **Since 0.17.0 the scanners run on three cadences, and only two of them block:**
+>
+> | | What it looks at | What it does |
+> |---|---|---|
+> | `tests/run.sh` | the file set the scanners define | fails the run — and writes no receipt, so the test gate above will not license the commit either |
+> | the commit gate | the staged diff only | denies the commit |
+> | `gt_sweep.py` | the whole tree | **reports**, never blocks |
+>
+> The narrow two are narrow deliberately: a commit gate that scanned the whole tree would
+> punish you for someone else's old code. But that means nothing ever re-examines what
+> nobody is touching — a rule added today never sees a file no one edits, and a credential
+> committed before the gate existed stays committed. The sweep is the answer to "what is
+> true about the tree as a whole", and because it can surface old debt it must never block:
+> a report you read on a Monday, not a wall in front of a commit.
+>
+> **A commit is also checked for credentials.** `/gt:gt-init` seeds `.githooks/` in the
+> vault and points `core.hooksPath` at it; the `pre-commit` hook there runs `gt_secrets.py
+> --staged` over the staged blobs — the index, not the worktree, because `git add`-ing a
+> credential and then tidying the file in your editor leaves a clean worktree and a dirty
+> commit. It is the only hook gt ships that **fails closed**: "could not run" refuses the
+> commit, because a credential in git history is in every clone, fork and backup
+> immediately and the only real remedy is rotating it. A finding is `path:line`, a rule id
+> and a **length** — never the value. If that gate passes, `gt_scan_code.py --staged` runs
+> after it; there a real finding blocks, but a rule skipped because this machine lacks an
+> optional evaluator tier is reported and allowed through, since blocking on it would
+> refuse every commit on every machine without `ast_grep_py`.
+>
+> Findings you have examined and accepted belong in a baseline —
+> `.gt/secrets-baseline.json` and `.gt/code-baseline.json`, which the hook picks up if they
+> exist — not in an escape. The escapes are `git commit --no-verify` for one commit, and
+> `git config gt.secretsgate off` for this clone, which prints that it is off on every
+> commit: a gate you have forgotten you disabled is indistinguishable from one that works.
+> Recording each commit's verdict into the vault is opt-in per clone
+> (`git config gt.checkreport on`), because a hook that writes to the vault on every commit
+> in every repo on the machine is a side effect nobody asked for.
 
 ---
 
@@ -451,7 +487,7 @@ Python scripts can also be run directly from the command line. One variable, so 
 bump does not strand eight copied paths — from the release tree, or from the install:
 
 ```bash
-GT=golden-thread/0.16.2/scripts
+GT=golden-thread/0.17.1/scripts
 # installed instead:  GT=$(ls -d ~/.claude/plugins/cache/golden-thread-plugin/gt/*/scripts | sort -V | tail -1)
 
 # Create a new vault
@@ -493,6 +529,81 @@ python3 $GT/gt_lint.py ~/my-vault \
 
 # View/change automatic behaviours
 python3 $GT/gt_settings.py show
+
+# Find credentials in the wrong place. A separate tool from every other scanner because
+# its output rule is the opposite of theirs: nothing here ever prints matched source
+# text, and no other check runs beside it. A finding is path:line, a rule id and a
+# LENGTH -- never an excerpt, a prefix or a hash. --staged reads the index, which is
+# what the commit gate uses. Exit 0 clean / 1 found something / 2 could not run.
+python3 $GT/gt_secrets.py ~/Projects/my-project \
+  --exclude 'vendor/**' --baseline .gt/secrets-baseline.json
+python3 $GT/gt_secrets.py . --write-baseline .gt/secrets-baseline.json
+
+# Source validation: check code against the `lint` rules in effect. A leaf of gt_scan.py
+# alongside gt_scan_language.py. Rules are DATA from lint packs, in a documented subset
+# of ast-grep's rule schema; a rule whose evaluator tier is absent here is reported
+# SKIPPED, never silently passed. Unlike gt_secrets it DOES print source text -- there
+# the text is the finding -- which is why the two may never share a process.
+python3 $GT/gt_scan_code.py ~/Projects/my-project --sarif findings.sarif
+python3 $GT/gt_scan_code.py --rules          # the rules in effect, and which tier each needs
+
+# The weekly cadence: the whole tree, REPORTS and never blocks. The other two cadences
+# are narrow on purpose, so nothing re-examines code nobody is touching; this is what
+# answers "what is true about the tree as a whole". Files its verdict in the vault.
+python3 $GT/gt_sweep.py --vault ~/my-vault --path ~/Projects/my-project --only secrets,code
+
+# File a check's result into the vault, so a gate leaves a record. A verdict, a count, a
+# scope and a ref -- never a finding's CONTENT, because the vault is committed and pushed.
+# It answers the three questions an exit code cannot: is the check running at all, is it
+# getting noisier, did anyone look.
+python3 $GT/gt_check_report.py record --vault ~/my-vault \
+  --check secrets --verdict clean --count 0 --scope "staged diff" --ref HEAD
+python3 $GT/gt_check_report.py show --vault ~/my-vault --check secrets
+
+# The deterministic framework for code review -- gt does the planning, the mechanical
+# rejection and the record; the judgement is yours. gt ships NO dimensions deliberately:
+# the opinions are the user's or the company's, added as a `review` pack in their vault.
+# Zero dimensions configured exits 3, never 0 -- "nothing was reviewed" is not "clean".
+python3 $GT/gt_code_review.py dimensions --vault ~/my-vault
+python3 $GT/gt_code_review.py plan ~/Projects/my-project --vault ~/my-vault --staged
+python3 $GT/gt_code_review.py validate findings.json --root ~/Projects/my-project
+python3 $GT/gt_code_review.py report findings.json --root ~/Projects/my-project \
+  --vault ~/my-vault --ledger ~/my-vault/Projects/my-project/review-ledger.jsonl
+
+# Install, verify and remove gt's scheduled (launchd) jobs -- `daily` and `lint-weekly`.
+# `install` does not stop at writing a plist: it bootstraps the job, kickstarts it and
+# reads launchd's own exit code, because a job that works in a terminal can still fail
+# under launchd. `remove` is the rollback, which is what makes install safe to re-run.
+python3 $GT/gt_schedule.py list
+python3 $GT/gt_schedule.py install daily --vault ~/my-vault \
+  --repo ~/Projects/my-project --hour 22 --minute 0
+python3 $GT/gt_schedule.py check daily
+python3 $GT/gt_schedule.py remove daily
+
+# Write the day's FACTS into Daily Notes/<date>.md: tasks closed, commits per repo, event
+# counts, wiki item counts, an active span per project. Terse by design -- it does not
+# explain or interpret, because the meaning of the day is the owner's to write. One
+# fenced block, replaced whole each run; it never touches `## Noticed`.
+python3 $GT/gt_daily.py --vault ~/my-vault --repo ~/Projects/my-project --dry-run
+python3 $GT/gt_daily.py --vault ~/my-vault --check
+
+# Write the session's state BEFORE the context runs out. The signal is `ctx_pct` --
+# context fill -- and never the rate-limit meter: a real reading was 5% of the five-hour
+# allowance at 91% context, so triggering on the allowance would have fired at the wrong
+# moment and looked right doing it. PreCompact is the backstop, not the primary.
+python3 $GT/gt_state.py check --margin 5 --json
+python3 $GT/gt_state.py write --reason "handing over"
+python3 $GT/gt_state.py show
+
+# Move a note DOWN the cost ladder without deleting it. /gt:gt-promote moves knowledge up
+# by how SETTLED it is; this moves it down by how often it is PAID FOR -- global-memory/
+# (read in every session of every project) -> Projects/<slug>/memory/ (every session of
+# one project) -> Knowledge/<page>.md (read only when asked). Without --apply it is a
+# preview; with it, the destination is written and verified before the source is removed.
+python3 $GT/gt_demote.py --vault ~/my-vault \
+  --file global-memory/one-project-fact.md --to project-memory --project my-project
+python3 $GT/gt_demote.py --vault ~/my-vault \
+  --file global-memory/one-project-fact.md --to knowledge --apply
 ```
 
 ---

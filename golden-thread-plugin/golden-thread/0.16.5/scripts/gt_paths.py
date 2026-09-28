@@ -24,30 +24,6 @@ from pathlib import Path
 CONFIG = Path.home() / ".claude" / "vault-config.json"
 MODEL_FILE = "core_rule_priority_model.md"   # the marker that identifies a real core-rules dir
 
-# Where a NEW vault puts its Core rules, and where the 0.17.0 migration moves them to:
-# the vault ROOT. Core rules govern every project in the vault, including projects with
-# nothing to do with golden-thread, so filing them under one project asserted an
-# ownership that was never real and buried the vault's most important files three levels
-# down.
-#
-# Read these constants; do not spell the path. That is this module's entire purpose (see
-# the docstring above), and it was being bypassed by four scripts that hardcoded
-# "Projects/golden-thread/core-rules" -- the precise failure the docstring warns about.
-CORE_RULES_DEFAULT = "core-rules"
-# Where vaults seeded before 0.17.0 keep them. Recognised, so an un-migrated vault keeps
-# working; never written to by anything shipped.
-CORE_RULES_LEGACY = "Projects/golden-thread/core-rules"
-
-
-def default_core_rules(vault: Path) -> Path:
-    """The canonical location for a vault's Core rules. Use when CREATING them."""
-    return Path(vault) / CORE_RULES_DEFAULT
-
-
-def legacy_core_rules(vault: Path) -> Path:
-    """The pre-0.17.0 location. Use only to DETECT a vault that has not migrated."""
-    return Path(vault) / CORE_RULES_LEGACY
-
 
 def read_config() -> dict:
     try:
@@ -144,36 +120,3 @@ if __name__ == "__main__":
         "core_rules": str(c) if c else None,
         "rules": [parse_rule(p).get("name") for p in core_rule_files(c)],
     }, indent=2))
-
-
-# ---------------------------------------------------------------------------- report dirs
-# Where a check's report goes, with the same three-step resolution gt_lint_weekly.py has
-# used since 0.13.0: an explicit config key wins; else the pre-0.13.0 folder if it already
-# exists, because an upgrade must never silently move a report to a folder the owner has
-# never seen (owner requirement, 2026-09-14); else the modern default.
-REPORT_DIR_DEFAULT = Path(".gt")
-REPORT_DIR_LEGACY = Path("Projects") / "golden-thread"
-
-
-def report_dir(vault: Path, config: dict | None = None, kind: str = "lint") -> Path:
-    """-> the directory `kind`'s reports belong in, absolute.
-
-    `kind` is a subfolder name ("lint", "checks"), so every check reports into the same
-    tree rather than each inventing a location.
-
-    gt_lint_weekly.py DUPLICATES this resolution and cannot import it: it is installed to
-    ~/.claude/golden-thread/hooks/ and runs standalone from there, with no path to the
-    release's scripts/. The duplication is therefore load-bearing rather than careless --
-    and because today's other bug was a duplicated fixture where only one copy got fixed,
-    test_gt_paths pins the two implementations as equivalent across all three branches.
-    """
-    vault = Path(vault)
-    config = config or {}
-    configured = config.get("lint_report_dir") if kind == "lint" else None
-    if isinstance(configured, str) and configured.strip():
-        # A relative value resolves inside the vault; an absolute one wins the join.
-        return vault / os.path.expanduser(configured.strip())
-    legacy = vault / REPORT_DIR_LEGACY / kind
-    if legacy.is_dir():
-        return legacy
-    return vault / REPORT_DIR_DEFAULT / kind

@@ -25,6 +25,7 @@ shipped broken while everything looked fine.
 | manifest | `gt_components.py` | a `MANIFEST.json` that no longer matches the tree |
 | skills | `skill_lint.py` | two skills sharing a trigger phrase |
 | cli contract | `check_cli_contract.py` | a vault tool that writes without accepting `--vault` and `--dry-run` |
+| docstring flags | `check_docstring_flags.py` | a usage block advertising a `--flag` that argparse does not accept, or that a *sibling* subcommand accepts rather than the one shown |
 | installer version | `check_installer_version.py` | `install.sh` or `selftest.sh` changed since the newest release was cut |
 | retired | `check_retired.py` | a release that stops installing a hook-dir file or registering a hook without listing it in `retired.json`, so upgrades from older releases would leave it behind |
 | modules | `plugins.py module-check` | a module whose `module.json` is invalid (unknown key, a listed file missing, a hook claiming a Core-rule enforcement script, a version mismatch) or whose `requires_gt` does not admit the gt being released |
@@ -41,6 +42,13 @@ shipped broken while everything looked fine.
   is unfollowable if the tool offers no way to name it, so this asserts the flags exist
   — by RUNNING `--help`, since a flag can exist in source and still not parse after the
   subcommand.
+- **`check_docstring_flags.py`** — `gt_state.py`'s usage block read
+  `write [--reason R] [--force]`. `--force` had never existed, and `check --write`, the form
+  the hook actually passes, was never shown. A docstring is not executed, so nothing caught it;
+  it surfaced only because an agent was sent to document the tool. The gate reads **usage
+  lines only** — a docstring discussing a flag in prose is often saying one deliberately does
+  *not* exist, and a first version reported three of those as defects, which is the
+  crying-wolf failure this release met twice elsewhere.
 - **`check_wiring_coverage.py`** — `guard_vault_writes.sh` shipped inert through three
   releases: copied, in the manifest, verified by the component check, and registered in
   `settings.json` by nothing. This installs into a throwaway home — including the

@@ -401,29 +401,15 @@ def _frontmatter(text):
 
 
 def core_rules_dir(vault):
-    """Where the Core rules live: the canonical path, then the legacy one, else the
-    folder holding the priority model (which is what names a core-rules folder, not its
-    name alone).
-
-    0.17.0: the canonical location is core-rules/ at the vault ROOT. The pre-0.17.0 path
-    is still recognised so an un-migrated vault reports healthy rather than looking
-    broken — doctor's job is to tell the truth about the vault it is given, not to
-    insist on the newest layout.
-    """
-    model = "core_rule_priority_model.md"
-    try:
-        sys.path.insert(0, str(Path(__file__).resolve().parent))
-        from gt_paths import default_core_rules, legacy_core_rules
-        candidates = [default_core_rules(vault), legacy_core_rules(vault)]
-    except Exception:
-        candidates = [vault / "core-rules", vault / "Projects" / "golden-thread" / "core-rules"]
-    for cand in candidates:
-        if (cand / model).is_file():
-            return cand
+    """Where the Core rules live: the conventional path, else the folder holding the
+    priority model (which is what names a core-rules folder, not its name alone)."""
+    conventional = vault / "Projects" / "golden-thread" / "core-rules"
+    if (conventional / "core_rule_priority_model.md").is_file():
+        return conventional
     for cand in sorted(vault.rglob("core-rules")):
-        if (cand / model).is_file():
+        if (cand / "core_rule_priority_model.md").is_file():
             return cand
-    return next((c for c in candidates if c.is_dir()), None)
+    return conventional if conventional.is_dir() else None
 
 
 def check_core_rules(rep, vault):
@@ -767,43 +753,8 @@ def check_lint(rep, vault):
                 fix="/gt:gt-lint for the detail")
 
 
-def check_astgrep(rep):
-    """Is the optional structural matcher here, and NEW ENOUGH? (check: astgrep)
-
-    Three states, three different fixes, so they are reported as three different things:
-
-      present and current   ok, with the version
-      present but TOO OLD   WARN -- this one IS a problem, because it looks installed. An older
-                            ast-grep supports fewer languages, so a rule targeting one it lacks
-                            never matches and nothing says the language was missing rather than
-                            the code clean. Coverage claimed and not delivered.
-      absent                ok. gt is stdlib-default and reports such rules SKIPPED rather than
-                            quietly passing, so nothing is broken -- warning about a deliberate,
-                            working configuration is how a health check teaches people to
-                            ignore it.
-
-    The asymmetry is deliberate: absent is a choice, stale is a trap.
-    """
-    scripts = os.path.dirname(os.path.abspath(__file__))
-    if scripts not in sys.path:
-        sys.path.insert(0, scripts)
-    try:
-        import gt_scan_code
-    except Exception as exc:
-        rep.add("astgrep", UNKNOWN, "could not load gt_scan_code (%s)" % exc.__class__.__name__)
-        return
-    path, version, problem = gt_scan_code.astgrep_status()
-    if not problem:
-        rep.add("astgrep", OK, "ast-grep %s (%s)" % (version, path))
-    elif version:                       # found, but not usable -- it LOOKS installed
-        rep.add("astgrep", WARN, problem)
-    else:
-        rep.add("astgrep", OK, "not installed — structural rules are SKIPPED, not silently "
-                               "passed. brew install ast-grep (or npm install -g @ast-grep/cli)")
-
-
 CHECKS = ("version", "components", "wiring", "core-rules", "modules", "vault",
-          "workers", "push", "gt-src", "lint", "astgrep")
+          "workers", "push", "gt-src", "lint")
 
 
 def main(argv=None):
@@ -843,8 +794,6 @@ def main(argv=None):
         check_gt_src(rep)
     if "lint" in wanted:
         check_lint(rep, vault)
-    if "astgrep" in wanted:
-        check_astgrep(rep)
 
     if a.fix:
         fix_wiring(rep, vdir, vault)

@@ -3,7 +3,7 @@
 > **Reader:** quick lookup, and the printed PDF
 > **Claims last checked against the code:** 2026-09-17 — see *The documents, and what belongs in each* in [`CLAUDE.md`](../CLAUDE.md).
 
-## Version gt 0.16.5 / gt-wiki 0.2.2 / gt-demo, gt-watch, gt-report-card, gt-farm, gt-flow 0.16.5
+## Version gt 0.17.1 / gt-wiki 0.2.3 / gt-usage 0.1.3 / gt-demo, gt-watch, gt-report-card, gt-farm, gt-flow 0.17.1
 
 ---
 
@@ -31,10 +31,10 @@ Facts move up the hierarchy as they prove themselves general. They never move ba
 
 ---
 
-## Core Rules (gt 0.16.5)
+## Core Rules (gt 0.17.1)
 
 Golden Thread defines a tiered rule model that separates rules by scope and enforcement strength.
-**Ten Core rules ship as of 0.15.0** and remain ten in 0.16.5, up from one at 0.6.0 (the count read "seven" from 0.9.10 through 0.12.3, one behind the files):
+**Ten Core rules ship as of 0.15.0** and remain ten in 0.17.1, up from one at 0.6.0 (the count read "seven" from 0.9.10 through 0.12.3, one behind the files):
 
 | # | Rule |
 |---|---|
@@ -125,6 +125,17 @@ The canonical rule definitions live in `Projects/golden-thread/core-rules/` insi
 | `/gt:gt-promote` | Graduate a fact up the hierarchy: project memory → project files → Knowledge wiki page → global-memory. Also handles new project scaffolding and retiring stale content. |
 | `/gt:gt-refresh` | Check `Sources/` for upstream changes. Supersedes outdated sources with new immutable files — never edits the old one. Updates Knowledge pages that cited the changed source. |
 
+**The same ladder downward is a script, not a skill.** `gt_demote.py --vault V --file <path>
+[--to knowledge|project-memory] [--project <slug>] [--apply]` ranks by **cost**, not by
+maturity: `global-memory/` is read in every session of every project, `Projects/<slug>/memory/`
+in every session of one, `Knowledge/<page>.md` only when someone asks. A fact in global-memory
+that one project needs is charged to every session for ever; moving it makes it cost what it is
+worth. Dry run unless `--apply`. It writes the destination, verifies it by re-reading from disk,
+and only then removes the source, leaving a pointer — so a failure leaves **duplication**, which
+a reader can resolve, rather than the deletion that got `gt_optimize --apply` removed. Refuses
+`core-rules/`, `Sources/`, and a file another live session has claimed; a session file it cannot
+read refuses too, because "could not check" is not "clear".
+
 ### Context & Verification
 
 | Command | What it does |
@@ -137,7 +148,7 @@ The canonical rule definitions live in `Projects/golden-thread/core-rules/` insi
 |---|---|
 | `/gt:gt-upgrade` | Bring an existing vault up to the installed release: run the migrations it has not had, take the release's changes into `PROTOCOL.md` and `CONVENTIONS.md` without losing local edits, add newly shipped Core rules, stamp the vault. Rehearse with `--dry-run`; it refuses a dirty tree and backs up before applying. |
 | `/gt:gt-doctor` | One report for the whole install: plugin version, component drift, hook wiring, pending vault migrations, stray workers, unpushed commits, publish-destination drift and a lint summary. Exit 2 means a check *could not run*, which is deliberately distinct from clean. |
-| `/gt:gt-lint` | Audit the vault for structural problems: 18 checks covering broken wikilinks, orphaned pages, missing index entries, unlisted memory files, Knowledge pages citing superseded sources, stale pages, and `core-unenforced` — a Core rule that is stored but wired to no hook. |
+| `/gt:gt-lint` | Audit the vault for structural problems: 19 checks covering broken wikilinks, orphaned pages, missing index entries, unlisted memory files, Knowledge pages citing superseded sources, stale pages, and `core-unenforced` — a Core rule that is stored but wired to no hook. |
 | `/gt:gt-optimize` | Find vault content that costs context and earns nothing back: a fact duplicated across memory files, an index row pointing at a file that is gone, a `global-memory/` file over budget, a relative date in a file that will be read months later. Splits findings into SAFE (applied with `--apply`) and JUDGEMENT (reported only — deleting knowledge is not reversible by reading a diff). Never writes `core-rules/`, and needs a flag for `global-memory/`. |
 | `/gt:gt-scan` | Scan code against the language definitions in effect on this machine — naming conventions and encoding, per language, all of it from packs rather than from the script (fourteen languages ship with definitions; `gt_scan_language.py --languages` lists what is in effect here). An aggregator over leaf scanners: it reports how many members RAN alongside what they found, because "nothing is wrong" and "nothing was checked" otherwise print identically. |
 | `/gt:gt-allin` | Run every check in one command — scan, lint, the optimize report, install health — and report how many members actually RAN alongside what they found, because a short finding list from a half-failed run reads exactly like a clean bill of health. Never pushes and never applies a change: `--suggest-push` prints the command for you, and refuses even that when anything failed. |
@@ -160,7 +171,7 @@ Optional parts, each a separate plugin in the `golden-thread-plugin` marketplace
 | *(no command)* | `report-card` (`gt-report-card`) · on | The session report card at `/compact` and session end — saved as a notice and shown at the next session start, because output at those events is never displayed — and the project close-out question. Settings `report_card`, `closeout_check`. |
 | `/gt-farm:gt-farm` | `farm` (`gt-farm`) · **off** fresh, on for upgraders | Route bulk, mechanical, or second-opinion tasks to an external AI service as a self-contained work packet. All four gates (Stateless, Self-contained, Checkable, Releasable) must pass before a task leaves. Results come back unverified. Was `/gt:gt-farm`; a machine upgrading from a gt that shipped it keeps it on. |
 | `/gt-flow:gt-flow` | `flow` (`gt-flow`) · on | New in 0.15.0. Renders `events.jsonl` as one offline HTML file: a lane per project, time left to right, an arrow each time an item climbed a level. `--redact` hashes every name before the page is shared; task events are hidden until `--tasks` or a click; `--project`, `--since`. Never writes the vault. |
-| `/gt-usage:gt-usage` | `usage` (`gt-usage`) 0.1.2 · on | New. Reports the 5-hour, weekly and monthly-spend windows from the readings its status line records, and what ending or cutting a session would save. A window the plan does not report is shown as absent, never as 0%. Settings: `usage_meter`, `usage_alert`. Never writes the vault. |
+| `/gt-usage:gt-usage` | `usage` (`gt-usage`) 0.1.3 · on | New. Reports the 5-hour, weekly and monthly-spend windows from the readings its status line records, and what ending or cutting a session would save. A window the plan does not report is shown as absent, never as 0%. Settings: `usage_meter`, `usage_alert`. Never writes the vault. |
 
 ### Movement events (0.15.0)
 
@@ -214,6 +225,74 @@ Two states are reported: `unwired` (no entry for that event names the script —
 
 The declaration lives in `gt_components.HOOK_REGISTRATIONS` and is what `install.sh` registers *from*, so the installer and the checker cannot disagree about what "wired" means. `install.sh` verifies its own five entries immediately after writing them; the six enforcement hooks are owned by `vault_init.py install-core-rules`, which needs a vault. `selftest.sh` asserts every declared entry from outside — the only vantage point that still works when nothing is wired at all.
 
+
+---
+
+## Checks, Cadences and Scheduled Jobs
+
+Scripts with their own command line, shipped with the plugin at
+`~/.claude/plugins/cache/golden-thread-plugin/gt/<version>/scripts/` rather than in the vault —
+a git hook and a launchd job must find them with no vault open. The hook resolves the newest
+installed release by glob, so upgrading does not rewrite it.
+
+### The three cadences
+
+The same scanners, run at three widths. The width is what keeps each one usable.
+
+| Cadence | Scope | Posture |
+|---|---|---|
+| `tests/run.sh` | the file set the scanners define | fails the run |
+| commit gate (`.githooks/pre-commit`) | the staged diff only | denies the commit |
+| `gt_sweep.py --vault V [--path P] [--only secrets,code] [--exclude GLOB] [--json]` | the whole tree, weekly | **reports, never blocks** |
+
+A gate that scanned the whole tree would punish you for someone else's old code, so it reads
+only what you are adding — which means nothing re-examines what is already there. The sweep is
+that answer, and because it surfaces old debt it must never block. It files each run through
+`gt_check_report.py` and exits non-zero only when a member could not run.
+
+### The two checks
+
+| Command | What it does |
+|---|---|
+| `gt_secrets.py <path> [--staged] [--json] [--exclude GLOB] [--baseline F] [--write-baseline F]` | Credential scanner. **Nothing in the process ever prints matched source text, and no other check runs beside it** — a finding is `path:line`, a rule id and a LENGTH; never a prefix, never a redaction, never a hash (a hash of a short secret is crackable and still confirms a guess). That output contract is why it is *not* a `gt-scan` member: the 0.16.0 attempt leaked because a `naming` check printed raw source in the same run. `--staged` reads staged blobs, which are what the commit will contain. Exit 0 clean / 1 found / 2 could not run — and for credentials, *could not run* blocks. |
+| `gt_scan_code.py <path> [--staged] [--sarif FILE] [--json] [--baseline F] [--write-baseline F] [--rules]` | Source validation against the `lint` rules in effect — the second `gt-scan` member alongside `gt_scan_language.py`; `gt_scan.py --list` shows both. Rules are DATA from `lint` packs, in a documented subset of ast-grep's rule schema; gt evaluates that data and never executes anything a pack supplies. Tiers `text` and `stdlib` are always present, `astgrep` and `treesitter` only if the optional dependency imports, and **a rule whose tier is absent is reported SKIPPED, never silently passed** (exit 3: nothing found, but the scan does not cover what it was asked to). Emits SARIF 2.1.0. It DOES print source text, because here the text is the finding — which is why it may never share a process with `gt_secrets`. |
+
+Accepted findings go in a baseline (`.gt/secrets-baseline.json`, `.gt/code-baseline.json`),
+which the gate and the sweep pick up automatically; new findings still fire. The gate's two
+escapes are loud: `git commit --no-verify` once, or `git config gt.secretsgate off` for the
+clone, which prints that it is off on every commit.
+
+### The record
+
+| Command | What it does |
+|---|---|
+| `gt_check_report.py record --vault V --check <name> --verdict clean\|findings\|cannot-run [--count N] [--scope "…"] [--ref R] [--detail T]` · `show --vault V [--check C] [--json]` | Files a check's result into the vault so a gate leaves a record: a verdict, a count, a scope and a ref, **never a finding's content** — a vault file is committed and pushed, and a report naming `path:line` for a credential would republish every secret's location. Answers what an exit code cannot: is this check running, is it getting noisier, did anyone look. `cannot-run` is a first-class verdict, never laundered into `clean`. `record` always exits 0 and never commits. |
+
+### Code review — the framework, with no opinions in it
+
+| Command | What it does |
+|---|---|
+| `gt_code_review.py dimensions [--vault V]` · `plan <path> [--staged]` · `validate <findings.json> --root P` · `report <findings.json> --root P --vault V [--ledger F]` | The deterministic half of code review. gt does not judge — *"does this abstraction earn its keep"* has no mechanical oracle — it plans which dimensions over which files, then rejects mechanically any finding citing a file that does not exist, a line out of range, an unknown dimension, an invalid severity or `confirmed: false`, and only survivors reach the record. `--ledger` keeps a previously declined finding from returning as new. |
+
+**gt ships ZERO review dimensions, deliberately.** The `review` slot is empty by design: the
+opinions are the user's or the company's, supplied as a `review.*.pack.json` in their own vault,
+where they get precedence, shadowed reporting, retraction and provenance from the same registry
+as everything else. **Zero dimensions configured exits 3 and says how to add one — it is never
+reported as a clean review**, because "nothing was reviewed" and "reviewed, nothing found" are
+different facts and only one is reassuring.
+
+### The scheduler
+
+| Command | What it does |
+|---|---|
+| `gt_schedule.py list` · `install <job> --vault V [--repo PATH …] [--hour H] [--minute M]` · `check <job>` · `remove <job>` | Installs, verifies and removes gt's launchd jobs (`daily`, `lint-weekly`). Exists because the weekly lint agent was installed by hand on 2026-09-08 with no `--check` and no rollback. **Validation goes through launchd, not a terminal run:** `install` bootstraps the job, kickstarts it, waits, then reads launchd's own last exit code and the job's output — a job that works in a terminal can still fail under launchd. `remove` boots out and deletes the plist, which is what makes `install` safe to re-run. |
+
+### Session capture
+
+| Command | What it does |
+|---|---|
+| `gt_daily.py --vault V [--date YYYY-MM-DD] [--repo PATH …] [--dry-run] [--check]` | Writes the day's FACTS into `Daily Notes/<date>.md`: tasks closed, commits per repo, event counts, wiki item counts, an active span per project. Terse by design — it does not explain, summarise or interpret, because a generated block that editorialised would encode a reading of the day that is not the owner's. One fenced, clearly-marked block under its own heading, replaced whole each run; it never touches `## Noticed`, the unfiled capture surface `gt-review` sweeps. Git is primary and events are enrichment: on 2026-09-27 the event log held 5 events on a day with 10 commits across three work streams. |
+| `gt_state.py check [--margin N] [--write]` · `write [--reason R]` · `show` · `hook` | Writes session state BEFORE the context runs out. **The signal is `ctx_pct`, never `rate_limits`**: a real reading was `{"five_hour": 5, "seven_day": 10, "ctx_pct": 91}`, so triggering on the allowance meter would have fired at the wrong moment and looked correct doing it. Fires once per crossing, at a margin (default 5) below the `usage_alert` flag point. PreCompact is the **backstop, not the primary** — it fires when compaction has already started — and the write says which it was. Never fatal, never blocking; a missing usage ledger reads as "cannot tell", never "plenty of room". |
 
 ---
 
@@ -347,7 +426,7 @@ bash install.sh
 # Restart Claude Code
 ```
 
-Installs `gt` (v0.16.2) and each module that is on — `wiki`, `demo`, `watch`, `report-card` and `flow` on by default, `farm` off for a fresh install — as separate plugins under the `golden-thread-plugin` marketplace. Choose modules with `--list-modules`, `--without <name>` and `--with <name>` (remembered). Re-running upgrades from any older release. Requires Python 3.8+.
+Installs `gt` (v0.17.1) and each module that is on — `wiki`, `demo`, `watch`, `report-card` and `flow` on by default, `farm` off for a fresh install — as separate plugins under the `golden-thread-plugin` marketplace. Choose modules with `--list-modules`, `--without <name>` and `--with <name>` (remembered). Re-running upgrades from any older release. Requires Python 3.8+.
 
 `install.sh` installs the **newest version directory** present, not a hardcoded constant — pass an argument only to roll back deliberately (`./install.sh 0.14.0`). Never pipe it to `head`: `set -o pipefail` turns the closed pipe into an abort partway through, leaving the cache updated and registration undone.
 

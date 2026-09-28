@@ -47,11 +47,16 @@ import stat
 import unittest
 from pathlib import Path
 
-from _harness import (Sandbox, REPO, GT, WIKI, WATCH, REPORT_CARD, FARM, latest_version_dir)
+from _harness import (Sandbox, REPO, GT, WIKI, WATCH, REPORT_CARD, FARM, latest_version_dir,
+                      load_module)
 
 INSTALL = REPO / "install.sh"
 IGNORE = shutil.ignore_patterns("__pycache__", "*.pyc", ".DS_Store")
 MARKET = "golden-thread-plugin"
+# gt's own hook declaration -- read, never copied, so a test about a MODULE's entries can
+# say what belongs to gt on the same event without a hand-kept list going stale.
+GT_REGISTRATIONS = load_module(GT / "scripts" / "gt_components.py",
+                               "gt_components_module_counts").HOOK_REGISTRATIONS
 try:
     DEMO = latest_version_dir(REPO / "golden-thread-demo")
 except (RuntimeError, OSError):
@@ -623,7 +628,19 @@ class RealModulesOff(RealModulesBase):
         self.assertNotIn("crontab", p.stdout)
         self.assertIn("Verified hook wiring", p.stdout)
         s = json.loads((self.claude(home) / "settings.json").read_text())
-        self.assertNotIn("PreCompact", s["hooks"], "an event emptied by the removal should go")
+        # The subject is REPORT-CARD'S OWN ENTRIES, not whether the event disappears.
+        # Until 0.17.1 report-card was the only thing on PreCompact, so "the event is gone"
+        # happened to be true; gt registering gt_state.py there made a passing test fail for
+        # something it never checked. What is left on the event is gt's own declaration.
+        pre = [h.get("command", "") for b in s["hooks"].get("PreCompact", [])
+               for h in b.get("hooks", [])]
+        self.assertFalse([c for c in pre if "gt_report_card.py" in c], pre)
+        gt_pre = [r for r in GT_REGISTRATIONS
+                  if r["event"] == "PreCompact" and r["owner"] == "install.sh"]
+        self.assertEqual(len(pre), len(gt_pre), "PreCompact keeps exactly gt's own entries")
+        if not gt_pre:
+            self.assertNotIn("PreCompact", s["hooks"],
+                             "an event emptied by the removal should go")
         self.assertNotIn("gt-report-card@%s" % MARKET, s["enabledPlugins"])
 
     def test_a_fresh_install_leaves_farm_off_and_records_nothing(self):

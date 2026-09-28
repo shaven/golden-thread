@@ -304,13 +304,7 @@ def install_core_rules(vault: Path, wire_hooks: bool = True, settings_path: Path
         return
 
     # Default location for a fresh vault; an existing one is found wherever it is.
-    #
-    # 0.17.0: the default moved to the vault ROOT. Core rules govern every project, so
-    # filing them under one project asserted an ownership that was never real. Existing
-    # vaults are unaffected here — _resolve_core_rules finds them wherever they are, and
-    # the `core-rules-root` migration in gt_upgrade relocates them deliberately rather
-    # than this function relocating them as a side effect of an install.
-    dest = _resolve_core_rules(vault) or _default_core_rules(vault)
+    dest = _resolve_core_rules(vault) or (vault / "Projects" / "golden-thread" / "core-rules")
     ensure_dir(dest)
     removed = read_removed(dest.parent)
     for f in sorted(src.glob("*.md")):
@@ -468,20 +462,6 @@ def _resolve_core_rules(vault: Path):
             if (cand / "core_rule_priority_model.md").is_file():
                 return cand
         return None
-
-
-def _default_core_rules(vault: Path):
-    """Where a FRESH vault's Core rules go: the vault root, since 0.17.0.
-
-    Read from gt_paths so there is exactly one definition of the default; the fallback
-    spells it only for the case where gt_paths cannot be imported at all.
-    """
-    try:
-        sys.path.insert(0, str(SCRIPT_DIR))
-        from gt_paths import default_core_rules
-        return default_core_rules(vault)
-    except Exception:
-        return vault / "core-rules"
 
 
 def _mentions_slug(md: Path, slug: str) -> bool:
@@ -1171,77 +1151,6 @@ def cmd_archive_project(vault: Path, slug: str, reason: str, today: str):
 
 
 
-def seed_code_baseline(vault: Path):
-    """Accept, with a reason, the two findings gt's own seeded files produce.
-
-    WITHOUT THIS, EVERY NEW VAULT IS UNCOMMITTABLE. The pre-commit gate runs source validation
-    over the staged diff; a fresh vault stages `.githooks/post-commit` and
-    `.githooks/prepare-commit-msg`, both of which gt seeds and both of which the
-    `sh-missing-nounset` rule flags -- so the FIRST commit in a brand-new vault was refused by
-    gt's own rule against gt's own file. Found by the test suite immediately, which is the only
-    reason it is not a shipping defect.
-
-    The rule is right in general and wrong for those two files: they must fail OPEN, because a
-    commit may never be blocked by attribution bookkeeping, and `set -u` turns an unset
-    variable into a non-zero exit -- which in a commit hook means a refused commit. So the
-    finding is ACCEPTED with that reason recorded, not suppressed and not worked around by
-    weakening the rule. `reasons` exists because a baselined finding is invisible, and an
-    accepted finding with nobody's reason attached is indistinguishable from a silenced one.
-    """
-    baseline = vault / ".gt" / "code-baseline.json"
-    if baseline.exists():
-        return                      # the owner's, from here on
-    why = ("DELIBERATE: this hook must fail OPEN -- a commit may never be blocked by "
-           "attribution bookkeeping -- and `set -u` turns an unset variable into a non-zero "
-           "exit, which for a commit hook means a blocked commit. The rule is right in "
-           "general and wrong here. Seeded by vault_init.")
-    ensure_file(baseline, json.dumps({
-        "accepted": [[".githooks/post-commit", "sh-missing-nounset", 1],
-                     [".githooks/prepare-commit-msg", "sh-missing-nounset", 1]],
-        "reasons": {".githooks/post-commit::sh-missing-nounset": why,
-                    ".githooks/prepare-commit-msg::sh-missing-nounset": why},
-        "_note": ("Each accepted finding SHOULD have an entry in `reasons`, keyed "
-                  "\"path::rule\". An accepted finding with no reason is a silenced one, and "
-                  "nobody can tell later which it was."),
-    }, indent=2) + "\n")
-
-
-def seed_daily_notes(vault: Path):
-    """The daily-note template, the folder it writes into, and the Obsidian settings that
-    point one at the other.
-
-    All three, or none of it works. `gt-review` sweeps `<vault>/Daily Notes/` for open
-    `- [ ]` lines carrying no `[[wikilink]]` -- but only if the folder exists, and the
-    folder only fills if Obsidian knows which template to stamp into it. Seeding the
-    template alone leaves a file nobody is ever handed: the inert-artifact failure this
-    release spent a week finding in three other places (a `lint` slot wired to nothing,
-    `selftest.sh` printing PASSED over failures, `gt_doctor` reading an exit code as a
-    verdict).
-
-    This is the ONLY place gt writes under `.obsidian/`, and it writes each file only
-    when ABSENT. That boundary is deliberate: `.obsidian/` is another application's
-    state, and an owner who already keeps daily notes somewhere else has a
-    `daily-notes.json` saying so. Skipping an existing file means their setting wins and
-    gt never silently relocates their journal -- the template still lands, and
-    `gt-review` still finds the folder they actually use.
-    """
-    tmpl = TEMPLATES_DIR / "daily-note.md"
-    if not tmpl.is_file():
-        return
-    ensure_file(vault / "Templates" / "Daily Note.md", tmpl.read_text(encoding="utf-8"))
-    ensure_dir(vault / "Daily Notes")
-    # Obsidian stores these as two separate core-plugin configs; the template is useless
-    # without `templates.json` naming the folder it lives in.
-    ensure_file(vault / ".obsidian" / "daily-notes.json", json.dumps({
-        "folder": "Daily Notes",
-        "format": "YYYY-MM-DD",
-        "template": "Templates/Daily Note",
-        "autorun": False,
-    }, indent=2) + "\n")
-    ensure_file(vault / ".obsidian" / "templates.json",
-                json.dumps({"folder": "Templates"}, indent=2) + "\n")
-
-
 def seed_vault_workspace(vault: Path, seeded: bool = True):
     """Everything a vault needs beyond the rules and the conventions, seeded only when
     absent: the vault tools, the inbox, the git hooks and the rollup.
@@ -1273,9 +1182,6 @@ def seed_vault_workspace(vault: Path, seeded: bool = True):
     inbox = TEMPLATES_DIR / "INBOX.md"
     if inbox.exists():
         ensure_file(vault / "INBOX.md", inbox.read_text(encoding="utf-8"))
-
-    seed_daily_notes(vault)
-    seed_code_baseline(vault)
 
     # How to open this folder in Obsidian, and which plugins the vault's own
     # conventions actually rely on. Seeded INTO the vault rather than left in the

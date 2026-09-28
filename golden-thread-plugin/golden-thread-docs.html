@@ -117,7 +117,7 @@
 <p><strong>Reader:</strong> quick lookup, and the printed PDF
 <strong>Claims last checked against the code:</strong> 2026-09-17 — see <em>The documents, and what belongs in each</em> in <a href="../CLAUDE.md"><code>CLAUDE.md</code></a>.</p>
 </blockquote>
-<h2 id="version-gt-0165-gt-wiki-022-gt-demo-gt-watch-gt-report-card-gt-farm-gt-flow-0165">Version gt 0.16.5 / gt-wiki 0.2.2 / gt-demo, gt-watch, gt-report-card, gt-farm, gt-flow 0.16.5</h2>
+<h2 id="version-gt-0171-gt-wiki-023-gt-usage-013-gt-demo-gt-watch-gt-report-card-gt-farm-gt-flow-0171">Version gt 0.17.1 / gt-wiki 0.2.3 / gt-usage 0.1.3 / gt-demo, gt-watch, gt-report-card, gt-farm, gt-flow 0.17.1</h2>
 <hr />
 <p>Golden Thread turns an Obsidian vault into the single source of truth for all AI memory across every project and every session. The tiered rule model introduced in v0.6.0 now carries <strong>ten hook-backed Core rules</strong> enforced at three points in the turn, 0.9.12 added <code>gt-route</code> for the middle of a session, and 0.9.13 makes the session-start component check verify that the hooks are <strong>wired</strong>, not merely installed, 0.11.0 makes <code>log.md</code> and <code>decisions.md</code> generated files so concurrent sessions cannot overwrite one another, 0.12.3 stops a vault tool running against a vault it was never told to touch, 0.12.4 makes parallel execution the default for divisible work in every project, 0.12.5 stops code being committed before its tests have been seen to pass, 0.13.0 makes an upgrade from any older release end where a fresh install would, 0.14.0 splits optional parts into modules you can decline, and 0.15.0 makes six of them — gt-wiki 0.2.1 (an LLM-powered knowledge base with immutable sources and interlinked pages), gt-demo (the guided tour), gt-watch (upstream repos), gt-report-card (the session report card), gt-farm (work packets for an external AI) and the new gt-flow, which draws the vault's event stream as a timeline of knowledge climbing the ladder. 0.16.0 gave contributed <strong>packs</strong> — plain JSON data, reviewed and merged, never third-party code — somewhere to come from and something to read them, shipping <code>gt-scan</code>, <code>gt-optimize</code>, <code>gt-handoff</code>, <code>gt-allin</code> and <code>gt-allin-commit</code>; 0.16.1 added <code>gt-context</code> (the first consumer of the registry's model-reachable tier) and <code>gt-validation</code> (a verification receipt that goes stale when the file it describes changes); and 0.16.2 re-asserts the Core rules after a compaction as well as on every prompt, lets a module hook declare a <code>timeout</code>, and refuses a copyleft licence by its current SPDX spelling; 0.16.3 makes <code>install.sh</code> refuse when MANIFEST.json is tracked but missing rather than regenerating one, and stops <code>gt_tasks.py</code> overwriting TASKS.md in silence.</p>
 <hr />
@@ -135,9 +135,9 @@ global-memory/  (loaded in every session, all projects)
 </code></pre>
 <p>Facts move up the hierarchy as they prove themselves general. They never move back down and are never silently deleted.</p>
 <hr />
-<h2 id="core-rules-gt-0165">Core Rules (gt 0.16.5)</h2>
+<h2 id="core-rules-gt-0171">Core Rules (gt 0.17.1)</h2>
 <p>Golden Thread defines a tiered rule model that separates rules by scope and enforcement strength.
-<strong>Ten Core rules ship as of 0.15.0</strong> and remain ten in 0.16.5, up from one at 0.6.0 (the count read "seven" from 0.9.10 through 0.12.3, one behind the files):</p>
+<strong>Ten Core rules ship as of 0.15.0</strong> and remain ten in 0.17.1, up from one at 0.6.0 (the count read "seven" from 0.9.10 through 0.12.3, one behind the files):</p>
 <table>
 <thead>
 <tr>
@@ -330,6 +330,16 @@ often it would train the guard to be ignored.</p>
 </tr>
 </tbody>
 </table>
+<p><strong>The same ladder downward is a script, not a skill.</strong> <code>gt_demote.py --vault V --file &lt;path&gt;
+[--to knowledge|project-memory] [--project &lt;slug&gt;] [--apply]</code> ranks by <strong>cost</strong>, not by
+maturity: <code>global-memory/</code> is read in every session of every project, <code>Projects/&lt;slug&gt;/memory/</code>
+in every session of one, <code>Knowledge/&lt;page&gt;.md</code> only when someone asks. A fact in global-memory
+that one project needs is charged to every session for ever; moving it makes it cost what it is
+worth. Dry run unless <code>--apply</code>. It writes the destination, verifies it by re-reading from disk,
+and only then removes the source, leaving a pointer — so a failure leaves <strong>duplication</strong>, which
+a reader can resolve, rather than the deletion that got <code>gt_optimize --apply</code> removed. Refuses
+<code>core-rules/</code>, <code>Sources/</code>, and a file another live session has claimed; a session file it cannot
+read refuses too, because "could not check" is not "clear".</p>
 <h3 id="context-verification">Context &amp; Verification</h3>
 <table>
 <thead>
@@ -364,7 +374,7 @@ often it would train the guard to be ignored.</p>
 </tr>
 <tr>
 <td><code>/gt:gt-lint</code></td>
-<td>Audit the vault for structural problems: 18 checks covering broken wikilinks, orphaned pages, missing index entries, unlisted memory files, Knowledge pages citing superseded sources, stale pages, and <code>core-unenforced</code> — a Core rule that is stored but wired to no hook.</td>
+<td>Audit the vault for structural problems: 19 checks covering broken wikilinks, orphaned pages, missing index entries, unlisted memory files, Knowledge pages citing superseded sources, stale pages, and <code>core-unenforced</code> — a Core rule that is stored but wired to no hook.</td>
 </tr>
 <tr>
 <td><code>/gt:gt-optimize</code></td>
@@ -447,7 +457,7 @@ often it would train the guard to be ignored.</p>
 </tr>
 <tr>
 <td><code>/gt-usage:gt-usage</code></td>
-<td><code>usage</code> (<code>gt-usage</code>) 0.1.2 · on</td>
+<td><code>usage</code> (<code>gt-usage</code>) 0.1.3 · on</td>
 <td>New. Reports the 5-hour, weekly and monthly-spend windows from the readings its status line records, and what ending or cutting a session would save. A window the plan does not report is shown as absent, never as 0%. Settings: <code>usage_meter</code>, <code>usage_alert</code>. Never writes the vault.</td>
 </tr>
 </tbody>
@@ -519,6 +529,137 @@ as a conflicted copy. The lint check is what catches that; this is not distribut
 <p>Before 0.9.13 only the first question was asked, so a machine with every file installed and an empty <code>settings.json</code> reported <strong>components: clean</strong> while nothing ran. The clean line now reads <em>"installed matches <version>, all 11 hooks wired"</em> — the second clause is the part that was missing.</p>
 <p>Two states are reported: <code>unwired</code> (no entry for that event names the script — it never runs) and <code>badpath</code> (wired, but the command names a path that does not exist on this machine, which is what a deleted version directory or an unquoted path containing a space produces).</p>
 <p>The declaration lives in <code>gt_components.HOOK_REGISTRATIONS</code> and is what <code>install.sh</code> registers <em>from</em>, so the installer and the checker cannot disagree about what "wired" means. <code>install.sh</code> verifies its own five entries immediately after writing them; the six enforcement hooks are owned by <code>vault_init.py install-core-rules</code>, which needs a vault. <code>selftest.sh</code> asserts every declared entry from outside — the only vantage point that still works when nothing is wired at all.</p>
+<hr />
+<h2 id="checks-cadences-and-scheduled-jobs">Checks, Cadences and Scheduled Jobs</h2>
+<p>Scripts with their own command line, shipped with the plugin at
+<code>~/.claude/plugins/cache/golden-thread-plugin/gt/&lt;version&gt;/scripts/</code> rather than in the vault —
+a git hook and a launchd job must find them with no vault open. The hook resolves the newest
+installed release by glob, so upgrading does not rewrite it.</p>
+<h3 id="the-three-cadences">The three cadences</h3>
+<p>The same scanners, run at three widths. The width is what keeps each one usable.</p>
+<table>
+<thead>
+<tr>
+<th>Cadence</th>
+<th>Scope</th>
+<th>Posture</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>tests/run.sh</code></td>
+<td>the file set the scanners define</td>
+<td>fails the run</td>
+</tr>
+<tr>
+<td>commit gate (<code>.githooks/pre-commit</code>)</td>
+<td>the staged diff only</td>
+<td>denies the commit</td>
+</tr>
+<tr>
+<td><code>gt_sweep.py --vault V [--path P] [--only secrets,code] [--exclude GLOB] [--json]</code></td>
+<td>the whole tree, weekly</td>
+<td><strong>reports, never blocks</strong></td>
+</tr>
+</tbody>
+</table>
+<p>A gate that scanned the whole tree would punish you for someone else's old code, so it reads
+only what you are adding — which means nothing re-examines what is already there. The sweep is
+that answer, and because it surfaces old debt it must never block. It files each run through
+<code>gt_check_report.py</code> and exits non-zero only when a member could not run.</p>
+<h3 id="the-two-checks">The two checks</h3>
+<table>
+<thead>
+<tr>
+<th>Command</th>
+<th>What it does</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>gt_secrets.py &lt;path&gt; [--staged] [--json] [--exclude GLOB] [--baseline F] [--write-baseline F]</code></td>
+<td>Credential scanner. <strong>Nothing in the process ever prints matched source text, and no other check runs beside it</strong> — a finding is <code>path:line</code>, a rule id and a LENGTH; never a prefix, never a redaction, never a hash (a hash of a short secret is crackable and still confirms a guess). That output contract is why it is <em>not</em> a <code>gt-scan</code> member: the 0.16.0 attempt leaked because a <code>naming</code> check printed raw source in the same run. <code>--staged</code> reads staged blobs, which are what the commit will contain. Exit 0 clean / 1 found / 2 could not run — and for credentials, <em>could not run</em> blocks.</td>
+</tr>
+<tr>
+<td><code>gt_scan_code.py &lt;path&gt; [--staged] [--sarif FILE] [--json] [--baseline F] [--write-baseline F] [--rules]</code></td>
+<td>Source validation against the <code>lint</code> rules in effect — the second <code>gt-scan</code> member alongside <code>gt_scan_language.py</code>; <code>gt_scan.py --list</code> shows both. Rules are DATA from <code>lint</code> packs, in a documented subset of ast-grep's rule schema; gt evaluates that data and never executes anything a pack supplies. Tiers <code>text</code> and <code>stdlib</code> are always present, <code>astgrep</code> and <code>treesitter</code> only if the optional dependency imports, and <strong>a rule whose tier is absent is reported SKIPPED, never silently passed</strong> (exit 3: nothing found, but the scan does not cover what it was asked to). Emits SARIF 2.1.0. It DOES print source text, because here the text is the finding — which is why it may never share a process with <code>gt_secrets</code>.</td>
+</tr>
+</tbody>
+</table>
+<p>Accepted findings go in a baseline (<code>.gt/secrets-baseline.json</code>, <code>.gt/code-baseline.json</code>),
+which the gate and the sweep pick up automatically; new findings still fire. The gate's two
+escapes are loud: <code>git commit --no-verify</code> once, or <code>git config gt.secretsgate off</code> for the
+clone, which prints that it is off on every commit.</p>
+<h3 id="the-record">The record</h3>
+<table>
+<thead>
+<tr>
+<th>Command</th>
+<th>What it does</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>gt_check_report.py record --vault V --check &lt;name&gt; --verdict clean\|findings\|cannot-run [--count N] [--scope "…"] [--ref R] [--detail T]</code> · <code>show --vault V [--check C] [--json]</code></td>
+<td>Files a check's result into the vault so a gate leaves a record: a verdict, a count, a scope and a ref, <strong>never a finding's content</strong> — a vault file is committed and pushed, and a report naming <code>path:line</code> for a credential would republish every secret's location. Answers what an exit code cannot: is this check running, is it getting noisier, did anyone look. <code>cannot-run</code> is a first-class verdict, never laundered into <code>clean</code>. <code>record</code> always exits 0 and never commits.</td>
+</tr>
+</tbody>
+</table>
+<h3 id="code-review-the-framework-with-no-opinions-in-it">Code review — the framework, with no opinions in it</h3>
+<table>
+<thead>
+<tr>
+<th>Command</th>
+<th>What it does</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>gt_code_review.py dimensions [--vault V]</code> · <code>plan &lt;path&gt; [--staged]</code> · <code>validate &lt;findings.json&gt; --root P</code> · <code>report &lt;findings.json&gt; --root P --vault V [--ledger F]</code></td>
+<td>The deterministic half of code review. gt does not judge — <em>"does this abstraction earn its keep"</em> has no mechanical oracle — it plans which dimensions over which files, then rejects mechanically any finding citing a file that does not exist, a line out of range, an unknown dimension, an invalid severity or <code>confirmed: false</code>, and only survivors reach the record. <code>--ledger</code> keeps a previously declined finding from returning as new.</td>
+</tr>
+</tbody>
+</table>
+<p><strong>gt ships ZERO review dimensions, deliberately.</strong> The <code>review</code> slot is empty by design: the
+opinions are the user's or the company's, supplied as a <code>review.*.pack.json</code> in their own vault,
+where they get precedence, shadowed reporting, retraction and provenance from the same registry
+as everything else. <strong>Zero dimensions configured exits 3 and says how to add one — it is never
+reported as a clean review</strong>, because "nothing was reviewed" and "reviewed, nothing found" are
+different facts and only one is reassuring.</p>
+<h3 id="the-scheduler">The scheduler</h3>
+<table>
+<thead>
+<tr>
+<th>Command</th>
+<th>What it does</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>gt_schedule.py list</code> · <code>install &lt;job&gt; --vault V [--repo PATH …] [--hour H] [--minute M]</code> · <code>check &lt;job&gt;</code> · <code>remove &lt;job&gt;</code></td>
+<td>Installs, verifies and removes gt's launchd jobs (<code>daily</code>, <code>lint-weekly</code>). Exists because the weekly lint agent was installed by hand on 2026-09-08 with no <code>--check</code> and no rollback. <strong>Validation goes through launchd, not a terminal run:</strong> <code>install</code> bootstraps the job, kickstarts it, waits, then reads launchd's own last exit code and the job's output — a job that works in a terminal can still fail under launchd. <code>remove</code> boots out and deletes the plist, which is what makes <code>install</code> safe to re-run.</td>
+</tr>
+</tbody>
+</table>
+<h3 id="session-capture">Session capture</h3>
+<table>
+<thead>
+<tr>
+<th>Command</th>
+<th>What it does</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>gt_daily.py --vault V [--date YYYY-MM-DD] [--repo PATH …] [--dry-run] [--check]</code></td>
+<td>Writes the day's FACTS into <code>Daily Notes/&lt;date&gt;.md</code>: tasks closed, commits per repo, event counts, wiki item counts, an active span per project. Terse by design — it does not explain, summarise or interpret, because a generated block that editorialised would encode a reading of the day that is not the owner's. One fenced, clearly-marked block under its own heading, replaced whole each run; it never touches <code>## Noticed</code>, the unfiled capture surface <code>gt-review</code> sweeps. Git is primary and events are enrichment: on 2026-09-27 the event log held 5 events on a day with 10 commits across three work streams.</td>
+</tr>
+<tr>
+<td><code>gt_state.py check [--margin N] [--write]</code> · <code>write [--reason R]</code> · <code>show</code> · <code>hook</code></td>
+<td>Writes session state BEFORE the context runs out. <strong>The signal is <code>ctx_pct</code>, never <code>rate_limits</code></strong>: a real reading was <code>{"five_hour": 5, "seven_day": 10, "ctx_pct": 91}</code>, so triggering on the allowance meter would have fired at the wrong moment and looked correct doing it. Fires once per crossing, at a margin (default 5) below the <code>usage_alert</code> flag point. PreCompact is the <strong>backstop, not the primary</strong> — it fires when compaction has already started — and the write says which it was. Never fatal, never blocking; a missing usage ledger reads as "cannot tell", never "plenty of room".</td>
+</tr>
+</tbody>
+</table>
 <hr />
 <h2 id="gt-wiki-skills-5">gt-wiki Skills (5)</h2>
 <p>The gt-wiki plugin provides an LLM-powered knowledge base separate from the Golden Thread memory hierarchy. Sources are ingested immutably; Knowledge pages are synthesized summaries linked bidirectionally.</p>
@@ -748,7 +889,7 @@ cd golden-thread-plugin
 bash install.sh
 # Restart Claude Code
 </code></pre>
-<p>Installs <code>gt</code> (v0.16.2) and each module that is on — <code>wiki</code>, <code>demo</code>, <code>watch</code>, <code>report-card</code> and <code>flow</code> on by default, <code>farm</code> off for a fresh install — as separate plugins under the <code>golden-thread-plugin</code> marketplace. Choose modules with <code>--list-modules</code>, <code>--without &lt;name&gt;</code> and <code>--with &lt;name&gt;</code> (remembered). Re-running upgrades from any older release. Requires Python 3.8+.</p>
+<p>Installs <code>gt</code> (v0.17.1) and each module that is on — <code>wiki</code>, <code>demo</code>, <code>watch</code>, <code>report-card</code> and <code>flow</code> on by default, <code>farm</code> off for a fresh install — as separate plugins under the <code>golden-thread-plugin</code> marketplace. Choose modules with <code>--list-modules</code>, <code>--without &lt;name&gt;</code> and <code>--with &lt;name&gt;</code> (remembered). Re-running upgrades from any older release. Requires Python 3.8+.</p>
 <p><code>install.sh</code> installs the <strong>newest version directory</strong> present, not a hardcoded constant — pass an argument only to roll back deliberately (<code>./install.sh 0.14.0</code>). Never pipe it to <code>head</code>: <code>set -o pipefail</code> turns the closed pipe into an abort partway through, leaving the cache updated and registration undone.</p>
 <hr />
 <h2 id="typical-session-pattern">Typical Session Pattern</h2>

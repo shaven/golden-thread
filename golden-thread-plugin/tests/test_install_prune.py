@@ -134,7 +134,10 @@ class PrunesDroppedHookEntries(RetiredBase):
         cmds = self.commands()
         self.assertIn("echo mine", cmds["SessionStart"])
         self.assertEqual(cmds["Stop"], ["python3 /opt/me/gt_retired_check.py"])
-        self.assertEqual(cmds["UserPromptSubmit"][0], str(self.hooks_dir / "my_own.sh"))
+        # The property is SURVIVAL, not position: gt registering another UserPromptSubmit
+        # entry (gt_state.py in 0.17.1) sorted ahead of the user's hook and broke an
+        # index-0 assertion that was never about ordering.
+        self.assertIn(str(self.hooks_dir / "my_own.sh"), cmds["UserPromptSubmit"])
         self.assertIn("Unknown hook entry pointing into the gt hooks dir, left in place", p.stdout)
         self.assertIn("UserPromptSubmit/my_own.sh", p.stdout)
 

@@ -60,7 +60,7 @@ class ScanBase(unittest.TestCase):
         from _harness import load_module
         members = load_module(AGG, "gt_scan_for_fixture").MEMBERS
         wanted = [AGG, REGISTRY, AGGREGATE] + [
-            GT / "scripts" / script for script, _ in members.values()]
+            GT / "scripts" / script for script, *_ in members.values()]
         # ...and whatever those scripts IMPORT, resolved transitively. A hand-maintained copy
         # list has now bitten three times in one day: the install fixture that omitted its
         # manifest step, this fixture's member list, and this fixture's import list -- a member
@@ -215,6 +215,58 @@ class AggregatorTest(ScanBase):
         self.assertEqual(sorted(d["asked"]), expected)
         self.assertEqual(d["ran"], [])
         self.assertEqual(sorted(m["member"] for m in d["could_not_run"]), expected)
+
+
+class AFlagIsOnlyPassedToMembersThatTakeIt(ScanBase):
+    """`--all-files` was forwarded to EVERY member. `code` has no such flag -- it decides scope
+    by a suffix/shebang union rule with nothing to widen -- so it exited 2 on argparse usage and
+    `gt_scan.py <tree> --all-files` reported "1 of 2 member(s) ran". A documented flag silently
+    halved the scan, and the count line was the only evidence.
+
+    Found by reading the file, not by a test: no test combined a member-specific flag with the
+    full member set. This is that test."""
+
+    def test_all_files_does_not_change_which_members_run(self):
+        """Fixture-independent, and the assertion that actually pins the defect: whatever this
+        fixture's packs let run, asking for `--all-files` must not change it. Asserting "2 of 2"
+        would have tied this test to the fixture shipping packs, which it does not."""
+        self.remanifest()
+        self.write("a.py", "x = 1\n")
+        import json as _json
+        base = _json.loads(self.run_agg("--json").stdout)
+        wide = _json.loads(self.run_agg("--all-files", "--json").stdout)
+        self.assertEqual(sorted(wide["ran"]), sorted(base["ran"]),
+                         "a member was knocked out by a flag it does not accept")
+        self.assertEqual(wide["headline"], base["headline"])
+
+    def test_no_member_ever_exits_on_ARGPARSE_USAGE(self):
+        """The defect's exact signature. `code` exited 2 -- a usage error -- because it was
+        handed a flag its parser has never had. A member refusing for its OWN reasons is a
+        different thing entirely and this does not object to it."""
+        self.remanifest()
+        self.write("a.py", "x = 1\n")
+        import json as _json
+        d = _json.loads(self.run_agg("--all-files", "--json").stdout)
+        for m in d["could_not_run"]:
+            self.assertNotEqual(m["exit"], 2,
+                                "member %r was handed a flag it does not accept: %s"
+                                % (m["member"], m["detail"]))
+
+    def test_it_says_which_members_the_flag_did_not_apply_to(self):
+        """Silently dropping the flag is its own small lie: the caller asked for something and
+        was never told part of the run ignored it."""
+        self.remanifest()
+        self.write("a.py", "x = 1\n")
+        r = self.run_agg("--all-files")
+        self.assertIn("--all-files does not apply to", r.stdout)
+
+    def test_every_member_declares_its_flag_surface(self):
+        """The defect was a member whose accepted flags were assumed rather than declared."""
+        from _harness import load_module
+        members = load_module(AGG, "gt_scan_for_decl").MEMBERS
+        for name, meta in members.items():
+            self.assertEqual(len(meta), 3, "member %r does not declare its flags" % name)
+            self.assertIsInstance(meta[2], frozenset)
 
 
 class LanguageLeafTest(ScanBase):

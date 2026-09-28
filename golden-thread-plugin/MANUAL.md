@@ -3,8 +3,8 @@
 > **Reader:** a daily user — the deepest document, where the *why* lives
 > **Claims last checked against the code:** 2026-09-17 — see *The documents, and what belongs in each* in [`CLAUDE.md`](../CLAUDE.md).
 
-Complete reference for gt's twenty-three skills and its seven modules. Written against **gt v0.16.5**
-(gt-wiki 0.2.2; gt-demo, gt-watch, gt-report-card, gt-farm and gt-flow 0.16.5).
+Complete reference for gt's twenty-three skills and its seven modules. Written against **gt v0.17.1**
+(gt-wiki 0.2.3; gt-usage 0.1.3; gt-demo, gt-watch, gt-report-card, gt-farm and gt-flow 0.17.1).
 
 ---
 
@@ -446,7 +446,7 @@ python3 $SCRIPTS/gt_upgrade.py --vault <vault> status  # vault upgrades pending
 ```
 
 **Modules (since 0.14.0).** Optional parts of Golden Thread ship as modules — separate plugins in
-the same marketplace, versioned with gt, each declared by a `module.json`. 0.16.5 ships seven:
+the same marketplace, versioned with gt, each declared by a `module.json`. 0.17.1 ships seven:
 
 | Module | Plugin | Default | What it adds |
 |---|---|---|---|
@@ -867,6 +867,34 @@ when the project's reality changes.
 **Not in `decisions.md`:** anything you might change next session. An ADR you
 reverse next week teaches the vault to lie to you.
 
+**It offers a handoff for what did not reach a file (0.17.1).** Classifying findings tells
+`gt-work` not only what to write but what it is *not* writing — a decision that needs you,
+something mid-flight, a question raised and unanswered. Those live in the conversation, and the
+conversation is about to end. So it names them and asks whether to write a
+[handoff](#gtgt-handoff); on yes it runs `gt_handoff.py` and writes the narrative itself,
+because the script deliberately will not.
+
+**On yes it also raises the work**, one task per unresolved item in the project's `## Tasks`,
+each naming its own item and citing the handoff:
+
+```markdown
+- [ ] Decide whether the sweep should block on cannot-run — context in handoff-2026-09-28.md [p:: 1] [waiting:: user] [since:: 2026-09-28]
+```
+
+A handoff nobody is told to read is write-only, so the task is the mechanism and the file is
+only the context. **`p:: 1`, never `p:: 0`** — there is no `p:: 0`; `0` exists at project level
+only, where it is defined as a tier nothing occupies permanently. `since::` is what makes it
+escalate: the vault's stale-P1 escalation rule raises the project a
+level once the task is seven days old, so an unread handoff climbs on its own and a read one
+costs nothing. One task per item, never a single "review the handoff" line — that competes with
+real work while saying nothing, and hides every item after the first.
+
+**The question is asked only when the list is non-empty**, and that restraint is the feature.
+An offer made every session is one that is always declined — `gt_closeout` demonstrated exactly
+that by asking the same question every session until the answer stopped being read. Nothing
+uncaptured, no question, one line saying so. And a `no` is final: nobody writes a handoff on
+your behalf after you have said those items are not worth a file.
+
 ### `/gt:gt-handoff`
 
 The session that *designs* something is rarely the session that builds it. This writes down what
@@ -1010,6 +1038,30 @@ Nothing is deleted. Retiring sets `status: stale` and records what superseded it
 
 Promoting a rule to Core (`level: core`) also wires the enforcement hook —
 `gt-promote` handles this; `gt-work` does not.
+
+### `gt_demote.py` — the same ladder, downwards
+
+```bash
+python3 $SCRIPTS/gt_demote.py --vault "<vault>" --file "<path relative to the vault>" \
+    [--to knowledge|project-memory] [--project <slug>]
+python3 $SCRIPTS/gt_demote.py --vault "<vault>" --file "<path>" --apply
+```
+
+**The two ladders measure different things.** `/gt:gt-promote` moves knowledge *up* by how
+settled it is. This moves it *down* by how often it is **paid for**:
+
+| Level | Read | Cost |
+|---|---|---|
+| `global-memory/` | every session of every project | most expensive |
+| `Projects/<slug>/memory/` | every session of one project | |
+| `Knowledge/<page>.md` | when someone asks for it | cheapest |
+
+A fact can be perfectly true, perfectly settled, and still be in the wrong place — because it is
+loaded into every session of every project and needed in one. Demotion is the answer to that,
+and it is not a demotion in the sense of being wrong.
+
+**Nothing is deleted, and nothing moves without `--apply`.** Without it you get the move it
+would make and the reasons it would refuse; exit `1` is a refusal with nothing written.
 
 ### `/gt:gt-refresh`
 
@@ -1475,11 +1527,19 @@ python3 $SCRIPTS/gt_scan.py <path> --all-files
 
 The vault is optional — without one you get the shipped definitions and no local packs.
 
-**It is an aggregator over leaf commands**, and owns no checking logic. Today there is one
-member, `language` (`gt_scan_language.py`), checking `encoding` and `naming`. A member is listed
-only when it exists: a planned-but-unbuilt leaf must never appear, because a listed-but-missing
-member reads as coverage. `--only` narrows the run, `--all-files` widens it, and `--timeout`
-bounds a member.
+**It is an aggregator over leaf commands**, and owns no checking logic. There are two members:
+
+| Member | Script | Checks |
+|---|---|---|
+| `language` | `gt_scan_language.py` | naming conventions and file encoding, per language |
+| `code` | `gt_scan_code.py` | **source validation** — code against the `lint` rules in effect |
+
+A member is listed only when it exists: a planned-but-unbuilt leaf must never appear, because a
+listed-but-missing member reads as coverage. `--only` narrows the run, `--all-files` widens it,
+and `--timeout` bounds a member. `code` has its own section under
+[Checks and cadences](#gt_scan_codepy-source-validation) — including the rule that a rule whose
+**evaluator tier** is absent is reported SKIPPED and never silently passed, which is the same
+rule as "a member that could not run is not a pass", one level down.
 
 **The denominator is the declared set.** It prints `running N scan member(s)` before it starts —
 composition is never a surprise — and a `N of M member(s) ran` line after. A member that is not
@@ -1529,11 +1589,14 @@ and will produce findings nobody owns — use it deliberately.
 
 **This scan prints source text** — an identifier *is* the finding — so do not point it at
 content where the text itself is the sensitive thing. Credential scanning is deliberately a
-separate tool: it lived here once, and a validation on 2026-09-16 found it missed a `.env` file
+separate tool, and **`gt_secrets.py` is now that tool**: it is not a member here and must not
+become one. It lived here once, and a validation on 2026-09-16 found it missed a `.env` file
 entirely, had no generic `KEY=`/`SECRET=` rule, and leaked the very values it redacted, because
 the naming check printed raw source text on the same run. A secret scanner that misses is worse
-than none, because people stop looking. The `secrets` slot still waits for the tool that will do
-it properly.
+than none, because people stop looking. Two tools with opposite output rules in one process is
+the whole reason for the split — see
+[`gt_secrets.py`](#gt_secretspy-credentials-in-the-wrong-place). If you are checking a tree for
+credentials, run that; `/gt:gt-scan` does not cover them, and `gt_sweep.py` runs both.
 
 Findings are advice about conventions, not defects. Do not "fix" a repo's naming wholesale
 because a pack disagreed with it.
@@ -1627,6 +1690,257 @@ Never pass `--allow-findings` on someone's behalf — accepting a finding is a j
 this specific change. Never work around a missing receipt; run the tests, because "I ran them"
 is the claim the rule was built to stop trusting. When reporting a successful commit, **say
 which tests the receipt covers**. The refusals are the feature.
+
+---
+
+## Checks and cadences
+
+Three cadences run the same checks over deliberately different file sets, and the difference is
+the point:
+
+| Cadence | What it looks at | What it does about it |
+|---|---|---|
+| `tests/run.sh` | the file set the scanners define | **fails the run** |
+| the commit gate | the **staged diff** only | **denies the commit** |
+| `gt_sweep.py` | the **whole tree**, weekly | **reports**, never blocks |
+
+The narrow two are what keep the gates usable. A commit gate that scanned the whole tree would
+punish you for someone else's old code, so it looks only at what you are adding — but that means
+nothing ever re-examines what is already there. A rule added today never sees a file nobody
+touches, and a credential committed before the gate existed stays committed. The sweep is the
+cadence that goes back over it, and it reports rather than blocks because there is no commit in
+front of it to refuse.
+
+### `gt_secrets.py` — credentials in the wrong place
+
+```bash
+python3 $SCRIPTS/gt_secrets.py <path> [--vault "<vault>"] [--staged] [--json]
+python3 $SCRIPTS/gt_secrets.py <path> --baseline .gt/secrets-baseline.json
+python3 $SCRIPTS/gt_secrets.py <path> --write-baseline .gt/secrets-baseline.json
+```
+
+**Its output contract is the reason it is a separate tool and not a `gt_scan` member:**
+
+> Nothing in this process ever prints matched source text, and no other check runs beside it.
+
+A finding is a path, a line, a rule id and a length. Never an excerpt, never a prefix, never a
+hash. Every other Golden Thread scanner prints the text it found, because there the text *is*
+the finding; here the text is the thing being protected. Those are opposite output rules, and
+two tools with opposite output rules in one process is exactly how the 0.16.0 attempt leaked —
+its `secrets` check printed only a length while its `naming` check, same tool and same run,
+printed raw source text, so a credential-shaped identifier reached stdout and `--json` in full.
+That is why this is not a member of `/gt:gt-scan`, and why registering it as one would be a
+regression rather than a tidy-up.
+
+`--baseline` reports only what is **new**, so an existing finding you have already triaged does
+not drown the ones that arrived today. `--write-baseline` records the current set — read it
+before you accept it; a baseline written without looking is a decision to ignore whatever was
+there.
+
+Exit: `0` clean (nothing new against the baseline) · `1` found something · `2` **could not run,
+or could not scan part of what it was asked to scan**. **Silence is never clean**: every
+successful run ends with an affirmative naming what was covered, because a scanner that could
+not run prints an empty finding list and so does a clean tree.
+
+### `gt_scan_code.py` — source validation
+
+```bash
+python3 $SCRIPTS/gt_scan_code.py <path> [--vault "<vault>"] [--staged] [--json]
+python3 $SCRIPTS/gt_scan_code.py <path> --sarif findings.sarif
+python3 $SCRIPTS/gt_scan_code.py --rules          # every rule in effect, and its tier
+```
+
+A **leaf** command, sequenced by `gt_scan.py` as the `code` member alongside `language`. Unlike
+`gt_secrets.py` it **does** print source text, because here the text is the finding — which is
+precisely why the two may never share a process.
+
+**Rules are data, never code.** Every rule comes from a `lint` pack in the slot registry, in a
+documented subset of ast-grep's rule schema: `id`, `message`, `severity`, `note`, `files`,
+`ignores`, and a `rule` object with atomic (`pattern`, `kind`, `regex`), relational (`inside`,
+`has`, with `stopBy`) and composite (`all`, `any`, `not`) forms. Same names, same nesting, same
+meanings as upstream, so a user can read ast-grep's published rule reference and have it apply.
+
+Each rule declares the **evaluator tier** it needs, and a tier is either present or it is not:
+
+| Tier | Evaluator | Present when |
+|---|---|---|
+| `text` | regex over the file | always |
+| `stdlib` | Python's own `ast` | always, for Python |
+| `astgrep` | the ast-grep **CLI** | `ast-grep` ≥ 0.45.3 is on `PATH` |
+| `treesitter` | tree-sitter grammars | the grammar is installed |
+
+**A rule whose tier is absent is reported SKIPPED, never silently passed.** This is the same
+rule as "a member that could not run is not a pass", one level down: a rule that was never
+evaluated and a rule that found nothing produce identical output otherwise, and the difference
+between them is the whole value of the scan. The affirmative line names what was skipped, and
+SARIF carries it in `toolExecutionNotifications`.
+
+Exit: `0` clean, everything ran · `1` **findings** (whether or not anything was also skipped) ·
+`2` usage · `3` nothing found **but** a rule was skipped or a pack problem was reported, so the
+scan does not cover what it was asked to cover · `4` nothing to scan with. `1` outranks `3`
+deliberately: a caller deciding whether to block needs "was anything found", and a run can both
+skip a rule and find something. Coverage is reported either way.
+
+The ast-grep CLI is **optional and not bundled**. `brew install ast-grep` or
+`npm i -g @ast-grep/cli`; `install.sh` offers it and never installs it behind your back. Below
+0.45.3 it is refused rather than used, because a partial version silently under-matches, which
+is the failure this whole section exists to prevent.
+
+### `gt_sweep.py` — the weekly cadence
+
+```bash
+python3 $SCRIPTS/gt_sweep.py --vault "<vault>" [--path "<tree>"] [--only secrets,code] [--json]
+```
+
+Runs the checks above over the whole tree and **reports**. Members are `secrets`
+(`gt_secrets.py`) and `code` (`gt_scan_code.py`), each reading `.gt/<member>-baseline.json` from
+the tree when one is there. `node_modules`, `.venv` and `__pycache__` are excluded by default —
+measured on gt's own repo, the credential scan went from 48 findings to 10 on that exclusion
+alone, and a sweep that reports the same finding once per retained release is a sweep nobody
+reads twice.
+
+Exit: `0` the sweep ran, with or without findings · `2` usage · `3` a member could not run, so
+the sweep does not cover what it claims to.
+
+### `gt_check_report.py` — so a gate leaves a record
+
+```bash
+python3 $SCRIPTS/gt_check_report.py record --vault "<vault>" --check secrets \
+    --verdict clean|findings|cannot-run [--count N] [--scope "..."] [--ref HEAD] [--detail TEXT]
+python3 $SCRIPTS/gt_check_report.py show --vault "<vault>" [--check secrets] [--json]
+```
+
+A gate tells you about the commit in front of you and nothing about the week. Three questions
+need history and cannot be answered from an exit code: **is this check actually running**, is it
+getting noisier or quieter, and did anyone ever look at the thing it flagged.
+
+**What is recorded is a verdict, a count, a scope and a ref — never a finding's content.**
+`gt_secrets.py` exists because a credential must not reach a log, and a vault file is a file
+like any other. A report that quoted the finding would undo the tool it is reporting on.
+
+`show` exits `1` when there are no reports yet, which is a different thing from a clean history
+and reads differently on purpose.
+
+### `gt_code_review.py` — the framework, not the opinions
+
+```bash
+python3 $SCRIPTS/gt_code_review.py dimensions [--vault "<vault>"] [--json]
+python3 $SCRIPTS/gt_code_review.py plan <path> [--vault "<vault>"] [--staged] [--json]
+python3 $SCRIPTS/gt_code_review.py validate <findings.json> --root <path> [--json]
+python3 $SCRIPTS/gt_code_review.py report <findings.json> --root <path> --vault "<vault>" [--ledger F]
+```
+
+**gt does not perform the review, and ships zero review dimensions.** It cannot perform one:
+"does this abstraction earn its keep" has no mechanical oracle, and a tool claiming to test that
+is testing something else. What gt owns is everything *around* the judgement, which is most of
+what makes a review trustworthy rather than decorative.
+
+The dimensions are **yours** — `<vault>/Projects/golden-thread/packs/review.<name>.pack.json`,
+each entry an `id`, a
+`title`, a `rubric` and optionally a `files` glob. The rubric reaches the plan **verbatim**; a
+rubric gt paraphrased would be gt's opinion wearing your name. A core review pack would make
+gt's idea of a good review everyone's default, so there is not one, and a test asserts there
+never quietly becomes one.
+
+**Zero dimensions configured exits `3`, never `0`.** Since gt ships none, the empty case is the
+*default* case — and if it reported success, every user who had never configured a dimension
+would be told their code had been reviewed. The message names the file to create.
+
+`validate` is the deterministic half, and rejects any finding that cannot be **checked**: a file
+that does not exist, a line past the end of one (the reason says how long the file actually is),
+a dimension nobody configured, a severity outside the vocabulary, or `confirmed: false` — a
+verification pass that says no must be honoured, or the pass is decoration. Rejections are
+**counted in the summary**, never silently dropped. `report --ledger` suppresses a finding
+already declined once: a review that re-proposes what was already dismissed stops being read.
+
+Scope comes from `gt_scan_code.in_scope` rather than a second definition of "what counts as
+code" — two tools disagreeing about one tree would mean the one nobody runs is the one that was
+right. An empty scope is an **outcome**, reported as such, never a silent upgrade to reviewing
+everything.
+
+### `gt_schedule.py` — the scheduled jobs, installed by a script rather than by hand
+
+```bash
+python3 $SCRIPTS/gt_schedule.py list
+python3 $SCRIPTS/gt_schedule.py install daily --vault "<vault>" [--repo PATH ...] [--hour H] [--minute M]
+python3 $SCRIPTS/gt_schedule.py check   daily
+python3 $SCRIPTS/gt_schedule.py remove  daily
+```
+
+| Job | Runs | What it does |
+|---|---|---|
+| `daily` | 22:00 | `gt_daily.py` — the day's facts into `Daily Notes/<today>.md` |
+| `lint-weekly` | Mondays 07:00 | vault + wiki lint, reported into the vault |
+
+The weekly lint agent was installed **by hand** in 2026-09-08, and its only record was two lines
+in a runbook: a manual step with no `--check` and no rollback, on a machine where scheduled jobs
+fail in ways a terminal run cannot reproduce. This retrofits the standing rule that any human
+step becomes a script with `--check`, self-proof and rollback.
+
+**`check` validates through launchd, not through a terminal run**, and reads back launchd's own
+*last exit code*. That distinction matters on macOS, where a job can run perfectly in your shell
+and be denied the filesystem under launchd. It also knows which exit codes are a **normal
+outcome** for each job — `lint-weekly` exits `1` whenever the lint finds something, which is most
+weeks, and an earlier version called the live job broken on exactly that. A check that reports a
+normal result as a failure is worse than no check, because people stop reading it.
+
+### `gt_daily.py` — the day's facts, and nothing else
+
+```bash
+python3 $SCRIPTS/gt_daily.py --vault "<vault>" [--date YYYY-MM-DD] [--repo PATH ...] [--dry-run] [--check]
+```
+
+Writes tasks closed, commits per repo, event counts, wiki item **counts**, and an active span per
+project into one fenced, clearly-marked block in `Daily Notes/<date>.md`, replaced whole on each
+run.
+
+**Terse by design.** It does not explain, summarise or interpret. The owner writes the meaning;
+a generated block that editorialised would encode a reading of the day that is not theirs. For
+the wiki it records how many items and how much time, never what they said.
+
+It **never touches a line outside its block**, and specifically never touches `## Noticed` —
+that is the unfiled capture surface `/gt:gt-review` sweeps, and a tool tidying it would defeat
+the sweep. Exit `1` means nothing to report for the day, which is not an error. `--check`
+verifies every dependency and exits; `--dry-run` prints the block and writes nothing.
+
+### `gt_state.py` — write the state before the context runs out
+
+```bash
+python3 $SCRIPTS/gt_state.py check [--margin N] [--write] [--json]
+python3 $SCRIPTS/gt_state.py write [--reason R]
+python3 $SCRIPTS/gt_state.py show
+python3 $SCRIPTS/gt_state.py hook      # PreCompact / SessionEnd: the backstop
+```
+
+Three pieces existed and nothing joined them: `gt_usage` reads the context percentage and only
+*displays* it; `gt_report_card` runs at `SessionEnd` and `PreCompact` and writes a **health
+summary** — uncommitted files, stale rollup — with nothing about what the session was doing; and
+`gt_handoff` gathers exactly the right content but is manual, so nothing ever calls it. This is
+the join, and it needs nobody to think of it.
+
+**The signal is `ctx_pct`, and the distinction is the whole design.** `readings.jsonl` carries
+context fill and rate-limit allowance side by side, and they are unrelated. A real reading from
+the session that prompted this:
+
+```json
+{"five_hour": 5, "seven_day": 10, "ctx_pct": 91}
+```
+
+5% of the five-hour allowance, 91% of the context. Triggering on the allowance meter would have
+fired at entirely the wrong moment **and looked correct doing it**, because both are percentages
+with plausible values. A test asserts the tool never reads `rate_limits` at all.
+
+It fires at `--margin` (default 5) below the flag point for your `usage_alert` mode, **once per
+crossing** rather than on every turn, and is wired to `UserPromptSubmit`. `PreCompact` is the
+**backstop, not the primary** — it fires when compaction is already starting, so the write
+competes with the thing it exists to survive — and its file says which one wrote it, so nobody
+reads a backstop write as the early one having worked.
+
+A missing or unreadable usage ledger is reported as **"cannot tell"**, never as room to spare:
+the usage module may not be installed at all, and silence from a source that was never there
+must not read as a measurement saying everything is fine. Every failure path exits `0`; a state
+write that broke a turn would be worse than the gap it closes.
+
 
 ---
 
@@ -1731,7 +2045,7 @@ promotion is an arrow climbing. It reads `Projects/golden-thread/events.jsonl` a
 writes the vault.
 
 ```bash
-FLOW=~/.claude/plugins/cache/golden-thread-plugin/gt-flow/0.16.2/scripts
+FLOW=~/.claude/plugins/cache/golden-thread-plugin/gt-flow/0.17.1/scripts
 python3 $FLOW/gt_flow.py render --vault <vault> [--out FILE|DIR] [--redact] \
     [--project <slug> ...] [--since YYYY-MM-DD] [--tasks]
 ```
@@ -1782,7 +2096,7 @@ project other than the one loaded.
 ## Script reference
 
 ```bash
-SCRIPTS=~/.claude/plugins/cache/golden-thread-plugin/gt/0.16.2/scripts
+SCRIPTS=~/.claude/plugins/cache/golden-thread-plugin/gt/0.17.1/scripts
 
 python3 $SCRIPTS/vault_init.py fresh --vault ~/my-vault --domain "My Team"
 

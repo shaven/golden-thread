@@ -13,8 +13,7 @@
 # that blocks wrongly makes every session unusable, which is far worse than missing
 # an occasional violation.
 #
-# Canonical source: core-rules/ at the vault root (Projects/golden-thread/core-rules
-# before 0.17.0; resolved via gt_paths, never spelled)
+# Canonical source: Projects/golden-thread/core-rules/
 
 set -uo pipefail
 

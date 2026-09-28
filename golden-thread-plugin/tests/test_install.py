@@ -7,10 +7,12 @@ and a sandbox HOME. Nothing touches the real repo or the real ~/.claude.
 Contracts pinned here:
   * gt and gt-wiki land in ~/.claude/plugins/cache/... AND the marketplace, file for
     file; both are registered and enabled;
-  * the five hooks install.sh owns for gt are registered in settings.json and verified,
-    and point at files that exist in the sandbox; since 0.15.0 the watch and report-card
-    modules wire the other four (gt_watch.py, gt_report_card.py x3) at the same paths with
-    the same commands, tagged with their module;
+  * the hooks install.sh owns for gt -- every HOOK_REGISTRATIONS entry owned by
+    install.sh, counted from that declaration rather than written down here -- are
+    registered in settings.json and verified, and point at files that exist in the
+    sandbox; since 0.15.0 the watch and report-card modules wire the rest (gt_watch.py,
+    gt_report_card.py x3, declared in their module.json) at the same paths with the same
+    commands, tagged with their module;
   * the demo is module `demo` (plugin gt-demo) since 0.14.0: gt itself ships no demo, and
     install_demo=no in vault-config.json (recorded as the module choice by the machine
     migration) leaves gt-demo out of cache, marketplace and settings -- including a demo
@@ -24,21 +26,44 @@ import shutil
 import unittest
 from pathlib import Path
 
-from _harness import Sandbox, REPO, GT, WIKI, WATCH, REPORT_CARD, latest_version_dir
+from _harness import (Sandbox, REPO, GT, WIKI, WATCH, REPORT_CARD, latest_version_dir,
+                      load_module)
 
 INSTALL = REPO / "install.sh"
 DEMO = ("skills/gt-demo", "scripts/gt_demo.sh", "templates/demo-pizzabot")
 GT_DIRS = (".claude-plugin", "skills", "scripts", "templates", "commands", "hooks")
 WIKI_DIRS = (".claude-plugin", "skills", "scripts", "templates", "commands")
 # 0.12.9 added the protected-path guard. 0.15.0 moved gt_watch.py and gt_report_card.py
-# into the watch and report-card modules (MODULE_OWNED): gt alone now wires five.
-OWNED = {"SessionStart": {"gt_components.py", "gt_workers.py", "gt_version_check.py",
-                          "gt_push_check.py"},
-         "PreToolUse": {"guard_protected_paths.sh"}}
-MODULE_OWNED = {("SessionStart", "gt_watch.py"): ("watch", ["--hook"]),
-                ("SessionStart", "gt_report_card.py"): ("report-card", ["surface", "--hook"]),
-                ("PreCompact", "gt_report_card.py"): ("report-card", []),
-                ("SessionEnd", "gt_report_card.py"): ("report-card", [])}
+# into the watch and report-card modules (MODULE_OWNED).
+#
+# WHAT GT WIRES, AND HOW MANY, IS DERIVED from HOOK_REGISTRATIONS -- the one declaration
+# install.sh registers FROM -- and the modules' share from their own module.json hook
+# lists. A literal `5` here does not test the registration count; it tests that somebody
+# remembered to edit it. 0.17.1 registering gt_state.py on UserPromptSubmit and PreCompact
+# is the fourth time in one release that a hand-maintained stand-in fell behind the thing
+# it stands for (the install fixture's manifest step, test_gt_scan's member list, then its
+# import list, then test_gt_components' HOOKDIR_SCRIPTS -- all now derived).
+_REGS = load_module(GT / "scripts" / "gt_components.py",
+                    "gt_components_install_counts").HOOK_REGISTRATIONS
+OWNED = {}
+for _r in (r for r in _REGS if r["owner"] == "install.sh"):
+    OWNED.setdefault(_r["event"], []).append(_r["script"])
+N_GT_HOOKS = sum(len(v) for v in OWNED.values())
+
+
+def _module_hooks(mod):
+    """(event, script) -> (module name, args), read from the module's own declaration."""
+    if mod is None:
+        return {}
+    m = json.loads((mod / "module.json").read_text())
+    return {(h["event"], h["script"]): (m["name"], h.get("args", []))
+            for h in m.get("hooks", [])}
+
+
+MODULE_OWNED = {}
+for _m in (WATCH, REPORT_CARD):
+    MODULE_OWNED.update(_module_hooks(_m))
+N_MODULE_HOOKS = len(MODULE_OWNED)
 IGNORE = shutil.ignore_patterns("__pycache__", "*.pyc", ".DS_Store")
 try:
     DEMO_MODULE = latest_version_dir(REPO / "golden-thread-demo")
@@ -187,18 +212,18 @@ class InstallTest(Sandbox):
     def test_gt_hooks_registered_and_verified(self):
         p = self.install()
         self.assertOk(p)
-        self.assertIn("Registered 5 hooks", p.stdout)
+        self.assertIn("Registered %d hooks" % N_GT_HOOKS, p.stdout)
         self.assertIn("Verified hook wiring", p.stdout)
         self.assertNotIn("INCOMPLETE", p.stdout)
         reg = self.registered()
-        self.assertEqual(sum(len(v) for v in reg.values()), 5, reg)
+        self.assertEqual(sum(len(v) for v in reg.values()), N_GT_HOOKS, reg)
         hooks_dir = str(self.home / ".claude" / "golden-thread" / "hooks")
         for event, scripts in OWNED.items():
             cmds = reg.get(event, [])
             self.assertEqual(len(cmds), len(scripts), event)
-            for s in scripts:
+            for s in set(scripts):
                 hit = [c for c in cmds if s in c]
-                self.assertEqual(len(hit), 1, f"{event}/{s}: {cmds}")
+                self.assertEqual(len(hit), scripts.count(s), f"{event}/{s}: {cmds}")
                 self.assertIn(hooks_dir, hit[0])
                 self.assertTrue((Path(hooks_dir) / s).is_file(), s)
         # the wiring check, asked independently, agrees
@@ -215,7 +240,7 @@ class InstallTest(Sandbox):
             shutil.copytree(mod, self.repo / mod.parent.name / mod.name, ignore=IGNORE)
         p = self.install()
         self.assertOk(p)
-        self.assertIn("Registered 9 hooks", p.stdout)
+        self.assertIn("Registered %d hooks" % (N_GT_HOOKS + N_MODULE_HOOKS), p.stdout)
         self.assertIn("Verified hook wiring", p.stdout)
         self.assertNotIn("gt-report-card skills:", p.stdout, "an empty skills heading")
         hooks_dir = self.home / ".claude" / "golden-thread" / "hooks"
@@ -231,7 +256,7 @@ class InstallTest(Sandbox):
         w = self.run_cmd(["python3", self.src() / "scripts" / "gt_components.py", "wiring",
                           self.src(), "--owner", "install.sh"])
         self.assertOk(w)
-        self.assertIn("all 9 declared hooks are wired", w.stdout)
+        self.assertIn("all %d declared hooks are wired" % (N_GT_HOOKS + N_MODULE_HOOKS), w.stdout)
 
     # -- the demo module (0.14.0; until then install_demo=no stripped it out of gt) ----
     def add_demo_module(self):
@@ -283,7 +308,8 @@ class InstallTest(Sandbox):
         p = self.install()
         self.assertOk(p)
         self.assertEqual(self.settings(), s1, "second run changed settings.json")
-        self.assertEqual(sum(len(v) for v in self.registered().values()), 5, "hooks duplicated")
+        self.assertEqual(sum(len(v) for v in self.registered().values()), N_GT_HOOKS,
+                         "hooks duplicated")
         self.assertEqual(files_under(self.cache(), GT_DIRS), files1)
         vers = [d.name for d in (self.plugins / "cache" / "golden-thread-plugin" / "gt").iterdir()]
         self.assertEqual(vers, [GT.name])

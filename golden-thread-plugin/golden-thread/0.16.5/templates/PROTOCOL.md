@@ -151,11 +151,7 @@ file's body so the tier is justified rather than asserted.
    Choose `validated` whenever the rule is mechanically checkable — it is the only
    form that does not depend on in-the-moment discipline. Use `reminder` only where a
    check would be ambiguous.
-3. **Place the file in `core-rules/`, at the vault root.** (Before gt 0.17.0 this was
-   `Projects/golden-thread/core-rules/`; the `core-rules-root` migration moves an older
-   vault, and the hooks find the folder wherever it is, so a vault mid-upgrade keeps
-   working. Core rules govern every project, which is why they no longer live under one.)
-   That folder is the
+3. **Place the file in `Projects/golden-thread/core-rules/`.** That folder is the
    canonical home, and nothing outside it may hold a Core rule.
 4. **Wire the mechanism** — the step that makes it real:
    - `reminder` → the `UserPromptSubmit` hook re-injects it every turn

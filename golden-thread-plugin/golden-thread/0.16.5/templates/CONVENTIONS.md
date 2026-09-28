@@ -36,7 +36,7 @@ human decision is written to `review-queue.md`.
 
 ## Core rules
 
-Core rules are defined **and enforced** from `core-rules/`
+Core rules are defined **and enforced** from `Projects/golden-thread/core-rules/`
 and apply to every project. They are the top of the promotion hierarchy, above
 `global-memory/`.
 
@@ -297,7 +297,7 @@ conflict the pack wins. First pack:
 | Cross-project facts | `global-memory/<file>.md` |
 | Durable notes that are not yet ADRs, findings, or architecture | `memory/<file>.md` |
 | Invariants a validation agent must enforce | `validation-rules.md` |
-| **Rules enforced on every turn** | `core-rules/<rule>.md` |
+| **Rules enforced on every turn** | `Projects/golden-thread/core-rules/<rule>.md` |
 
 The last row is the only one holding **rules** rather than **facts**, and the only one
 pushed into every turn by a hook rather than read on demand. See "Core rules" above and

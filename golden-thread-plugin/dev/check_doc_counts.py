@@ -187,10 +187,22 @@ def check(facts):
             if s is None:
                 continue
             numbers = "|".join(list(WORDS.values()) + [str(k) for k in WORDS])
-            m = re.search(r"\b(%s)\s+(?:deterministic\s+)?checks?\b" % numbers, s, re.I)
-            if m and m.group(1).casefold() not in want:
-                bad.append((rel, "says %r gt_lint checks; %d are emitted"
-                            % (m.group(1), n_lint)))
+            # ANCHORED ON gt_lint, not merely on the first "N checks" in the file. Until
+            # 2026-09-28 this took whatever matched first, so a release that added a section
+            # saying "The two checks themselves" -- about the credential and source scanners,
+            # entirely correct -- was told the document claimed gt_lint had two checks. A gate
+            # that calls a correct sentence wrong is the crying-wolf defect this release met
+            # three times; the Core-rules check above already excludes non-claims for the same
+            # reason. A count claim about gt_lint names gt_lint within a line or so of itself.
+            for m in re.finditer(r"\b(%s)\s+(?:deterministic\s+)?checks?\b" % numbers,
+                                 s, re.I):
+                near = s[max(0, m.start() - 300):m.end() + 300]
+                if not re.search(r"gt[_-]lint", near, re.I):
+                    continue
+                if m.group(1).casefold() not in want:
+                    bad.append((rel, "says %r gt_lint checks; %d are emitted"
+                                % (m.group(1), n_lint)))
+                break
     return bad
 
 

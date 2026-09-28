@@ -46,8 +46,7 @@ the true statement on every volume; "case variants are caught" is only true wher
 folds case. Found when the suite first ran on Linux (CI, 2026-09-17) against a test that had
 encoded the macOS answer as universal.
 
-CORE RULES LOCATION: the default core-rules/ at the vault root (was
-Projects/golden-thread/core-rules before 0.17.0), the recorded
+CORE RULES LOCATION: the default Projects/golden-thread/core-rules, the recorded
 vault-config.json:core_rules_path, and -- mirroring gt_paths.find_core_rules' search --
 any ancestor directory named core-rules that holds the marker model file. The ancestor
 walk replaces the rglob over the whole vault that find_core_rules falls back to: this

@@ -36,8 +36,6 @@ import gt_aggregate                                        # noqa: E402
 MEMBERS = {
     "language": ("gt_scan_language.py",
                  "encoding and naming, against the language definitions in effect"),
-    "code": ("gt_scan_code.py",
-             "source validation, against the lint rules in effect"),
 }
 
 # Leaf exit codes, so the aggregator interprets rather than guesses.

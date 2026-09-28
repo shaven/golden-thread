@@ -66,36 +66,7 @@ SLOTS = {
     "classify":         {"mode": "map",   "key": ("path",)},
     "encoding":         {"mode": "map",   "key": ("lang",)},
     "naming":           {"mode": "map",   "key": ("lang", "construct")},
-    # `lang` is OPTIONAL here, and only here. A rule such as "a TODO with no owner" is
-    # language-agnostic: forcing a language onto it would mean writing the same rule once
-    # per language, and the copies would drift. An entry omitting `lang` -- or spelling it
-    # "*" -- is normalised to the wildcard and applies to every language.
-    #
-    # `*` and a specific language are DISTINCT keys, so both are in effect and neither
-    # shadows the other. Specificity-shadowing was considered and rejected: it would mean a
-    # python entry silently disabling a wildcard rule, which is the kind of quiet removal
-    # this module exists to prevent. To switch off a wildcard rule for one language, RETRACT
-    # it -- that path already exists and every retraction is reported.
-    #
-    # The key field is `id`, NOT `rule`, and that is a rename made on 2026-09-27 while
-    # writing the first pack -- the last moment it was free. gt's rule vocabulary is a
-    # documented subset of ast-grep's schema, borrowed verbatim, and there `id` names the
-    # rule while `rule` holds the MATCHER OBJECT (`pattern` / `kind` / `all` / `any`...).
-    # Keying on `rule` would have forced one of the two to mean something else than it does
-    # upstream, which defeats the entire reason for borrowing a published vocabulary: that a
-    # user can read ast-grep's rule reference and have it be true here. Nothing consumed this
-    # slot yet, so the rename cost one test fixture; after a pack ships it would have cost
-    # every pack in the wild.
-    "lint":             {"mode": "map",   "key": ("lang", "id"), "optional": ("lang",)},
-    # A REVIEW DIMENSION -- one kind of code review, as data. gt ships NO dimensions: the
-    # framework exists and the opinions are the owner's or the company's (owner, 2026-09-28).
-    # That is why this slot is empty by design rather than by omission, and why the tool that
-    # reads it must say "0 dimensions configured" rather than reporting a clean review.
-    #
-    # `map` keyed on `id`, so a local pack REPLACES a shipped dimension of the same name
-    # instead of adding a second one with the same title -- two dimensions both called
-    # "integrity" would double every finding they agree on.
-    "review":           {"mode": "map",   "key": ("id",)},
+    "lint":             {"mode": "map",   "key": ("lang", "rule")},
     "vocabulary":       {"mode": "map",   "key": ("term",)},
     "validation_rules": {"mode": "map",   "key": ("id",)},
     # What makes a LANGUAGE PACK self-contained. Without these two, a contributed language
@@ -131,13 +102,9 @@ CONSUMERS = {
     "vocabulary": "gt_context.py",
     "validation_rules": "gt_context.py",
     "runbook": "gt_context.py",
-    "secrets": "gt_secrets.py",   # 0.17.0: the slot shipped in 0.16.0 with no consumer
-    # 0.17.0 too. The old comment here read "the slot cannot express WHAT to detect; needs a
-    # pattern field" -- which was true only because entries had to be flat strings. Entries may
-    # now nest, so the matcher object the slot always needed can live in `rule`, and this slot
-    # is read.
-    "lint": "gt_scan_code.py",
-    "review": "gt_code_review.py",
+    # No consumer yet. Listed so the gap is visible, not so it looks supported:
+    "secrets": None,            # awaits gt_scan_secrets
+    "lint": None,               # the slot cannot express WHAT to detect; needs a pattern field
 }
 
 TIERS = ("community", "core", "local")      # low to high precedence
@@ -390,80 +357,26 @@ def _string_problem(label, s, cap):
     return None
 
 
-# A nested matcher may not be arbitrarily deep or wide. Both caps exist so that "every
-# string is checked" cannot be defeated by burying text where a checker gives up, and so a
-# pack cannot cost unbounded work to validate.
-_MAX_DEPTH = 8
-_MAX_NODES = 256
-
-
 def entry_problem(entry):
     """-> a reason string when this entry must not be served, else None.
 
     Field NAMES are checked exactly like field values. Checking only values left the obvious
     hiding place open: the 2026-09-16 review put 147 characters of instruction text, an RLO
     override and a BEL into a JSON KEY and it was served verbatim, problems empty, exit 0.
-    Anything a reader sees is content, and a key is something a reader sees.
-
-    NESTING, added 2026-09-27. Until now every value had to be a flat string, which is what
-    made a pack safely readable -- but it also made the `lint` slot impossible to fill: gt's
-    rule format is a documented subset of ast-grep's schema, where the matcher is an OBJECT
-    (`rule: {all: [{kind: ...}, {not: {...}}]}`). Flattening it to a JSON string inside the
-    entry was the cheaper option and was rejected: §2.2 of the design commits to "same names,
-    same nesting, same meanings" as ast-grep, and a rule the user cannot read in its upstream
-    shape gives up the only reason for borrowing a published vocabulary.
-
-    So containers are now walked, and THE SECURITY PROPERTY IS UNCHANGED: every key and every
-    string, at every depth, goes through exactly the same _string_problem as before. What is
-    new is only where they may live. Depth and node caps bound the walk, because a checker
-    that gives up quietly is a hiding place of its own.
-    """
-    seen = [0]
-
-    def walk(node, label, depth):
-        seen[0] += 1
-        if depth > _MAX_DEPTH:
-            return "%s nests deeper than %d levels" % (label, _MAX_DEPTH)
-        if seen[0] > _MAX_NODES:
-            return "entry has more than %d nested value(s)" % _MAX_NODES
-        if isinstance(node, dict):
-            for i, (k, v) in enumerate(node.items()):
-                if not isinstance(k, str):               # json gives str keys; be explicit
-                    return "%s field name #%d is %s, not a string" % (label, i + 1,
-                                                                      type(k).__name__)
-                # The offending name is identified by POSITION, not quoted back. Quoting it
-                # echoed the injection into the PROBLEM line -- read by a terminal and, more
-                # to the point, by a model. A refusal must not become the delivery mechanism.
-                bad = _string_problem("%s field name #%d" % (label, i + 1), k, _MAX_FIELD_NAME)
-                if bad:
-                    return bad
-                # Safe to name k below: it passed the checks immediately above.
-                bad = walk(v, "field %r" % _clean(k, 40), depth + 1)
-                if bad:
-                    return bad
-            return None
-        if isinstance(node, list):
-            for i, v in enumerate(node):
-                bad = walk(v, "%s[%d]" % (label, i), depth + 1)
-                if bad:
-                    return bad
-            return None
-        if isinstance(node, bool) or isinstance(node, int):
-            # ast-grep's `stopBy` and `nthChild` take a keyword or a number, so a scalar that
-            # carries no text is allowed -- it cannot hide a string. Booleans are ints in
-            # Python, hence the explicit first test.
-            return None
-        if not isinstance(node, str):
-            return "%s is %s, not a string" % (label, type(node).__name__)
-        return _string_problem(label, node, _MAX_VALUE)
-
+    Anything a reader sees is content, and a key is something a reader sees."""
     for i, (k, v) in enumerate(entry.items()):
-        if not isinstance(k, str):
+        if not isinstance(k, str):                       # json gives str keys; be explicit
             return "field name #%d is %s, not a string" % (i + 1, type(k).__name__)
+        # The offending name is identified by POSITION, not quoted back. Quoting it echoed the
+        # injection into the PROBLEM line -- which is read by a terminal and, more to the
+        # point, by a model. A refusal must not become the delivery mechanism.
         bad = _string_problem("field name #%d" % (i + 1), k, _MAX_FIELD_NAME)
         if bad:
             return bad
-        bad = walk(v, "field %r" % _clean(k, 40), 1)
+        if not isinstance(v, str):
+            return "field %r is %s, not a string" % (k, type(v).__name__)
+        # Safe to name k here: it passed the checks immediately above.
+        bad = _string_problem("field %r" % _clean(k, 40), v, _MAX_VALUE)
         if bad:
             return bad
     return None
@@ -479,14 +392,8 @@ def _clean(value, limit=48):
     return out if len(out) <= limit else out[:limit - 1] + "…"
 
 
-WILDCARD = "*"
-
-
 def _key(entry, fields):
-    """The map key. An omitted optional field and an explicit "*" MUST produce the same
-    key, or the same rule written two ways would occupy two slots and neither would
-    shadow the other."""
-    return tuple(entry.get(f) or (WILDCARD if f == "lang" else "") for f in fields)
+    return tuple(entry.get(f, "") for f in fields)
 
 
 def _retract_matches(entry, _spec_fields, pattern):
@@ -520,20 +427,14 @@ def resolve(slot, lang=None, vault=None):
             if bad:
                 problems.append((where, bad))
                 continue
-            optional = spec.get("optional", ())
-            missing = [f for f in spec["key"]
-                       if not entry.get(f) and f not in optional]
+            missing = [f for f in spec["key"] if not entry.get(f)]
             if missing:
                 # Without this an entry missing `lang` keys as ("", ...), never collides with a
                 # real entry, is never shadowed, and answers every --lang query.
                 problems.append((where, "missing key field(s): %s" % ", ".join(missing)))
                 continue
-            if lang and "lang" in spec["key"]:
-                entry_lang = entry.get("lang") or WILDCARD
-                # A wildcard entry answers every language query. Dropping it here was the
-                # whole reason `lang` could not be optional.
-                if entry_lang not in (lang, WILDCARD):
-                    continue
+            if lang and "lang" in spec["key"] and entry.get("lang") != lang:
+                continue
             rec = {"entry": entry, "source": pack["name"], "tier": pack["tier"],
                    "path": pack["path"]}
             if spec["mode"] == "union":
