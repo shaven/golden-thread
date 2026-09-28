@@ -121,8 +121,8 @@
    "sha256": "1c51fb189fb6c80165484e3e760eddcbdc09d518997e77bf8c8ee0d0633f8d6b"
   },
   "scripts/gt_doctor.py": {
-   "bytes": 38701,
-   "sha256": "4c93d903c9fe718af36cf5fef3a90746ca4fa62d29de04942c82d8cc7f49f43e"
+   "bytes": 40277,
+   "sha256": "c94b3f57cff52799573f9305a7ed089eadeb070d7dcc3451bb7cc2f57799fe07"
   },
   "scripts/gt_handoff.py": {
    "bytes": 13099,
@@ -381,7 +381,7 @@
    "sha256": "05a5e61333b0ba5d6f97866735268f7f99ff354d9502b2b05e0e512a86f82a6b"
   }
  },
- "generated": "2026-09-28T03:56:30",
+ "generated": "2026-09-28T05:41:12",
  "hooks": [
   {
    "args": [

@@ -19,6 +19,7 @@ Contracts pinned here:
   * a bad version request or a manifest/dir mismatch refuses before installing.
 """
 import json
+import os
 import shutil
 import unittest
 from pathlib import Path
@@ -961,3 +962,53 @@ class ManifestMismatch(InstallTest):
         self.assertNotIn("Traceback", p.stdout + p.stderr,
                          "a missing manifest must not crash the installer")
         self.assertTrue(man.is_file(), "the installer writes one when it is absent")
+
+
+class AstgrepOfferIsDefaultOnButNeverUnattended(InstallTest):
+    """install.sh offers the optional structural matcher, with yes as the default.
+
+    The owner's framing (2026-09-28): optional in the code, default-on in the install. gt never
+    REQUIRES ast-grep — a rule needing it is reported SKIPPED rather than quietly passing, which
+    is what lets gt stay stdlib-default. But "optional" and "off by default" are different
+    decisions, and without the binary a person has no reason to know what is not running.
+
+    The hard rule these tests defend: it NEVER installs software without a person present. Every
+    install in this suite is non-interactive, so if the offer ever reached for the network or
+    blocked on a prompt, the whole file would hang or start mutating the machine running it.
+    """
+
+    def test_a_non_interactive_install_never_installs_anything(self):
+        p = self.install()
+        self.assertOk(p)
+        self.assertIn("Not a terminal", p.stdout,
+                      "the offer did not take the non-interactive path")
+        self.assertNotIn("Running: brew", p.stdout, "it tried to install unattended")
+        self.assertNotIn("Running: npm", p.stdout)
+
+    def test_it_names_both_install_routes(self):
+        """The owner asked for both ways to be given, not one."""
+        out = self.install().stdout
+        self.assertTrue("brew install ast-grep" in out or "npm install -g @ast-grep/cli" in out,
+                        "no install route was offered:\n" + out[-600:])
+
+    def test_it_says_absence_means_SKIPPED_not_passed(self):
+        """The distinction the whole scanner is built on. "Optional" with no consequence stated
+        reads as "ignore this"."""
+        out = self.install().stdout
+        self.assertIn("SKIPPED", out)
+        self.assertIn("OPTIONAL", out)
+
+    def test_the_offer_never_fails_the_install(self):
+        """gt is installed and working by the time this runs; a third-party package manager is
+        not a reason to report gt as broken."""
+        self.assertOk(self.install())
+
+    def test_a_present_binary_is_reported_instead_of_offered(self):
+        d = self.tmp / "fakebin"
+        d.mkdir(parents=True, exist_ok=True)
+        (d / "ast-grep").write_text("#!/bin/sh\necho 'ast-grep 0.45.3'\n")
+        (d / "ast-grep").chmod(0o755)
+        p = self.sh(self.repo / "install.sh", "--no-vault",
+                    env={"PATH": "%s:%s" % (d, os.environ["PATH"])}, timeout=300)
+        self.assertIn("ast-grep found", p.stdout)
+        self.assertNotIn("is not installed", p.stdout)

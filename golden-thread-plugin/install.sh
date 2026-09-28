@@ -2415,4 +2415,83 @@ if [ -n "$VAULT_PREWRITE_BACKUP" ] && [ -f "$VAULT_PREWRITE_BACKUP" ]; then
     --backup "$VAULT_PREWRITE_BACKUP" 2>/dev/null || true
 fi
 
+# ── The structural matcher: optional in the code, default-on in this path ──────
+#
+# gt NEVER REQUIRES ast-grep. A rule that needs it is reported SKIPPED, counted in the
+# affirmative line, and placed in SARIF notifications -- the scanner's whole contract is that
+# a check which did not run says so. That must stay true, because gt is stdlib-default and a
+# rule format whose meaning depends on an optional native dependency would be undefined on a
+# machine without it.
+#
+# But "optional" and "off by default" are different decisions. Without the binary, structural
+# rules for bash and the other 26 languages simply never run, and the person who installed gt
+# has no reason to know what they are missing. So this OFFERS it, with yes as the default, and
+# names both routes.
+#
+# IT NEVER INSTALLS WITHOUT A PERSON PRESENT. A non-interactive run -- CI, an agent, a pipe --
+# skips and says so, rather than reaching onto the machine unattended or hanging on a prompt
+# nobody can answer.
+astgrep_present() {
+  for b in ast-grep sg; do
+    command -v "$b" >/dev/null 2>&1 || continue
+    # `sg` is util-linux's setgid tool on many systems, so the NAME proves nothing.
+    "$b" --version 2>&1 | grep -qi "ast-grep" && return 0
+  done
+  return 1
+}
+
+if astgrep_present; then
+  echo ""
+  echo "ast-grep found ($(command -v ast-grep 2>/dev/null || command -v sg)) — structural code"
+  echo "rules are available."
+else
+  AG_BREW=""; AG_NPM=""
+  command -v brew >/dev/null 2>&1 && AG_BREW="brew install ast-grep"
+  command -v npm  >/dev/null 2>&1 && AG_NPM="npm install -g @ast-grep/cli"
+  echo ""
+  echo "ast-grep is not installed. It is OPTIONAL: gt works without it, and any rule that"
+  echo "needs it is reported as SKIPPED rather than quietly passing. With it, gt can check"
+  echo "code structurally in 29 languages (bash, markdown, go, rust and more) instead of by"
+  echo "line matching. It is MIT-licensed and gt only ever runs it on your own files."
+  if [ -z "$AG_BREW" ] && [ -z "$AG_NPM" ]; then
+    echo "Neither brew nor npm is on PATH here, so gt cannot offer to install it."
+    echo "See https://ast-grep.github.io/ for other routes."
+  elif [ -t 0 ] && [ -t 1 ]; then
+    echo ""
+    [ -n "$AG_BREW" ] && echo "  1) $AG_BREW"
+    [ -n "$AG_NPM" ]  && echo "  2) $AG_NPM"
+    DEFAULT_AG="${AG_BREW:-$AG_NPM}"
+    printf 'Install it now with "%s"? [Y/n or 1/2]: ' "$DEFAULT_AG"
+    read -r AG_ANSWER </dev/tty || AG_ANSWER=""
+    AG_CMD=""
+    case "$AG_ANSWER" in
+      ""|y|Y|yes|YES) AG_CMD="$DEFAULT_AG" ;;
+      1)              AG_CMD="$AG_BREW" ;;
+      2)              AG_CMD="$AG_NPM" ;;
+      n|N|no|NO)      AG_CMD="" ;;
+      *)              AG_CMD="" ;;
+    esac
+    if [ -n "$AG_CMD" ]; then
+      echo "Running: $AG_CMD"
+      # NEVER fails the install. gt is installed and working at this point; a third-party
+      # package manager failing is not a reason to report gt as broken.
+      if $AG_CMD; then
+        astgrep_present \
+          && echo "ast-grep installed — structural rules are now available." \
+          || echo "The command finished but ast-grep is still not on PATH; open a new shell, or install it yourself."
+      else
+        echo "That did not succeed. gt is installed and fine; structural rules will be SKIPPED"
+        echo "until ast-grep is present. Try it yourself later: $AG_CMD"
+      fi
+    else
+      echo "Skipped. Structural rules will be reported as SKIPPED until it is installed:"
+      echo "  ${AG_BREW:-$AG_NPM}"
+    fi
+  else
+    echo "Not a terminal, so nothing was installed. To enable structural rules later:"
+    [ -n "$AG_BREW" ] && echo "  $AG_BREW"
+    [ -n "$AG_NPM" ]  && echo "  $AG_NPM"
+  fi
+fi
+
 echo "Restart Claude Code to load the plugins."

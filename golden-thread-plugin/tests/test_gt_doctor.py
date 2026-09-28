@@ -672,3 +672,57 @@ class DoctorUnderlyingCheckCrashes(DoctorBase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class AstgrepIsOptionalNotMissing(Sandbox):
+    """The optional structural matcher, reported without being scolded about.
+
+    gt is stdlib-default: a rule needing ast-grep is reported SKIPPED by the scanner rather
+    than quietly passing, so its absence breaks nothing. What the absence DOES cost is
+    knowledge — someone whose structural rules have never run has no reason to suspect it. So
+    doctor reports it either way, and never as a WARN: warning about a deliberate, documented,
+    working configuration is how a health check teaches people to ignore it.
+    """
+
+    def fake_astgrep(self, version="ast-grep 0.45.3"):
+        d = self.tmp / "bin"
+        d.mkdir(exist_ok=True)
+        p = d / "ast-grep"
+        p.write_text("#!/bin/sh\necho '%s'\n" % version)
+        p.chmod(0o755)
+        return d
+
+    def doctor(self, extra_path=None):
+        env = {"PATH": "%s:%s" % (extra_path, os.environ["PATH"])} if extra_path else None
+        return self.py(SCRIPTS / "gt_doctor.py", "--only", "astgrep", env=env)
+
+    def test_absent_is_reported_and_is_not_a_failure(self):
+        proc = self.doctor()
+        self.assertIn("astgrep", proc.stdout)
+        self.assertIn("not installed", proc.stdout)
+        self.assertNotIn("warn", proc.stdout.lower().split("astgrep")[1][:40])
+        self.assertEqual(proc.returncode, 0,
+                         "a deliberate, working configuration was reported as a problem")
+
+    def test_absent_says_what_it_costs_and_how_to_fix_it(self):
+        """"Not installed" alone tells nobody whether it matters."""
+        out = self.doctor().stdout
+        self.assertIn("SKIPPED", out, "it did not say structural rules are skipped, not passed")
+        self.assertIn("brew install ast-grep", out)
+
+    def test_present_reports_the_version(self):
+        proc = self.doctor(extra_path=str(self.fake_astgrep()))
+        self.assertIn("0.45.3", proc.stdout)
+        self.assertEqual(proc.returncode, 0)
+
+    def test_a_binary_named_sg_that_is_not_ast_grep_is_not_believed(self):
+        """`sg` is util-linux's setgid tool on many systems. Finding the NAME proves nothing;
+        the version string is what settles it."""
+        d = self.tmp / "bin2"
+        d.mkdir(exist_ok=True)
+        p = d / "sg"
+        p.write_text("#!/bin/sh\necho 'setgid, from util-linux'\n")
+        p.chmod(0o755)
+        out = self.doctor(extra_path=str(d)).stdout
+        self.assertIn("not installed", out,
+                      "a look-alike binary was accepted as the structural matcher")

@@ -767,8 +767,38 @@ def check_lint(rep, vault):
                 fix="/gt:gt-lint for the detail")
 
 
+def check_astgrep(rep):
+    """Is the optional structural matcher here? (check: astgrep)
+
+    NOT a failure when absent, and that distinction is the whole point. gt is stdlib-default:
+    a rule needing ast-grep is reported SKIPPED by the scanner rather than quietly passing, so
+    nothing is broken without it. What IS a problem is not knowing -- a person whose structural
+    rules have never run has no reason to suspect it, because the scanner's affirmative line is
+    the only place it shows.
+
+    So this reports OK when present and a NOTE when not, with the install command. It never
+    returns WARN: warning about a deliberate, documented, working configuration is how a
+    health check teaches people to ignore it.
+    """
+    import shutil as _sh
+    for name in ("ast-grep", "sg"):
+        path = _sh.which(name)
+        if not path:
+            continue
+        try:
+            out = subprocess.run([path, "--version"], capture_output=True, text=True, timeout=20)
+        except (OSError, subprocess.SubprocessError):
+            continue
+        # `sg` is util-linux's setgid tool on many systems; the name proves nothing.
+        if out.returncode == 0 and "ast-grep" in (out.stdout + out.stderr):
+            rep.add("astgrep", OK, (out.stdout or out.stderr).strip().splitlines()[0])
+            return
+    rep.add("astgrep", OK, "not installed — structural rules are SKIPPED, not silently passed. "
+                           "brew install ast-grep (or npm install -g @ast-grep/cli)")
+
+
 CHECKS = ("version", "components", "wiring", "core-rules", "modules", "vault",
-          "workers", "push", "gt-src", "lint")
+          "workers", "push", "gt-src", "lint", "astgrep")
 
 
 def main(argv=None):
@@ -808,6 +838,8 @@ def main(argv=None):
         check_gt_src(rep)
     if "lint" in wanted:
         check_lint(rep, vault)
+    if "astgrep" in wanted:
+        check_astgrep(rep)
 
     if a.fix:
         fix_wiring(rep, vdir, vault)
