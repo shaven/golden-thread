@@ -196,3 +196,36 @@ class ItHonoursClaimsAndChecksProperly(DailyBase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class ItDoesNotMangleTheTextItQuotes(Sandbox):
+    """Two defects found on the FIRST run against real data, both silent.
+
+    A summary that alters what it quotes is worse than one that omits it: `gtdaily.py` is a
+    filename someone would grep for and never find, and a subject reduced to one character
+    looks like an empty commit rather than a broken summariser.
+    """
+
+    def short(self, text):
+        from _harness import SCRIPTS, load_module
+        return load_module(SCRIPTS / "gt_daily.py", "gt_daily_short").short(text)
+
+    def test_an_underscore_in_a_filename_survives(self):
+        """`_` was stripped as markdown emphasis, turning gt_daily.py into gtdaily.py."""
+        self.assertIn("gt_daily.py", self.short("Daily capture: gt_daily.py writes the facts"))
+
+    def test_a_commit_subject_containing_bold_is_not_reduced_to_the_bold_bit(self):
+        """`BOLD.search` matched anywhere, so a subject with bold in the middle became just
+        that fragment -- measured: one subject came out as the single character 's'."""
+        out = self.short("Daily capture: writes the day**s** facts and nothing else")
+        self.assertIn("Daily capture", out)
+        self.assertGreater(len(out), 20, "the subject was replaced by a fragment: %r" % out)
+
+    def test_a_task_title_still_uses_its_leading_bold(self):
+        """The behaviour the bold rule exists for: a gt task is `**Title** — explanation`,
+        and taking the title is what makes the list scannable."""
+        out = self.short("**Reserve the IP** — a long explanation that nobody needs [p:: 2]")
+        self.assertEqual(out, "Reserve the IP")
+
+    def test_dataview_fields_are_stripped_from_a_task_title(self):
+        self.assertNotIn("p::", self.short("**Do the thing** [p:: 1] [waiting:: user]"))

@@ -113,8 +113,8 @@
    "sha256": "3138ac640492de457633dbe78cc5dfbc47795242d7f3f527b6b73ac2a212022a"
   },
   "scripts/gt_daily.py": {
-   "bytes": 15635,
-   "sha256": "de452565e52e74a8fca5cef45146d9adb1342dee8a03d03adf3aa073c637b25c"
+   "bytes": 16398,
+   "sha256": "64a94dcd3397b85730874346b72fd3f6c2cd2d88b6af6a876fd35010bf4f13b4"
   },
   "scripts/gt_demote.py": {
    "bytes": 21935,
@@ -381,7 +381,7 @@
    "sha256": "05a5e61333b0ba5d6f97866735268f7f99ff354d9502b2b05e0e512a86f82a6b"
   }
  },
- "generated": "2026-09-27T19:50:16",
+ "generated": "2026-09-27T20:05:46",
  "hooks": [
   {
    "args": [

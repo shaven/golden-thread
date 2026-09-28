@@ -67,11 +67,20 @@ def sh(args, cwd=None):
 
 def short(text, limit=88):
     """A task or commit line, trimmed to something a human scans rather than reads."""
-    m = BOLD.search(text)
+    # Use the bold span ONLY when it opens the line. A gt task is written
+    # `- [x] **Title** — long explanation`, so the leading bold IS the title and taking it is
+    # what makes these lines scannable. A commit subject that merely CONTAINS bold is not that
+    # shape, and `search` reduced one to a single character on the first real run -- a summary
+    # that silently replaces a line with a fragment of itself.
+    m = BOLD.match(text.strip())
     if m:
         text = m.group(1)
     text = FIELDS.sub("", text)
-    text = re.sub(r"[`*_]", "", text).strip().rstrip(".")
+    # Backticks and asterisks only. Stripping `_` as emphasis MANGLES IDENTIFIERS: the first
+    # run on real data rendered `gt_daily.py` as `gtdaily.py`, turning a filename someone might
+    # grep for into one that does not exist. Underscore emphasis is rare in commit subjects and
+    # task titles; underscores in names are not.
+    text = re.sub(r"[`*]", "", text).strip().rstrip(".")
     text = " ".join(text.split())
     return text if len(text) <= limit else text[:limit - 1].rstrip() + "…"
 
