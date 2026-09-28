@@ -40,6 +40,7 @@ class SyncGtSrcTest(Sandbox):
         (r / "install.sh").write_text("#!/bin/sh\necho hi\n")
         (r / "MANUAL.md").write_text("# manual\n")
         (r.parent / "CHANGELOG.md").write_text("# changelog\n")   # a repo-root file
+        (r.parent / "My Project.code-workspace").write_text("{}\n")  # a root file with a space
         (r / "golden-thread-plugin.zip").write_text("build artifact\n")
         (r / ".gitignore").write_text("*.zip\n")
         self.repo = r
@@ -84,6 +85,7 @@ class SyncGtSrcTest(Sandbox):
         self.assertEqual(src["layout"], "repository")
         # 0.17.3 (owner): gt-src takes the GitHub repo's layout, repo root included
         self.assertIn("../CHANGELOG.md", got, "repo-root files must publish at gt-src's root")
+        self.assertIn("../My Project.code-workspace", got)
 
     def test_checksums_let_the_receiving_machine_verify_every_file(self):
         """Owner, 2026-09-28: the installing machine must be able to tell it has the newest
@@ -132,6 +134,8 @@ class SyncGtSrcTest(Sandbox):
         self.assertEqual(proc.returncode, 3, proc.stdout)
         self.assertIn("missing golden-thread-plugin/selftest.sh", proc.stdout)
         self.assertIn("is empty", proc.stdout)
+        self.assertNotIn("missing repo-root file", proc.stdout,
+                         "a present root file (one with a space in its name) was reported missing")
         self.assertIn("missing golden-thread-plugin/gt-extra/1.2.0/MANIFEST.json", proc.stdout,
                       "every plugin must arrive with its MANIFEST.json")
 

@@ -167,9 +167,11 @@ for f in install.sh selftest.sh build-docs.py README.md MANUAL.md INSTALL.md tes
   [ -f "$P$f" ] || vbad "missing $PREFIX$f"
 done
 # The repo root arrives too -- the reason the layout changed (2026-09-28).
-for f in $(git -C "$ROOT" ls-files --full-name -- ':(top)*' | grep -v / ); do
+# Read line by line: a `for f in $(...)` loop split "Golden Thread.code-workspace" into two
+# names and reported a file that was present as missing (first repo-layout publish, 0.17.3).
+while IFS= read -r f; do
   [ -f "$DEST/$f" ] || vbad "missing repo-root file $f"
-done
+done < <(git -C "$ROOT" ls-files --full-name -- ':(top)*' | grep -v /)
 # Every plugin arrives with its metadata AND its MANIFEST.json (hash trust, since 0.13.0).
 for i in "${!PDIRS[@]}"; do
   for f in .claude-plugin/plugin.json MANIFEST.json; do
