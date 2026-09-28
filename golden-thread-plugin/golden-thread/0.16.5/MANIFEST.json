@@ -112,6 +112,10 @@
    "bytes": 10260,
    "sha256": "3138ac640492de457633dbe78cc5dfbc47795242d7f3f527b6b73ac2a212022a"
   },
+  "scripts/gt_daily.py": {
+   "bytes": 15635,
+   "sha256": "de452565e52e74a8fca5cef45146d9adb1342dee8a03d03adf3aa073c637b25c"
+  },
   "scripts/gt_demote.py": {
    "bytes": 21935,
    "sha256": "1c51fb189fb6c80165484e3e760eddcbdc09d518997e77bf8c8ee0d0633f8d6b"
@@ -167,6 +171,10 @@
   "scripts/gt_scan_language.py": {
    "bytes": 18658,
    "sha256": "9e270d06b09a6f15ca1b0a9c6df9ef74ad8908092c96a950814d4724f37ed07e"
+  },
+  "scripts/gt_schedule.py": {
+   "bytes": 10620,
+   "sha256": "c2e0c0d2a9211dfa60177198bf89be2ec985bec6a2da35d8f15f5d5753836f82"
   },
   "scripts/gt_secrets.py": {
    "bytes": 17650,
@@ -373,7 +381,7 @@
    "sha256": "05a5e61333b0ba5d6f97866735268f7f99ff354d9502b2b05e0e512a86f82a6b"
   }
  },
- "generated": "2026-09-27T14:29:57",
+ "generated": "2026-09-27T19:50:16",
  "hooks": [
   {
    "args": [
