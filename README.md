@@ -15,12 +15,14 @@ it at startup, look things up while working, and write back what they learn.
 Its distinguishing idea is the second problem, the one most memory systems never
 address: **writing a rule down does not mean it gets followed.**
 
-Plugin **v0.17.5**. Ten Core rules currently enforced, five of them *validated* — a
+Plugin **v0.17.6**. Ten Core rules currently enforced, five of them *validated* — a
 hook inspects the finished reply (`Stop`) or the tool call about to run (`PreToolUse`)
 and blocks it if the rule was broken.
 
 
 > [!IMPORTANT]
+> **0.17.6**: the installer reports progress — announced slow steps, counted upgrade steps, timings, a heartbeat.
+>
 > **0.17.5**: the component check survives a moved plugin source; an unregistered vault write is warned about as it happens.
 >
 > **0.17.4** fixes installs from gt-src or a git clone (an empty `packs/community/` was dropped by git).

@@ -887,6 +887,28 @@ fi
 #
 # Every conditional is an `if`: this script runs under set -e, where a bare `a && b` whose
 # left side is false aborts the install (the 0.17.1 installer bug).
+# ── Feedback: never silent (owner, 2026-09-29) ─────────────────────────────────
+# An install over a 0.9.4 vault sat with no output through its vault work, twice, and was
+# stopped as hung. Every slow step now says what it is about to do BEFORE it starts, reports
+# how long it took, and -- while it runs quietly -- prints a "still working" line every 15s.
+# Not verbose: one line in, one line out, a heartbeat only when a step actually runs long.
+with_heartbeat() {  # $1 = what is happening (e.g. "backing up the vault"); rest = command
+  local label="$1"; shift
+  local start=$SECONDS next=15 pid rc=0
+  "$@" &
+  pid=$!
+  while kill -0 "$pid" 2>/dev/null; do
+    sleep 1
+    if [ $((SECONDS - start)) -ge "$next" ] && kill -0 "$pid" 2>/dev/null; then
+      echo "  ...still $label ($((SECONDS - start))s)"
+      next=$((next + 15))
+    fi
+  done
+  wait "$pid" || rc=$?
+  HEARTBEAT_ELAPSED=$((SECONDS - start))
+  return "$rc"
+}
+
 checksum_problem() {   # $1 = what went wrong; stops only when verification was required
   if [ "$REQUIRE_CHECKSUM" = yes ]; then
     echo "✗ checksum: $1 -- NOTHING was installed (--require-checksum)."
@@ -915,6 +937,7 @@ checksum_block() {
     else
       SUMS_OUT=""
       SUMS_RC=0
+      echo "checksum: verifying $(grep -c . "$SUMS_ROOT/SHA256SUMS" || true) published files (a cloud-synced folder may download them first)..."
       SUMS_OUT=$(cd "$SUMS_ROOT" && $SUMCMD -c --quiet SHA256SUMS 2>&1) || SUMS_RC=$?
       SUMS_TREE=$($SUMCMD "$SUMS_ROOT/SHA256SUMS" | cut -d' ' -f1)
       if [ "$SUMS_RC" -ne 0 ]; then
@@ -935,16 +958,6 @@ checksum_block() {
     fi
   fi
 }
-# Run it NOW, before anything is copied, but hold its report until after the "Installing ..."
-# line: that line is the installer's first line by contract (callers and tests read it).
-# A refusal (exit 8) prints at once -- then the refusal IS the first thing to say.
-CHECKSUM_REPORT=""
-CHECKSUM_RC=0
-CHECKSUM_REPORT=$(checksum_block) || CHECKSUM_RC=$?
-if [ "$CHECKSUM_RC" -ne 0 ]; then
-  printf '%s\n' "$CHECKSUM_REPORT"
-  exit "$CHECKSUM_RC"
-fi
 
 REQUESTED="${POSITIONAL:-${GT_VERSION:-}}"
 CORE_DIR="golden-thread"
@@ -1155,7 +1168,10 @@ if [ -n "$REQUESTED" ]; then
 else
   echo "Installing gt $VERSION (newest version directory)$OTHERS"
 fi
-if [ -n "$CHECKSUM_REPORT" ]; then printf '%s\n' "$CHECKSUM_REPORT"; fi
+# The checksum runs HERE: after the first line (so the installer speaks at once -- 0.17.5 ran it
+# silently before any output, and on a cloud-synced gt-src that hashing downloads every file
+# first), and before step 0 below, the first thing that writes anything.
+checksum_block
 [ -n "$PICK_NOTES" ] && printf '%s' "$PICK_NOTES"
 [ -n "$SKIP_NOTES" ] && printf '%s' "$SKIP_NOTES"
 
@@ -2058,8 +2074,13 @@ backup_vault_before_writes() {  # $1 = vault path, before anything writes into i
   [ -f "$SRC/scripts/vault_refresh.py" ] || return 0
   VAULT_PREWRITE_PATH="$real"
   VAULT_PREWRITE_BACKUP="$HOME/.claude/golden-thread/backups/install-vault-files-$(date +%Y%m%d_%H%M%S).tar.gz"
-  python3 "$SRC/scripts/vault_refresh.py" backup --vault "$real" --out "$VAULT_PREWRITE_BACKUP" \
-    >/dev/null 2>&1 || { echo "⚠ could not back up the vault's files before installing — continuing"; VAULT_PREWRITE_BACKUP=""; }
+  echo "Backing up the vault's gt-managed files before changing them..."
+  if with_heartbeat "backing up the vault" python3 "$SRC/scripts/vault_refresh.py" backup \
+       --vault "$real" --out "$VAULT_PREWRITE_BACKUP" >/dev/null 2>&1; then
+    echo "  backed up (${HEARTBEAT_ELAPSED}s)"
+  else
+    echo "⚠ could not back up the vault's files before installing — continuing"; VAULT_PREWRITE_BACKUP=""
+  fi
 }
 
 # What install-core-rules put back, by name (0.15.0): a Core rule re-created or the
@@ -2178,7 +2199,9 @@ if [ -n "$VAULT_PATH" ] && git -C "$VAULT_PATH" rev-parse --git-dir >/dev/null 2
   # the hooks over unconditionally, replaced any tool older ON DISK than the template, and
   # set core.hooksPath whatever it held -- three ways to lose an owner's edit.
   if [ -f "$SRC/scripts/vault_refresh.py" ]; then
-    python3 "$SRC/scripts/vault_refresh.py" refresh --vault "$VAULT_PATH" 2>&1 \
+    echo "Refreshing the vault's git hooks and tools..."
+    with_heartbeat "refreshing the vault's tools" python3 "$SRC/scripts/vault_refresh.py" \
+        refresh --vault "$VAULT_PATH" 2>&1 \
       || echo "⚠ the vault's git hooks and tools could not be refreshed — run install.sh again to retry"
   fi
 fi
@@ -2404,6 +2427,7 @@ apply_vault_upgrades() {
   up="$SRC/scripts/gt_upgrade.py"
   [ -f "$up" ] || { echo "Vault upgrades: check could not run (gt_upgrade.py not shipped)"; echo ""; return 0; }
 
+  echo "Checking the vault for upgrades this release needs..."
   out=$(python3 "$up" status --vault "$vault" 2>&1) || rc=$?
   if [ "$rc" -ne 0 ]; then
     echo "⚠ Vault upgrades: the check could not run (exit $rc) — run /gt:gt-upgrade to look"
@@ -2457,9 +2481,31 @@ apply_vault_upgrades() {
     echo "  (the vault was clean before this install; its uncommitted files are this install's own refreshes:)"
     printf '%s\n' "$porcelain" | sed 's/^/    /'
   fi
-  run_out=$(python3 "$up" --vault "$vault" run ${allow[@]+"${allow[@]}"} 2>&1) || run_rc=$?
+  # STREAMED, not captured (2026-09-29): the longest step of an upgrade from an old release
+  # used to print nothing until it was all done. gt_upgrade prints "[k/N]" per step with its
+  # time and a heartbeat; the lines reach the screen as they come, a copy feeds the summary.
   # The attention section is printed once, from the follow-up status below.
-  printf '%s\n' "$run_out" | sed '/^needs a person (/,$d' | sed '/^[[:space:]]*$/d' | sed 's/^/  /' || true
+  local run_log
+  run_log=$(mktemp)
+  python3 -u "$up" --vault "$vault" run ${allow[@]+"${allow[@]}"} > "$run_log" 2>&1 &
+  local up_pid=$!
+  local shown=0 total
+  while kill -0 "$up_pid" 2>/dev/null; do
+    sleep 1
+    total=$(wc -l < "$run_log" | tr -d ' ')
+    if [ "$total" -gt "$shown" ]; then
+      sed -n "$((shown + 1)),${total}p" "$run_log" | sed '/^needs a person (/,$d' \
+        | sed '/^[[:space:]]*$/d' | sed 's/^/  /' || true
+      shown=$total
+    fi
+  done
+  wait "$up_pid" || run_rc=$?
+  total=$(wc -l < "$run_log" | tr -d ' ')
+  if [ "$total" -gt "$shown" ]; then
+    sed -n "$((shown + 1)),${total}p" "$run_log" | sed '/^needs a person (/,$d' \
+      | sed '/^[[:space:]]*$/d' | sed 's/^/  /' || true
+  fi
+  run_out=$(cat "$run_log"); rm -f "$run_log"
   backup=$(printf '%s\n' "$run_out" | sed -n 's/^backup: //p' | head -1)
   if [ "$run_rc" -eq 1 ] && printf '%s\n' "$run_out" | grep -q 'need a person:'; then
     echo "  Left for you: the step(s) above that need a person. Run /gt:gt-upgrade to finish"
