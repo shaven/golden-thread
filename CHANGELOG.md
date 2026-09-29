@@ -11,28 +11,6 @@ release's own summary line, kept short rather than reconstructed after the fact.
 
 ---
 
-## gt 0.17.6 — 2026-09-29
-
-**The installer is never silent.** An install of 0.17.5 over a vault last installed at 0.9.4 sat
-with no output while it worked — backing the vault up, then applying a long chain of upgrades — and
-was stopped twice as hung. The owner's rule: *"not overly verbose, but no feedback is not
-acceptable for an install."*
-
-- **Every slow step announces itself before it starts** and reports how long it took: the checksum
-  pass ("verifying 532 published files…"), the pre-write vault backup, the vault tool refresh, the
-  upgrade check, the upgrade itself.
-- **The vault upgrade counts.** It knows how many steps it will apply, so it says so up front and
-  prints `[k/N]` as each starts, with its time when it ends; the backup it takes first names the
-  file count and size.
-- **A heartbeat for quiet steps:** any step silent for 15s prints `...still <what> (Ns)`.
-- **Streamed, not captured:** the upgrade's output reaches the screen as it happens; before, the
-  installer collected it and printed it only when everything was done.
-- **The checksum runs after the installer's first line,** not before it: in 0.17.5 it hashed every
-  file before saying anything, which on a cloud-synced gt-src first downloads every file.
-
-A test asserts the announcements appear, in order, before the work they describe, and that each
-step reports its time.
-
 ## gt 0.17.5 — 2026-09-29
 
 **Two fixes requested by the receiving machine after its first install from gt-src.**

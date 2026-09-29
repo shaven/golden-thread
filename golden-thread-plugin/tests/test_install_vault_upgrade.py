@@ -145,22 +145,6 @@ class CleanVaultIsUpgraded(VaultUpgradeBase):
         self.assertIn("Vault upgrades: none pending", p.stdout)
         self.assertIn('Review and commit the vault: git -C "%s" status' % v, p.stdout)
 
-    def test_the_upgrade_says_what_it_is_doing_before_and_while_it_does_it(self):
-        """Owner, 2026-09-29: an install over a 0.9.4 vault sat silent through its vault
-        work and was stopped twice as hung. Every slow step announces itself first, the
-        upgrade counts its steps as k/N, and each step reports how long it took."""
-        v = self.current_vault()
-        self.make_doc_merge_pending(v)
-        self.commit(v, "owner work")
-        out = self.install().stdout
-        order = ["Backing up the vault's gt-managed files", "Checking the vault for upgrades",
-                 "upgrade step(s) to apply", "backing up the vault first", "[1/"]
-        pos = [out.find(x) for x in order]
-        self.assertTrue(all(i >= 0 for i in pos), "missing progress line(s): %s\n%s"
-                        % ([x for x, i in zip(order, pos) if i < 0], out))
-        self.assertEqual(pos, sorted(pos), "progress lines out of order:\n" + out)
-        self.assertRegex(out, r"\(\d+s\)", "no step reported its time")
-
 
 class InstallRefreshesDoNotBlock(VaultUpgradeBase):
     def test_clean_vault_with_a_stale_tool_still_gets_the_pending_step(self):

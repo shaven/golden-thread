@@ -118,8 +118,8 @@ th, td { border:1px solid #ddd; padding:3px 5px; text-align:left; vertical-align
 <p><strong>Reader:</strong> a daily user — the deepest document, where the <em>why</em> lives
 <strong>Claims last checked against the code:</strong> 2026-09-17 — see <em>The documents, and what belongs in each</em> in <a href="../CLAUDE.md"><code>CLAUDE.md</code></a>.</p>
 </blockquote>
-<p>Complete reference for gt's twenty-eight skills and its seven modules. Written against <strong>gt v0.17.6</strong>
-(gt-wiki 0.2.3; gt-usage 0.1.3; gt-demo, gt-watch, gt-report-card, gt-farm and gt-flow 0.17.6 —
+<p>Complete reference for gt's twenty-eight skills and its seven modules. Written against <strong>gt v0.17.5</strong>
+(gt-wiki 0.2.3; gt-usage 0.1.3; gt-demo, gt-watch, gt-report-card, gt-farm and gt-flow 0.17.5 —
 those five are versioned with gt and move with every release, changed or not).</p>
 <hr />
 <h2 id="the-model">The model</h2>
@@ -2859,7 +2859,7 @@ lane split into the ladder's levels (memory → research/decisions/design → Kn
 global-memory → Core); an arrow joins the level an item left to the level it reached, so a
 promotion is an arrow climbing. It reads <code>Projects/golden-thread/events.jsonl</code> and never
 writes the vault.</p>
-<pre><code class="language-bash">FLOW=~/.claude/plugins/cache/golden-thread-plugin/gt-flow/0.17.6/scripts
+<pre><code class="language-bash">FLOW=~/.claude/plugins/cache/golden-thread-plugin/gt-flow/0.17.5/scripts
 python3 $FLOW/gt_flow.py render --vault &lt;vault&gt; [--out FILE|DIR] [--redact] \
     [--project &lt;slug&gt; ...] [--since YYYY-MM-DD] [--tasks]
 </code></pre>
@@ -2939,7 +2939,7 @@ answer is not obvious — including when the honest answer is that the fact belo
 project other than the one loaded.</p>
 <hr />
 <h2 id="script-reference">Script reference</h2>
-<pre><code class="language-bash">SCRIPTS=~/.claude/plugins/cache/golden-thread-plugin/gt/0.17.6/scripts
+<pre><code class="language-bash">SCRIPTS=~/.claude/plugins/cache/golden-thread-plugin/gt/0.17.5/scripts
 
 python3 $SCRIPTS/vault_init.py fresh --vault ~/my-vault --domain &quot;My Team&quot;
 
