@@ -3,8 +3,8 @@
 > **Reader:** a daily user — the deepest document, where the *why* lives
 > **Claims last checked against the code:** 2026-09-17 — see *The documents, and what belongs in each* in [`CLAUDE.md`](../CLAUDE.md).
 
-Complete reference for gt's twenty-eight skills and its seven modules. Written against **gt v0.17.3**
-(gt-wiki 0.2.3; gt-usage 0.1.3; gt-demo, gt-watch, gt-report-card, gt-farm and gt-flow 0.17.3 —
+Complete reference for gt's twenty-eight skills and its seven modules. Written against **gt v0.17.4**
+(gt-wiki 0.2.3; gt-usage 0.1.3; gt-demo, gt-watch, gt-report-card, gt-farm and gt-flow 0.17.4 —
 those five are versioned with gt and move with every release, changed or not).
 
 ---
@@ -2396,7 +2396,7 @@ promotion is an arrow climbing. It reads `Projects/golden-thread/events.jsonl` a
 writes the vault.
 
 ```bash
-FLOW=~/.claude/plugins/cache/golden-thread-plugin/gt-flow/0.17.3/scripts
+FLOW=~/.claude/plugins/cache/golden-thread-plugin/gt-flow/0.17.4/scripts
 python3 $FLOW/gt_flow.py render --vault <vault> [--out FILE|DIR] [--redact] \
     [--project <slug> ...] [--since YYYY-MM-DD] [--tasks]
 ```
@@ -2447,7 +2447,7 @@ project other than the one loaded.
 ## Script reference
 
 ```bash
-SCRIPTS=~/.claude/plugins/cache/golden-thread-plugin/gt/0.17.3/scripts
+SCRIPTS=~/.claude/plugins/cache/golden-thread-plugin/gt/0.17.4/scripts
 
 python3 $SCRIPTS/vault_init.py fresh --vault ~/my-vault --domain "My Team"
 

@@ -87,6 +87,18 @@ done
 [ $NMOD -gt 0 ] || ok "no modules ship in this release"
 
 step "manifest"
+# NO EMPTY DIRECTORY in a release (0.17.4). git does not track an empty directory, so one
+# exists on this machine and in nothing made through git: gt-src, the other repository, any
+# clone. packs/community shipped empty through 0.17.3, the registry treats its absence as a
+# fault, and every install made from gt-src failed while every install here passed.
+EMPTY_DIRS=""
+for i in "${!PDIRS[@]}"; do
+  d="${PDIRS[$i]}"
+  while IFS= read -r e; do EMPTY_DIRS="$EMPTY_DIRS $e"; done < <(find "$d" -type d -not -path '*/__pycache__*' -empty 2>/dev/null)
+done
+if [ -z "$EMPTY_DIRS" ]; then ok "no empty directory in any release (git would drop it)"
+else echo "  empty:$EMPTY_DIRS"; bad "empty directories in a release -- git drops them; ship a README in each"; fi
+
 # EVERY plugin ships a MANIFEST.json and it must match its tree. A plugin without one
 # fails (dev/plugins.py manifest-check exits 2): until 0.13.0 only gt had hash trust, and
 # gt-wiki shipped whatever sat on disk with nothing to compare it against.

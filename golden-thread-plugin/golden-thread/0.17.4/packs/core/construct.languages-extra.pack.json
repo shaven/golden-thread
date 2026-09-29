@@ -1,0 +1,55 @@
+{
+  "schema": 1,
+  "slot": "construct",
+  "name": "languages-extra",
+  "tier": "A",
+  "spdx": "MIT",
+  "provenance": {
+    "origin": "original",
+    "contributor": "Golden Thread <gt@example.com>",
+    "upstream": null
+  },
+  "dco": "Signed-off-by: Golden Thread <gt@example.com>",
+  "entries": [
+    {
+      "lang": "ruby",
+      "construct": "function",
+      "pattern": "^[ \\t]*def[ \\t]+([A-Za-z_][A-Za-z0-9_]{0,80})"
+    },
+    {
+      "lang": "ruby",
+      "construct": "class",
+      "pattern": "^[ \\t]*class[ \\t]+([A-Za-z_][A-Za-z0-9_]{0,80})"
+    },
+    {
+      "lang": "php",
+      "construct": "function",
+      "pattern": "function[ \\t]+([A-Za-z_][A-Za-z0-9_]{0,80})[ \\t]*\\("
+    },
+    {
+      "lang": "php",
+      "construct": "class",
+      "pattern": "^[ \\t]*(?:final[ \\t]+)?class[ \\t]+([A-Za-z_][A-Za-z0-9_]{0,80})"
+    },
+    {
+      "lang": "java",
+      "construct": "class",
+      "pattern": "^[ \\t]*(?:public[ \\t]+)?(?:final[ \\t]+)?class[ \\t]+([A-Za-z_][A-Za-z0-9_]{0,80})"
+    },
+    {
+      "lang": "java",
+      "construct": "type",
+      "pattern": "^[ \\t]*(?:public[ \\t]+)?interface[ \\t]+([A-Za-z_][A-Za-z0-9_]{0,80})"
+    },
+    {
+      "lang": "csharp",
+      "construct": "class",
+      "pattern": "^[ \\t]*(?:public[ \\t]+)?(?:sealed[ \\t]+)?class[ \\t]+([A-Za-z_][A-Za-z0-9_]{0,80})"
+    },
+    {
+      "lang": "csharp",
+      "construct": "type",
+      "pattern": "^[ \\t]*(?:public[ \\t]+)?interface[ \\t]+([A-Za-z_][A-Za-z0-9_]{0,80})"
+    }
+  ]
+}

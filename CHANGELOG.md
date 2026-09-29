@@ -11,6 +11,26 @@ release's own summary line, kept short rather than reconstructed after the fact.
 
 ---
 
+## gt 0.17.4 — 2026-09-29
+
+**An install from gt-src — or from any git clone — refused to load gt's definitions.** Found on
+the receiving machine the morning after 0.17.3 shipped.
+
+`packs/community/` shipped **empty**. git does not track an empty directory, so the directory
+existed on the publishing Mac and in nothing made through git: the publisher copies only tracked
+files, so gt-src lacked it, and so would any repository that committed gt-src. `gt_registry`
+treats a missing *release* pack directory as a fault, deliberately — renaming a release pack
+directory is how a definitions slot can be emptied in silence — so every install from gt-src
+failed while every install on the Mac, which reads its own working tree, passed. Neither the
+selftest nor the publisher's verification exercised the registry from the published tree.
+
+- `packs/community/README.md` now ships, so the directory survives git (the registry reads only
+  `*.pack.json`, so this changes nothing it loads).
+- The release gate fails on **any empty directory** in a release, with the reason, so the next
+  one cannot ship. Shown failing with the README removed.
+
+Nothing else changed; the five gt-versioned modules move to 0.17.4 with gt, content unchanged.
+
 ## gt 0.17.3 — 2026-09-28
 
 **A publishing release on top of 0.17.2, the same day.** Nothing a session does changes; what

@@ -1,0 +1,85 @@
+{
+  "schema": 1,
+  "slot": "naming",
+  "name": "conventions",
+  "tier": "A",
+  "spdx": "MIT",
+  "provenance": {
+    "origin": "original",
+    "contributor": "Golden Thread <noreply@example.com>",
+    "upstream": null
+  },
+  "dco": "Signed-off-by: Golden Thread <noreply@example.com>",
+  "entries": [
+    {
+      "lang": "python",
+      "construct": "function",
+      "style": "snake"
+    },
+    {
+      "lang": "python",
+      "construct": "class",
+      "style": "pascal"
+    },
+    {
+      "lang": "python",
+      "construct": "constant",
+      "style": "screaming_snake"
+    },
+    {
+      "lang": "javascript",
+      "construct": "function",
+      "style": "camel"
+    },
+    {
+      "lang": "javascript",
+      "construct": "class",
+      "style": "pascal"
+    },
+    {
+      "lang": "go",
+      "construct": "function",
+      "style": "pascal"
+    },
+    {
+      "lang": "rust",
+      "construct": "function",
+      "style": "snake"
+    },
+    {
+      "lang": "rust",
+      "construct": "type",
+      "style": "pascal"
+    },
+    {
+      "lang": "javascript",
+      "construct": "method",
+      "style": "camel"
+    },
+    {
+      "lang": "typescript",
+      "construct": "method",
+      "style": "camel"
+    },
+    {
+      "lang": "typescript",
+      "construct": "function",
+      "style": "camel"
+    },
+    {
+      "lang": "typescript",
+      "construct": "class",
+      "style": "pascal"
+    },
+    {
+      "lang": "typescript",
+      "construct": "type",
+      "style": "pascal"
+    },
+    {
+      "lang": "shell",
+      "construct": "function",
+      "style": "snake"
+    }
+  ]
+}

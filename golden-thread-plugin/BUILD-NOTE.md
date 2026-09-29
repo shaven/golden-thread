@@ -1,4 +1,4 @@
-# Build note — gt 0.17.3 (with 0.17.2 underneath)
+# Build note — gt 0.17.4 (0.17.3 and 0.17.2 underneath)
 
 **Read this first if you are the person taking this tree into the other repository.**
 
@@ -19,16 +19,24 @@ this tree was cut from.
 
 | Plugin | Version | Was |
 |---|---|---|
-| `gt` | **0.17.3** | 0.17.2 (released the same day; see §2) |
-| `gt-demo`, `gt-farm`, `gt-flow`, `gt-report-card`, `gt-watch` | **0.17.3** | 0.17.2 (content unchanged) |
+| `gt` | **0.17.4** | 0.17.3 |
+| `gt-demo`, `gt-farm`, `gt-flow`, `gt-report-card`, `gt-watch` | **0.17.4** | 0.17.3 (content unchanged) |
 | `gt-usage` | 0.1.3 | unchanged |
 | `gt-wiki` | 0.2.3 | unchanged |
 
-**The five gt-versioned modules moved with gt** (their `requires_gt` is now `>=0.17.3,<0.18.0`);
-their content is unchanged. gt-usage and gt-wiki keep their own version trains. Both 0.17.3 and
-0.17.2 are in the tree, deliberately, so `install.sh` can roll back. **0.17.3 changes only the
-publish (layout + checksums) and `/gt:gt-doctor`'s gt-src check**; everything in §2 below arrived
-in 0.17.2 and is unchanged in 0.17.3.
+> **Why 0.17.4 exists — read this if 0.17.3 would not install.** `packs/community/` shipped
+> EMPTY, and git does not keep an empty directory, so it was missing from gt-src and from any
+> repository that committed it. gt treats a missing release pack directory as tampering and
+> refuses to load its definitions. 0.17.4 ships `packs/community/README.md` so the directory
+> survives git, and the release gate now fails on any empty directory. Nothing else changed.
+> **If your repository committed 0.17.3, commit 0.17.4 over it** — the fix is a file, and only a
+> file survives the commit.
+
+**The five gt-versioned modules moved with gt** (their `requires_gt` is now `>=0.17.4,<0.18.0`);
+their content is unchanged. gt-usage and gt-wiki keep their own version trains. Both 0.17.4 and
+0.17.3 are in the tree, deliberately, so `install.sh` can roll back. 0.17.3 changed only the
+publish (layout + checksums) and `/gt:gt-doctor`'s gt-src check; everything in §2 below arrived
+in 0.17.2.
 
 gt now has **28 skills** (five new) and eleven core settings (three new: `surface`,
 `handoff_surface`, `task_surface`).
