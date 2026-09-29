@@ -1,0 +1,45 @@
+{
+  "schema": 1,
+  "slot": "encoding",
+  "name": "languages-extra",
+  "tier": "A",
+  "spdx": "MIT",
+  "provenance": {
+    "origin": "original",
+    "contributor": "Golden Thread <gt@example.com>",
+    "upstream": null
+  },
+  "dco": "Signed-off-by: Golden Thread <gt@example.com>",
+  "entries": [
+    {
+      "lang": "ruby",
+      "charset": "utf-8",
+      "eol": "lf",
+      "bom": "never"
+    },
+    {
+      "lang": "php",
+      "charset": "utf-8",
+      "eol": "lf",
+      "bom": "never"
+    },
+    {
+      "lang": "java",
+      "charset": "utf-8",
+      "eol": "lf",
+      "bom": "never"
+    },
+    {
+      "lang": "csharp",
+      "charset": "utf-8",
+      "eol": "lf",
+      "bom": "never"
+    },
+    {
+      "lang": "sql",
+      "charset": "utf-8",
+      "eol": "lf",
+      "bom": "never"
+    }
+  ]
+}

@@ -1,4 +1,4 @@
-# Build note — gt 0.17.5
+# Build note — gt 0.17.7
 
 **Read this first if you are the person taking this tree into the other repository.**
 
@@ -19,10 +19,17 @@ this tree was cut from.
 
 | Plugin | Version | Was |
 |---|---|---|
-| `gt` | **0.17.5** | 0.17.4 |
-| `gt-demo`, `gt-farm`, `gt-flow`, `gt-report-card`, `gt-watch` | **0.17.5** | 0.17.4 (content unchanged) |
+| `gt` | **0.17.7** | 0.17.5 (0.17.6 withdrawn) |
+| `gt-demo`, `gt-farm`, `gt-flow`, `gt-report-card`, `gt-watch` | **0.17.7** | 0.17.5 (content unchanged) |
+| `gt-visualize` | **0.1.0** | new module |
 | `gt-usage` | 0.1.3 | unchanged |
 | `gt-wiki` | 0.2.3 | unchanged |
+
+> **Why 0.17.7 exists — the installer went silent (2026-09-29).** (Released first as 0.17.6 that morning, withdrawn after 22 minutes, and re-cut here as 0.17.7 so a machine that installed the withdrawn 0.17.6 is not left holding a different release with the same number.) An install over a 0.9.4 vault
+> printed nothing while it backed the vault up and applied its upgrades, and was stopped twice as
+> hung. Every slow step now announces itself before it starts and reports its time; the vault
+> upgrade prints `[k/N]` per step; any step quiet for 15s prints `...still <doing X> (45s)`. **If an
+> install seems to stall, it is now telling you what it is doing — let it run.**
 
 > **Why 0.17.5 exists — the two requests from this machine's first install (2026-09-29).**
 > (1) The SessionStart component check reported `badpath` and `no-manifest`: it is registered with
@@ -41,9 +48,9 @@ this tree was cut from.
 > **If your repository committed 0.17.3, commit 0.17.4 over it** — the fix is a file, and only a
 > file survives the commit.
 
-**The five gt-versioned modules moved with gt** (their `requires_gt` is now `>=0.17.5,<0.18.0`);
-their content is unchanged. gt-usage and gt-wiki keep their own version trains. Both 0.17.5 and
-0.17.4 are in the tree, deliberately, so `install.sh` can roll back. 0.17.3 changed only the
+**The five gt-versioned modules moved with gt** (their `requires_gt` is now `>=0.17.7,<0.18.0`);
+their content is unchanged. gt-usage and gt-wiki keep their own version trains; gt-visualize starts its own at 0.1.0. 0.17.6 and
+0.17.5 are in the tree, deliberately, so `install.sh` can roll back. 0.17.3 changed only the
 publish (layout + checksums) and `/gt:gt-doctor`'s gt-src check; everything in §2 below arrived
 in 0.17.2.
 

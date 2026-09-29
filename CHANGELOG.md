@@ -11,7 +11,33 @@ release's own summary line, kept short rather than reconstructed after the fact.
 
 ---
 
-## gt-visualize 0.1.0 — unreleased
+## gt 0.17.7 — 2026-09-29
+
+Two things: the installer reports what it is doing, and a new module, **gt-visualize 0.1.0**. The installer work was first released this morning as 0.17.6 and withdrawn after 22 minutes; it ships here under a new number so no machine that installed the withdrawn 0.17.6 holds a different release of the same name.
+
+### The installer is never silent
+
+An install of 0.17.5 over a vault last installed at 0.9.4 sat
+with no output while it worked — backing the vault up, then applying a long chain of upgrades — and
+was stopped twice as hung. The owner's rule: *"not overly verbose, but no feedback is not
+acceptable for an install."*
+
+- **Every slow step announces itself before it starts** and reports how long it took: the checksum
+  pass ("verifying 532 published files…"), the pre-write vault backup, the vault tool refresh, the
+  upgrade check, the upgrade itself.
+- **The vault upgrade counts.** It knows how many steps it will apply, so it says so up front and
+  prints `[k/N]` as each starts, with its time when it ends; the backup it takes first names the
+  file count and size.
+- **A heartbeat for quiet steps:** any step silent for 15s prints `...still <what> (Ns)`.
+- **Streamed, not captured:** the upgrade's output reaches the screen as it happens; before, the
+  installer collected it and printed it only when everything was done.
+- **The checksum runs after the installer's first line,** not before it: in 0.17.5 it hashed every
+  file before saying anything, which on a cloud-synced gt-src first downloads every file.
+
+A test asserts the announcements appear, in order, before the work they describe, and that each
+step reports its time.
+
+### gt-visualize 0.1.0 — a codebase in 3D
 
 **A new module: a codebase in 3D.** `/gt-visualize:gt-visualize` has two modes. **explain**
 renders a scroll-driven walkthrough of how a system's parts work together: a narrative column
@@ -27,6 +53,7 @@ and pinned by hash; a bundle that does not match is refused rather than inlined.
 feature request `2026-09-29-gt-visualize-3d-codebase-view`.
 
 ---
+
 
 ## gt 0.17.5 — 2026-09-29
 

@@ -3,8 +3,8 @@
   "name": "visualize",
   "plugin": "gt-visualize",
   "version": "0.1.0",
-  "requires_gt": ">=0.17.5,<0.18.0",
-  "summary": "Code city: render a repository as an interactive 3D city -- directories as districts, files as buildings -- one offline HTML file drawn with three.js",
+  "requires_gt": ">=0.17.7,<0.18.0",
+  "summary": "A codebase in 3D: a scroll-driven walkthrough of how its parts work together (explain), or a code city of its files (render) -- one offline HTML file drawn with three.js",
   "default": "on",
   "skills": [
     "gt-visualize"
