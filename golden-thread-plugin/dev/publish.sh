@@ -39,6 +39,7 @@ STEPS=(
   "committed|the tree is committed, so what is published equals a commit|git diff --quiet HEAD --"
   "tested-is-committed|the working tree the tests ran on IS the commit: no empty directory git drops, no untracked file that was tested (git status cannot see either)|python3 dev/tree_is_commit.py --published"
   "pushed|the commit exists on the remote others read|git_pushed"
+  "released|tag v<version> on the remote and a GitHub Release for it, so the repo's 'Latest' is this release|check_released"
   "gt-src|the shared working copy holds this release, verified by selftest|dev/sync-gt-src.sh {dry}"
   "announced|a Discussion names this version (warn only — needs gh)|check_announced"
   "logged|the vault records the publish|log_to_vault {dry}"
@@ -53,6 +54,26 @@ git_pushed() {
   remote=$(git rev-parse "@{u}" 2>/dev/null) || { echo "    no upstream branch"; return 1; }
   [ "$head" = "$remote" ] || {
     echo "    HEAD $head is not the upstream commit $remote — push first"; return 1; }
+}
+
+check_released() {
+  # Found 2026-09-29: GitHub showed 0.16.1 as the latest release while 0.17.4 had shipped --
+  # eight releases were published everywhere except as tags and Releases, because nothing
+  # required it. The tag must exist on the remote AND point at HEAD's release commit or an
+  # ancestor of HEAD; the Release is checked with gh when gh can answer, and said when it cannot.
+  local tag="v$GTV"
+  git ls-remote --exit-code --tags origin "refs/tags/$tag" >/dev/null 2>&1 || {
+    echo "    no tag $tag on origin -- git tag -a $tag <release commit> -m 'gt $GTV' && git push origin $tag"
+    return 1; }
+  git merge-base --is-ancestor "$tag" HEAD 2>/dev/null || {
+    echo "    tag $tag is not in HEAD's history"; return 1; }
+  if command -v gh >/dev/null 2>&1; then
+    gh release view "$tag" >/dev/null 2>&1 || {
+      echo "    tag $tag has no GitHub Release -- gh release create $tag --latest --notes-file <CHANGELOG section>"
+      return 1; }
+  else
+    echo "    gh not installed: the GitHub Release for $tag was NOT checked"
+  fi
 }
 
 github_repo() {

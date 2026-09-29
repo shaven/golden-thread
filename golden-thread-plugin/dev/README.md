@@ -99,6 +99,7 @@ dev/publish.sh             # publish
 | `committed` | the tree is committed, so what is published equals a commit |
 | `tested-is-committed` | the working tree the tests ran on **is** the commit: `dev/tree_is_commit.py --published` walks the real directories and files and fails on any directory with no committed file (git drops it) or untracked file that was tested. `git status` sees neither — 0.16.0–0.17.3 were tested with an empty `packs/community/` and shipped without it (2026-09-29) |
 | `pushed` | the commit exists on the remote others read |
+| `released` | tag `v<version>` is on the remote, in HEAD's history, and has a GitHub Release — so the repo's *Latest* is this release (0.16.2–0.17.4 shipped untagged; GitHub showed 0.16.1 as latest until 2026-09-29) |
 | `gt-src` | the shared working copy holds this release, verified by selftest |
 | `announced` | a Discussion names this version (warn only — needs `gh`) |
 | `logged` | the vault records the publish |
