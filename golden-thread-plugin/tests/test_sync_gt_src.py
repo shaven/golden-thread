@@ -27,6 +27,7 @@ class SyncGtSrcTest(Sandbox):
         shutil.copy(SYNC, r / "dev" / "sync-gt-src.sh")
         shutil.copy(SCRUB, r / "dev" / "scrub_check.py")
         shutil.copy(PLUGINS, r / "dev" / "plugins.py")
+        shutil.copy(REPO / "dev" / "tree_is_commit.py", r / "dev" / "tree_is_commit.py")
         # A third plugin proves the sync iterates over what is discovered, not a named pair.
         for plugin, name, versions in (("golden-thread", "gt", ("0.9.8", "0.9.9", "0.10.0")),
                                        ("golden-thread-wiki", "gt-wiki", ("0.1.0", "0.1.1", "0.1.2")),
@@ -109,6 +110,20 @@ class SyncGtSrcTest(Sandbox):
         bad = subprocess.run(["shasum", "-a", "256", "-c", "--quiet", "SHA256SUMS"],
                              cwd=self.dest, capture_output=True, text=True)
         self.assertNotEqual(bad.returncode, 0)
+
+    def test_refuses_an_empty_directory_in_the_newest_release(self):
+        """0.16.0-0.17.3: packs/community was empty, so git dropped it; tested here, absent there."""
+        (self.repo / "golden-thread" / "0.10.0" / "packs" / "community").mkdir(parents=True)
+        proc = self.sync()
+        self.assertEqual(proc.returncode, 2, proc.stdout)
+        self.assertIn("packs/community/", proc.stdout)
+        self.assertIn("not the commit being published", proc.stdout)
+
+    def test_an_empty_directory_in_the_previous_release_only_warns(self):
+        (self.repo / "golden-thread" / "0.9.9" / "packs" / "community").mkdir(parents=True)
+        proc = self.sync()
+        self.assertOk(proc)
+        self.assertIn("WARNING (already released", proc.stdout)
 
     def test_refuses_dirty_tree(self):
         (self.repo / "MANUAL.md").write_text("# edited\n")

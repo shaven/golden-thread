@@ -37,6 +37,7 @@ done
 STEPS=(
   "gate|every release check passes, tests and selftest included|dev/release-check.sh"
   "committed|the tree is committed, so what is published equals a commit|git diff --quiet HEAD --"
+  "tested-is-committed|the working tree the tests ran on IS the commit: no empty directory git drops, no untracked file that was tested (git status cannot see either)|python3 dev/tree_is_commit.py --published"
   "pushed|the commit exists on the remote others read|git_pushed"
   "gt-src|the shared working copy holds this release, verified by selftest|dev/sync-gt-src.sh {dry}"
   "announced|a Discussion names this version (warn only — needs gh)|check_announced"

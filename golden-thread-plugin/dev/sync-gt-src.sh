@@ -65,6 +65,17 @@ for i in "${!PDIRS[@]}"; do
   KEEP+=("$("$PY" dev/plugins.py releases "${PDIRS[$i]}" 2 | tr '\n' ' ')")
 done
 
+# THE TESTED TREE MUST BE THE COMMITTED TREE (2026-09-29). `git status` cannot see an empty
+# directory, so it called the tree clean while packs/community -- empty -- existed only here:
+# 0.16.0 through 0.17.3 were tested WITH it and shipped WITHOUT it. Compare directly. The newest
+# release and everything outside release dirs must match; the previous release is already
+# released, so a difference there is a warning; older releases never publish.
+echo "== the tested tree is the committed tree"
+if ! "$PY" dev/tree_is_commit.py "$ROOT" --published; then
+  echo "REFUSED: the working tree the tests ran on is not the commit being published."
+  exit 2
+fi
+
 STAGE=$(mktemp -d); VCOPY=""; trap 'rm -rf "$STAGE" "$VCOPY"' EXIT
 git -C "$ROOT" ls-files -z | while IFS= read -r -d '' f; do  # the WHOLE repo, root-relative
   for i in "${!PDIRS[@]}"; do                                 # older releases stay home
@@ -186,6 +197,14 @@ else
   vbad "no golden-thread release in the published tree"
 fi
 while IFS= read -r f; do bash -n "$f" 2>/dev/null || vbad "bash -n $f"; done < <(find "$DEST" -name '*.sh')
+# The published copy must LOAD its definitions, not merely hold its files (2026-09-29): gt-src
+# lacked packs/community and every file-level check passed, because each compared against a
+# commit that lacked it too. Ask the published release's own registry for its pack directories.
+if [ -n "$GTV" ]; then
+  REG_OUT=$("$PY" -c "import sys; sys.path.insert(0, sys.argv[1]); import gt_registry as r; bad=[(t,d,f) for t,d,f in r.pack_dirs() if t!='local' and f]; [print('%s %s %s' % b) for b in bad]; sys.exit(1 if bad else 0)" "$DEST/${PREFIX}golden-thread/$GTV/scripts" 2>&1) \
+    && vok "the published release finds every pack directory it ships (community, core)" \
+    || { printf '%s\n' "$REG_OUT" | sed 's/^/    /'; vbad "the published release cannot load its pack directories"; }
+fi
 VCOPY=$(mktemp -d); cp -Rp "$DEST/." "$VCOPY/"
 if OUT=$(cd "$VCOPY/$PREFIX" && ./selftest.sh 2>&1); then vok "$(echo "$OUT" | tail -1) — run from a copy of gt-src"; else echo "$OUT" | grep FAIL | head || true; vbad "selftest.sh from gt-src"; fi
 rm -rf "$VCOPY"

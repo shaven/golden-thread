@@ -34,7 +34,8 @@ shipped broken while everything looked fine.
 | modules | `plugins.py module-check` | a module whose `module.json` is invalid (unknown key, a listed file missing, a hook claiming a Core-rule enforcement script, a version mismatch) or whose `requires_gt` does not admit the gt being released |
 | wiring coverage | `check_wiring_coverage.py` | a shipped hook, script, skill, tool or Core rule that does not reach its destination in a real install |
 | docs | *(inline)* + `build-docs.py` | a skill, vault tool, setting or `dev/` script documented nowhere; HTML drifted from its `.md`; a PDF older than its source; docs that never name the current version |
-| scrub | `scrub_check.py` | an employer or machine-specific string in anything shipped |
+| scrub | `tree_is_commit.py` | the tested tree equals the committed tree — run by `publish.sh` and `sync-gt-src.sh`; `--published` scopes it exactly as publishing does |
+| `scrub_check.py` | an employer or machine-specific string in anything shipped |
 | tests | `../tests/run.sh` | a failing test |
 | selftest | `../selftest.sh` | an install that does not work from cold |
 
@@ -96,6 +97,7 @@ dev/publish.sh             # publish
 |---|---|
 | `gate` | every release check passes, tests and selftest included |
 | `committed` | the tree is committed, so what is published equals a commit |
+| `tested-is-committed` | the working tree the tests ran on **is** the commit: `dev/tree_is_commit.py --published` walks the real directories and files and fails on any directory with no committed file (git drops it) or untracked file that was tested. `git status` sees neither — 0.16.0–0.17.3 were tested with an empty `packs/community/` and shipped without it (2026-09-29) |
 | `pushed` | the commit exists on the remote others read |
 | `gt-src` | the shared working copy holds this release, verified by selftest |
 | `announced` | a Discussion names this version (warn only — needs `gh`) |

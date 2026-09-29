@@ -31,6 +31,17 @@ selftest nor the publisher's verification exercised the registry from the publis
 
 Nothing else changed; the five gt-versioned modules move to 0.17.4 with gt, content unchanged.
 
+**And the check that would have caught it is now a requirement for checking in** (owner). The
+publisher's only working-tree check was "git status is clean" — and git status cannot see an
+empty directory. `dev/tree_is_commit.py` walks the real directories and files and fails on any
+directory with no committed file or any untracked file that was tested. It is a `dev/publish.sh`
+requirement (`tested-is-committed`, right after `committed`) and runs inside
+`dev/sync-gt-src.sh` before anything is published. On its first run it found the same empty
+directory in every release since 0.16.0 — including 0.17.3, the rollback copy, which is reported
+as a warning because a released tree cannot be changed. After publishing, the verification now
+also asks the published release's own registry to find its pack directories, so "gt-src verified"
+means the definitions load, not only that the files arrived.
+
 ## gt 0.17.3 — 2026-09-28
 
 **A publishing release on top of 0.17.2, the same day.** Nothing a session does changes; what
