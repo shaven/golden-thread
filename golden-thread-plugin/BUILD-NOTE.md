@@ -1,4 +1,4 @@
-# Build note — gt 0.17.4 (0.17.3 and 0.17.2 underneath)
+# Build note — gt 0.17.5
 
 **Read this first if you are the person taking this tree into the other repository.**
 
@@ -19,10 +19,19 @@ this tree was cut from.
 
 | Plugin | Version | Was |
 |---|---|---|
-| `gt` | **0.17.4** | 0.17.3 |
-| `gt-demo`, `gt-farm`, `gt-flow`, `gt-report-card`, `gt-watch` | **0.17.4** | 0.17.3 (content unchanged) |
+| `gt` | **0.17.5** | 0.17.4 |
+| `gt-demo`, `gt-farm`, `gt-flow`, `gt-report-card`, `gt-watch` | **0.17.5** | 0.17.4 (content unchanged) |
 | `gt-usage` | 0.1.3 | unchanged |
 | `gt-wiki` | 0.2.3 | unchanged |
+
+> **Why 0.17.5 exists — the two requests from this machine's first install (2026-09-29).**
+> (1) The SessionStart component check reported `badpath` and `no-manifest`: it is registered with
+> the path of the plugin source install.sh ran from, and that source had moved. It now checks the
+> INSTALLED copy of the same release and tells you to re-run `install.sh` from where the source now
+> lives, which re-points the hook. (2) A vault write with no registered session now warns at once,
+> naming the file and the `gt_session.py register` command; `gt_session.py release` prints the same
+> reminder. **After installing 0.17.5, re-run install.sh from the new location once** so the hook
+> points at a path that exists.
 
 > **Why 0.17.4 exists — read this if 0.17.3 would not install.** `packs/community/` shipped
 > EMPTY, and git does not keep an empty directory, so it was missing from gt-src and from any
@@ -32,9 +41,9 @@ this tree was cut from.
 > **If your repository committed 0.17.3, commit 0.17.4 over it** — the fix is a file, and only a
 > file survives the commit.
 
-**The five gt-versioned modules moved with gt** (their `requires_gt` is now `>=0.17.4,<0.18.0`);
-their content is unchanged. gt-usage and gt-wiki keep their own version trains. Both 0.17.4 and
-0.17.3 are in the tree, deliberately, so `install.sh` can roll back. 0.17.3 changed only the
+**The five gt-versioned modules moved with gt** (their `requires_gt` is now `>=0.17.5,<0.18.0`);
+their content is unchanged. gt-usage and gt-wiki keep their own version trains. Both 0.17.5 and
+0.17.4 are in the tree, deliberately, so `install.sh` can roll back. 0.17.3 changed only the
 publish (layout + checksums) and `/gt:gt-doctor`'s gt-src check; everything in §2 below arrived
 in 0.17.2.
 

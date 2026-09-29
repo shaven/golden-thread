@@ -1,0 +1,55 @@
+{
+  "schema": 1,
+  "slot": "naming",
+  "name": "languages-extra",
+  "tier": "A",
+  "spdx": "MIT",
+  "provenance": {
+    "origin": "original",
+    "contributor": "Golden Thread <gt@example.com>",
+    "upstream": null
+  },
+  "dco": "Signed-off-by: Golden Thread <gt@example.com>",
+  "entries": [
+    {
+      "lang": "ruby",
+      "construct": "function",
+      "style": "snake"
+    },
+    {
+      "lang": "ruby",
+      "construct": "class",
+      "style": "pascal"
+    },
+    {
+      "lang": "php",
+      "construct": "function",
+      "style": "camel"
+    },
+    {
+      "lang": "php",
+      "construct": "class",
+      "style": "pascal"
+    },
+    {
+      "lang": "java",
+      "construct": "class",
+      "style": "pascal"
+    },
+    {
+      "lang": "java",
+      "construct": "type",
+      "style": "pascal"
+    },
+    {
+      "lang": "csharp",
+      "construct": "class",
+      "style": "pascal"
+    },
+    {
+      "lang": "csharp",
+      "construct": "type",
+      "style": "pascal"
+    }
+  ]
+}

@@ -1,12 +1,16 @@
 # Golden Thread Plugin
 
 > **Reader:** someone who has installed it and wants the reference
-> **Claims last checked against the code:** 2026-09-29 (gt 0.17.4) — see *The documents, and what belongs in each* in [`CLAUDE.md`](../CLAUDE.md).
+> **Claims last checked against the code:** 2026-09-29 (gt 0.17.5) — see *The documents, and what belongs in each* in [`CLAUDE.md`](../CLAUDE.md).
 
 A Claude Code plugin that turns an Obsidian vault into the single source of truth for all AI memory across every project and every session.
 
 
 > [!IMPORTANT]
+> **0.17.5** fixes two things the first real install from gt-src hit: the component check now falls
+> back to the installed copy (and says so) when the plugin source has moved, and a vault write with no
+> registered session is warned about at the moment it happens.
+>
 > **0.17.4** fixes an install from gt-src or any git clone: `packs/community/` shipped empty, git
 > dropped it, and gt refused to load its definitions. It now ships a README, and the release gate
 > refuses any empty directory.
@@ -529,7 +533,7 @@ Python scripts can also be run directly from the command line. One variable, so 
 bump does not strand eight copied paths — from the release tree, or from the install:
 
 ```bash
-GT=golden-thread/0.17.4/scripts
+GT=golden-thread/0.17.5/scripts
 # installed instead:  GT=$(ls -d ~/.claude/plugins/cache/golden-thread-plugin/gt/*/scripts | sort -V | tail -1)
 
 # Create a new vault

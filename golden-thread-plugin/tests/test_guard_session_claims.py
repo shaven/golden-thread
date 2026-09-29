@@ -117,6 +117,21 @@ class GuardTest(GuardTestBase):
         p.wait()
         return p.pid
 
+    # -- no registration (request 2026-09-29) --------------------------------------------
+    def test_an_unregistered_session_is_warned_and_not_blocked(self):
+        hso = self.guard(self.target, env={"CLAUDE_SESSION_ID": "me"})
+        self.assertAllow(hso)
+        self.assertIn("NOT registered", hso.get("additionalContext", ""))
+        self.assertIn("Projects/alpha/research.md", hso["additionalContext"])
+        self.assertIn("gt_session.py", hso["additionalContext"])
+
+    def test_a_registered_session_hears_nothing(self):
+        self.session(sid="me", claims=())
+        self.assertEqual(self.guard(self.target, env={"CLAUDE_SESSION_ID": "me"}), {})
+
+    def test_an_unknown_session_id_is_not_called_unregistered(self):
+        self.assertEqual(self.guard(self.target), {}, "cannot tell must not read as unregistered")
+
     # -- deny -------------------------------------------------------------------------
     def test_live_pid_on_this_host_denies(self):
         self.session(host=HOST, pid=os.getpid())         # this test process is alive

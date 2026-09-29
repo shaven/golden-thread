@@ -359,6 +359,28 @@ class Check(ComponentsBase):
         self.assertIn(str(old), out)
 
 
+class SourceMoved(ComponentsBase):
+    """Request 2026-09-29: the hook is registered with the source path install.sh ran from;
+    when that tree moved (gt-src's layout change) the check said `badpath` + `no-manifest` and
+    checked nothing. It must fall back to the installed copy and say what happened."""
+
+    def test_a_moved_source_is_checked_against_the_installed_copy(self):
+        self.full_setup()
+        cache = self.home / ".claude" / "plugins" / "cache" / "golden-thread-plugin" / "gt" / "1.2.3"
+        shutil.copytree(self.vdir, cache)
+        self.vdir.rename(self.vdir.parent / "moved-away")
+        out = self.check()
+        self.assertIn("is gone", out)
+        self.assertIn("INSTALLED copy", out)
+        self.assertIn("re-run install.sh", out)
+        self.assertNotIn("no-manifest", out)
+
+    def test_with_no_installed_copy_either_it_still_says_no_manifest(self):
+        self.full_setup()
+        self.vdir.rename(self.vdir.parent / "moved-away")
+        self.assertIn("no-manifest", self.check())
+
+
 class DuplicateDestinations(Sandbox):
     """Two shipped files must never install to the same path.
 

@@ -11,6 +11,29 @@ release's own summary line, kept short rather than reconstructed after the fact.
 
 ---
 
+## gt 0.17.5 — 2026-09-29
+
+**Two fixes requested by the receiving machine after its first install from gt-src.**
+
+### The component check survives a moved plugin source
+
+The SessionStart component check is registered with the path of the source tree `install.sh`
+ran from. When that tree moved — gt-src took the repository's layout in 0.17.3, so everything
+went one level down — the check reported `badpath` and `no-manifest`: it checked nothing, and
+said so only obliquely. It now falls back to the **installed** copy of the same release in the
+plugin cache, which carries the same `MANIFEST.json`, compares against that, and says plainly
+that the source is gone and that re-running `install.sh` from its new location re-points the
+hook. With no installed copy either, it still reports `no-manifest` — nothing is guessed.
+
+### An unregistered vault write is warned about when it happens
+
+After `gt_session.py release`, or in a session that never registered, vault writes were
+unattributed and unprotected, and the first anyone heard of it was the report card at session
+end. The claims guard now emits a warning on such a write — naming the file and the
+`gt_session.py register` command — without blocking it (the write still lands and is still
+recorded as unattributed). A session whose id cannot be determined is not called unregistered.
+`gt_session.py release` now prints the same reminder.
+
 ## gt 0.17.4 — 2026-09-29
 
 **An install from gt-src — or from any git clone — refused to load gt's definitions.** Found on

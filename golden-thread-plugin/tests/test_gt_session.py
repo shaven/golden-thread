@@ -261,6 +261,14 @@ class GtSessionTest(SessionTools):
         self.assertIn("STALE", chk.stdout)
 
     # -- release -------------------------------------------------------------
+    def test_release_says_the_session_must_register_again(self):
+        """Request 2026-09-29: writes after a release were unattributed and nothing said so."""
+        self.assertOk(self.gs("sessA", "register"))
+        rel = self.gs("sessA", "release")
+        self.assertOk(rel)
+        self.assertIn("no longer registered", rel.stdout)
+        self.assertIn("register", rel.stdout.split("no longer registered", 1)[1])
+
     def test_release_deletes_the_file_and_frees_claims(self):
         self.assertOk(self.gs("sessA", "register", "--files", "notes.md"))
         self.assertOk(self.gs("sessB", "register"))
