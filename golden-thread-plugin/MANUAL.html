@@ -615,6 +615,12 @@ the same marketplace, versioned with gt, each declared by a <code>module.json</c
 <td><code>/gt-flow:gt-flow</code>, the flow view of the event stream</td>
 </tr>
 <tr>
+<td><code>visualize</code></td>
+<td><code>gt-visualize</code></td>
+<td>on</td>
+<td><code>/gt-visualize:gt-visualize</code>, a repository as a 3D code city</td>
+</tr>
+<tr>
 <td><code>usage</code></td>
 <td><code>gt-usage</code></td>
 <td>on</td>
@@ -2877,6 +2883,36 @@ python3 $FLOW/gt_flow.py render --vault &lt;vault&gt; [--out FILE|DIR] [--redact
 <p>Exit codes: <code>0</code> written · <code>1</code> bad arguments, an invalid event file or an unknown schema
 version · <code>2</code> no events yet (run <code>gt_events.py backfill --dry-run</code> to see what history
 would be recovered) · <code>3</code> the filters matched nothing.</p>
+<h3 id="gt-visualizegt-visualize"><code>/gt-visualize:gt-visualize</code></h3>
+<p><em>Module <code>visualize</code> (plugin <code>gt-visualize</code>), new in gt-visualize 0.1.0, installed by default.</em></p>
+<p>Draws a <strong>repository</strong> as an interactive 3D code city, in <strong>one self-contained HTML file</strong>
+that opens offline — three.js is inlined, nothing is fetched. Directories are districts,
+nested so a directory's plot sits on its parent's; files are buildings. Height is lines,
+footprint is size (log scale), colour is language — from gt's own <code>filetype</code> definitions,
+the ones <code>gt-scan</code> uses — or, toggled in the page, how often the file changed in the last
+<code>--since</code> days. Drag to orbit, scroll to zoom, hover for a file's details, click a
+district to fly to it, search to highlight paths. (For how <em>knowledge</em> moved through the
+vault, see <code>/gt-flow:gt-flow</code>.)</p>
+<pre><code class="language-bash">VIS=$(ls -d ~/.claude/plugins/cache/golden-thread-plugin/gt-visualize/*/scripts | sort -V | tail -1)
+python3 $VIS/gt_visualize.py render [PATH] [--out FILE|DIR] [--redact] [--since DAYS] \
+    [--no-churn] [--exclude GLOB ...] [--max-files N]
+</code></pre>
+<ul>
+<li>Inside a git work tree the file list is <code>git ls-files --cached --others --exclude-standard</code>,
+  so <code>.gitignore</code> is honoured; outside one the directory is walked (skipping <code>.git/</code>) and
+  churn is off — the output line says so.</li>
+<li><strong><code>--redact</code> before the page leaves your own screen.</strong> Every file and directory name
+  becomes a salted hash, keeping the tree's shape and short extensions; if the redaction
+  self-check finds a surviving name, nothing is written.</li>
+<li>Above <code>--max-files</code> (default 20,000) the deepest directories collapse into single
+  buildings, and the output line says at which depth.</li>
+<li>Without <code>--out</code> the file lands in the current directory (a temp directory when that is
+  inside the vault). An <code>--out</code> inside the vault is <strong>refused</strong>.</li>
+<li>The three.js bundle is pinned by hash (<code>scripts/vendor/VENDOR.json</code>); a bundle that does
+  not match is refused, never inlined.</li>
+</ul>
+<p>Exit codes: <code>0</code> written · <code>1</code> bad arguments, an unreadable path, a refused <code>--out</code> or a
+bundle that fails its hash · <code>3</code> nothing to draw.</p>
 <hr />
 <h2 id="where-does-this-fact-go">Where does this fact go?</h2>
 <table>

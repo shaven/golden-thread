@@ -11,6 +11,19 @@ release's own summary line, kept short rather than reconstructed after the fact.
 
 ---
 
+## gt-visualize 0.1.0 — unreleased
+
+**A new module: a repository drawn as a 3D code city.** `/gt-visualize:gt-visualize`
+renders any source tree as one offline HTML file with three.js inlined — directories as
+districts, files as buildings, height by lines, footprint by size, colour by language (gt's
+`filetype` definitions) or by git churn. Orbit, hover, click to focus, search.
+`--redact` hashes every name before sharing, and an `--out` inside the vault is refused.
+The three.js bundle (r186.1, MIT) is built by esbuild with only the classes the page uses
+and pinned by hash; a bundle that does not match is refused rather than inlined. Filed as
+feature request `2026-09-29-gt-visualize-3d-codebase-view`.
+
+---
+
 ## gt 0.17.5 — 2026-09-29
 
 **Two fixes requested by the receiving machine after its first install from gt-src.**

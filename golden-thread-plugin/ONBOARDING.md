@@ -37,6 +37,7 @@ plus each optional **module** that is on:
 - **`gt-watch`** — follow git repos you depend on (`/gt-watch:gt-watch`)
 - **`gt-report-card`** — the session report card at `/compact`
 - **`gt-flow`** — a picture of how your knowledge moved (`/gt-flow:gt-flow`)
+- **`gt-visualize`** — a 3D picture of a codebase (`/gt-visualize:gt-visualize`)
 - **`gt-farm`** — work packets for an external AI; **off** unless you add it with
   `bash install.sh --with farm` (or had `/gt:gt-farm` before upgrading)
 
@@ -205,6 +206,7 @@ they just stop outranking live work.
 # from modules
 /gt-watch:gt-watch         ← watch a git repo you depend on; a security fix upstream opens your next session as a P0
 /gt-flow:gt-flow           ← draw how knowledge climbed the ladder, one offline HTML file (--redact before sharing)
+/gt-visualize:gt-visualize ← draw a repository as a 3D code city, one offline HTML file (--redact before sharing)
 /gt-farm:gt-farm           ← route bulk or mechanical tasks to an external AI service as a work packet (farm module, off by default)
 /gt-demo:gt-demo           ← guided tour in a throwaway demo vault, nine acts plus one per module: start / tour / end / clean / remove
 ```

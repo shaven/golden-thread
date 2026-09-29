@@ -79,6 +79,7 @@ beside gt and is versioned with it. 0.15.0 ships six:
 | `watch` | `gt-watch` | on | `/gt-watch:gt-watch` and its session-start report; fetches nothing until the `watch` setting is `report` |
 | `report-card` | `gt-report-card` | on | the session report card and close-out question (three hooks, no command) |
 | `flow` | `gt-flow` | on | `/gt-flow:gt-flow`, an offline HTML timeline of knowledge moving up the ladder |
+| `visualize` | `gt-visualize` | on | `/gt-visualize:gt-visualize`, a repository as an offline 3D code city (three.js inlined) |
 | `farm` | `gt-farm` | **off** | `/gt-farm:gt-farm`, work packets for an external AI service |
 
 `farm` is off for a fresh install. A machine upgrading from a gt that shipped `/gt:gt-farm`

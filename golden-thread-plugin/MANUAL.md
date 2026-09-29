@@ -473,6 +473,7 @@ the same marketplace, versioned with gt, each declared by a `module.json`. Seven
 | `report-card` | `gt-report-card` | on | the session report card: three hooks (PreCompact, SessionEnd — which declares `"timeout": 15` since 0.16.2 — and SessionStart) and the `report_card` and `closeout_check` settings; no command |
 | `farm` | `gt-farm` | **off** for a fresh install | `/gt-farm:gt-farm`, work packets for an external AI (was `/gt:gt-farm`) |
 | `flow` | `gt-flow` | on | `/gt-flow:gt-flow`, the flow view of the event stream |
+| `visualize` | `gt-visualize` | on | `/gt-visualize:gt-visualize`, a repository as a 3D code city |
 | `usage` | `gt-usage` | on | `/gt-usage:gt-usage`, the plan-allowance meter: a session-start hook, an optional status line, and the `usage_meter` and `usage_alert` settings |
 
 ```bash
@@ -2414,6 +2415,41 @@ python3 $FLOW/gt_flow.py render --vault <vault> [--out FILE|DIR] [--redact] \
 Exit codes: `0` written · `1` bad arguments, an invalid event file or an unknown schema
 version · `2` no events yet (run `gt_events.py backfill --dry-run` to see what history
 would be recovered) · `3` the filters matched nothing.
+
+### `/gt-visualize:gt-visualize`
+
+*Module `visualize` (plugin `gt-visualize`), new in gt-visualize 0.1.0, installed by default.*
+
+Draws a **repository** as an interactive 3D code city, in **one self-contained HTML file**
+that opens offline — three.js is inlined, nothing is fetched. Directories are districts,
+nested so a directory's plot sits on its parent's; files are buildings. Height is lines,
+footprint is size (log scale), colour is language — from gt's own `filetype` definitions,
+the ones `gt-scan` uses — or, toggled in the page, how often the file changed in the last
+`--since` days. Drag to orbit, scroll to zoom, hover for a file's details, click a
+district to fly to it, search to highlight paths. (For how *knowledge* moved through the
+vault, see `/gt-flow:gt-flow`.)
+
+```bash
+VIS=$(ls -d ~/.claude/plugins/cache/golden-thread-plugin/gt-visualize/*/scripts | sort -V | tail -1)
+python3 $VIS/gt_visualize.py render [PATH] [--out FILE|DIR] [--redact] [--since DAYS] \
+    [--no-churn] [--exclude GLOB ...] [--max-files N]
+```
+
+- Inside a git work tree the file list is `git ls-files --cached --others --exclude-standard`,
+  so `.gitignore` is honoured; outside one the directory is walked (skipping `.git/`) and
+  churn is off — the output line says so.
+- **`--redact` before the page leaves your own screen.** Every file and directory name
+  becomes a salted hash, keeping the tree's shape and short extensions; if the redaction
+  self-check finds a surviving name, nothing is written.
+- Above `--max-files` (default 20,000) the deepest directories collapse into single
+  buildings, and the output line says at which depth.
+- Without `--out` the file lands in the current directory (a temp directory when that is
+  inside the vault). An `--out` inside the vault is **refused**.
+- The three.js bundle is pinned by hash (`scripts/vendor/VENDOR.json`); a bundle that does
+  not match is refused, never inlined.
+
+Exit codes: `0` written · `1` bad arguments, an unreadable path, a refused `--out` or a
+bundle that fails its hash · `3` nothing to draw.
 
 ---
 

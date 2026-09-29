@@ -476,6 +476,11 @@ read refuses too, because "could not check" is not "clear".</p>
 <td>New in 0.15.0. Renders <code>events.jsonl</code> as one offline HTML file: a lane per project, time left to right, an arrow each time an item climbed a level. <code>--redact</code> hashes every name before the page is shared; task events are hidden until <code>--tasks</code> or a click; <code>--project</code>, <code>--since</code>. Never writes the vault.</td>
 </tr>
 <tr>
+<td><code>/gt-visualize:gt-visualize</code></td>
+<td><code>visualize</code> (<code>gt-visualize</code>) · on</td>
+<td>New in gt-visualize 0.1.0. Renders a repository as one offline HTML file with three.js inlined: directories are districts, files are buildings — height by lines, footprint by size, colour by language (gt's filetype definitions) or by git churn over <code>--since</code> days. Orbit, hover, click to focus, search. <code>--redact</code> hashes every name before sharing; an <code>--out</code> inside the vault is refused.</td>
+</tr>
+<tr>
 <td><code>/gt-usage:gt-usage</code></td>
 <td><code>usage</code> (<code>gt-usage</code>) 0.1.3 · on</td>
 <td>New. Reports the 5-hour, weekly and monthly-spend windows from the readings its status line records, and what ending or cutting a session would save. A window the plan does not report is shown as absent, never as 0%. Settings: <code>usage_meter</code>, <code>usage_alert</code>. Never writes the vault.</td>
@@ -949,6 +954,7 @@ bash install.sh
 /gt-wiki:gt-wiki-ingest &lt;url&gt; # add a source to the wiki
 /gt:gt-promote                # graduate a finding to Knowledge or global-memory
 /gt-flow:gt-flow              # see how knowledge moved (--redact before sharing)
+/gt-visualize:gt-visualize    # see a repository as a 3D code city (--redact before sharing)
 </code></pre>
 <hr />
 <h2 id="requirements">Requirements</h2>

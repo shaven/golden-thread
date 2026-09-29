@@ -195,6 +195,7 @@ costly, so a broken hook announces itself.
 | `golden-thread-plugin/golden-thread-report-card/<ver>/` | Module `report-card` (plugin `gt-report-card`) — the session report card and close-out question |
 | `golden-thread-plugin/golden-thread-farm/<ver>/` | Module `farm` (plugin `gt-farm`) — work packets for an external AI service |
 | `golden-thread-plugin/golden-thread-flow/<ver>/` | Module `flow` (plugin `gt-flow`) — an offline timeline of knowledge moving up the ladder |
+| `golden-thread-plugin/golden-thread-visualize/<ver>/` | Module `visualize` (plugin `gt-visualize`) — a repository drawn as an interactive 3D code city |
 | `golden-thread-plugin/golden-thread-usage/<ver>/` | Module `usage` (plugin `gt-usage`) — the plan-allowance meter, quiet until a window is near its ceiling |
 | `golden-thread-plugin/install.sh` | Installs gt and every module that is on, wires the hooks, applies upgrades |
 
@@ -294,6 +295,7 @@ Module skills (each present only while its module is on):
 | `/gt-watch:gt-watch` | `watch` | Watches any git repo and opens your next session with a P0 when it ships something you need to know about — a security fix, a breaking change. Was `/gt:gt-watch` before 0.15.0. |
 | `/gt-farm:gt-farm` | `farm` | Hands bulk or mechanical work to an external AI service as a self-contained packet with a strict return contract. The packet is identical whether you paste it into a web UI or send it to an API. Was `/gt:gt-farm`; off for a fresh install. |
 | `/gt-flow:gt-flow` | `flow` | Draws how knowledge moved through the vault — one lane per project, an arrow each time an item climbed a level — as one offline HTML file. `--redact` before sharing. |
+| `/gt-visualize:gt-visualize` | `visualize` | Draws a repository as an interactive 3D code city — directories as districts, files as buildings; height by lines, colour by language or git churn — as one offline HTML file with three.js inlined. `--redact` before sharing. |
 | `/gt-demo:gt-demo` | `demo` | A guided tour of the whole system against a throwaway vault, so nothing you try touches your own. |
 | `/gt-wiki:gt-wiki` … | `wiki` | Five skills for a standalone LLM wiki: query, ingest, init, lint, refresh. |
 

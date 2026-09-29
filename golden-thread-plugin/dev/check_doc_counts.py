@@ -69,7 +69,8 @@ def derive():
     except OSError:
         facts["lint_checks"] = None
     for mod in ("golden-thread-wiki", "golden-thread-demo", "golden-thread-watch",
-                "golden-thread-report-card", "golden-thread-farm", "golden-thread-flow"):
+                "golden-thread-report-card", "golden-thread-farm", "golden-thread-flow",
+                "golden-thread-visualize"):
         v = newest_version(mod)
         if v:
             facts[mod] = v
