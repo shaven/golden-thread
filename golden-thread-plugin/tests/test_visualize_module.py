@@ -345,6 +345,126 @@ class VisualizeRender(Sandbox):
         self.assertFalse((self.out / "t.html").exists())
 
 
+def story(**over):
+    s = {
+        "title": "How the kestrel pipeline works",
+        "subtitle": "A `queue` and a **gate**",
+        "intro": ["Two services and a store."],
+        "parts": [
+            {"id": "api", "label": "Kestrel API", "group": "Edge", "note": "takes requests"},
+            {"id": "gate", "label": "Auth gate", "kind": "gate", "group": "Edge"},
+            {"id": "db", "label": "Quokka store", "kind": "store", "group": "Data", "size": "l"},
+            {"id": "user", "label": "Caller", "kind": "actor", "group": "Outside", "at": [-9, 2]},
+        ],
+        "links": [
+            {"from": "user", "to": "api", "label": "request"},
+            {"from": "api", "to": "gate"},
+            {"from": "gate", "to": "db"},
+            {"id": "deny", "from": "gate", "to": "user", "label": "refused"},
+        ],
+        "scenes": [
+            {"title": "The parts", "body": "All of it <script>alert(1)</script>.", "show": "*"},
+            {"title": "A request", "body": ["It goes in.", "Then it is `checked`."],
+             "show": ["user", "api", "gate"], "focus": ["gate"], "ghost": True,
+             "flows": [{"link": "user>api"}, {"link": "deny", "kind": "block"}]},
+        ],
+    }
+    s.update(over)
+    return s
+
+
+class VisualizeExplain(Sandbox):
+    def setUp(self):
+        super().setUp()
+        self.out = self.tmp / "out"
+        self.out.mkdir()
+        self.vault = self.tmp / "vault"
+        (self.vault / "Projects").mkdir(parents=True)
+
+    def write(self, s):
+        p = self.tmp / "story.json"
+        p.write_text(json.dumps(s), encoding="utf-8")
+        return p
+
+    def explain(self, s, *args, out=None):
+        target = out if out is not None else self.out / "story.html"
+        return self.py(SCRIPT, "explain", self.write(s), "--out", target, "--vault", self.vault,
+                       *args), target
+
+    def test_renders_one_offline_walkthrough(self):
+        p, target = self.explain(story())
+        self.assertOk(p)
+        self.assertIn("4 parts, 4 links, 2 scenes", p.stdout)
+        self.assertEqual(os.listdir(self.out), ["story.html"])
+        page = target.read_text(encoding="utf-8")
+        rest = without_bundle(page)
+        self.assertNotEqual(rest, page, "three.js must be inlined")
+        self.assertNotRegex(page, r"(?i)<script[^>]*\bsrc\s*=|<link[^>]*\bhref\s*=")
+        self.assertNotIn("http://", rest)
+        self.assertNotIn("https://", rest)
+        self.assertEqual(len(re.findall(r'<section class="step" data-i="\d+">', page)), 2)
+        self.assertIn("<title>How the kestrel pipeline works</title>", page)
+        self.assertIn("<code>queue</code>", page)
+        self.assertIn("<strong>gate</strong>", page)
+        self.assertIn("<code>checked</code>", page)
+        self.assertNotIn("<script>alert(1)</script>", page)
+        self.assertIn("&lt;script&gt;alert(1)&lt;/script&gt;", page)
+        self.assertIn("prefers-color-scheme:dark", page)
+        self.assertIn("prefers-reduced-motion", page)
+        m = re.search(r'<script type="application/json" id="gtx-data">(.*?)</script>', page, re.S)
+        d = json.loads(m.group(1).replace("<\\/", "</"))
+        self.assertEqual([x["id"] for x in d["parts"]], ["api", "gate", "db", "user"])
+        self.assertEqual([x["id"] for x in d["links"]], ["user>api", "api>gate", "gate>db", "deny"])
+        self.assertEqual(d["scenes"][1]["flows"], [{"link": "user>api", "kind": "data"},
+                                                   {"link": "deny", "kind": "block"}])
+        self.assertEqual(d["groups"], ["Edge", "Data", "Outside"])
+
+    def test_layout_groups_are_columns_and_at_wins(self):
+        p, target = self.explain(story())
+        self.assertOk(p)
+        page = target.read_text(encoding="utf-8")
+        d = json.loads(re.search(r'id="gtx-data">(.*?)</script>', page, re.S).group(1))
+        pos = {x["id"]: (x["x"], x["z"]) for x in d["parts"]}
+        self.assertEqual(pos["api"][0], pos["gate"][0], "one group, one column")
+        self.assertLess(pos["api"][0], pos["db"][0], "columns in order of first appearance")
+        self.assertNotEqual(pos["api"][1], pos["gate"][1])
+        self.assertEqual(pos["user"], (-9.0, 2.0))
+
+    def test_check_validates_and_writes_nothing(self):
+        p, _ = self.explain(story(), "--check")
+        self.assertOk(p)
+        self.assertIn("ok ", p.stdout)
+        self.assertEqual(os.listdir(self.out), [])
+
+    def test_bad_story_is_refused_with_every_reason(self):
+        s = story()
+        s["parts"].append({"id": "api", "label": "again", "kind": "blimp"})
+        s["links"].append({"from": "api", "to": "nowhere"})
+        s["scenes"][1]["flows"].append({"link": "no-such-link"})
+        s["scenes"][1]["focus"] = ["ghost-part"]
+        s["colour"] = "red"
+        p, target = self.explain(s)
+        self.assertEqual(p.returncode, 1, p.stdout + p.stderr)
+        for want in ("'api' is used twice", "kind: one of", "'nowhere' is not a part id",
+                     "flows[2].link", "'ghost-part' is not a part id",
+                     "unknown top-level key 'colour'", "nothing was written"):
+            self.assertIn(want, p.stderr)
+        self.assertFalse(target.exists())
+
+    def test_unreadable_or_not_json(self):
+        bad = self.tmp / "bad.json"
+        bad.write_text("{nope", encoding="utf-8")
+        p = self.py(SCRIPT, "explain", bad, "--out", self.out / "x.html", "--vault", self.vault)
+        self.assertEqual(p.returncode, 1)
+        self.assertIn("not valid JSON", p.stderr)
+
+    def test_out_inside_the_vault_is_refused(self):
+        p, _ = self.explain(story(), out=self.vault / "Projects" / "story.html")
+        self.assertEqual(p.returncode, 1, p.stdout + p.stderr)
+        self.assertIn("inside the vault", p.stderr)
+        self.assertEqual(sorted(x.name for x in self.vault.rglob("*")), ["Projects"])
+
+
 class VisualizeInstall(Sandbox):
     def setUp(self):
         super().setUp()

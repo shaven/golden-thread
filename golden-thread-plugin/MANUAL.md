@@ -473,7 +473,7 @@ the same marketplace, versioned with gt, each declared by a `module.json`. Seven
 | `report-card` | `gt-report-card` | on | the session report card: three hooks (PreCompact, SessionEnd — which declares `"timeout": 15` since 0.16.2 — and SessionStart) and the `report_card` and `closeout_check` settings; no command |
 | `farm` | `gt-farm` | **off** for a fresh install | `/gt-farm:gt-farm`, work packets for an external AI (was `/gt:gt-farm`) |
 | `flow` | `gt-flow` | on | `/gt-flow:gt-flow`, the flow view of the event stream |
-| `visualize` | `gt-visualize` | on | `/gt-visualize:gt-visualize`, a repository as a 3D code city |
+| `visualize` | `gt-visualize` | on | `/gt-visualize:gt-visualize`, a codebase in 3D: a scroll-driven walkthrough of how its parts work, or a code city |
 | `usage` | `gt-usage` | on | `/gt-usage:gt-usage`, the plan-allowance meter: a session-start hook, an optional status line, and the `usage_meter` and `usage_alert` settings |
 
 ```bash
@@ -2418,7 +2418,7 @@ would be recovered) · `3` the filters matched nothing.
 
 ### `/gt-visualize:gt-visualize`
 
-*Module `visualize` (plugin `gt-visualize`), new in gt-visualize 0.1.0, installed by default.*
+*Module `visualize` (plugin `gt-visualize`), new in gt-visualize 0.1.0, installed by default. Two modes: `explain` and `render`.*
 
 Draws a **repository** as an interactive 3D code city, in **one self-contained HTML file**
 that opens offline — three.js is inlined, nothing is fetched. Directories are districts,
@@ -2435,6 +2435,24 @@ python3 $VIS/gt_visualize.py render [PATH] [--out FILE|DIR] [--redact] [--since 
     [--no-churn] [--exclude GLOB ...] [--max-files N]
 ```
 
+**Explain how it works** — the second mode, and usually the one to reach for first. Where the
+city shows *where* the code is, an explainer shows *how the parts work together*: a narrative
+column that scrolls beside a 3D stage, each scene showing some parts, putting one or two in
+focus and animating flows along the links between them — data, a rule pushed in, an answer
+coming back, or a request stopped at a gate. The skill writes the story (a JSON file of
+parts, links and scenes) from the project's `source.md`, `design.md` and the code itself;
+the script renders it:
+
+```bash
+python3 $VIS/gt_visualize.py explain story.json --check     # list every problem, write nothing
+python3 $VIS/gt_visualize.py explain story.json [--out FILE|DIR]
+```
+
+A story with any problem is never rendered. Ask for it in a session — *"explain how this
+codebase works"*, *"architecture walkthrough"* — and keep the story file with the project
+if you want the next render to start from it.
+
+- **Code city** (`render`), below.
 - Inside a git work tree the file list is `git ls-files --cached --others --exclude-standard`,
   so `.gitignore` is honoured; outside one the directory is walked (skipping `.git/`) and
   churn is off — the output line says so.

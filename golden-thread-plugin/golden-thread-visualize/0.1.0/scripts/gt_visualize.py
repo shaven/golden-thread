@@ -1,8 +1,20 @@
 #!/usr/bin/env python3
-"""Golden Thread visualize: draw a repository as a 3D code city, in one offline HTML file.
+"""Golden Thread visualize: show a codebase in 3D, in one offline HTML file.
 
+    gt_visualize.py explain STORY.json [--out FILE|DIR] [--check] [--vault V]
     gt_visualize.py render [PATH] [--out FILE|DIR] [--since DAYS] [--no-churn] [--redact]
                            [--exclude GLOB ...] [--max-files N] [--vault V]
+
+## explain: how the parts work together
+
+A scroll-driven walkthrough. STORY.json names the parts of a system, the links between
+them and an ordered list of scenes; each scene shows some parts, focuses one or two, and
+animates flows along links (data, rule, return, or block -- stopped at a gate). A narrative
+column scrolls beside the 3D stage and drives it. The story is written by the skill from
+the code and the vault; nothing about any one codebase is built in. `--check` validates the
+story and writes nothing; every problem is listed, and a story with any is never rendered.
+
+## render: the code city
 
 ## What it draws
 
@@ -75,7 +87,7 @@ MODULE = os.path.dirname(HERE)
 VENDOR = os.path.join(HERE, "vendor", "three-bundle.min.js")
 # MANIFEST.json covers the bundle, but only when something checks the manifest; this pin makes
 # every render check it, and refuse to inline a bundle that is not the one VENDOR.json records.
-THREE_SHA256 = "58bd7e943f5a98307d30ccd99e8d5152df866e9bb7ddd4a5a388bea376b29672"
+THREE_SHA256 = "84747b01d6856104f9888ffa55707dfbfd5f5c9e2b9fe6c116b21fa993e4c7a6"
 DEFAULT_MAX_FILES = 20000
 SAFE_EXT = re.compile(r"(\.[A-Za-z0-9]{1,6})?")
 SNIFF = 8192
@@ -730,9 +742,505 @@ def cmd_render(a):
     return 0
 
 
+# -- explain: a scroll-driven 3D walkthrough of how a system's parts work together --------
+#
+# The code city answers "where is the code"; an explainer answers "how does it work". Its
+# input is a STORY: the parts of a system, the links between them, and an ordered list of
+# scenes -- what each scene shows, which parts it puts in focus, and which links carry a
+# flow. The skill has Claude write the story from the codebase and the vault; this renders
+# it. Nothing about any one codebase is built in here.
+EXPLAIN_KINDS = ("box", "store", "actor", "stack", "gate", "file")
+FLOW_KINDS = ("data", "rule", "block", "return")
+SIZES = ("s", "m", "l")
+MAX_PARTS, MAX_LINKS, MAX_SCENES = 80, 160, 24
+_ID = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_-]{0,39}$")
+_TOP_KEYS = {"title", "subtitle", "intro", "parts", "links", "scenes", "source"}
+_PART_KEYS = {"id", "label", "kind", "group", "size", "at", "note"}
+_LINK_KEYS = {"id", "from", "to", "label"}
+_SCENE_KEYS = {"title", "body", "show", "focus", "flows", "ghost"}
+
+
+def _text(v, limit):
+    return isinstance(v, str) and v.strip() != "" and len(v) <= limit
+
+
+def validate_story(s):
+    """-> list of problems, empty when the story can be rendered."""
+    bad = []
+    if not isinstance(s, dict):
+        return ["the story is not a JSON object"]
+    for k in sorted(set(s) - _TOP_KEYS):
+        bad.append("unknown top-level key %r" % k)
+    if not _text(s.get("title"), 120):
+        bad.append("title: required, 1-120 characters")
+    for k, lim in (("subtitle", 240), ("source", 240)):
+        if k in s and not _text(s[k], lim):
+            bad.append("%s: text of 1-%d characters" % (k, lim))
+    intro = s.get("intro", [])
+    if isinstance(intro, str):
+        intro = [intro]
+    if not isinstance(intro, list) or not all(_text(p, 1500) for p in intro):
+        bad.append("intro: a paragraph or a list of paragraphs, each 1-1500 characters")
+    parts = s.get("parts")
+    if not isinstance(parts, list) or not 1 <= len(parts) <= MAX_PARTS:
+        return bad + ["parts: a list of 1-%d parts" % MAX_PARTS]
+    ids = set()
+    for i, p in enumerate(parts):
+        where = "parts[%d]" % i
+        if not isinstance(p, dict):
+            bad.append("%s is not an object" % where)
+            continue
+        for k in sorted(set(p) - _PART_KEYS):
+            bad.append("%s: unknown key %r" % (where, k))
+        pid = p.get("id")
+        if not isinstance(pid, str) or not _ID.match(pid):
+            bad.append("%s.id: letters, digits, _ and -, up to 40" % where)
+        elif pid in ids:
+            bad.append("%s.id %r is used twice" % (where, pid))
+        else:
+            ids.add(pid)
+        if not _text(p.get("label"), 60):
+            bad.append("%s.label: required, 1-60 characters" % where)
+        if p.get("kind", "box") not in EXPLAIN_KINDS:
+            bad.append("%s.kind: one of %s" % (where, ", ".join(EXPLAIN_KINDS)))
+        if p.get("size", "m") not in SIZES:
+            bad.append("%s.size: one of s, m, l" % where)
+        if "group" in p and not _text(p["group"], 40):
+            bad.append("%s.group: text of 1-40 characters" % where)
+        if "note" in p and not _text(p["note"], 300):
+            bad.append("%s.note: text of 1-300 characters" % where)
+        if "at" in p:
+            at = p["at"]
+            if not (isinstance(at, list) and len(at) == 2 and
+                    all(isinstance(v, (int, float)) and not isinstance(v, bool)
+                        and -60 <= v <= 60 for v in at)):
+                bad.append("%s.at: [x, z], each between -60 and 60" % where)
+    links = s.get("links", [])
+    lids = set()
+    if not isinstance(links, list) or len(links) > MAX_LINKS:
+        bad.append("links: a list of at most %d links" % MAX_LINKS)
+        links = []
+    for i, l in enumerate(links):
+        where = "links[%d]" % i
+        if not isinstance(l, dict):
+            bad.append("%s is not an object" % where)
+            continue
+        for k in sorted(set(l) - _LINK_KEYS):
+            bad.append("%s: unknown key %r" % (where, k))
+        for end in ("from", "to"):
+            if l.get(end) not in ids:
+                bad.append("%s.%s: %r is not a part id" % (where, end, l.get(end)))
+        if l.get("from") is not None and l.get("from") == l.get("to"):
+            bad.append("%s: a link must join two different parts" % where)
+        lid = l.get("id", "%s>%s" % (l.get("from"), l.get("to")))
+        if not isinstance(lid, str) or not lid.strip():
+            bad.append("%s.id: text" % where)
+        elif lid in lids:
+            bad.append("%s.id %r is used twice (give one an explicit id)" % (where, lid))
+        else:
+            lids.add(lid)
+        if "label" in l and not _text(l["label"], 60):
+            bad.append("%s.label: text of 1-60 characters" % where)
+    scenes = s.get("scenes")
+    if not isinstance(scenes, list) or not 1 <= len(scenes) <= MAX_SCENES:
+        return bad + ["scenes: a list of 1-%d scenes" % MAX_SCENES]
+    for i, sc in enumerate(scenes):
+        where = "scenes[%d]" % i
+        if not isinstance(sc, dict):
+            bad.append("%s is not an object" % where)
+            continue
+        for k in sorted(set(sc) - _SCENE_KEYS):
+            bad.append("%s: unknown key %r" % (where, k))
+        if not _text(sc.get("title"), 100):
+            bad.append("%s.title: required, 1-100 characters" % where)
+        body = sc.get("body", [])
+        if isinstance(body, str):
+            body = [body]
+        if not isinstance(body, list) or not body or not all(_text(p, 1500) for p in body):
+            bad.append("%s.body: a paragraph or a list of paragraphs, each 1-1500 characters"
+                       % where)
+        show = sc.get("show", "*")
+        if show != "*":
+            if not isinstance(show, list) or not show:
+                bad.append("%s.show: \"*\" or a non-empty list of part ids" % where)
+            else:
+                for x in show:
+                    if x not in ids:
+                        bad.append("%s.show: %r is not a part id" % (where, x))
+        for x in sc.get("focus", []) if isinstance(sc.get("focus", []), list) else [None]:
+            if x not in ids:
+                bad.append("%s.focus: %r is not a part id" % (where, x))
+        flows = sc.get("flows", [])
+        if not isinstance(flows, list):
+            bad.append("%s.flows: a list" % where)
+            flows = []
+        for j, f in enumerate(flows):
+            if not isinstance(f, dict) or f.get("link") not in lids:
+                bad.append("%s.flows[%d].link: not a link id (ids default to \"from>to\")"
+                           % (where, j))
+            elif f.get("kind", "data") not in FLOW_KINDS:
+                bad.append("%s.flows[%d].kind: one of %s" % (where, j, ", ".join(FLOW_KINDS)))
+        if "ghost" in sc and not isinstance(sc["ghost"], bool):
+            bad.append("%s.ghost: true or false" % where)
+    return bad
+
+
+def explain_layout(parts):
+    """-> {id: (x, z)}. Groups become columns, left to right in order of first appearance;
+    a part's own `at` wins over the automatic place."""
+    groups = []
+    for p in parts:
+        g = p.get("group", "")
+        if g not in groups:
+            groups.append(g)
+    members = {g: [p for p in parts if p.get("group", "") == g] for g in groups}
+    pos = {}
+    n = len(groups)
+    for gi, g in enumerate(groups):
+        col = members[g]
+        for ri, p in enumerate(col):
+            pos[p["id"]] = ((gi - (n - 1) / 2.0) * 4.6, (ri - (len(col) - 1) / 2.0) * 3.0)
+    for p in parts:
+        if "at" in p:
+            pos[p["id"]] = (float(p["at"][0]), float(p["at"][1]))
+    return pos
+
+
+def _inline(text):
+    """Escape, then allow `code` and **bold** -- the only markup a story may use."""
+    t = text.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
+    t = re.sub(r"`([^`\n]{1,200})`", r"<code>\1</code>", t)
+    return re.sub(r"\*\*([^*\n]{1,200})\*\*", r"<strong>\1</strong>", t)
+
+
+def _paras(v):
+    return [v] if isinstance(v, str) else list(v or [])
+
+
+def story_payload(s):
+    pos = explain_layout(s["parts"])
+    groups = []
+    for p in s["parts"]:
+        g = p.get("group", "")
+        if g not in groups:
+            groups.append(g)
+    parts = [{"id": p["id"], "label": p["label"], "kind": p.get("kind", "box"),
+              "group": p.get("group", ""), "size": p.get("size", "m"),
+              "note": p.get("note", ""), "x": round(pos[p["id"]][0], 3),
+              "z": round(pos[p["id"]][1], 3)} for p in s["parts"]]
+    links = [{"id": l.get("id", "%s>%s" % (l["from"], l["to"])), "from": l["from"],
+              "to": l["to"], "label": l.get("label", "")} for l in s.get("links", [])]
+    scenes = []
+    for sc in s["scenes"]:
+        scenes.append({"show": sc.get("show", "*"), "focus": sc.get("focus", []),
+                       "flows": [{"link": f["link"], "kind": f.get("kind", "data")}
+                                 for f in sc.get("flows", [])],
+                       "ghost": bool(sc.get("ghost", False))})
+    return {"groups": groups, "parts": parts, "links": links, "scenes": scenes}
+
+
+EXPLAIN_PAGE = r"""<!doctype html>
+<html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>__TITLE__</title>
+<style>
+:root{--bg:#f6f5f1;--panel:#ffffff;--fg:#1d2127;--dim:#5d6571;--line:#d9d6ce;--acc:#2f6fdf;
+--grid:#d6d2c8;--label-bg:rgba(255,255,255,.92);--link:#9aa3b2;--flow-data:#2f6fdf;
+--flow-rule:#c47a00;--flow-block:#d33f3f;--flow-return:#2e9d5b;--code-bg:#eceae4}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#0f1115;--panel:#161a21;
+--fg:#e6e8ee;--dim:#98a0b3;--line:#2a2f3a;--acc:#6aa9ff;--grid:#232833;--label-bg:rgba(22,26,33,.92);
+--link:#56607a;--flow-data:#6aa9ff;--flow-rule:#f2b04a;--flow-block:#ff6b6b;--flow-return:#5fd08e;--code-bg:#202532}}
+:root[data-theme="dark"]{--bg:#0f1115;--panel:#161a21;--fg:#e6e8ee;--dim:#98a0b3;--line:#2a2f3a;
+--acc:#6aa9ff;--grid:#232833;--label-bg:rgba(22,26,33,.92);--link:#56607a;--flow-data:#6aa9ff;
+--flow-rule:#f2b04a;--flow-block:#ff6b6b;--flow-return:#5fd08e;--code-bg:#202532}
+*{box-sizing:border-box}
+html,body{margin:0;background:var(--bg);color:var(--fg);
+font:16px/1.6 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif}
+code{font:13.5px/1.4 Menlo,Consolas,"Liberation Mono",monospace;background:var(--code-bg);
+padding:1px 5px;border-radius:4px;word-break:break-word}
+.wrap{display:grid;grid-template-columns:minmax(320px,440px) 1fr;min-height:100vh}
+.story{padding:40px 36px 30vh;border-right:1px solid var(--line);background:var(--panel)}
+.story header{min-height:62vh;display:flex;flex-direction:column;justify-content:center}
+.eyebrow{text-transform:uppercase;letter-spacing:.08em;font-size:12px;color:var(--dim);margin:0 0 10px}
+h1{font-size:30px;line-height:1.2;margin:0 0 12px}
+.sub{font-size:18px;color:var(--dim);margin:0 0 18px}
+.hint{font-size:13px;color:var(--dim)}
+.step{min-height:78vh;padding:28px 0;opacity:.38;transition:opacity .35s}
+.step.on{opacity:1}
+.step .n{font-size:12px;color:var(--acc);font-weight:600;letter-spacing:.06em}
+.step h2{font-size:22px;line-height:1.25;margin:6px 0 12px}
+.step p{margin:0 0 12px}
+.stagecol{position:relative}
+#stage{position:sticky;top:0;height:100vh;width:100%;overflow:hidden}
+#stage canvas{display:block;cursor:grab}
+#rail{position:absolute;right:16px;top:50%;transform:translateY(-50%);display:flex;
+flex-direction:column;gap:8px;z-index:2}
+#rail button{width:12px;height:12px;border-radius:50%;border:1px solid var(--dim);background:transparent;
+padding:0;cursor:pointer}
+#rail button[aria-current="true"]{background:var(--acc);border-color:var(--acc)}
+#legend{position:absolute;left:16px;bottom:16px;background:var(--label-bg);border:1px solid var(--line);
+border-radius:8px;padding:8px 10px;font-size:12px;z-index:2;max-width:60%}
+#legend .row{display:flex;align-items:center;gap:6px;white-space:nowrap}
+#legend .sw{width:10px;height:10px;border-radius:2px;flex:none}
+#legend .fl{display:inline-block;width:18px;height:3px;border-radius:2px;vertical-align:middle;margin-right:4px}
+#tip{position:absolute;pointer-events:none;display:none;background:var(--label-bg);border:1px solid var(--line);
+border-radius:8px;padding:8px 10px;font-size:13px;max-width:300px;z-index:3}
+#nogl{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;padding:24px;
+text-align:center;color:var(--dim)}
+#nogl[hidden],#legend[hidden]{display:none}
+#theme{position:absolute;right:16px;top:16px;z-index:2;font:inherit;font-size:12px;color:var(--fg);
+background:var(--label-bg);border:1px solid var(--line);border-radius:6px;padding:4px 8px;cursor:pointer}
+.src{font-size:12px;color:var(--dim);margin-top:30px}
+@media (max-width:860px){.wrap{display:block}.stagecol{position:sticky;top:0;z-index:1;height:46vh}
+#stage{height:46vh;position:relative}.story{border-right:0;padding:24px 16px 40vh}
+.story header{min-height:auto;padding:12px 0 30px}.step{min-height:60vh}h1{font-size:25px}
+#legend{max-width:calc(100% - 60px)}#rail{right:8px}}
+@media (prefers-reduced-motion:reduce){.step{transition:none}}
+</style></head><body>
+<div class="wrap">
+<main class="story">
+<header><p class="eyebrow">How it works</p><h1>__TITLE__</h1>__SUBTITLE____INTRO__
+<p class="hint">Scroll to step through it. Drag the picture to look around; hover a part for what it does.</p></header>
+__STEPS__
+__SOURCE__
+</main>
+<div class="stagecol"><div id="stage" aria-label="3D diagram of the parts named in the text">
+<button id="theme" type="button">Theme</button><nav id="rail" aria-label="Scenes"></nav>
+<div id="legend"></div><div id="tip"></div><div id="nogl" hidden>This picture needs WebGL, which this browser has turned off. The text tells the same story.</div>
+</div></div>
+</div>
+<script type="application/json" id="gtx-data">__DATA__</script>
+<script>__THREE__</script>
+<script>__APP__</script>
+</body></html>
+"""
+
+EXPLAIN_APP = r"""
+(function(){
+"use strict";
+var D=JSON.parse(document.getElementById("gtx-data").textContent);
+var steps=[].slice.call(document.querySelectorAll(".step"));
+var reduced=!!(window.matchMedia&&matchMedia("(prefers-reduced-motion: reduce)").matches);
+var stage=document.getElementById("stage"),tip=document.getElementById("tip");
+var FONT='-apple-system,"Segoe UI",Roboto,Helvetica,Arial,sans-serif';
+var root=document.documentElement;
+try{var th=localStorage.getItem("gtx-theme");if(th)root.setAttribute("data-theme",th);}catch(e){}
+function tok(n){return getComputedStyle(root).getPropertyValue(n).trim();}
+var rail=document.getElementById("rail");
+steps.forEach(function(s,i){var b=document.createElement("button");b.type="button";
+b.setAttribute("aria-label","Scene "+(i+1)+": "+s.querySelector("h2").textContent);
+b.onclick=function(){s.scrollIntoView({behavior:reduced?"auto":"smooth",block:"center"});};rail.appendChild(b);});
+var renderer;
+try{renderer=new THREE.WebGLRenderer({antialias:true,alpha:true});}catch(e){renderer=null;}
+if(!renderer){document.getElementById("nogl").hidden=false;
+observe(function(i){steps.forEach(function(s,j){s.classList.toggle("on",j===i);});});return;}
+renderer.setPixelRatio(Math.min(window.devicePixelRatio||1,2));
+renderer.outputColorSpace=THREE.SRGBColorSpace;
+stage.insertBefore(renderer.domElement,stage.firstChild);
+var scene=new THREE.Scene();
+var camera=new THREE.PerspectiveCamera(38,1,0.1,500);
+scene.add(new THREE.HemisphereLight(0xffffff,0x40444f,1.05));
+var sun=new THREE.DirectionalLight(0xffffff,1.25);sun.position.set(6,14,9);scene.add(sun);
+var controls=new THREE.OrbitControls(camera,renderer.domElement);
+controls.enableDamping=true;controls.enablePan=false;controls.maxPolarAngle=Math.PI*0.47;
+controls.minDistance=3;controls.maxDistance=160;
+var PAL=["#4e79a7","#f28e2b","#59a14f","#b07aa1","#e15759","#76b7b2","#c9a227","#9c755f"];
+var GC={};D.groups.forEach(function(g,i){GC[g]=PAL[i%PAL.length];});
+function rr(x,a,b,w,h,r){x.beginPath();x.moveTo(a+r,b);x.arcTo(a+w,b,a+w,b+h,r);x.arcTo(a+w,b+h,a,b+h,r);x.arcTo(a,b+h,a,b,r);x.arcTo(a,b,a+w,b,r);x.closePath();}
+function labelTex(text,px){var dpr=2,cv=document.createElement("canvas"),x=cv.getContext("2d");
+var font="600 "+px+"px "+FONT;x.font=font;var w=Math.ceil(x.measureText(text).width)+26,h=px+16;
+cv.width=w*dpr;cv.height=h*dpr;x.scale(dpr,dpr);x.font=font;x.fillStyle=tok("--label-bg");rr(x,0.5,0.5,w-1,h-1,7);x.fill();
+x.strokeStyle=tok("--line");x.lineWidth=1;x.stroke();x.fillStyle=tok("--fg");x.textBaseline="middle";x.fillText(text,13,h/2+1);
+var t=new THREE.CanvasTexture(cv);t.minFilter=THREE.LinearFilter;t.colorSpace=THREE.SRGBColorSpace;return{t:t,w:w,h:h};}
+var sprites=[];
+function makeLabel(text,px,k){var m=new THREE.SpriteMaterial({transparent:true,depthTest:false,depthWrite:false,opacity:0});
+var s=new THREE.Sprite(m);s.renderOrder=10;s.userData={text:text,px:px,k:k};paintLabel(s);sprites.push(s);return s;}
+function paintLabel(s){var c=labelTex(s.userData.text,s.userData.px);if(s.material.map)s.material.map.dispose();
+s.material.map=c.t;s.material.needsUpdate=true;s.scale.set(c.w*s.userData.k,c.h*s.userData.k,1);}
+var grid=null;
+function paintGrid(){if(grid){scene.remove(grid);grid.geometry.dispose();}
+var gc=new THREE.Color(tok("--grid"));grid=new THREE.GridHelper(120,60,gc,gc);grid.position.y=-0.02;scene.add(grid);}
+paintGrid();
+// parts
+var PARTS={},plist=[],meshes=[];
+D.parts.forEach(function(d){var s={s:0.9,m:1.3,l:1.8}[d.size]||1.3;
+var col=new THREE.Color(GC[d.group]||"#8892a6");var g=new THREE.Group(),mats=[],h;
+function mat(){var m=new THREE.MeshStandardMaterial({color:col,roughness:0.55,metalness:0.05,emissive:col,emissiveIntensity:0.08,transparent:true,opacity:0});mats.push(m);return m;}
+function add(geo,y){var m=new THREE.Mesh(geo,mat());m.position.y=y;m.userData.part=d.id;g.add(m);meshes.push(m);}
+if(d.kind==="store"){h=s*0.85;add(new THREE.CylinderGeometry(s*0.55,s*0.55,h,36),h/2);}
+else if(d.kind==="actor"){h=s*0.9;add(new THREE.SphereGeometry(s*0.45,28,20),s*0.45);}
+else if(d.kind==="stack"){for(var i=0;i<3;i++)add(new THREE.BoxGeometry(s*(1-i*0.18),s*0.22,s*(1-i*0.18)),s*0.11+i*s*0.29);h=s*0.8;}
+else if(d.kind==="gate"){h=s*1.15;add(new THREE.BoxGeometry(s*0.2,h,s*1.1),h/2);}
+else if(d.kind==="file"){h=s*1.05;add(new THREE.BoxGeometry(s*0.78,h,s*0.14),h/2);}
+else{h=s*0.62;add(new THREE.BoxGeometry(s,h,s),h/2);}
+var lab=makeLabel(d.label,26,0.0105);lab.position.y=h+0.5;g.add(lab);
+g.position.set(d.x,0,d.z);scene.add(g);
+var e={def:d,g:g,mats:mats,lab:lab,h:h,op:0,to:0,glow:0.08,glowTo:0.08};PARTS[d.id]=e;plist.push(e);});
+// links
+var LINKS={},llist=[];
+D.links.forEach(function(l){var a=PARTS[l.from],b=PARTS[l.to];
+var p0=new THREE.Vector3(a.g.position.x,a.h+0.08,a.g.position.z),p1=new THREE.Vector3(b.g.position.x,b.h+0.08,b.g.position.z);
+var mid=p0.clone().lerp(p1,0.5);mid.y+=Math.max(1.1,p0.distanceTo(p1)*0.3);
+var curve=new THREE.QuadraticBezierCurve3(p0,mid,p1);
+var m=new THREE.MeshBasicMaterial({color:new THREE.Color(tok("--link")),transparent:true,opacity:0,depthWrite:false});
+var tube=new THREE.Mesh(new THREE.TubeGeometry(curve,56,0.035,6,false),m);scene.add(tube);
+var lab=null;if(l.label){lab=makeLabel(l.label,22,0.0085);lab.position.copy(curve.getPoint(0.5));lab.position.y+=0.32;scene.add(lab);}
+var L={def:l,curve:curve,mat:m,tube:tube,lab:lab,op:0,to:0,lop:0,lto:0};LINKS[l.id]=L;llist.push(L);});
+// flows
+var FLOWC={data:"--flow-data",rule:"--flow-rule",block:"--flow-block","return":"--flow-return"};
+var pgeo=new THREE.SphereGeometry(0.12,14,10),particles=[];
+function setFlows(list){particles.forEach(function(p){scene.remove(p.m);p.m.material.dispose();});particles=[];
+list.forEach(function(f){var L=LINKS[f.link];if(!L)return;var n=reduced?1:4;
+for(var i=0;i<n;i++){var m=new THREE.Mesh(pgeo,new THREE.MeshBasicMaterial({color:new THREE.Color(tok(FLOWC[f.kind]||"--flow-data")),transparent:true,opacity:0}));
+m.renderOrder=5;scene.add(m);particles.push({m:m,L:L,kind:f.kind,t:reduced?0.5:i/n});}});}
+// legend
+function legend(){var h="";D.groups.forEach(function(g){if(g)h+='<div class="row"><span class="sw" style="background:'+GC[g]+'"></span>'+esc(g)+"</div>";});
+var used={};D.scenes.forEach(function(s){s.flows.forEach(function(f){used[f.kind]=1;});});
+var names={data:"data / calls","return":"answer","rule":"rule injected",block:"stopped at a gate"};
+Object.keys(names).forEach(function(k){if(used[k])h+='<div class="row"><span class="fl" style="background:'+tok(FLOWC[k])+'"></span>'+names[k]+"</div>";});
+document.getElementById("legend").innerHTML=h;document.getElementById("legend").hidden=!h;}
+function esc(s){return String(s).replace(/[&<>"]/g,function(c){return{"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c];});}
+legend();
+// scenes
+var cur=-1,camFrom,camTo,tgtFrom,tgtTo,camT=1;
+function frame(ids){var box=new THREE.Box3(),v=new THREE.Vector3();
+ids.forEach(function(id){var e=PARTS[id];if(!e)return;box.expandByPoint(v.set(e.g.position.x-1.1,0,e.g.position.z-1.1));box.expandByPoint(v.set(e.g.position.x+1.1,e.h+1,e.g.position.z+1.1));});
+if(box.isEmpty())return;var c=box.getCenter(new THREE.Vector3()),sz=box.getSize(new THREE.Vector3());
+var r=Math.max(sz.x,sz.z*0.9,3.2)*0.5,fov=camera.fov*Math.PI/180;
+var dist=r/Math.tan(fov/2)/Math.min(1,Math.max(camera.aspect,0.55))+2.5;
+tgtFrom=controls.target.clone();tgtTo=new THREE.Vector3(c.x,0.5,c.z);camFrom=camera.position.clone();
+camTo=tgtTo.clone().add(new THREE.Vector3(0.28,0.64,1).normalize().multiplyScalar(dist));
+if(reduced||cur<0&&camT===1&&camFrom.lengthSq()===0){controls.target.copy(tgtTo);camera.position.copy(camTo);camT=1;}else camT=0;}
+function apply(i){if(i===cur||i<0||i>=D.scenes.length)return;var first=cur<0;cur=i;var S=D.scenes[i];
+var show=S.show==="*"?null:S.show,focus=S.focus;
+plist.forEach(function(e){var id=e.def.id,vis=!show||show.indexOf(id)>=0,f=focus.indexOf(id)>=0;
+e.to=vis?(focus.length&&!f?0.5:1):(S.ghost?0.1:0);e.glowTo=f?0.6:0.08;});
+var flowing={};S.flows.forEach(function(f){flowing[f.link]=1;});
+llist.forEach(function(L){var a=PARTS[L.def.from],b=PARTS[L.def.to],on=a.to>0.3&&b.to>0.3;
+L.to=on?(flowing[L.def.id]?0.95:0.3):(S.ghost&&(a.to>0||b.to>0)?0.06:0);L.lto=flowing[L.def.id]?1:0;});
+setFlows(S.flows);frame(focus.length?focus:(show||Object.keys(PARTS)));
+steps.forEach(function(s,j){s.classList.toggle("on",j===i);});
+[].forEach.call(rail.children,function(b,j){b.setAttribute("aria-current",j===i?"true":"false");});
+if(first&&!reduced)camT=1,controls.target.copy(tgtTo),camera.position.copy(camTo);}
+function observe(cb){if(!("IntersectionObserver" in window)){steps.forEach(function(s){s.classList.add("on");});cb(0);return;}
+var io=new IntersectionObserver(function(es){es.forEach(function(en){if(en.isIntersecting)cb(+en.target.getAttribute("data-i"));});},{rootMargin:"-45% 0px -45% 0px"});
+steps.forEach(function(s){io.observe(s);});}
+observe(apply);
+// size
+function resize(){var r=stage.getBoundingClientRect();var w=Math.max(r.width,1),h=Math.max(r.height,1);
+renderer.setSize(w,h);camera.aspect=w/h;camera.updateProjectionMatrix();}
+if(window.ResizeObserver)new ResizeObserver(resize).observe(stage);window.addEventListener("resize",resize);resize();
+apply(0);
+// theme
+function retheme(){paintGrid();sprites.forEach(paintLabel);llist.forEach(function(L){L.mat.color.set(tok("--link"));});
+particles.forEach(function(p){p.m.material.color.set(tok(FLOWC[p.kind]||"--flow-data"));});legend();}
+document.getElementById("theme").onclick=function(){var dark=tok("--bg").toLowerCase()==="#0f1115";var next=dark?"light":"dark";
+root.setAttribute("data-theme",next);try{localStorage.setItem("gtx-theme",next);}catch(e){}retheme();};
+if(window.matchMedia){var mq=matchMedia("(prefers-color-scheme: dark)");if(mq.addEventListener)mq.addEventListener("change",retheme);}
+// hover
+var ray=new THREE.Raycaster(),ptr=new THREE.Vector2();
+renderer.domElement.addEventListener("pointermove",function(ev){var r=renderer.domElement.getBoundingClientRect();
+ptr.x=(ev.clientX-r.left)/r.width*2-1;ptr.y=-((ev.clientY-r.top)/r.height)*2+1;ray.setFromCamera(ptr,camera);
+var hits=ray.intersectObjects(meshes.filter(function(m){return PARTS[m.userData.part].op>0.3;}),false);
+if(!hits.length){tip.style.display="none";return;}var d=PARTS[hits[0].object.userData.part].def;
+tip.innerHTML="<b>"+esc(d.label)+"</b>"+(d.note?"<br>"+esc(d.note):"");tip.style.display="block";
+var x=ev.clientX-r.left+14,y=ev.clientY-r.top+14;if(x+300>r.width)x=Math.max(8,x-320);tip.style.left=x+"px";tip.style.top=y+"px";});
+renderer.domElement.addEventListener("pointerleave",function(){tip.style.display="none";});
+// loop
+var last=performance.now();
+function tick(now){var dt=Math.min((now-last)/1000,0.1);last=now;var k=reduced?1:1-Math.pow(0.002,dt);
+plist.forEach(function(e){e.op+=(e.to-e.op)*k;e.glow+=(e.glowTo-e.glow)*k;e.g.visible=e.op>0.01;
+e.mats.forEach(function(m){m.opacity=e.op;m.emissiveIntensity=e.glow;m.depthWrite=e.op>0.6;});e.lab.material.opacity=Math.min(1,e.op*1.3);});
+llist.forEach(function(L){L.op+=(L.to-L.op)*k;L.lop+=(L.lto-L.lop)*k;L.tube.visible=L.op>0.01;L.mat.opacity=L.op;
+if(L.lab){L.lab.visible=L.lop>0.01;L.lab.material.opacity=L.lop;}});
+if(camT<1){camT=Math.min(1,camT+dt/1.2);var s=camT*camT*(3-2*camT);controls.target.lerpVectors(tgtFrom,tgtTo,s);camera.position.lerpVectors(camFrom,camTo,s);}
+particles.forEach(function(p){if(!reduced){p.t+=dt*0.32;if(p.t>1)p.t-=1;}
+var t=p.t,op=Math.min(1,p.L.op*1.1);
+if(p.kind==="block"){t=p.t*0.55;var near=t>0.47;p.m.scale.setScalar(near?1.35:1);p.m.material.color.set(tok(near?"--flow-block":"--flow-data"));}
+p.m.position.copy(p.L.curve.getPoint(p.kind==="return"?1-t:t));p.m.material.opacity=op;});
+controls.update();renderer.render(scene,camera);requestAnimationFrame(tick);}
+requestAnimationFrame(tick);
+window.gtx={camera:camera,controls:controls,scene:function(){return cur;},go:apply};
+})();
+"""
+
+
+def build_explain_page(story, three_js):
+    title = _inline(story["title"])
+    sub = '<p class="sub">%s</p>' % _inline(story["subtitle"]) if story.get("subtitle") else ""
+    intro = "".join("<p>%s</p>" % _inline(p) for p in _paras(story.get("intro")))
+    n = len(story["scenes"])
+    steps = []
+    for i, sc in enumerate(story["scenes"]):
+        steps.append('<section class="step" data-i="%d"><div class="n">%d / %d</div><h2>%s</h2>%s'
+                     '</section>' % (i, i + 1, n, _inline(sc["title"]),
+                                     "".join("<p>%s</p>" % _inline(p)
+                                             for p in _paras(sc["body"]))))
+    src = '<p class="src">%s</p>' % _inline(story["source"]) if story.get("source") else ""
+    blob = json.dumps(story_payload(story), separators=(",", ":"), ensure_ascii=False)
+    blob = blob.replace("</", "<\\/").replace("<!--", "<\\!--")
+    plain = re.sub(r"<[^>]+>", "", title)
+    return (EXPLAIN_PAGE.replace("<title>__TITLE__</title>", "<title>%s</title>" % plain)
+            .replace("__TITLE__", title).replace("__SUBTITLE__", sub).replace("__INTRO__", intro)
+            .replace("__STEPS__", "\n".join(steps)).replace("__SOURCE__", src)
+            .replace("__APP__", EXPLAIN_APP).replace("__DATA__", blob)
+            .replace("__THREE__", three_js.replace("</script", "<\\/script")))
+
+
+def read_three():
+    if not os.path.isfile(VENDOR):
+        raise Refused(1, "three.js is missing from this module (%s); reinstall gt-visualize"
+                      % VENDOR)
+    with open(VENDOR, "rb") as fh:
+        raw = fh.read()
+    if hashlib.sha256(raw).hexdigest() != THREE_SHA256:
+        raise Refused(1, "three.js in this module does not match the vendored hash (%s); "
+                         "refusing to inline it -- reinstall gt-visualize" % VENDOR)
+    return raw.decode("utf-8")
+
+
+def cmd_explain(a):
+    try:
+        with open(os.path.expanduser(a.story), encoding="utf-8") as fh:
+            story = json.load(fh)
+    except OSError as e:
+        raise Refused(1, "cannot read %s: %s" % (a.story, e.strerror or e))
+    except ValueError as e:
+        raise Refused(1, "%s is not valid JSON: %s" % (a.story, e))
+    problems = validate_story(story)
+    if problems:
+        shown = problems[:25]
+        more = "" if len(problems) <= 25 else "\n  ... and %d more" % (len(problems) - 25)
+        raise Refused(1, "%s has %d problem(s); nothing was written:\n  %s%s"
+                      % (a.story, len(problems), "\n  ".join(shown), more))
+    if a.check:
+        print("ok %s (%d parts, %d links, %d scenes)" % (
+            a.story, len(story["parts"]), len(story.get("links", [])), len(story["scenes"])))
+        return 0
+    vault = find_vault(a.vault)
+    now = datetime.now().astimezone()
+    slug = re.sub(r"[^a-z0-9]+", "-", story["title"].lower()).strip("-")[:40] or "story"
+    out = resolve_out(a.out, vault, "explain-" + slug, now)
+    page = build_explain_page(story, read_three())
+    tmp = out + ".tmp-%d" % os.getpid()
+    with open(tmp, "w", encoding="utf-8") as fh:
+        fh.write(page)
+    os.replace(tmp, out)
+    print("wrote %s (%d parts, %d links, %d scenes)" % (
+        out, len(story["parts"]), len(story.get("links", [])), len(story["scenes"])))
+    return 0
+
+
 def main(argv=None):
     ap = argparse.ArgumentParser(prog="gt_visualize.py", description=__doc__.split("\n\n")[0])
     sub = ap.add_subparsers(dest="cmd")
+    x = sub.add_parser("explain", help="render a story (parts, links, scenes) as a "
+                                       "scroll-driven 3D walkthrough, one HTML file")
+    x.add_argument("story", help="the story JSON file")
+    x.add_argument("--out", help="file or existing directory, outside the vault")
+    x.add_argument("--check", action="store_true", help="validate the story; write nothing")
+    x.add_argument("--vault", help="the vault an --out must stay out of "
+                                   "(default: $GT_VAULT, then ~/.claude/vault-config.json)")
     r = sub.add_parser("render", help="render a repository as a 3D code city, one HTML file")
     r.add_argument("path", nargs="?", default=".", help="the tree to draw (default: .)")
     r.add_argument("--out", help="file or existing directory, outside the vault")
@@ -748,11 +1256,11 @@ def main(argv=None):
     r.add_argument("--vault", help="the vault an --out must stay out of "
                                    "(default: $GT_VAULT, then ~/.claude/vault-config.json)")
     a = ap.parse_args(argv)
-    if a.cmd != "render":
+    if a.cmd not in ("render", "explain"):
         ap.print_help(sys.stderr)
         return 1
     try:
-        return cmd_render(a)
+        return cmd_render(a) if a.cmd == "render" else cmd_explain(a)
     except Refused as e:
         print("gt_visualize: %s" % e, file=sys.stderr)
         return e.code

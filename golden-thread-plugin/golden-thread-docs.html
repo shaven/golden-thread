@@ -478,7 +478,7 @@ read refuses too, because "could not check" is not "clear".</p>
 <tr>
 <td><code>/gt-visualize:gt-visualize</code></td>
 <td><code>visualize</code> (<code>gt-visualize</code>) · on</td>
-<td>New in gt-visualize 0.1.0. Renders a repository as one offline HTML file with three.js inlined: directories are districts, files are buildings — height by lines, footprint by size, colour by language (gt's filetype definitions) or by git churn over <code>--since</code> days. Orbit, hover, click to focus, search. <code>--redact</code> hashes every name before sharing; an <code>--out</code> inside the vault is refused.</td>
+<td>New in gt-visualize 0.1.0. Two modes, each one offline HTML file with three.js inlined. <strong>explain</strong>: a scroll-driven walkthrough of how a codebase's parts work together — scenes highlight parts and animate the flows between them, from a story Claude writes out of the code and the vault (<code>--check</code> validates it). <strong>render</strong>, the code city: directories are districts, files are buildings — height by lines, footprint by size, colour by language (gt's filetype definitions) or by git churn over <code>--since</code> days. Orbit, hover, click to focus, search. <code>--redact</code> hashes every name before sharing; an <code>--out</code> inside the vault is refused.</td>
 </tr>
 <tr>
 <td><code>/gt-usage:gt-usage</code></td>
@@ -954,7 +954,7 @@ bash install.sh
 /gt-wiki:gt-wiki-ingest &lt;url&gt; # add a source to the wiki
 /gt:gt-promote                # graduate a finding to Knowledge or global-memory
 /gt-flow:gt-flow              # see how knowledge moved (--redact before sharing)
-/gt-visualize:gt-visualize    # see a repository as a 3D code city (--redact before sharing)
+/gt-visualize:gt-visualize    # explain a codebase in 3D, or see it as a code city
 </code></pre>
 <hr />
 <h2 id="requirements">Requirements</h2>

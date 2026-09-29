@@ -13,8 +13,12 @@ release's own summary line, kept short rather than reconstructed after the fact.
 
 ## gt-visualize 0.1.0 — unreleased
 
-**A new module: a repository drawn as a 3D code city.** `/gt-visualize:gt-visualize`
-renders any source tree as one offline HTML file with three.js inlined — directories as
+**A new module: a codebase in 3D.** `/gt-visualize:gt-visualize` has two modes. **explain**
+renders a scroll-driven walkthrough of how a system's parts work together: a narrative column
+beside a 3D stage whose scenes highlight parts and animate flows (data, rules, answers, and
+requests stopped at a gate), from a story file Claude writes out of the code and the vault;
+`--check` lists every problem and a story with any is never rendered. **render** draws any
+source tree as one offline HTML file with three.js inlined — directories as
 districts, files as buildings, height by lines, footprint by size, colour by language (gt's
 `filetype` definitions) or by git churn. Orbit, hover, click to focus, search.
 `--redact` hashes every name before sharing, and an `--out` inside the vault is refused.

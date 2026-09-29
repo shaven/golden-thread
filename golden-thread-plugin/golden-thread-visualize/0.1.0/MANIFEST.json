@@ -1,22 +1,22 @@
 {
  "files": {
   "scripts/gt_visualize.py": {
-   "bytes": 36270,
-   "sha256": "c677052704cf20896d67e74edb6888538c41cf5fa72d9381ce88bb447f65b0b9"
+   "bytes": 66714,
+   "sha256": "aa2302f1a4e522e7f02319a16d425c7983a50c3082dad334967108947a74a62c"
   },
   "scripts/vendor/THREE-LICENSE": {
    "bytes": 1081,
    "sha256": "8b378ebe60e2fe500158cb0ac71cb5e8b7d92953c2abcc63a0eb90499653b5bc"
   },
   "scripts/vendor/VENDOR.json": {
-   "bytes": 992,
-   "sha256": "c314c99409b03e8eb7479955fc2c0deb74103f7c59c92a7a9c5bb4604202b731"
+   "bytes": 1223,
+   "sha256": "4d5f28deb6282bb82c7412621ed619352aaf4737b96e2e1df6e154eaa4dbffc6"
   },
   "scripts/vendor/three-bundle.min.js": {
-   "bytes": 561945,
-   "sha256": "58bd7e943f5a98307d30ccd99e8d5152df866e9bb7ddd4a5a388bea376b29672"
+   "bytes": 591684,
+   "sha256": "84747b01d6856104f9888ffa55707dfbfd5f5c9e2b9fe6c116b21fa993e4c7a6"
   }
  },
- "generated": "2026-09-29T14:08:32",
+ "generated": "2026-09-29T15:10:11",
  "version": "0.1.0"
 }

@@ -618,7 +618,7 @@ the same marketplace, versioned with gt, each declared by a <code>module.json</c
 <td><code>visualize</code></td>
 <td><code>gt-visualize</code></td>
 <td>on</td>
-<td><code>/gt-visualize:gt-visualize</code>, a repository as a 3D code city</td>
+<td><code>/gt-visualize:gt-visualize</code>, a codebase in 3D: a scroll-driven walkthrough of how its parts work, or a code city</td>
 </tr>
 <tr>
 <td><code>usage</code></td>
@@ -2884,7 +2884,7 @@ python3 $FLOW/gt_flow.py render --vault &lt;vault&gt; [--out FILE|DIR] [--redact
 version · <code>2</code> no events yet (run <code>gt_events.py backfill --dry-run</code> to see what history
 would be recovered) · <code>3</code> the filters matched nothing.</p>
 <h3 id="gt-visualizegt-visualize"><code>/gt-visualize:gt-visualize</code></h3>
-<p><em>Module <code>visualize</code> (plugin <code>gt-visualize</code>), new in gt-visualize 0.1.0, installed by default.</em></p>
+<p><em>Module <code>visualize</code> (plugin <code>gt-visualize</code>), new in gt-visualize 0.1.0, installed by default. Two modes: <code>explain</code> and <code>render</code>.</em></p>
 <p>Draws a <strong>repository</strong> as an interactive 3D code city, in <strong>one self-contained HTML file</strong>
 that opens offline — three.js is inlined, nothing is fetched. Directories are districts,
 nested so a directory's plot sits on its parent's; files are buildings. Height is lines,
@@ -2897,7 +2897,21 @@ vault, see <code>/gt-flow:gt-flow</code>.)</p>
 python3 $VIS/gt_visualize.py render [PATH] [--out FILE|DIR] [--redact] [--since DAYS] \
     [--no-churn] [--exclude GLOB ...] [--max-files N]
 </code></pre>
+<p><strong>Explain how it works</strong> — the second mode, and usually the one to reach for first. Where the
+city shows <em>where</em> the code is, an explainer shows <em>how the parts work together</em>: a narrative
+column that scrolls beside a 3D stage, each scene showing some parts, putting one or two in
+focus and animating flows along the links between them — data, a rule pushed in, an answer
+coming back, or a request stopped at a gate. The skill writes the story (a JSON file of
+parts, links and scenes) from the project's <code>source.md</code>, <code>design.md</code> and the code itself;
+the script renders it:</p>
+<pre><code class="language-bash">python3 $VIS/gt_visualize.py explain story.json --check     # list every problem, write nothing
+python3 $VIS/gt_visualize.py explain story.json [--out FILE|DIR]
+</code></pre>
+<p>A story with any problem is never rendered. Ask for it in a session — <em>"explain how this
+codebase works"</em>, <em>"architecture walkthrough"</em> — and keep the story file with the project
+if you want the next render to start from it.</p>
 <ul>
+<li><strong>Code city</strong> (<code>render</code>), below.</li>
 <li>Inside a git work tree the file list is <code>git ls-files --cached --others --exclude-standard</code>,
   so <code>.gitignore</code> is honoured; outside one the directory is walked (skipping <code>.git/</code>) and
   churn is off — the output line says so.</li>

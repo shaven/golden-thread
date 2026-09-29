@@ -156,7 +156,7 @@ by `install.sh` while it is on. Since 0.15.0 there are six.
 | `report-card` (`gt-report-card`) | on | none | The session report card at `/compact` and session end, shown at the next session start, and the project close-out question. Settings `report_card`, `closeout_check`. |
 | `farm` (`gt-farm`) | off (kept on when upgrading from a gt that had it) | `/gt-farm:gt-farm` | Route bulk, mechanical, or second-opinion tasks to an external AI service as a self-contained work packet. All four gates (Stateless, Self-contained, Checkable, Releasable) must pass before a task leaves. Results come back unverified. Was `/gt:gt-farm`. |
 | `flow` (`gt-flow`) | on | `/gt-flow:gt-flow` | Render the vault's event stream as one offline HTML page: a lane per project, an arrow each time knowledge climbed a level. Add `--redact` before sharing it. |
-| `visualize` (`gt-visualize`) | on | `/gt-visualize:gt-visualize` | Render a repository as a 3D code city in one offline HTML page (three.js inlined): directories are districts, files are buildings, height is lines, colour is language or git churn. `--redact` before sharing. |
+| `visualize` (`gt-visualize`) | on | `/gt-visualize:gt-visualize` | Explain a codebase as a scroll-driven 3D walkthrough of how its parts work together, or render it as a 3D code city — one offline HTML page (three.js inlined): directories are districts, files are buildings, height is lines, colour is language or git churn. `--redact` before sharing. |
 | `usage` (`gt-usage`) | on | `/gt-usage:gt-usage` | Where this account stands against its Claude plan allowance — the 5-hour, weekly and monthly-spend windows. Records a reading a minute and says nothing until one is worth acting on; `usage_alert always` keeps it on screen. |
 
 #### What flow shows
@@ -495,7 +495,7 @@ tools/gt_adr.py allocate <project>      ← reserves the next ADR number atomica
 /gt:gt-validate               ← verify a claim before recording it as fact
 /gt-farm:gt-farm              ← route bulk or external-opinion tasks out of this context (farm module)
 /gt-flow:gt-flow              ← draw how knowledge climbed the ladder (flow module)
-/gt-visualize:gt-visualize    ← draw a repository as a 3D code city (visualize module)
+/gt-visualize:gt-visualize    ← explain a codebase in 3D, or draw it as a code city (visualize module)
 ```
 
 ---
