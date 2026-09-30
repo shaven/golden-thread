@@ -270,8 +270,14 @@ class C6FarmSubmitsThroughTheQueue(BrokerBase):
     def test_the_documented_command_queues_instead_of_writing(self):
         scratch = self.tmp / "returned.md"
         scratch.write_text("FINDINGS:\n  - claim: x\n    source: NONE\n")
+        # The script path is QUOTED as it is substituted: the shared checkout lives under
+        # ".../Golden Thread/", and an unquoted path split at the space failed this test there
+        # (and only there) during the 0.17.10 publish.
+        import shlex
+        script = shlex.quote(str(SCRIPTS / "gt_write_queue.py"))
         cmd = (self.documented_command()
-               .replace("<gt-scripts>", str(SCRIPTS)).replace("<vault>", str(self.vault))
+               .replace("<gt-scripts>/gt_write_queue.py", script)
+               .replace("<vault>", str(self.vault))
                .replace("<packet path>", "Projects/quokka/packets/2026-09-30-probe")
                .replace("<scratch file>", str(scratch)))
         p = self.run_cmd(["bash", "-c", cmd])
