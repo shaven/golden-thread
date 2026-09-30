@@ -120,6 +120,19 @@ GIT_ID = {"GIT_AUTHOR_NAME": "gt-test", "GIT_AUTHOR_EMAIL": "gt-test@example.inv
           "GIT_COMMITTER_NAME": "gt-test", "GIT_COMMITTER_EMAIL": "gt-test@example.invalid"}
 
 
+def path_without_astgrep(path=None):
+    """PATH with every directory that holds an `ast-grep` binary removed.
+
+    A test of the ABSENT case must not see the machine's own install. Found 2026-09-29: the
+    suite passed on the owner's Mac only because ast-grep had never been installed there; the
+    hour it was, three test classes that build their PATH from os.environ started failing. Only
+    `ast-grep` is looked for, never `sg`: on Linux /usr/bin/sg is the unrelated setgid tool, and
+    dropping /usr/bin would break everything else the test runs."""
+    dirs = (path if path is not None else os.environ.get("PATH", "")).split(os.pathsep)
+    keep = [d for d in dirs if d and not os.access(os.path.join(d, "ast-grep"), os.X_OK)]
+    return os.pathsep.join(keep) or "/usr/bin:/bin"
+
+
 def load_module(path: Path, name: str = None):
     """Import a script by path. Set HOME in os.environ BEFORE calling if it reads config."""
     spec = importlib.util.spec_from_file_location(name or path.stem, str(path))

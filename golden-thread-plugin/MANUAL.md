@@ -3,8 +3,8 @@
 > **Reader:** a daily user — the deepest document, where the *why* lives
 > **Claims last checked against the code:** 2026-09-17 — see *The documents, and what belongs in each* in [`CLAUDE.md`](../CLAUDE.md).
 
-Complete reference for gt's twenty-eight skills and its seven modules. Written against **gt v0.17.7**
-(gt-wiki 0.2.3; gt-usage 0.1.3; gt-demo, gt-watch, gt-report-card, gt-farm and gt-flow 0.17.7; gt-visualize 0.1.0 —
+Complete reference for gt's twenty-eight skills and its seven modules. Written against **gt v0.17.8**
+(gt-wiki 0.2.3; gt-usage 0.1.3; gt-demo, gt-watch, gt-report-card, gt-farm and gt-flow 0.17.8; gt-visualize 0.2.0 —
 those five are versioned with gt and move with every release, changed or not).
 
 ---
@@ -2397,7 +2397,7 @@ promotion is an arrow climbing. It reads `Projects/golden-thread/events.jsonl` a
 writes the vault.
 
 ```bash
-FLOW=~/.claude/plugins/cache/golden-thread-plugin/gt-flow/0.17.7/scripts
+FLOW=~/.claude/plugins/cache/golden-thread-plugin/gt-flow/0.17.8/scripts
 python3 $FLOW/gt_flow.py render --vault <vault> [--out FILE|DIR] [--redact] \
     [--project <slug> ...] [--since YYYY-MM-DD] [--tasks]
 ```
@@ -2418,7 +2418,7 @@ would be recovered) · `3` the filters matched nothing.
 
 ### `/gt-visualize:gt-visualize`
 
-*Module `visualize` (plugin `gt-visualize`), new in gt-visualize 0.1.0, installed by default. Two modes: `explain` and `render`.*
+*Module `visualize` (plugin `gt-visualize`), new in gt-visualize 0.2.0, installed by default. Two modes: `explain` and `render`.*
 
 Draws a **repository** as an interactive 3D code city, in **one self-contained HTML file**
 that opens offline — three.js is inlined, nothing is fetched. Directories are districts,
@@ -2448,7 +2448,7 @@ python3 $VIS/gt_visualize.py explain story.json --check     # list every problem
 python3 $VIS/gt_visualize.py explain story.json [--out FILE|DIR]
 ```
 
-A story with any problem is never rendered. Ask for it in a session — *"explain how this
+A story with any problem is never rendered. **The rules are fixed, not left to taste** (gt-visualize 0.2.0): scene 1 is an establishing shot of the whole system and the last scene a recap of it; every middle scene shows at least 3 parts and focuses 1–2; every scene carries a one-line caption of what the picture shows; and the page itself keeps the camera at one viewing angle, framing everything a scene shows and never closer than 55% of the establishing shot. `--check` names the rule each problem breaks; the full table (S1–S10, F1–F6) is in the skill. Ask for it in a session — *"explain how this
 codebase works"*, *"architecture walkthrough"* — and keep the story file with the project
 if you want the next render to start from it.
 
@@ -2501,7 +2501,7 @@ project other than the one loaded.
 ## Script reference
 
 ```bash
-SCRIPTS=~/.claude/plugins/cache/golden-thread-plugin/gt/0.17.7/scripts
+SCRIPTS=~/.claude/plugins/cache/golden-thread-plugin/gt/0.17.8/scripts
 
 python3 $SCRIPTS/vault_init.py fresh --vault ~/my-vault --domain "My Team"
 

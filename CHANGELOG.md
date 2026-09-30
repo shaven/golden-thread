@@ -11,6 +11,31 @@ release's own summary line, kept short rather than reconstructed after the fact.
 
 ---
 
+## gt 0.17.8 — 2026-09-29
+
+**gt-visualize 0.2.0: explainers follow written rules instead of taste.** A story that put one or
+two parts in focus in every scene — the first included — rendered "all zoomed in from the start",
+because the camera framed only the focus. The shape is now fixed, in two layers.
+
+**The page enforces framing itself (F1–F6)**, so no story can break it: it opens on an
+establishing shot of the whole system; it frames everything a scene *shows*, with focus shown by
+light rather than by zooming in; it never comes closer than 55% of the establishing shot; it keeps
+one viewing angle; parts outside a scene stay as faint ghosts; and the last scene pulls back out.
+
+**`--check` enforces the story (S1–S10)** and names the rule each problem breaks: scene 1 is the
+overview (everything shown, no focus, no flows) and the last scene a recap of the whole; 4–10
+scenes; 8–30 parts in 3–6 groups; labels of at most 24 characters; each middle scene shows at
+least 3 parts and focuses 1–2 of them; at most 5 flows a scene, each with both ends shown; 1–2
+paragraphs a scene; and every scene has a one-line **caption** of what the picture shows, rendered
+under the scene as "On the stage: …". The skill teaches the same rules before the story is
+written. A 0.1.0 story needs a caption per scene and a closing recap to pass.
+
+Also: **three test classes about an ABSENT ast-grep failed on any machine that had it installed** — they built their PATH from the real one, and passed on the release machine only because ast-grep had never been installed there. A shared helper now removes ast-grep from the PATH those tests see (never `sg`, which on Linux is an unrelated system tool).
+
+gt and the gt-versioned modules move to 0.17.8 with gt-visualize; their content is unchanged.
+
+---
+
 ## gt 0.17.7 — 2026-09-29
 
 Two things: the installer reports what it is doing, and a new module, **gt-visualize 0.1.0**. The installer work was first released this morning as 0.17.6 and withdrawn after 22 minutes; it ships here under a new number so no machine that installed the withdrawn 0.17.6 holds a different release of the same name.

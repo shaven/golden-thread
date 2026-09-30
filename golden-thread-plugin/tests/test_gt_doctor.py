@@ -18,7 +18,7 @@ import sys
 import unittest
 from pathlib import Path
 
-from _harness import Sandbox, SCRIPTS, GT, ENFORCEMENT_HOOKS, core_rules_dir
+from _harness import Sandbox, SCRIPTS, GT, ENFORCEMENT_HOOKS, core_rules_dir, path_without_astgrep
 
 
 DOCTOR = SCRIPTS / "gt_doctor.py"
@@ -820,7 +820,8 @@ class AstgrepIsOptionalNotMissing(Sandbox):
         return d
 
     def doctor(self, extra_path=None):
-        env = {"PATH": "%s:%s" % (extra_path, os.environ["PATH"])} if extra_path else None
+        env = {"PATH": ("%s:%s" % (extra_path, path_without_astgrep())) if extra_path
+               else path_without_astgrep()}
         return self.py(SCRIPTS / "gt_doctor.py", "--only", "astgrep", env=env)
 
     def test_absent_is_reported_and_is_not_a_failure(self):
@@ -877,7 +878,8 @@ class AstgrepMustBeNewEnough(Sandbox):
         return str(d)
 
     def doctor(self, path_dir=None):
-        env = {"PATH": "%s:%s" % (path_dir, os.environ["PATH"])} if path_dir else None
+        env = {"PATH": ("%s:%s" % (path_dir, path_without_astgrep())) if path_dir
+               else path_without_astgrep()}
         return self.py(SCRIPTS / "gt_doctor.py", "--only", "astgrep", env=env)
 
     def test_a_stale_binary_is_a_WARN_because_it_looks_installed(self):

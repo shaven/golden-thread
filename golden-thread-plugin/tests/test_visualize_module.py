@@ -353,20 +353,35 @@ def story(**over):
         "parts": [
             {"id": "api", "label": "Kestrel API", "group": "Edge", "note": "takes requests"},
             {"id": "gate", "label": "Auth gate", "kind": "gate", "group": "Edge"},
+            {"id": "cache", "label": "Wombat cache", "kind": "stack", "group": "Edge"},
             {"id": "db", "label": "Quokka store", "kind": "store", "group": "Data", "size": "l"},
+            {"id": "queue", "label": "Marmot queue", "kind": "stack", "group": "Data"},
+            {"id": "worker", "label": "Ibex worker", "group": "Data"},
             {"id": "user", "label": "Caller", "kind": "actor", "group": "Outside", "at": [-9, 2]},
+            {"id": "admin", "label": "Operator", "kind": "actor", "group": "Outside"},
         ],
         "links": [
             {"from": "user", "to": "api", "label": "request"},
             {"from": "api", "to": "gate"},
             {"from": "gate", "to": "db"},
             {"id": "deny", "from": "gate", "to": "user", "label": "refused"},
+            {"from": "api", "to": "queue"},
+            {"from": "queue", "to": "worker"},
+            {"from": "worker", "to": "db"},
         ],
         "scenes": [
-            {"title": "The parts", "body": "All of it <script>alert(1)</script>.", "show": "*"},
+            {"title": "The parts", "body": "All of it <script>alert(1)</script>.", "show": "*",
+             "caption": "Every part, from above."},
             {"title": "A request", "body": ["It goes in.", "Then it is `checked`."],
-             "show": ["user", "api", "gate"], "focus": ["gate"], "ghost": True,
+             "caption": "A request reaches the gate; a bad one is sent back.",
+             "show": ["user", "api", "gate"], "focus": ["gate"],
              "flows": [{"link": "user>api"}, {"link": "deny", "kind": "block"}]},
+            {"title": "Work in the background", "body": "Slow work is queued.",
+             "caption": "The API queues work; the worker writes the result to the store.",
+             "show": ["api", "queue", "worker", "db"], "focus": ["queue", "worker"],
+             "flows": [{"link": "api>queue"}, {"link": "queue>worker"}, {"link": "worker>db"}]},
+            {"title": "All together", "body": "That is the whole pipeline.",
+             "caption": "Back to the whole picture.", "show": "*"},
         ],
     }
     s.update(over)
@@ -394,7 +409,7 @@ class VisualizeExplain(Sandbox):
     def test_renders_one_offline_walkthrough(self):
         p, target = self.explain(story())
         self.assertOk(p)
-        self.assertIn("4 parts, 4 links, 2 scenes", p.stdout)
+        self.assertIn("8 parts, 7 links, 4 scenes", p.stdout)
         self.assertEqual(os.listdir(self.out), ["story.html"])
         page = target.read_text(encoding="utf-8")
         rest = without_bundle(page)
@@ -402,7 +417,8 @@ class VisualizeExplain(Sandbox):
         self.assertNotRegex(page, r"(?i)<script[^>]*\bsrc\s*=|<link[^>]*\bhref\s*=")
         self.assertNotIn("http://", rest)
         self.assertNotIn("https://", rest)
-        self.assertEqual(len(re.findall(r'<section class="step" data-i="\d+">', page)), 2)
+        self.assertEqual(len(re.findall(r'<section class="step" data-i="\d+">', page)), 4)
+        self.assertEqual(page.count('<p class="caption"><span>On the stage:</span>'), 4)
         self.assertIn("<title>How the kestrel pipeline works</title>", page)
         self.assertIn("<code>queue</code>", page)
         self.assertIn("<strong>gate</strong>", page)
@@ -413,11 +429,61 @@ class VisualizeExplain(Sandbox):
         self.assertIn("prefers-reduced-motion", page)
         m = re.search(r'<script type="application/json" id="gtx-data">(.*?)</script>', page, re.S)
         d = json.loads(m.group(1).replace("<\\/", "</"))
-        self.assertEqual([x["id"] for x in d["parts"]], ["api", "gate", "db", "user"])
-        self.assertEqual([x["id"] for x in d["links"]], ["user>api", "api>gate", "gate>db", "deny"])
+        self.assertEqual([x["id"] for x in d["parts"]],
+                         ["api", "gate", "cache", "db", "queue", "worker", "user", "admin"])
+        self.assertEqual([x["id"] for x in d["links"]],
+                         ["user>api", "api>gate", "gate>db", "deny", "api>queue", "queue>worker",
+                          "worker>db"])
         self.assertEqual(d["scenes"][1]["flows"], [{"link": "user>api", "kind": "data"},
                                                    {"link": "deny", "kind": "block"}])
         self.assertEqual(d["groups"], ["Edge", "Data", "Outside"])
+        # F5: context never vanishes unless a story asks; F3's floor reaches the page.
+        self.assertTrue(all(sc["ghost"] for sc in d["scenes"]))
+        self.assertEqual(d["zoomFloor"], 0.55)
+        self.assertIn("F1 the first scene is an establishing shot", page)
+        self.assertIn("frame(i)", page)
+
+    def test_every_story_rule_is_enforced_and_named(self):
+        def bad(mutate):
+            s = story()
+            mutate(s)
+            p, target = self.explain(s)
+            self.assertEqual(p.returncode, 1, p.stdout + p.stderr)
+            self.assertFalse(target.exists())
+            return p.stderr
+
+        def few_parts(s):
+            s["parts"] = s["parts"][:5]
+            s["links"] = [l for l in s["links"] if l["from"] in ("api", "gate", "cache", "db", "queue")
+                          and l["to"] in ("api", "gate", "cache", "db", "queue")]
+            for sc in s["scenes"]:
+                sc["flows"] = []
+                if sc["show"] != "*":
+                    sc["show"] = ["api", "gate", "db"]
+                    sc["focus"] = ["api"]
+
+        cases = {
+            "S1": lambda s: s["scenes"][0].update(focus=["api"]),
+            "S2": lambda s: s["scenes"][3].update(show=["api", "gate", "db"]),
+            "S3": lambda s: s.update(scenes=s["scenes"][:1] + s["scenes"][3:]),
+            "S4": few_parts,
+            "S5": lambda s: s["parts"][0].update(label="A label that is far too long to read"),
+            "S6": lambda s: s["scenes"][1].update(focus=[]),
+            "S7": lambda s: s["scenes"][1].update(show=["api", "gate"], flows=[]),
+            "S8": lambda s: s["scenes"][2]["flows"].append({"link": "user>api"}),
+            "S9": lambda s: s["scenes"][2].update(body=["one", "two", "three"]),
+            "S10": lambda s: s["scenes"][2].pop("caption"),
+        }
+        for rid, mutate in cases.items():
+            with self.subTest(rule=rid):
+                self.assertIn("rule %s:" % rid, bad(mutate))
+
+    def test_focus_must_be_shown(self):
+        s = story()
+        s["scenes"][1]["focus"] = ["db"]
+        p, _ = self.explain(s)
+        self.assertEqual(p.returncode, 1)
+        self.assertIn("'db' is not shown -- rule S6", p.stderr)
 
     def test_layout_groups_are_columns_and_at_wins(self):
         p, target = self.explain(story())

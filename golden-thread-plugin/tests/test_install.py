@@ -27,7 +27,7 @@ import unittest
 from pathlib import Path
 
 from _harness import (Sandbox, REPO, GT, WIKI, WATCH, REPORT_CARD, latest_version_dir,
-                      load_module, SCRIPTS)
+                      load_module, SCRIPTS, path_without_astgrep)
 
 INSTALL = REPO / "install.sh"
 DEMO = ("skills/gt-demo", "scripts/gt_demo.sh", "templates/demo-pizzabot")
@@ -1007,6 +1007,12 @@ class AstgrepOfferIsDefaultOnButNeverUnattended(InstallTest):
     install in this suite is non-interactive, so if the offer ever reached for the network or
     blocked on a prompt, the whole file would hang or start mutating the machine running it.
     """
+
+    def setUp(self):
+        super().setUp()
+        # The offer is only made when ast-grep is ABSENT; the machine running the suite may
+        # have it installed, and that must not change what these tests see.
+        self.env["PATH"] = path_without_astgrep(self.env.get("PATH"))
 
     def test_the_install_finishes_when_neither_brew_nor_npm_exists(self):
         """THE REGRESSION THAT NEARLY SHIPPED.
