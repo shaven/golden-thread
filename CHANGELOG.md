@@ -34,6 +34,24 @@ Feature request `2026-09-30-gt-daily-enhancements-tasks-domain-new-project`.
   `README.md` files are read now. An open task edited or moved during the day is not counted as
   added.
 
+### Named sections, and email/Teams content off by default
+
+Feature request `2026-09-30-gt-daily-comms-section`, redesigned with the owner the same morning:
+instead of a fixed `none`/`m365`/`joule` setting, the owner **names** sections and other tools fill
+them. gt_daily makes an empty, marked area for each in the daily note — which always lives in
+`Daily Notes/` — and writes `Daily Notes/.handoff/<date>.md` saying where the note is and which
+sections are waiting; it never overwrites a section, and with nothing open for filling there is no
+handoff (a stale one is removed). gt_daily itself never reaches for mail, Teams or a network, so the
+`m365` problem — a scheduled job cannot use a session's M365 tools — disappears: a session or Joule
+is just another tool filling a section.
+
+Sections and the comms policy live in the **shared vault** (`.gt/daily-sections.json`), because one
+user works from several machines on one vault. **Email and Teams content is off by default**; a
+`--comms` section is placed only while the vault's policy is `on` (`--comms-content on`) and the
+machine does not force it off with the new gt setting `daily_comms_content` (`follow`/`off`). A
+machine can tighten the policy, never loosen it: a shared vault is readable from every machine,
+including a work one whose employer does not want such content anywhere Claude can read.
+
 ### gt-visualize 0.3.0 — publish
 
 Feature request `2026-09-30-gt-visualize-default-publish-target`. `gt_visualize.py publish` puts a

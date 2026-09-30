@@ -2183,6 +2183,31 @@ created.
 vault with no remote — adds a `> NOTE` to the block and the write still happens. `--dry-run` never
 pushes; `--check` reports an unreachable remote as a problem and a missing one as information.
 
+**Named sections other tools fill** (0.17.9). Name a section and gt_daily makes an empty, marked
+area for it in the daily note — which always lives in `Daily Notes/<date>.md` — and writes
+`Daily Notes/.handoff/<date>.md`, saying where the note is and which sections are waiting. Another
+tool (Joule, a Claude session, anything) reads the handoff and writes between its own section's
+markers; gt_daily never overwrites a section, and its next run marks it `filled`. With no section
+open for filling there is no handoff, and a stale one is removed. The sections live in the shared
+vault (`.gt/daily-sections.json`), so every machine agrees.
+
+```bash
+python3 $SCRIPTS/gt_daily.py --vault "<vault>" --section-add builds [--title T] [--instructions I]
+python3 $SCRIPTS/gt_daily.py --vault "<vault>" --section-add mail --comms     # holds email/Teams info
+python3 $SCRIPTS/gt_daily.py --vault "<vault>" --sections-list | --section-remove NAME
+python3 $SCRIPTS/gt_daily.py --vault "<vault>" --sections-only                # make room early in the day
+python3 $SCRIPTS/gt_daily.py --vault "<vault>" --comms-content on|off         # the vault-wide policy
+```
+
+**Email and Teams content is OFF by default.** A `--comms` section is placed only while the
+vault's policy is `on` and this machine does not force it off with the gt setting
+`daily_comms_content` (`follow`, the default, or `off`). A machine can tighten the policy, never
+loosen it: the vault is shared, so content written on one machine is readable from every other —
+including a work machine whose employer does not want mail or chat content anywhere Claude can
+read. While off, a comms section gets no room and no handoff, every handoff says such content is
+not allowed, and if one still holds content a `> NOTE` says so; gt_daily never deletes another
+tool's writing.
+
 **Terse by design.** It does not explain, summarise or interpret. The owner writes the meaning;
 a generated block that editorialised would encode a reading of the day that is not theirs. For
 the wiki it records how many items and how much time, never what they said.

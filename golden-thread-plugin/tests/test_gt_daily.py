@@ -408,3 +408,209 @@ class OnlyReadmeTasksCount(DailyBase):
         out = self.run_daily("--dry-run", expect=0).stdout
         self.assertIn("A real task", out)
         self.assertNotIn("Do the tests pass", out, "a handoff checklist line was read as a task")
+
+
+class NamedSections(DailyBase):
+    """Owner design 2026-09-30 (supersedes the comms request's fixed none/m365/joule setting):
+    named sections other tools fill, a handoff that says where the note is, and a note that
+    always lives in Daily Notes/."""
+
+    def handoff(self):
+        p = self.vault / "Daily Notes" / ".handoff" / ("%s.md" % DATE)
+        return p.read_text() if p.is_file() else ""
+
+    def add(self, name, *extra):
+        return self.py(DAILY, "--vault", self.vault, "--section-add", name, *extra)
+
+    def fill(self, name, content):
+        note = self.vault / "Daily Notes" / ("%s.md" % DATE)
+        text = note.read_text()
+        b = "<!-- gt_daily:section:%s:begin" % name
+        head, rest = text.split(b, 1)
+        marker_end = rest.index("-->") + 3
+        tail = rest[rest.index("<!-- gt_daily:section:%s:end -->" % name):]
+        note.write_text(head + b + rest[:marker_end] + "\n## Comms\n\n" + content + "\n" + tail)
+
+    def test_no_sections_means_output_identical_to_before(self):
+        self.commit("did a thing", {"notes.md": "x\n"})
+        self.run_daily(expect=0)
+        self.assertNotIn("gt_daily:section:", self.note())
+        self.assertFalse((self.vault / "Daily Notes" / ".handoff").exists())
+
+    def test_a_named_section_gets_room_in_the_note_and_a_handoff(self):
+        self.assertOk(self.add("comms", "--title", "Comms",
+                               "--instructions", "counts only, never subjects"))
+        self.commit("did a thing", {"notes.md": "x\n"})
+        self.run_daily(expect=0)
+        note = self.note()
+        self.assertIn("<!-- gt_daily:section:comms:begin", note)
+        self.assertIn("<!-- gt_daily:section:comms:end -->", note)
+        self.assertIn("_Nothing handed off yet._", note)
+        self.assertLess(note.index("gt_daily:end"), note.index("gt_daily:section:comms:begin"),
+                        "the section should follow the facts block")
+        h = self.handoff()
+        self.assertIn("note: Daily Notes/%s.md" % DATE, h)
+        self.assertIn("name: comms", h)
+        self.assertIn("status: waiting", h)
+        self.assertIn("counts only, never subjects", h)
+
+    def test_a_tools_content_survives_every_rerun_and_is_marked_filled(self):
+        self.add("comms")
+        self.commit("did a thing", {"notes.md": "x\n"})
+        self.run_daily(expect=0)
+        self.fill("comms", "- 12 emails received, 9 handled")
+        self.commit("more", {"notes.md": "y\n"})
+        self.run_daily(expect=0)
+        self.run_daily(expect=0)
+        note = self.note()
+        self.assertIn("- 12 emails received, 9 handled", note)
+        self.assertEqual(note.count("gt_daily:section:comms:begin"), 1)
+        self.assertEqual(note.count("gt_daily:begin"), 1)
+        self.assertIn("status: filled", self.handoff())
+
+    def test_sections_only_makes_room_on_a_quiet_day(self):
+        self.add("comms")
+        p = self.run_daily("--sections-only", expect=0)
+        self.assertIn("waiting: comms", p.stdout)
+        self.assertIn("gt_daily:section:comms:begin", self.note())
+        self.assertNotIn("gt_daily:begin", self.note(), "no facts block was asked for")
+        self.assertIn("status: waiting", self.handoff())
+
+    def test_sections_only_without_sections_writes_nothing(self):
+        self.run_daily("--sections-only", expect=1)
+        self.assertEqual(self.note(), "")
+
+    def test_dry_run_shows_sections_and_writes_nothing(self):
+        self.add("comms")
+        self.commit("did a thing", {"notes.md": "x\n"})
+        out = self.run_daily("--dry-run", expect=0).stdout
+        self.assertIn("gt_daily:section:comms:begin", out)
+        self.assertIn("--- handoff:", out)
+        self.assertEqual(self.note(), "")
+        self.assertEqual(self.handoff(), "")
+
+    def test_credential_shaped_section_content_is_flagged_not_quoted(self):
+        self.add("comms")
+        self.commit("did a thing", {"notes.md": "x\n"})
+        self.run_daily(expect=0)
+        fake = "Qm7tR2vX" + "9pL4sK8w" + "N3yB6dF1" + "hJ5cA0eZ"
+        self.fill("comms", 'api_key = "%s"' % fake)
+        self.commit("more", {"notes.md": "y\n"})
+        p = self.run_daily(expect=0)
+        note = self.note()
+        self.assertIn("credential-shaped text", note)
+        self.assertEqual(note.count(fake), 1, "the value was repeated outside its section")
+        self.assertNotIn(fake, p.stdout + p.stderr)
+
+    def test_names_are_validated_and_sections_can_be_removed(self):
+        p = self.add("Bad Name!")
+        self.assertEqual(p.returncode, 2)
+        self.assertOk(self.add("comms"))
+        self.assertOk(self.add("calendar", "--title", "Calendar"))
+        out = self.py(DAILY, "--vault", self.vault, "--sections-list").stdout
+        self.assertIn("comms", out)
+        self.assertIn("calendar", out)
+        self.assertOk(self.py(DAILY, "--vault", self.vault, "--section-remove", "comms"))
+        out = self.py(DAILY, "--vault", self.vault, "--sections-list").stdout
+        self.assertNotIn("comms", out)
+        self.assertEqual(self.py(DAILY, "--vault", self.vault, "--section-remove",
+                                 "comms").returncode, 2)
+
+    def test_check_reports_each_sections_state(self):
+        self.add("comms")
+        p = self.run_daily("--check", expect=0)
+        self.assertIn("section comms — not in today's note yet", p.stdout)
+
+
+class CommsContentIsOffByDefault(NamedSections):
+    """Owner, 2026-09-30: an employer may not want mail or Teams content in anything Claude can
+    read. One user works from several machines on ONE shared vault, so the policy lives in the
+    vault (off by default) and a machine can only force it off, never on."""
+
+    def policy(self, value):
+        self.assertOk(self.py(DAILY, "--vault", self.vault, "--comms-content", value))
+
+    def machine(self, value):
+        (self.home / ".claude" / "vault-config.json").write_text(
+            json.dumps({"daily_comms_content": value}))
+
+    def test_off_by_default_the_comms_section_is_held_back(self):
+        p = self.add("mail", "--comms", "--title", "Mail")
+        self.assertIn("comms content is OFF", p.stdout)
+        self.add("builds")
+        self.commit("did a thing", {"notes.md": "x\n"})
+        self.run_daily(expect=0)
+        note, h = self.note(), self.handoff()
+        self.assertNotIn("gt_daily:section:mail:", note, "a comms section was placed while off")
+        self.assertIn("gt_daily:section:builds:begin", note)
+        self.assertNotIn("name: mail", h, "a comms section was offered to other tools while off")
+        self.assertIn("comms_content: off", h)
+        self.assertIn("Email and Teams content is OFF", h)
+
+    def test_sections_and_policy_live_in_the_shared_vault(self):
+        self.add("mail", "--comms")
+        self.policy("on")
+        d = json.loads((self.vault / ".gt" / "daily-sections.json").read_text())
+        self.assertEqual(d["comms_content"], "on")
+        self.assertEqual([s["name"] for s in d["sections"]], ["mail"])
+
+    def test_on_in_the_vault_places_the_comms_section(self):
+        self.policy("on")
+        self.add("mail", "--comms")
+        self.commit("did a thing", {"notes.md": "x\n"})
+        self.run_daily(expect=0)
+        self.assertIn("gt_daily:section:mail:begin", self.note())
+        h = self.handoff()
+        self.assertIn("name: mail", h)
+        self.assertIn("comms_content: on", h)
+        self.assertNotIn("content is OFF", h)
+
+    def test_a_machine_can_force_it_off_but_never_on(self):
+        self.policy("on")
+        self.machine("off")
+        self.add("mail", "--comms")
+        self.commit("did a thing", {"notes.md": "x\n"})
+        self.run_daily(expect=0)
+        self.assertNotIn("gt_daily:section:mail:", self.note(), "the machine override was ignored")
+        self.assertIn("forced off on this machine", self.run_daily("--check", expect=0).stdout)
+        self.policy("off")
+        self.machine("on")          # not a recognised value: a machine cannot loosen the vault
+        self.run_daily(expect=0)
+        self.assertNotIn("gt_daily:section:mail:", self.note())
+
+    def test_no_open_sections_means_no_handoff_and_a_stale_one_is_removed(self):
+        self.policy("on")
+        self.add("mail", "--comms")
+        self.commit("did a thing", {"notes.md": "x\n"})
+        self.run_daily(expect=0)
+        self.assertIn("name: mail", self.handoff())
+        self.policy("off")
+        self.commit("more", {"notes.md": "y\n"})
+        self.run_daily(expect=0)
+        self.assertEqual(self.handoff(), "", "a handoff still invites mail after comms went off")
+
+    def test_content_left_in_a_comms_section_after_turning_off_is_flagged_not_deleted(self):
+        self.policy("on")
+        self.add("mail", "--comms")
+        self.commit("did a thing", {"notes.md": "x\n"})
+        self.run_daily(expect=0)
+        self.fill("mail", "- 4 threads answered")
+        self.policy("off")
+        self.commit("more", {"notes.md": "y\n"})
+        self.run_daily(expect=0)
+        note = self.note()
+        self.assertIn("- 4 threads answered", note, "gt_daily deleted another tool's writing")
+        self.assertIn("holds content although comms content is off", note)
+
+    def test_check_states_the_policy(self):
+        self.assertIn("is off — off in the vault", self.run_daily("--check", expect=0).stdout)
+        self.policy("on")
+        self.assertIn("is ON — on in the vault", self.run_daily("--check", expect=0).stdout)
+
+    def test_the_machine_setting_is_registered_follow_by_default(self):
+        import importlib.util
+        spec = importlib.util.spec_from_file_location("gts", str(SCRIPTS / "gt_settings.py"))
+        m = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(m)
+        s = m.SETTINGS["daily_comms_content"]
+        self.assertEqual((s["default"], s["values"]), ("follow", ["follow", "off"]))

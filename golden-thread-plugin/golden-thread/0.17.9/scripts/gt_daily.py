@@ -2,6 +2,14 @@
 """gt_daily.py -- put the day's FACTS into the daily note. Terse by design.
 
     gt_daily.py --vault V [--date YYYY-MM-DD] [--repo PATH ...] [--dry-run] [--check]
+    gt_daily.py --vault V [--date YYYY-MM-DD] --sections-only [--dry-run]
+    gt_daily.py --vault V --section-add NAME [--title T] [--instructions I]
+    gt_daily.py --vault V --section-remove NAME | --sections-list
+
+NAMED SECTIONS (0.17.9): the owner names a section ("comms"); gt_daily puts an empty, marked area
+for it in `Daily Notes/<date>.md` and writes `Daily Notes/.handoff/<date>.md` saying where the note
+is and which sections are waiting. Another tool reads the handoff and writes between its own
+markers; gt_daily never overwrites a section. Sections are per user.
 
 WHAT IT WRITES: new projects, tasks closed, tasks added, tasks due today that are still open,
 commits, event counts, wiki item COUNTS, and an active span per project. Numbers and one-liners.
@@ -516,6 +524,219 @@ def check_push(vault: Path):
     return None, None
 
 
+# -- named sections: other tools fill them, gt_daily makes room and says where ------------
+#
+# Owner design, 2026-09-30, replacing the comms request's fixed `none`/`m365`/`joule` setting:
+# the owner NAMES a section ("comms"), gt_daily puts an empty, marked area for it in the daily
+# note -- which always lives in `Daily Notes/<date>.md` -- and writes a HANDOFF file saying where
+# the note is, which sections exist and which are still waiting. Another tool (Joule, a Claude
+# session with M365 tools, anything) reads the handoff and writes its content between its own
+# markers. gt_daily never overwrites a section's content, so any number of writers share the
+# note without colliding, and gt_daily itself never reaches for mail, Teams or a network.
+# In the SHARED vault, so every machine one user works from agrees on the sections and on the
+# comms policy (owner, 2026-09-30: one user, several machines, one vault, one source tree).
+SECTIONS_REL = os.path.join(".gt", "daily-sections.json")
+HANDOFF_DIR = ".handoff"                    # inside Daily Notes/; Obsidian hides dot-folders
+SECTION_NAME = re.compile(r"^[a-z0-9][a-z0-9-]{0,30}$")
+PLACEHOLDER = "_Nothing handed off yet._"
+CONFIG = Path(os.path.expanduser("~/.claude/vault-config.json"))
+
+
+def _vault_cfg(vault):
+    try:
+        d = json.loads((Path(vault) / SECTIONS_REL).read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return {}
+    return d if isinstance(d, dict) else {}
+
+
+def _save_vault_cfg(vault, d):
+    path = Path(vault) / SECTIONS_REL
+    path.parent.mkdir(parents=True, exist_ok=True)
+    tmp = path.with_suffix(".tmp")
+    tmp.write_text(json.dumps(d, indent=2) + "\n", encoding="utf-8")
+    os.replace(tmp, path)
+
+
+def machine_forces_off():
+    """The gt setting `daily_comms_content` on THIS machine: `follow` the vault (default) or
+    `off`. A machine can only tighten the vault's policy, never loosen it: the vault is shared,
+    so content written on one machine is readable from every other."""
+    try:
+        v = json.loads(CONFIG.read_text(encoding="utf-8")).get("daily_comms_content")
+    except (OSError, ValueError, AttributeError):
+        v = None
+    return isinstance(v, str) and v.strip().lower() == "off"
+
+
+def comms_state(vault):
+    """-> (allowed, why). Allowed only when the vault says on AND this machine does not say off."""
+    vault_on = str(_vault_cfg(vault).get("comms_content", "off")).lower() == "on"
+    if not vault_on:
+        return False, "off in the vault (the default)"
+    if machine_forces_off():
+        return False, "on in the vault, but forced off on this machine (daily_comms_content off)"
+    return True, "on in the vault"
+
+
+def sec_begin(name):
+    return "<!-- gt_daily:section:%s:begin — filled by another tool; gt_daily never " \
+           "overwrites this -->" % name
+
+
+def sec_end(name):
+    return "<!-- gt_daily:section:%s:end -->" % name
+
+
+def load_sections(vault):
+    """-> [{name, title, instructions, comms}] from the vault, shared by every machine."""
+    d = _vault_cfg(vault)
+    out = []
+    for s in d.get("sections", []):
+        if isinstance(s, dict) and SECTION_NAME.match(str(s.get("name", ""))):
+            out.append({"name": s["name"], "title": s.get("title") or s["name"].title(),
+                        "instructions": s.get("instructions", ""),
+                        "comms": bool(s.get("comms"))})
+    return out
+
+
+def save_sections(vault, sections):
+    d = _vault_cfg(vault)
+    d["sections"] = sections
+    _save_vault_cfg(vault, d)
+
+
+def section_content(text, name):
+    """-> what sits between a section's markers, or None when the section is not in the note."""
+    b, e = sec_begin(name), sec_end(name)
+    if b not in text or e not in text:
+        return None
+    return text.split(b, 1)[1].split(e, 1)[0]
+
+
+def filled(content):
+    body = (content or "").strip()
+    lines = [l for l in body.splitlines() if l.strip() and not l.startswith("## ")]
+    return bool(lines) and lines != [PLACEHOLDER]
+
+
+def ensure_sections(text, sections):
+    """Append a marked, empty area for each section the note lacks. Never alters one it has."""
+    for s in sections:
+        if section_content(text, s["name"]) is not None:
+            continue
+        sep = "" if not text or text.endswith("\n\n") else ("\n" if text.endswith("\n") else "\n\n")
+        text += "%s%s\n## %s\n\n%s\n%s\n" % (sep, sec_begin(s["name"]), s["title"], PLACEHOLDER,
+                                            sec_end(s["name"]))
+    return text
+
+
+def handoff_text(date, rel_note, sections, note_text, comms_on=False):
+    """The handoff: where the note is, which sections wait, and the rules for filling them."""
+    L = ["---", "type: daily-handoff", "date: %s" % date, "note: %s" % rel_note,
+         "comms_content: %s" % ("on" if comms_on else "off"), "sections:"]
+    for s in sections:
+        L.append("  - name: %s" % s["name"])
+        L.append("    title: %s" % json.dumps(s["title"]))
+        L.append("    status: %s" % ("filled" if filled(section_content(note_text, s["name"]))
+                                     else "waiting"))
+        L.append("    begin: %s" % json.dumps(sec_begin(s["name"])))
+        L.append("    end: %s" % json.dumps(sec_end(s["name"])))
+        if s["instructions"]:
+            L.append("    instructions: %s" % json.dumps(s["instructions"]))
+    L += ["---", "", "# Daily note handoff — %s" % date, "",
+          "Today's note is `%s`. Each section below has an area in it, between its `begin` and "
+          "`end` markers." % rel_note, "",
+          "**To contribute:** replace the text between YOUR section's markers — keep the markers, "
+          "and the `## Title` line under the begin marker. Touch nothing else in the note: the "
+          "generated `gt_daily` block is replaced on every run, and the owner's own headings are "
+          "theirs. gt_daily never overwrites a section, and its next run marks it `filled` here.",
+          ""]
+    if not comms_on:
+        L += ["**Email and Teams content is OFF for this note** (vault policy or this machine). Do not "
+              "write any mail or chat information — subjects, senders, bodies, counts — into any "
+              "section of this note.", ""]
+    for s in sections:
+        L.append("- **%s** (`%s`)%s%s" % (s["title"], s["name"],
+                                          " [comms]" if s.get("comms") else "",
+                                        " — " + s["instructions"] if s["instructions"] else ""))
+    return "\n".join(L) + "\n"
+
+
+def credential_note(note_text, sections):
+    """A NOTE when a filled section holds credential-shaped text -- found, never quoted."""
+    body = "\n".join(section_content(note_text, s["name"]) or "" for s in sections)
+    if not body.strip():
+        return None
+    here = Path(__file__).resolve().parent
+    scanner = here / "gt_secrets.py"
+    if not scanner.is_file():
+        return None
+    import tempfile
+    import shutil
+    d = tempfile.mkdtemp(prefix="gt-daily-sections-")
+    try:
+        (Path(d) / "sections.md").write_text(body, encoding="utf-8")
+        p = subprocess.run([sys.executable, str(scanner), d], capture_output=True, text=True,
+                           timeout=120)
+    except (OSError, subprocess.SubprocessError):
+        return None
+    finally:
+        shutil.rmtree(d, ignore_errors=True)
+    if p.returncode == 1:
+        return ("a handed-off section contains credential-shaped text — review the sections "
+                "below (run gt_secrets.py on this note to see where)")
+    return None
+
+
+def sections_cli(a, vault):
+    if a.comms_content:
+        d = _vault_cfg(vault)
+        d["comms_content"] = a.comms_content
+        _save_vault_cfg(vault, d)
+        allowed, why = comms_state(vault)
+        print("gt-daily: comms content is now %s in the vault — effective here: %s (%s)"
+              % (a.comms_content, "ON" if allowed else "off", why))
+        return WROTE
+    sections = load_sections(vault)     # every configured section, comms or not
+    if a.sections_list:
+        if not sections:
+            print("gt-daily: no named sections in this vault (%s)" % SECTIONS_REL)
+        for s in sections:
+            print("%-16s %s%s%s" % (s["name"], s["title"], "  [comms]" if s["comms"] else "",
+                                    "  — " + s["instructions"] if s["instructions"] else ""))
+        allowed, why = comms_state(vault)
+        if any(s["comms"] for s in sections) and not allowed:
+            print("gt-daily: comms content is %s, so [comms] sections are not placed" % why)
+        return WROTE
+    if a.section_add:
+        name = a.section_add.strip().lower()
+        if not SECTION_NAME.match(name):
+            print("gt-daily: a section name is lowercase letters, digits and -, up to 31",
+                  file=sys.stderr)
+            return USAGE
+        sections = [s for s in sections if s["name"] != name]
+        sections.append({"name": name, "title": (a.title or name.replace("-", " ").title()),
+                         "instructions": a.instructions or "", "comms": bool(a.comms)})
+        save_sections(vault, sections)
+        allowed, why = comms_state(vault)
+        if a.comms and not allowed:
+            print("gt-daily: section %r added as a comms section, but comms content is OFF (%s) — "
+                  "it will not appear in the note or the handoff until "
+                  "`gt_daily.py --vault V --comms-content on`" % (name, why))
+        else:
+            print("gt-daily: section %r added — the next run makes room for it and lists it in "
+                  "the handoff" % name)
+        return WROTE
+    name = a.section_remove.strip().lower()
+    if not any(s["name"] == name for s in sections):
+        print("gt-daily: no section named %r" % name, file=sys.stderr)
+        return USAGE
+    save_sections(vault, [s for s in sections if s["name"] != name])
+    print("gt-daily: section %r removed — existing notes keep what was written in it" % name)
+    return WROTE
+
+
 def main(argv=None) -> int:
     ap = argparse.ArgumentParser(description="write the day's facts into the daily note")
     ap.add_argument("--vault", required=True)
@@ -524,11 +745,33 @@ def main(argv=None) -> int:
                     help="a repo to summarise (repeatable). The vault is always included.")
     ap.add_argument("--dry-run", action="store_true", help="print the block, write nothing")
     ap.add_argument("--check", action="store_true", help="verify every dependency and exit")
+    ap.add_argument("--sections-only", action="store_true",
+                    help="make room for the named sections and write the handoff; no facts block")
+    ap.add_argument("--sections-list", action="store_true", help="list the vault's named sections")
+    ap.add_argument("--section-add", metavar="NAME", help="add a named section")
+    ap.add_argument("--section-remove", metavar="NAME", help="remove a named section")
+    ap.add_argument("--title", help="with --section-add: the heading shown in the note")
+    ap.add_argument("--instructions", help="with --section-add: what the filling tool must follow")
+    ap.add_argument("--comms-content", choices=("on", "off"),
+                    help="the VAULT-WIDE policy for email/Teams content (default off); a machine "
+                         "can force it off with the gt setting daily_comms_content")
+    ap.add_argument("--comms", action="store_true",
+                    help="with --section-add: this section holds email/Teams information, placed "
+                         "only while daily_comms_content is on")
     a = ap.parse_args(argv)
 
     vault = Path(a.vault).expanduser()
+    if a.sections_list or a.section_add or a.section_remove or a.comms_content:
+        return sections_cli(a, vault)
+
     date = a.date or datetime.date.today().isoformat()
     repos = [str(vault)] + [str(Path(r).expanduser()) for r in a.repo]
+    comms_on, comms_why = comms_state(vault)
+    configured = load_sections(vault)
+    # A comms section is placed only while the vault allows comms AND this machine does not force
+    # it off (daily_comms_content).
+    sections = [s for s in configured if comms_on or not s["comms"]]
+    held_back = [s for s in configured if s["comms"] and not comms_on]
 
     if a.check:
         problems = check(vault, repos)
@@ -542,6 +785,16 @@ def main(argv=None) -> int:
         if not problems:
             print("gt-daily: check passed — vault listable, Daily Notes/ listable, %d repo(s) "
                   "readable%s" % (len(repos), "" if push_info else ", vault push possible"))
+        print("gt-daily: email/Teams content in the daily note is %s — %s"
+              % ("ON" if comms_on else "off", comms_why))
+        if sections:
+            note = vault / "Daily Notes" / ("%s.md" % date)
+            text = note.read_text(encoding="utf-8") if note.is_file() else ""
+            for s in sections:
+                c = section_content(text, s["name"])
+                print("gt-daily: section %s — %s" % (s["name"], "not in today's note yet"
+                                                    if c is None else ("filled" if filled(c)
+                                                                       else "waiting")))
         return CANNOT_RUN if problems else WROTE
 
     problems = check(vault, repos)
@@ -572,44 +825,88 @@ def main(argv=None) -> int:
     span = spans(commits_by_repo, events)
     vault_name = os.path.basename(str(vault).rstrip("/")) or str(vault)
 
-    if not any(commits_by_repo.values()) and not closed and not added and not events:
-        print("gt-daily: nothing recorded for %s" % date)
-        return NOTHING
-
-    if a.dry_run:
-        # No push: a dry run changes nothing, the remote included.
-        print(render(date, commits_by_repo, closed, events, wiki, span, notes, added, due,
-                     fresh, dom, vault_name))
-        return WROTE
-
-    push_note = push_vault(vault)
-    if push_note:
-        notes.append(push_note)
-    block = render(date, commits_by_repo, closed, events, wiki, span, notes, added, due,
-                   fresh, dom, vault_name)
-
     target = vault / "Daily Notes" / ("%s.md" % date)
     rel = os.path.relpath(target, vault)
+    handoff = vault / "Daily Notes" / HANDOFF_DIR / ("%s.md" % date)
+    quiet = not any(commits_by_repo.values()) and not closed and not added and not events
+    facts = not quiet and not a.sections_only
+    if held_back:
+        print("gt-daily: %d comms section(s) held back — daily_comms_content is off on this "
+              "machine" % len(held_back))
+    if not facts and not configured:
+        print("gt-daily: nothing recorded for %s" % date if quiet else
+              "gt-daily: --sections-only, but no named sections in this vault")
+        return NOTHING
+
+    def existing_note():
+        if target.is_file():
+            return target.read_text(encoding="utf-8")
+        tmpl = vault / "Templates" / "Daily Note.md"
+        if tmpl.is_file():
+            return tmpl.read_text(encoding="utf-8").replace(
+                "{{date:YYYY-MM-DD}}", date).replace(
+                "{{date:dddd}}", datetime.date.fromisoformat(date).strftime("%A"))
+        return ""
+
+    if a.dry_run:
+        # No push and no write: a dry run changes nothing, the remote included.
+        text = existing_note()
+        if not facts and not sections:
+            print("gt-daily: nothing to place — every named section is held back (%s)" % comms_why)
+        if facts:
+            print(render(date, commits_by_repo, closed, events, wiki, span, notes, added, due,
+                         fresh, dom, vault_name))
+        if sections:
+            text = ensure_sections(text, sections)
+            for s in sections:
+                print("%s\n%s%s" % (sec_begin(s["name"]), section_content(text, s["name"]),
+                                    sec_end(s["name"])))
+            print("--- handoff: %s ---" % os.path.relpath(handoff, vault))
+            print(handoff_text(date, rel, sections, text, comms_on))
+        return WROTE
+
     holder = claim_holder(vault, rel)
     if holder:
         print("gt-daily: %s is claimed by session %s — NOT written" % (rel, holder),
               file=sys.stderr)
         return CANNOT_RUN
 
-    existing = ""
-    if target.is_file():
-        existing = target.read_text(encoding="utf-8")
-    else:
-        tmpl = vault / "Templates" / "Daily Note.md"
-        if tmpl.is_file():
-            existing = tmpl.read_text(encoding="utf-8").replace(
-                "{{date:YYYY-MM-DD}}", date).replace(
-                "{{date:dddd}}", datetime.date.fromisoformat(date).strftime("%A"))
+    text = existing_note()
+    if sections:
+        warn = credential_note(text, sections)
+        if warn:
+            notes.append(warn)
+    for s in held_back:
+        # Never deleted -- it is another tool's writing -- but never silent either.
+        if filled(section_content(text, s["name"])):
+            notes.append("comms section %r holds content although comms content is %s — review "
+                         "it and remove it if it should not be here" % (s["name"], comms_why))
+    if facts:
+        push_note = push_vault(vault)
+        if push_note:
+            notes.append(push_note)
+        text = splice(text, render(date, commits_by_repo, closed, events, wiki, span, notes,
+                                   added, due, fresh, dom, vault_name))
+    if sections:
+        # After the facts block, so a new note reads: the owner's headings, the facts, then the
+        # sections other tools fill. A section already in the note is never moved or altered.
+        text = ensure_sections(text, sections)
     target.parent.mkdir(parents=True, exist_ok=True)
-    target.write_text(splice(existing, block), encoding="utf-8")
-    print("gt-daily: wrote %s — %d commit(s), %d task(s) closed, %d event(s)"
+    target.write_text(text, encoding="utf-8")
+    if sections:
+        handoff.parent.mkdir(parents=True, exist_ok=True)
+        handoff.write_text(handoff_text(date, rel, sections, text, comms_on), encoding="utf-8")
+    elif handoff.is_file():
+        # Nothing is open for filling (owner, 2026-09-30: no sections, no handoff). A handoff left
+        # from earlier in the day -- when comms was on -- would go on inviting tools to write mail
+        # into the note, so it is removed rather than left standing.
+        handoff.unlink()
+    waiting = [s["name"] for s in sections if not filled(section_content(text, s["name"]))]
+    print("gt-daily: wrote %s — %d commit(s), %d task(s) closed, %d event(s)%s"
           % (rel, sum(len(v or []) for v in commits_by_repo.values()),
-             sum(len(v) for v in closed.values()), len(events)))
+             sum(len(v) for v in closed.values()), len(events),
+             "; %d section(s), waiting: %s" % (len(sections), ", ".join(waiting) or "none")
+             if sections else ""))
     return WROTE
 
 

@@ -2686,6 +2686,27 @@ created.</p>
 <p><strong>Push first</strong> (0.17.9): before writing, it runs <code>git push</code> in the vault. A failed push — or a
 vault with no remote — adds a <code>&gt; NOTE</code> to the block and the write still happens. <code>--dry-run</code> never
 pushes; <code>--check</code> reports an unreachable remote as a problem and a missing one as information.</p>
+<p><strong>Named sections other tools fill</strong> (0.17.9). Name a section and gt_daily makes an empty, marked
+area for it in the daily note — which always lives in <code>Daily Notes/&lt;date&gt;.md</code> — and writes
+<code>Daily Notes/.handoff/&lt;date&gt;.md</code>, saying where the note is and which sections are waiting. Another
+tool (Joule, a Claude session, anything) reads the handoff and writes between its own section's
+markers; gt_daily never overwrites a section, and its next run marks it <code>filled</code>. With no section
+open for filling there is no handoff, and a stale one is removed. The sections live in the shared
+vault (<code>.gt/daily-sections.json</code>), so every machine agrees.</p>
+<pre><code class="language-bash">python3 $SCRIPTS/gt_daily.py --vault &quot;&lt;vault&gt;&quot; --section-add builds [--title T] [--instructions I]
+python3 $SCRIPTS/gt_daily.py --vault &quot;&lt;vault&gt;&quot; --section-add mail --comms     # holds email/Teams info
+python3 $SCRIPTS/gt_daily.py --vault &quot;&lt;vault&gt;&quot; --sections-list | --section-remove NAME
+python3 $SCRIPTS/gt_daily.py --vault &quot;&lt;vault&gt;&quot; --sections-only                # make room early in the day
+python3 $SCRIPTS/gt_daily.py --vault &quot;&lt;vault&gt;&quot; --comms-content on|off         # the vault-wide policy
+</code></pre>
+<p><strong>Email and Teams content is OFF by default.</strong> A <code>--comms</code> section is placed only while the
+vault's policy is <code>on</code> and this machine does not force it off with the gt setting
+<code>daily_comms_content</code> (<code>follow</code>, the default, or <code>off</code>). A machine can tighten the policy, never
+loosen it: the vault is shared, so content written on one machine is readable from every other —
+including a work machine whose employer does not want mail or chat content anywhere Claude can
+read. While off, a comms section gets no room and no handoff, every handoff says such content is
+not allowed, and if one still holds content a <code>&gt; NOTE</code> says so; gt_daily never deletes another
+tool's writing.</p>
 <p><strong>Terse by design.</strong> It does not explain, summarise or interpret. The owner writes the meaning;
 a generated block that editorialised would encode a reading of the day that is not theirs. For
 the wiki it records how many items and how much time, never what they said.</p>

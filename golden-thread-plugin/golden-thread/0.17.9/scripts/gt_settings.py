@@ -163,6 +163,23 @@ SETTINGS = {
             "top priority that way (2026-09-28): priority is a sort order, not an alarm.\n"
             "This is the alarm; the task stays the record. It never writes to the vault."),
     },
+    "daily_comms_content": {
+        "default": "follow",
+        "values": ["follow", "off"],
+        "summary": "Whether THIS machine may put email and Teams information into the daily note: follow the vault's policy, or force it off here.",
+        "detail": (
+            "follow  use the vault-wide policy  (default)\n"
+            "off     never on this machine, whatever the vault says -- e.g. a work machine\n"
+            "\n"
+            "The policy itself lives in the shared vault and is OFF by default:\n"
+            "  gt_daily.py --vault <vault> --comms-content on|off\n"
+            "A machine can only tighten it, never loosen it: the vault is shared, so mail or\n"
+            "chat content written on one machine is readable from every other -- including a\n"
+            "work machine whose employer does not want such content anywhere Claude can read\n"
+            "(owner, 2026-09-30). While off, gt_daily makes no room for a --comms section,\n"
+            "offers it in no handoff, and if one still holds content a NOTE says so -- it never\n"
+            "deletes another tool's writing."),
+    },
     "handoff_surface": {
         "default": "any",
         "values": ["any", "project", "manual"],

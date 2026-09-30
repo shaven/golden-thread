@@ -21,7 +21,7 @@ and blocks it if the rule was broken.
 
 
 > [!IMPORTANT]
-> **0.17.9**: the daily note gains tasks added, due today, domain grouping, new projects and a push before writing; gt-visualize 0.3.0 can publish a page — to a claude.ai Artifact, GitHub Pages or a gist — after a scrub gate and your yes. (0.17.8: explainers follow written framing rules.)
+> **0.17.9**: the daily note gains tasks added, due today, domain grouping, new projects, a push before writing and named sections other tools fill (email/Teams content off by default); gt-visualize 0.3.0 can publish a page — to a claude.ai Artifact, GitHub Pages or a gist — after a scrub gate and your yes. (0.17.8: explainers follow written framing rules.)
 >
 > **0.17.5**: the component check survives a moved plugin source; an unregistered vault write is warned about as it happens.
 >

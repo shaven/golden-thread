@@ -25,7 +25,7 @@ this tree was cut from.
 | `gt-usage` | 0.1.3 | unchanged |
 | `gt-wiki` | 0.2.3 | unchanged |
 
-> **Why 0.17.9 exists — two owner requests (2026-09-30).** The daily note gains tasks added, due today, domain grouping, a new-projects line and a push before writing (and stops counting handoff checklists as tasks). gt-visualize 0.3.0 publishes a page — claude.ai Artifact, GitHub Pages or gist — after a scrub gate and the owner's yes to a printed plan; no credential is stored.
+> **Why 0.17.9 exists — two owner requests (2026-09-30).** The daily note gains tasks added, due today, domain grouping, a new-projects line, a push before writing and named sections other tools fill, with email/Teams content off by default (and stops counting handoff checklists as tasks). gt-visualize 0.3.0 publishes a page — claude.ai Artifact, GitHub Pages or gist — after a scrub gate and the owner's yes to a printed plan; no credential is stored.
 
 > **Why 0.17.8 exists — explainers came out as close-ups (2026-09-29).** A gt-visualize story that focused one or two parts in every scene rendered "all zoomed in from the start": the camera framed only the focus. 0.2.0 makes the shape a rule. The page opens on an establishing shot, frames everything a scene shows, never comes closer than 55% of the overview, and closes wide again; `--check` refuses a story that does not open and close on the whole system, shows fewer than 3 parts in a middle scene, or lacks a caption per scene (rules S1–S10, F1–F6, in the skill).
 

@@ -29,6 +29,8 @@ EXPECTED = {
     "parallel_work": ("on", ["off", "on"]),
     # 0.17.2: what a session is shown at start (gt_surface).
     "surface": ("on", ["off", "on"]),
+    # 0.17.9: a machine may only tighten the vault-wide email/Teams policy (owner, 2026-09-30).
+    "daily_comms_content": ("follow", ["follow", "off"]),
     "handoff_surface": ("any", ["any", "project", "manual"]),
     "task_surface": ("on", ["off", "on"]),
     # values None == free-form; `validate` carries the shape instead of a closed list.
