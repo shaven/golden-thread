@@ -1,13 +1,13 @@
 # Golden Thread Plugin
 
 > **Reader:** someone who has installed it and wants the reference
-> **Claims last checked against the code:** 2026-09-29 (gt 0.17.8) — see *The documents, and what belongs in each* in [`CLAUDE.md`](../CLAUDE.md).
+> **Claims last checked against the code:** 2026-09-29 (gt 0.17.9) — see *The documents, and what belongs in each* in [`CLAUDE.md`](../CLAUDE.md).
 
 A Claude Code plugin that turns an Obsidian vault into the single source of truth for all AI memory across every project and every session.
 
 
 > [!IMPORTANT]
-> **0.17.8**: gt-visualize explainers follow written framing and story rules (0.2.0). **0.17.7** (with the new **gt-visualize** module): the installer is never silent — every slow step says what it is about to do and how long
+> **0.17.9**: daily-note enhancements, and gt-visualize 0.3.0 publishes pages (claude, github-pages, gist) behind a scrub gate. **0.17.8**: explainers follow written framing and story rules. **0.17.7** (with the new **gt-visualize** module): the installer is never silent — every slow step says what it is about to do and how long
 > it took, a vault upgrade counts its steps (`[3/12]`), and a quiet step prints "still working" every 15s.
 >
 > **0.17.5** fixes two things the first real install from gt-src hit: the component check now falls
@@ -538,7 +538,7 @@ Python scripts can also be run directly from the command line. One variable, so 
 bump does not strand eight copied paths — from the release tree, or from the install:
 
 ```bash
-GT=golden-thread/0.17.8/scripts
+GT=golden-thread/0.17.9/scripts
 # installed instead:  GT=$(ls -d ~/.claude/plugins/cache/golden-thread-plugin/gt/*/scripts | sort -V | tail -1)
 
 # Create a new vault

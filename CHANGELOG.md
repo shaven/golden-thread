@@ -11,6 +11,51 @@ release's own summary line, kept short rather than reconstructed after the fact.
 
 ---
 
+## gt 0.17.9 — 2026-09-30
+
+Two owner requests: the daily note captures more of the day, and a gt-visualize page can be
+published.
+
+### The daily note (`gt_daily.py`)
+
+Feature request `2026-09-30-gt-daily-enhancements-tasks-domain-new-project`.
+
+- **Tasks added** today and **Due today (open)** — tasks marked `[due:: <today>]` still open when
+  the job runs, read from the READMEs as they stand rather than from the diff.
+- **Grouped by domain, then project** — every task list and the commits sit under `### <domain>`
+  from each project's `domain:`, alphabetical, `uncategorized` last. A vault commit is filed under
+  the project whose files it changed most.
+- **New projects** — one line on a day a project README was created.
+- **Push before writing** — a failed push, or a vault with no remote, becomes a `> NOTE` in the
+  block and the write still happens. `--dry-run` never pushes; `--check` reports an unreachable
+  remote.
+- **Fixed on the way:** tasks were read from every file under `Projects/`, so a handoff's
+  checklist ("Do the tests pass right now?") was reported as tasks closed. Only project
+  `README.md` files are read now. An open task edited or moved during the day is not counted as
+  added.
+
+### gt-visualize 0.3.0 — publish
+
+Feature request `2026-09-30-gt-visualize-default-publish-target`. `gt_visualize.py publish` puts a
+rendered page where others can see it, after a **scrub gate** (credential scan, IPv4 addresses,
+home-folder paths, the owner's scrub terms — findings are named, never their values) and a printed
+plan the owner agrees to; nothing is published without `--yes`. Targets, chosen by the owner:
+`local` (the default), `claude` (Claude publishes a private claude.ai Artifact; updates keep the
+URL), `github-pages` (always public) and `gist` (secret or public; GitHub shows its HTML as
+source, which the tool says every time). A visibility a target cannot enforce is refused. Two
+settings, `visualize_publish` and `visualize_publish_visibility`; target details via
+`targets set`; every publish recorded and listed by `publishes`. No credential is ever stored —
+each target uses a login the owner already has.
+
+The scrub gate strips the embedded three.js by its shape rather than by this module's copy: a
+page rendered by an older gt-visualize carries an older bundle, and scanning minified three.js
+reported 7 false "assigned credential" findings.
+
+gt-visualize 0.2.0 and gt 0.17.8 stay as released; the gt-versioned modules move to 0.17.9
+unchanged.
+
+---
+
 ## gt 0.17.8 — 2026-09-29
 
 **gt-visualize 0.2.0: explainers follow written rules instead of taste.** A story that put one or

@@ -1,4 +1,4 @@
-# Build note — gt 0.17.8
+# Build note — gt 0.17.9
 
 **Read this first if you are the person taking this tree into the other repository.**
 
@@ -19,11 +19,13 @@ this tree was cut from.
 
 | Plugin | Version | Was |
 |---|---|---|
-| `gt` | **0.17.8** | 0.17.7 |
-| `gt-demo`, `gt-farm`, `gt-flow`, `gt-report-card`, `gt-watch` | **0.17.8** | 0.17.7 (content unchanged) |
-| `gt-visualize` | **0.2.0** | 0.1.0 |
+| `gt` | **0.17.9** | 0.17.8 |
+| `gt-demo`, `gt-farm`, `gt-flow`, `gt-report-card`, `gt-watch` | **0.17.9** | 0.17.8 (content unchanged) |
+| `gt-visualize` | **0.3.0** | 0.2.0 |
 | `gt-usage` | 0.1.3 | unchanged |
 | `gt-wiki` | 0.2.3 | unchanged |
+
+> **Why 0.17.9 exists — two owner requests (2026-09-30).** The daily note gains tasks added, due today, domain grouping, a new-projects line and a push before writing (and stops counting handoff checklists as tasks). gt-visualize 0.3.0 publishes a page — claude.ai Artifact, GitHub Pages or gist — after a scrub gate and the owner's yes to a printed plan; no credential is stored.
 
 > **Why 0.17.8 exists — explainers came out as close-ups (2026-09-29).** A gt-visualize story that focused one or two parts in every scene rendered "all zoomed in from the start": the camera framed only the focus. 0.2.0 makes the shape a rule. The page opens on an establishing shot, frames everything a scene shows, never comes closer than 55% of the overview, and closes wide again; `--check` refuses a story that does not open and close on the whole system, shows fewer than 3 parts in a middle scene, or lacks a caption per scene (rules S1–S10, F1–F6, in the skill).
 
@@ -50,7 +52,7 @@ this tree was cut from.
 > **If your repository committed 0.17.3, commit 0.17.4 over it** — the fix is a file, and only a
 > file survives the commit.
 
-**The five gt-versioned modules moved with gt** (their `requires_gt` is now `>=0.17.8,<0.18.0`);
+**The five gt-versioned modules moved with gt** (their `requires_gt` is now `>=0.17.9,<0.18.0`);
 their content is unchanged. gt-usage and gt-wiki keep their own version trains; gt-visualize starts its own at 0.1.0. 0.17.6 and
 0.17.5 are in the tree, deliberately, so `install.sh` can roll back. 0.17.3 changed only the
 publish (layout + checksums) and `/gt:gt-doctor`'s gt-src check; everything in §2 below arrived

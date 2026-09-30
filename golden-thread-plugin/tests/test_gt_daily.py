@@ -238,3 +238,173 @@ class ItDoesNotMangleTheTextItQuotes(Sandbox):
 
     def test_dataview_fields_are_stripped_from_a_task_title(self):
         self.assertNotIn("p::", self.short("**Do the thing** [p:: 1] [waiting:: user]"))
+
+
+README = "---\ntype: project\nslug: {slug}\n{domain}stage: active\n---\n\n# {slug}\n\n## Tasks\n\n{tasks}"
+
+
+def readme(slug, tasks="", domain=None):
+    return README.format(slug=slug, tasks=tasks,
+                         domain=("domain: %s\n" % domain) if domain else "")
+
+
+class TheDaysTasksAndProjects(DailyBase):
+    """Feature request 2026-09-30-gt-daily-enhancements-tasks-domain-new-project."""
+
+    def seed(self):
+        # Yesterday's state: two existing projects, one with a domain and one without.
+        self.run_cmd(["git", "-C", str(self.vault), "commit", "-q", "--allow-empty", "-m", "root"],
+                     env={"GIT_AUTHOR_DATE": "2026-09-26T10:00:00-05:00",
+                          "GIT_COMMITTER_DATE": "2026-09-26T10:00:00-05:00"})
+        for rel, text in {
+                "Projects/alpha/README.md": readme("alpha", "- [ ] **Old task** [p:: 2]\n",
+                                                   domain="orchard"),
+                "Projects/beta/README.md": readme("beta", "- [ ] **Edited task** first words\n")}.items():
+            p = self.vault / rel
+            p.parent.mkdir(parents=True, exist_ok=True)
+            p.write_text(text)
+        self.git("add", "-A")
+        self.run_cmd(["git", "-C", str(self.vault), "commit", "-q", "-m", "seed"],
+                     env={"GIT_AUTHOR_DATE": "2026-09-26T11:00:00-05:00",
+                          "GIT_COMMITTER_DATE": "2026-09-26T11:00:00-05:00"})
+
+    def test_new_tasks_are_listed_and_edits_are_not(self):
+        self.seed()
+        self.commit("add and edit tasks", {
+            "Projects/alpha/README.md": readme(
+                "alpha", "- [ ] **Old task** [p:: 2]\n- [ ] **Brand new task** [p:: 1]\n",
+                domain="orchard"),
+            "Projects/beta/README.md": readme("beta", "- [ ] **Edited task** other words\n")})
+        out = self.run_daily("--dry-run", expect=0).stdout
+        self.assertIn("**Tasks added**", out)
+        added = out.split("**Tasks added**", 1)[1].split("**Commits**", 1)[0]
+        self.assertIn("Brand new task", added)
+        self.assertNotIn("Edited task", added, "an edited task was counted as new")
+        self.assertNotIn("[p:: 1]", added)
+        self.assertNotIn("Brand new task", out.split("**Tasks added**", 1)[0],
+                         "a new task also appeared as closed")
+        self.assertIn("1 task(s) added", out)
+
+    def test_due_today_lists_only_open_tasks_due_today(self):
+        self.seed()
+        self.commit("dues", {"Projects/alpha/README.md": readme(
+            "alpha", "- [ ] **Old task** [p:: 2]\n"
+                     "- [ ] **Pay the invoice** [due:: %s]\n"
+                     "- [x] **Already sent** [due:: %s]\n"
+                     "- [ ] **Next week** [due:: 2026-10-04]\n" % (DATE, DATE),
+            domain="orchard")})
+        out = self.run_daily("--dry-run", expect=0).stdout
+        due = out.split("**Due today (open)**", 1)[1].split("**Commits**", 1)[0]
+        self.assertIn("Pay the invoice", due)
+        self.assertNotIn("Already sent", due)
+        self.assertNotIn("Next week", due)
+
+    def test_empty_sections_are_left_out(self):
+        self.seed()
+        self.commit("just a note", {"notes.md": "hello\n"})
+        out = self.run_daily("--dry-run", expect=0).stdout
+        for heading in ("**Tasks added**", "**Due today (open)**", "**Tasks closed**",
+                        "**New projects**"):
+            self.assertNotIn(heading, out)
+
+    def test_sections_are_grouped_by_domain_with_uncategorized_last(self):
+        self.seed()
+        self.commit("work in both", {
+            "Projects/alpha/README.md": readme(
+                "alpha", "- [ ] **Old task** [p:: 2]\n- [ ] **Alpha new**\n", domain="orchard"),
+            "Projects/beta/README.md": readme(
+                "beta", "- [ ] **Edited task** first words\n- [ ] **Beta new**\n")})
+        out = self.run_daily("--dry-run", expect=0).stdout
+        added = out.split("**Tasks added**", 1)[1].split("**Commits**", 1)[0]
+        self.assertLess(added.index("### orchard"), added.index("Alpha new"))
+        self.assertLess(added.index("### uncategorized"), added.index("Beta new"))
+        self.assertLess(added.index("### orchard"), added.index("### uncategorized"))
+        commits = out.split("**Commits**", 1)[1]
+        self.assertIn("### orchard", commits)
+        self.assertIn("- **alpha** (1)", commits, "a vault commit is filed under its project")
+
+    def test_a_project_created_today_is_flagged(self):
+        self.seed()
+        self.commit("new project", {"Projects/gamma/README.md": readme("gamma")})
+        out = self.run_daily("--dry-run", expect=0).stdout
+        self.assertIn("**New projects** — gamma", out)
+        self.assertLess(out.index("**New projects**"), out.index("**Commits**"))
+
+    def test_no_new_projects_line_when_none_was_created(self):
+        self.seed()
+        self.commit("edit", {"Projects/alpha/README.md": readme("alpha", "- [ ] **X**\n",
+                                                                domain="orchard")})
+        self.assertNotIn("New projects", self.run_daily("--dry-run", expect=0).stdout)
+
+
+class ThePushComesFirst(DailyBase):
+    def remote(self, reachable=True):
+        bare = self.tmp / "remote.git"
+        if reachable:
+            self.run_cmd(["git", "init", "-q", "--bare", str(bare)])
+        self.git("remote", "add", "origin", str(bare))
+        return bare
+
+    def pushed_heads(self, bare):
+        p = self.run_cmd(["git", "-C", str(bare), "for-each-ref", "refs/heads"])
+        return p.stdout.strip()
+
+    def test_a_successful_push_adds_no_note_and_reaches_the_remote(self):
+        bare = self.remote()
+        self.commit("did a thing", {"notes.md": "x\n"})
+        self.git("push", "-q", "-u", "origin", "main")
+        self.commit("did another", {"notes.md": "y\n"})
+        self.run_daily(expect=0)
+        self.assertNotIn("push failed", self.note())
+        self.assertNotIn("no git remote", self.note())
+        head = self.git("rev-parse", "HEAD").stdout.strip()
+        self.assertIn(head, self.pushed_heads(bare), "the push did not happen before the write")
+
+    def test_a_failed_push_is_noted_and_the_note_is_still_written(self):
+        self.remote(reachable=False)
+        self.commit("did a thing", {"notes.md": "x\n"})
+        self.run_daily(expect=0)
+        body = self.note()
+        self.assertIn("gt_daily:begin", body, "the write was abandoned after a failed push")
+        self.assertIn("> NOTE vault push failed before write", body)
+
+    def test_no_remote_is_noted_not_fatal(self):
+        self.commit("did a thing", {"notes.md": "x\n"})
+        self.run_daily(expect=0)
+        self.assertIn("no git remote", self.note())
+
+    def test_dry_run_never_pushes(self):
+        bare = self.remote()
+        self.commit("did a thing", {"notes.md": "x\n"})
+        out = self.run_daily("--dry-run", expect=0).stdout
+        self.assertEqual(self.pushed_heads(bare), "", "--dry-run pushed")
+        self.assertNotIn("push failed", out)
+        self.assertEqual(self.note(), "")
+
+    def test_check_reports_an_unreachable_remote(self):
+        self.remote(reachable=False)
+        self.commit("did a thing", {"notes.md": "x\n"})
+        proc = self.run_daily("--check", expect=3)
+        self.assertIn("git push is not possible", proc.stderr)
+        self.assertEqual(self.note(), "")
+
+    def test_check_passes_with_a_reachable_remote(self):
+        self.remote()
+        self.commit("did a thing", {"notes.md": "x\n"})
+        self.git("push", "-q", "-u", "origin", "main")
+        proc = self.run_daily("--check", expect=0)
+        self.assertIn("vault push possible", proc.stdout)
+
+
+class OnlyReadmeTasksCount(DailyBase):
+    def test_a_handoff_checklist_is_not_a_task(self):
+        self.commit("handoff", {
+            "Projects/alpha/handoff/2026-09-27-handoff.md":
+                "## What the next session must not assume\n\n- [ ] Do the tests pass right now?\n",
+            "Projects/alpha/README.md": "# alpha\n\n## Tasks\n\n- [ ] **A real task**\n"})
+        self.commit("tick the checklist", {
+            "Projects/alpha/handoff/2026-09-27-handoff.md":
+                "## What the next session must not assume\n\n- [x] Do the tests pass right now?\n"})
+        out = self.run_daily("--dry-run", expect=0).stdout
+        self.assertIn("A real task", out)
+        self.assertNotIn("Do the tests pass", out, "a handoff checklist line was read as a task")

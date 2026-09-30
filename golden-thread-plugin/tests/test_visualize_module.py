@@ -117,8 +117,9 @@ class VisualizeModule(unittest.TestCase):
                          ("gt-visualize", m["version"]))
         self.assertEqual(m["skills"], ["gt-visualize"])
         self.assertEqual(m["scripts"], ["gt_visualize.py"])
-        self.assertEqual((m["hooks"], m["hookdir_scripts"], m["settings"], m["replaces_core"]),
-                         ([], [], [], []))
+        self.assertEqual((m["hooks"], m["hookdir_scripts"], m["replaces_core"]), ([], [], []))
+        self.assertEqual([s["key"] for s in m["settings"]],
+                         ["visualize_publish", "visualize_publish_visibility"])
         self.assertTrue((VIS / m["demo"]).is_file())
         self.assertIn("the gt-visualize skill", (VIS / m["demo"]).read_text("utf-8"))
         self.assertEqual(m["requires_gt"], gt_requires_range(GT.name),
@@ -573,3 +574,170 @@ class VisualizeInstall(Sandbox):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+CLEAN_PAGE = "<!doctype html><html><head><title>Kestrel walkthrough</title></head>" \
+             "<body><p>How the kestrel pipeline works.</p></body></html>\n"
+FAKE_KEY = "Zx9pQ2mL" + "7vT4rB8n" + "K3wY6sD1" + "fH5jA0cE"
+FAKE_GH = """#!/bin/sh
+echo "$@" >> "%(log)s"
+case "$1 $2" in
+  "auth status") exit 0 ;;
+  "gist create") echo "https://gist.github.com/shaven/abc123def" ;;
+  "gist edit") exit 0 ;;
+esac
+"""
+
+
+class VisualizePublish(Sandbox):
+    """Feature request 2026-09-30-gt-visualize-default-publish-target."""
+
+    def setUp(self):
+        super().setUp()
+        self.page = self.tmp / "kestrel-walkthrough.html"
+        self.page.write_text(CLEAN_PAGE, encoding="utf-8")
+        self.state = self.home / ".claude" / "golden-thread"
+
+    def publish(self, *args, page=None):
+        return self.py(SCRIPT, "publish", page or self.page, *args)
+
+    def records(self):
+        p = self.state / "visualize-publishes.jsonl"
+        return [json.loads(l) for l in p.read_text().splitlines()] if p.exists() else []
+
+    def settings(self, **kv):
+        (self.home / ".claude" / "vault-config.json").write_text(json.dumps(kv))
+
+    def fake_gh(self):
+        d = self.tmp / "ghbin"
+        d.mkdir()
+        log = self.tmp / "gh.log"
+        (d / "gh").write_text(FAKE_GH % {"log": log})
+        (d / "gh").chmod(0o755)
+        self.env["PATH"] = "%s:%s" % (d, self.env["PATH"])
+        return log
+
+    def test_the_module_registers_both_settings(self):
+        m = json.loads((VIS / "module.json").read_text(encoding="utf-8"))
+        keys = {s["key"]: s for s in m["settings"]}
+        self.assertEqual(keys["visualize_publish"]["default"], "local")
+        self.assertEqual(keys["visualize_publish"]["values"],
+                         ["local", "claude", "github-pages", "gist"])
+        self.assertEqual(keys["visualize_publish_visibility"]["values"],
+                         ["private", "link", "public"])
+
+    def test_local_shows_the_plan_and_waits_for_yes(self):
+        p = self.publish("--check")
+        self.assertOk(p)
+        self.assertIn("plan: kestrel-walkthrough.html -> local", p.stdout)
+        p = self.publish()
+        self.assertEqual(p.returncode, 4, p.stdout + p.stderr)
+        self.assertIn("re-run with --yes", p.stdout)
+        self.assertEqual(self.records(), [], "something was recorded without --yes")
+        self.assertOk(self.publish("--yes"))
+        (rec,) = self.records()
+        self.assertEqual((rec["target"], rec["visibility"]), ("local", "private"))
+        self.assertTrue(rec["url"].startswith("file://"))
+        self.assertIn("kestrel-walkthrough.html", self.py(SCRIPT, "publishes").stdout)
+
+    def test_a_visibility_the_target_cannot_deliver_is_refused(self):
+        for target, vis in (("github-pages", "private"), ("gist", "private"),
+                            ("claude", "public")):
+            with self.subTest(target=target):
+                p = self.publish("--target", target, "--visibility", vis)
+                self.assertEqual(p.returncode, 1, p.stdout + p.stderr)
+                self.assertIn("cannot be published as %s" % vis, p.stderr)
+
+    def test_the_scrub_gate_refuses_what_should_not_leave(self):
+        terms = self.tmp / "terms.txt"
+        terms.write_text("# employer names\nquokkacorp\n")
+        self.assertOk(self.py(SCRIPT, "targets", "set", "scrub_terms=%s" % terms))
+        cases = {
+            "IPv4": "<p>db at 10.20.30.40</p>",
+            "home-folder": "<p>/Users/alice/projects</p>",
+            "scrub term": "<p>built for QuokkaCorp</p>",
+            # Assembled at run time: a credential-shaped LITERAL in the source trips the
+            # repo's own secrets gate, which is right to refuse one.
+            "credential": "<p>api_key = \"%s\"</p>" % FAKE_KEY,
+        }
+        for what, snippet in cases.items():
+            with self.subTest(what=what):
+                page = self.tmp / ("bad-%s.html" % what.replace(" ", "-"))
+                page.write_text(CLEAN_PAGE.replace("</body>", snippet + "</body>"))
+                p = self.publish("--check", page=page)
+                self.assertEqual(p.returncode, 1, p.stdout + p.stderr)
+                self.assertIn("not published", p.stderr)
+                self.assertIn(what if what != "credential" else "credential scan", p.stderr)
+                self.assertNotIn(FAKE_KEY, p.stdout + p.stderr,
+                                 "the credential's value was printed")
+                self.assertNotIn("10.20.30.40", p.stdout + p.stderr)
+
+    def test_the_settings_choose_the_default_target(self):
+        log = self.fake_gh()
+        self.settings(visualize_publish="gist", visualize_publish_visibility="link")
+        p = self.publish("--check")
+        self.assertOk(p)
+        self.assertIn("-> gist, visibility link", p.stdout)
+        self.assertIn("shows a gist's HTML as SOURCE", p.stdout)
+
+    def test_github_pages_commits_pushes_and_records_the_url(self):
+        bare = self.tmp / "site.git"
+        clone = self.tmp / "site"
+        self.run_cmd(["git", "init", "-q", "--bare", "-b", "main", str(bare)])
+        self.run_cmd(["git", "clone", "-q", str(bare), str(clone)])
+        self.run_cmd(["git", "-C", str(clone), "commit", "-q", "--allow-empty", "-m", "root"])
+        self.run_cmd(["git", "-C", str(clone), "push", "-q", "origin", "HEAD:main"])
+        self.assertOk(self.py(SCRIPT, "targets", "set", "github-pages", "repo=%s" % clone,
+                              "base_url=https://example.github.io/site"))
+        p = self.publish("--target", "github-pages", "--visibility", "public", "--yes")
+        self.assertOk(p)
+        url = "https://example.github.io/site/visualize/kestrel-walkthrough/"
+        self.assertIn(url, p.stdout)
+        shown = self.run_cmd(["git", "-C", str(bare), "show",
+                              "main:visualize/kestrel-walkthrough/index.html"])
+        self.assertEqual(shown.stdout, CLEAN_PAGE, "the page did not reach the remote")
+        self.assertEqual(self.records()[-1]["url"], url)
+
+    def test_github_pages_without_configuration_says_what_to_set(self):
+        p = self.publish("--target", "github-pages", "--visibility", "public", "--check")
+        self.assertEqual(p.returncode, 1)
+        self.assertIn("targets set github-pages repo=", p.stderr)
+
+    def test_gist_creates_once_then_edits_the_same_gist(self):
+        log = self.fake_gh()
+        p = self.publish("--target", "gist", "--visibility", "link", "--yes")
+        self.assertOk(p)
+        self.assertIn("https://gist.github.com/shaven/abc123def", p.stdout)
+        calls = log.read_text()
+        self.assertIn("gist create", calls)
+        self.assertNotIn("--public", calls, "a link-visibility gist was made public")
+        p = self.publish("--target", "gist", "--visibility", "link", "--yes")
+        self.assertOk(p)
+        self.assertIn("gist edit abc123def --filename kestrel-walkthrough.html", log.read_text())
+        self.assertEqual(len(self.records()), 2)
+
+    def test_claude_hands_over_then_records_the_artifact_url(self):
+        p = self.publish("--target", "claude", "--yes")
+        self.assertOk(p)
+        self.assertIn("ready for Claude", p.stdout)
+        self.assertEqual(self.records(), [], "recorded before the Artifact existed")
+        url = "https://claude.ai/code/artifact/0000-kestrel"
+        self.assertOk(self.publish("--target", "claude", "--url", url, "--yes"))
+        self.assertEqual(self.records()[-1]["url"], url)
+        p = self.publish("--target", "claude", "--yes")
+        self.assertIn("as an update of %s" % url, p.stdout)
+
+    def test_targets_never_store_a_credential(self):
+        for pair in ("password=hunter2", "token=abc", "api_key=xyz"):
+            with self.subTest(pair=pair):
+                p = self.py(SCRIPT, "targets", "set", "github-pages", pair)
+                self.assertEqual(p.returncode, 1)
+                self.assertIn("credentials are never stored", p.stderr)
+        p = self.py(SCRIPT, "targets", "set", "github-pages", "colour=red")
+        self.assertEqual(p.returncode, 1)
+        self.assertFalse((self.state / "visualize-targets.json").exists())
+
+    def test_url_is_only_for_the_claude_target(self):
+        p = self.publish("--target", "local", "--url", "https://example.com/x")
+        self.assertEqual(p.returncode, 1)
+        self.assertIn("--url records a claude.ai Artifact", p.stderr)

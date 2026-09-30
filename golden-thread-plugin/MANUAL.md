@@ -3,8 +3,8 @@
 > **Reader:** a daily user — the deepest document, where the *why* lives
 > **Claims last checked against the code:** 2026-09-17 — see *The documents, and what belongs in each* in [`CLAUDE.md`](../CLAUDE.md).
 
-Complete reference for gt's twenty-eight skills and its seven modules. Written against **gt v0.17.8**
-(gt-wiki 0.2.3; gt-usage 0.1.3; gt-demo, gt-watch, gt-report-card, gt-farm and gt-flow 0.17.8; gt-visualize 0.2.0 —
+Complete reference for gt's twenty-eight skills and its seven modules. Written against **gt v0.17.9**
+(gt-wiki 0.2.3; gt-usage 0.1.3; gt-demo, gt-watch, gt-report-card, gt-farm and gt-flow 0.17.9; gt-visualize 0.3.0 —
 those five are versioned with gt and move with every release, changed or not).
 
 ---
@@ -2166,9 +2166,22 @@ owner's choice.
 python3 $SCRIPTS/gt_daily.py --vault "<vault>" [--date YYYY-MM-DD] [--repo PATH ...] [--dry-run] [--check]
 ```
 
-Writes tasks closed, commits per repo, event counts, wiki item **counts**, and an active span per
-project into one fenced, clearly-marked block in `Daily Notes/<date>.md`, replaced whole on each
-run.
+Writes new projects, tasks closed, tasks added, tasks **due today that are still open**,
+commits, event counts, wiki item **counts**, and an active span per project into one fenced,
+clearly-marked block in `Daily Notes/<date>.md`, replaced whole on each run.
+
+**Grouped by domain, then project** (0.17.9): each task list and the commits sit under
+`### <domain>` sub-headings taken from each project README's `domain:`, alphabetical, with
+`uncategorized` last. A vault commit is filed under the project whose files it changed most; one
+that touched no project, and commits in an extra `--repo`, go under `uncategorized` by repo name.
+Tasks are read only from project `README.md` files, so a handoff's checklist is never counted as
+a task; an open task whose title was also removed that day was edited, not added. A section with
+nothing in it is left out, and a "New projects" line appears only on a day a project README was
+created.
+
+**Push first** (0.17.9): before writing, it runs `git push` in the vault. A failed push — or a
+vault with no remote — adds a `> NOTE` to the block and the write still happens. `--dry-run` never
+pushes; `--check` reports an unreachable remote as a problem and a missing one as information.
 
 **Terse by design.** It does not explain, summarise or interpret. The owner writes the meaning;
 a generated block that editorialised would encode a reading of the day that is not theirs. For
@@ -2397,7 +2410,7 @@ promotion is an arrow climbing. It reads `Projects/golden-thread/events.jsonl` a
 writes the vault.
 
 ```bash
-FLOW=~/.claude/plugins/cache/golden-thread-plugin/gt-flow/0.17.8/scripts
+FLOW=~/.claude/plugins/cache/golden-thread-plugin/gt-flow/0.17.9/scripts
 python3 $FLOW/gt_flow.py render --vault <vault> [--out FILE|DIR] [--redact] \
     [--project <slug> ...] [--since YYYY-MM-DD] [--tasks]
 ```
@@ -2418,7 +2431,7 @@ would be recovered) · `3` the filters matched nothing.
 
 ### `/gt-visualize:gt-visualize`
 
-*Module `visualize` (plugin `gt-visualize`), new in gt-visualize 0.2.0, installed by default. Two modes: `explain` and `render`.*
+*Module `visualize` (plugin `gt-visualize`), new in gt-visualize 0.3.0, installed by default. Two modes: `explain` and `render`.*
 
 Draws a **repository** as an interactive 3D code city, in **one self-contained HTML file**
 that opens offline — three.js is inlined, nothing is fetched. Directories are districts,
@@ -2448,7 +2461,7 @@ python3 $VIS/gt_visualize.py explain story.json --check     # list every problem
 python3 $VIS/gt_visualize.py explain story.json [--out FILE|DIR]
 ```
 
-A story with any problem is never rendered. **The rules are fixed, not left to taste** (gt-visualize 0.2.0): scene 1 is an establishing shot of the whole system and the last scene a recap of it; every middle scene shows at least 3 parts and focuses 1–2; every scene carries a one-line caption of what the picture shows; and the page itself keeps the camera at one viewing angle, framing everything a scene shows and never closer than 55% of the establishing shot. `--check` names the rule each problem breaks; the full table (S1–S10, F1–F6) is in the skill. Ask for it in a session — *"explain how this
+A story with any problem is never rendered. **The rules are fixed, not left to taste** (gt-visualize 0.3.0): scene 1 is an establishing shot of the whole system and the last scene a recap of it; every middle scene shows at least 3 parts and focuses 1–2; every scene carries a one-line caption of what the picture shows; and the page itself keeps the camera at one viewing angle, framing everything a scene shows and never closer than 55% of the establishing shot. `--check` names the rule each problem breaks; the full table (S1–S10, F1–F6) is in the skill. Ask for it in a session — *"explain how this
 codebase works"*, *"architecture walkthrough"* — and keep the story file with the project
 if you want the next render to start from it.
 
@@ -2468,6 +2481,25 @@ if you want the next render to start from it.
 
 Exit codes: `0` written · `1` bad arguments, an unreadable path, a refused `--out` or a
 bundle that fails its hash · `3` nothing to draw.
+
+**Publish** (gt-visualize 0.3.0) — a page is local until you ask to share it. `publish` runs a
+scrub gate (credential scan, IPv4 addresses, home-folder paths, your scrub terms), prints the plan
+— target, visibility, final URL — and publishes only when re-run with `--yes`, which the skill
+does after you agree. Targets: `local` (default), `claude` (a private claude.ai Artifact Claude
+publishes; updates keep the URL), `github-pages` (`<repo>/<dir>/<slug>/index.html`, pushed with
+your git login; always public) and `gist` (secret or public, with your `gh` login — GitHub shows a
+gist's HTML as source, not as a page). A visibility a target cannot enforce is refused. No
+credential is ever stored.
+
+```bash
+python3 $VIS/gt_visualize.py publish page.html [--target T] [--visibility V] [--check] [--yes]
+python3 $VIS/gt_visualize.py targets set github-pages repo=<clone> base_url=<https://…> [dir=visualize]
+python3 $VIS/gt_visualize.py targets set scrub_terms=<file>     # one term per line
+python3 $VIS/gt_visualize.py publishes                          # everything published, to find or take down
+```
+
+Defaults come from two settings, `visualize_publish` (`local`/`claude`/`github-pages`/`gist`) and
+`visualize_publish_visibility` (`private`/`link`/`public`), changed with `/gt:gt-settings`.
 
 ---
 
@@ -2501,7 +2533,7 @@ project other than the one loaded.
 ## Script reference
 
 ```bash
-SCRIPTS=~/.claude/plugins/cache/golden-thread-plugin/gt/0.17.8/scripts
+SCRIPTS=~/.claude/plugins/cache/golden-thread-plugin/gt/0.17.9/scripts
 
 python3 $SCRIPTS/vault_init.py fresh --vault ~/my-vault --domain "My Team"
 
