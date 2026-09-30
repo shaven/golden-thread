@@ -236,5 +236,30 @@ class Delivery(SurfaceBase):
                             for r in comp.HOOK_REGISTRATIONS))
 
 
+class WriteQueue(SurfaceBase):
+    """gt_write_queue.py requests waiting for `gt_broker.py drain` are counted, never drained:
+    surfacing reads, and draining stays an explicit command."""
+
+    def queue(self):
+        q = self.vault / "Projects" / "golden-thread" / "spool" / "queue"
+        q.mkdir(parents=True, exist_ok=True)
+        return q
+
+    def test_pending_requests_are_counted_in_one_line(self):
+        q = self.queue()
+        (q / "20260928T100000.000000Z-a-x.json").write_text("{}")
+        (q / "20260928T100001.000000Z-b-x.json").write_text("{}")
+        (q / ".req.half-written.tmp").write_text("")
+        p = self.run_check()
+        self.assertOk(p)
+        self.assertIn("WRITE QUEUE: 2 vault write requests waiting", p.stdout)
+        self.assertEqual(len(list(q.iterdir())), 3, "surfacing must not touch the queue")
+
+    def test_an_empty_or_absent_queue_says_nothing(self):
+        self.assertNotIn("WRITE QUEUE", self.run_check().stdout)
+        self.queue()
+        self.assertNotIn("WRITE QUEUE", self.run_check().stdout)
+
+
 if __name__ == "__main__":
     unittest.main()

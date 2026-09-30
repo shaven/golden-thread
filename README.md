@@ -15,13 +15,13 @@ it at startup, look things up while working, and write back what they learn.
 Its distinguishing idea is the second problem, the one most memory systems never
 address: **writing a rule down does not mean it gets followed.**
 
-Plugin **v0.17.9**. Ten Core rules currently enforced, five of them *validated* — a
+Plugin **v0.17.10**. Ten Core rules currently enforced, five of them *validated* — a
 hook inspects the finished reply (`Stop`) or the tool call about to run (`PreToolUse`)
 and blocks it if the rule was broken.
 
 
 > [!IMPORTANT]
-> **0.17.9**: the daily note gains tasks added, due today, domain grouping, new projects, a push before writing and named sections other tools fill (email/Teams content off by default); gt-visualize 0.3.0 can publish a page — to a claude.ai Artifact, GitHub Pages or a gist — after a scrub gate and your yes. (0.17.8: explainers follow written framing rules.)
+> **0.17.10**: queued vault writes for concurrent agents (a write broker), specialist agents by job type (off by default), and release announcements that can post themselves (off by default). (0.17.9: a richer daily note with named sections, and gt-visualize publishing.)
 >
 > **0.17.5**: the component check survives a moved plugin source; an unregistered vault write is warned about as it happens.
 >

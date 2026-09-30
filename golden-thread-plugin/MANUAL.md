@@ -3,8 +3,8 @@
 > **Reader:** a daily user — the deepest document, where the *why* lives
 > **Claims last checked against the code:** 2026-09-17 — see *The documents, and what belongs in each* in [`CLAUDE.md`](../CLAUDE.md).
 
-Complete reference for gt's twenty-eight skills and its seven modules. Written against **gt v0.17.9**
-(gt-wiki 0.2.3; gt-usage 0.1.3; gt-demo, gt-watch, gt-report-card, gt-farm and gt-flow 0.17.9; gt-visualize 0.3.0 —
+Complete reference for gt's twenty-eight skills and its seven modules. Written against **gt v0.17.10**
+(gt-wiki 0.2.3; gt-usage 0.1.3; gt-demo, gt-watch, gt-report-card, gt-farm and gt-flow 0.17.10; gt-visualize 0.3.0 —
 those five are versioned with gt and move with every release, changed or not).
 
 ---
@@ -2170,7 +2170,7 @@ Writes new projects, tasks closed, tasks added, tasks **due today that are still
 commits, event counts, wiki item **counts**, and an active span per project into one fenced,
 clearly-marked block in `Daily Notes/<date>.md`, replaced whole on each run.
 
-**Grouped by domain, then project** (0.17.9): each task list and the commits sit under
+**Grouped by domain, then project** (0.17.10): each task list and the commits sit under
 `### <domain>` sub-headings taken from each project README's `domain:`, alphabetical, with
 `uncategorized` last. A vault commit is filed under the project whose files it changed most; one
 that touched no project, and commits in an extra `--repo`, go under `uncategorized` by repo name.
@@ -2179,11 +2179,11 @@ a task; an open task whose title was also removed that day was edited, not added
 nothing in it is left out, and a "New projects" line appears only on a day a project README was
 created.
 
-**Push first** (0.17.9): before writing, it runs `git push` in the vault. A failed push — or a
+**Push first** (0.17.10): before writing, it runs `git push` in the vault. A failed push — or a
 vault with no remote — adds a `> NOTE` to the block and the write still happens. `--dry-run` never
 pushes; `--check` reports an unreachable remote as a problem and a missing one as information.
 
-**Named sections other tools fill** (0.17.9). Name a section and gt_daily makes an empty, marked
+**Named sections other tools fill** (0.17.10). Name a section and gt_daily makes an empty, marked
 area for it in the daily note — which always lives in `Daily Notes/<date>.md` — and writes
 `Daily Notes/.handoff/<date>.md`, saying where the note is and which sections are waiting. Another
 tool (Joule, a Claude session, anything) reads the handoff and writes between its own section's
@@ -2435,7 +2435,7 @@ promotion is an arrow climbing. It reads `Projects/golden-thread/events.jsonl` a
 writes the vault.
 
 ```bash
-FLOW=~/.claude/plugins/cache/golden-thread-plugin/gt-flow/0.17.9/scripts
+FLOW=~/.claude/plugins/cache/golden-thread-plugin/gt-flow/0.17.10/scripts
 python3 $FLOW/gt_flow.py render --vault <vault> [--out FILE|DIR] [--redact] \
     [--project <slug> ...] [--since YYYY-MM-DD] [--tasks]
 ```
@@ -2526,6 +2526,59 @@ python3 $VIS/gt_visualize.py publishes                          # everything pub
 Defaults come from two settings, `visualize_publish` (`local`/`claude`/`github-pages`/`gist`) and
 `visualize_publish_visibility` (`private`/`link`/`public`), changed with `/gt:gt-settings`.
 
+### 0.17.10 — queued vault writes, specialist agents, release announcements
+
+**Queued vault writes (`gt_write_queue.py` / `gt_broker.py`).** When several agents write to one
+vault at once, each can queue its write instead of making it:
+
+```bash
+python3 $SCRIPTS/gt_write_queue.py --vault "<vault>" --path Projects/<slug>/research.md \
+    --op append|replace-section|create [--section "Findings"] --content "…"   # or --content-file F
+python3 $SCRIPTS/gt_broker.py drain --vault "<vault>" [--dry-run]
+python3 $SCRIPTS/gt_broker.py status --vault "<vault>"
+```
+
+Requests wait in `Projects/golden-thread/spool/queue/`; session start shows how many. `drain`
+applies them oldest first and exits — no daemon, no hook. Appends from any number of sessions
+merge and near-duplicates are dropped. Two sessions replacing one section differently, or a section
+that changed after a replace was requested, write nothing: every version is saved in
+`spool/broker/conflicts/` and a `#conflict` P1 task points at it. A file another live session has
+claimed stays queued (Core rule 1). Generated and protected files (`log.md`, `TASKS.md`,
+`decisions.md`, `Sources/`, `core-rules/`) are refused; `design.md` and `global-memory/` always go
+to the owner. Decisions are logged to `spool/broker/log-<date>.jsonl`. gt-farm files its results
+this way, and a farmed result can only create a new file, never edit an existing note (ADR-8).
+
+**Specialist agents by job type (`agent_specialization`, off by default).** With it on,
+`/gt:gt-ingest` hands work to a specialist agent (`ingest-code`, `ingest-docs`, `ingest-tool`) and
+`/gt:gt-validate` gives each validator a `validate` spec that loads **no** vault context. With
+`skeptic_pass` also on, `/gt:gt-work` has a skeptic agent flag unverified or overclaimed figures in
+the drafted research entries before they land. Full results go to
+`Projects/golden-thread/spool/agents/<job>/`; the session sees a summary. A job with no spec runs
+inline with a notice.
+
+```bash
+python3 $SCRIPTS/gt_agent_spec.py list
+python3 $SCRIPTS/gt_agent_spec.py validate <spec.json>
+python3 $SCRIPTS/gt_agent_spec.py resolve --skill gt-ingest --path <dir>
+python3 $SCRIPTS/gt_agent_spec.py render validate --template
+```
+
+Shipped specs are in `templates/agent-specs/`; a valid spec in
+`<vault>/Projects/golden-thread/packs/agent-specs/<job-type>.json` replaces the shipped one. (The
+job types are due to become stage × kind specs — feature request
+`2026-09-30-ingest-promote-stage-pipeline`.)
+
+**Ingest scans first, stops only when it must, and runs on Claude only.** Before anything reads material for ingest, `/gt:gt-ingest` runs `python3 <gt>/scripts/gt_intake_scan.py <project-dir>`: credentials (gt_secrets), unsafe source code (a download piped into a shell, exec of fetched or decoded data, obfuscated blobs, destructive filesystem commands, install hooks that fetch and run) and prompt injection (text telling an AI to drop its instructions, fake role markers, hidden Unicode, instruction-bearing HTML comments). Results are per unit — each top-level folder, plus `.` for root files; `--unit-depth 2` splits a monorepo, `--unit U` scans one, `--json` gives the full report. A finding is kind, file, line and rule id — the matched text is never printed. Exit 0 clean, 1 findings, 2 usage, 3 incomplete (a scan that could not run is not a pass; unreadable formats such as PDF make a unit incomplete). Ingest no longer asks for approval: it stops for the owner only on a contradiction with a fact already in the vault, a security finding, or unsafe code, and writes nothing for a stopped unit. No ingest stage may run through gt-farm or any non-Claude service — `gt_agent_spec.py validate` refuses such a spec, and `gt_agent_spec.py render` refuses to produce an ingest prompt unless that unit scans clean.
+
+**Release announcements (`release_announce`, off by default).** `dev/publish.sh`'s `announced`
+step warned when no Discussion named the new version, and announcing was the step that got skipped.
+`off` keeps the warning; `draft` writes the post to `~/.claude/golden-thread/announce-<version>.md`;
+`post` creates it in the repo's Announcements category with `gh`. One post covers every release no
+Discussion names yet, built from the CHANGELOG. It is scrubbed first (IPv4 addresses, home paths,
+scrub terms, credentials); a hit, or a scrub that cannot run, posts nothing and leaves the draft.
+Without a working `gh` it falls back to a draft. It never announces a version twice and never fails
+a release.
+
 ---
 
 ## Where does this fact go?
@@ -2558,7 +2611,7 @@ project other than the one loaded.
 ## Script reference
 
 ```bash
-SCRIPTS=~/.claude/plugins/cache/golden-thread-plugin/gt/0.17.9/scripts
+SCRIPTS=~/.claude/plugins/cache/golden-thread-plugin/gt/0.17.10/scripts
 
 python3 $SCRIPTS/vault_init.py fresh --vault ~/my-vault --domain "My Team"
 

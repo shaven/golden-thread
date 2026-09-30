@@ -31,6 +31,10 @@ EXPECTED = {
     "surface": ("on", ["off", "on"]),
     # 0.17.9: a machine may only tighten the vault-wide email/Teams policy (owner, 2026-09-30).
     "daily_comms_content": ("follow", ["follow", "off"]),
+    # 0.17.10: announce automation and job-typed agents, all off by default (owner, 2026-09-30).
+    "release_announce": ("off", ["off", "draft", "post"]),
+    "agent_specialization": ("off", ["off", "on"]),
+    "skeptic_pass": ("off", ["off", "on"]),
     "handoff_surface": ("any", ["any", "project", "manual"]),
     "task_surface": ("on", ["off", "on"]),
     # values None == free-form; `validate` carries the shape instead of a closed list.

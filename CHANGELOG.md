@@ -11,6 +11,64 @@ release's own summary line, kept short rather than reconstructed after the fact.
 
 ---
 
+## gt 0.17.10 — 2026-09-30
+
+Four owner requests: queued vault writes for concurrent agents, specialist agents by job type,
+self-posting release announcements, and safety rules for every ingest. The two agent features and
+announcing are **off by default**.
+
+### Queued vault writes — a write broker for concurrent agents
+
+Feature request `2026-09-30-vault-write-broker-queue`. `gt_write_queue.py` queues a write (append,
+replace-section, create) instead of making it; `gt_broker.py drain` applies the queue oldest first
+and exits (no daemon, no hook); session start shows how many are waiting. Appends from any number of
+sessions merge and near-duplicates are dropped; two sessions replacing one section differently — or
+a section that changed after the replace was requested — write nothing: every version is saved in
+`spool/broker/conflicts/` and a `#conflict` P1 task points at it. A claimed file stays queued (Core
+rule 1); generated and protected files are refused; `design.md` and `global-memory/` always go to
+the owner. Reconciled with ADR-8: this orders the owner's own sessions' writes and is not the
+extension broker; a result from gt-farm (external text) may only create a new file.
+
+### Specialist agents by job type (`agent_specialization`, `skeptic_pass`)
+
+Feature request `2026-09-30-agent-specialization-by-job-type`. `gt_agent_spec.py` lists, validates,
+resolves and renders job-type specs (`ingest-code`, `ingest-docs`, `ingest-tool`, `validate`,
+`skeptic`) shipped in `templates/agent-specs/` (not `packs/`, which the release gate treats as
+security-control input); a valid spec in `<vault>/Projects/golden-thread/packs/agent-specs/`
+overrides one. With `agent_specialization` on, gt-ingest and gt-validate hand work to a specialist
+agent (validate loads no vault context); with `skeptic_pass` also on, gt-work runs a skeptic over the
+drafted findings. These job types are due to become stage × kind specs — request
+`2026-09-30-ingest-promote-stage-pipeline`, which also carries gt-work's breakdown.
+
+### Release announcements that post themselves (`release_announce`)
+
+Feature request `2026-09-30-publish-auto-announce-release`. `publish.sh`'s `announced` step only
+warned, and announcing was the step that got skipped. `off` (default) keeps the warning; `draft`
+writes the post to `~/.claude/golden-thread/announce-<version>.md`; `post` creates it in
+Announcements with `gh`. One post covers every release no Discussion names yet, built from this
+CHANGELOG, scrubbed first (IPv4, home paths, scrub terms, credentials — a hit or a scrub that cannot
+run posts nothing). Never announces a version twice; never fails a release.
+
+### Ingest scans first, stops only when it must, and runs on Claude only
+
+Feature request `2026-09-30-ingest-promote-stage-pipeline` (the owner's rulings, first part).
+Before anything reads material for ingest, `/gt:gt-ingest` runs
+`python3 <gt>/scripts/gt_intake_scan.py <project-dir>`: credentials (gt_secrets), unsafe source code
+(a download piped into a shell, exec of fetched or decoded data, obfuscated blobs, destructive
+filesystem commands, install hooks that fetch and run) and prompt injection (text telling an AI to
+drop its instructions, fake role markers, hidden Unicode, instruction-bearing HTML comments).
+Results are per unit — each top-level folder, plus `.` for root files; `--unit-depth 2` splits a
+monorepo, `--unit U` scans one, `--json` gives the full report. A finding is kind, file, line and
+rule id — the matched text is never printed. Exit 0 clean, 1 findings, 2 usage, 3 incomplete (a
+scan that could not run is not a pass; unreadable formats such as PDF make a unit incomplete).
+Ingest no longer asks for approval: it stops for the owner only on a contradiction with a fact
+already in the vault, a security finding, or unsafe code, and writes nothing for a stopped unit. No
+ingest stage may run through gt-farm or any non-Claude service — `gt_agent_spec.py validate`
+refuses such a spec, and `gt_agent_spec.py render` refuses to produce an ingest prompt unless that
+unit scans clean.
+
+---
+
 ## gt 0.17.9 — 2026-09-30
 
 Two owner requests: the daily note captures more of the day, and a gt-visualize page can be

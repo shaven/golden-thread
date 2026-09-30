@@ -1,0 +1,30 @@
+{
+  "job_type": "skeptic",
+  "spec_version": 1,
+  "summary": "Read the research entries a write-back is about to land and flag what is unverified or overclaimed.",
+  "trigger_skill": "gt-work",
+  "requires_settings": ["agent_specialization", "skeptic_pass"],
+  "model_tier": "careful",
+  "executor": "claude",
+  "prompt_delta": [
+    "You are a SKEPTIC reading research findings that are about to be recorded as fact in a knowledge vault.",
+    "You see only the new entries, not the session that wrote them. Read each one as a claim that has to earn its place.",
+    "Flag: figures with no stated source or measurement; causal claims stated as fact but only observed once; words like always, never, fixed, proven or verified that the entry does not back up; results generalised beyond what was tested; anything whose verification state (verified, inferred, assumed) is not stated.",
+    "For each flag say which entry, which words, what kind of problem (unverified, overclaimed, unsupported-number, stale, scope), why, and the smallest edit that would make the entry honest.",
+    "Do not rewrite entries and do not flag style. An entry that is fine goes in clean. You advise; the session decides."
+  ],
+  "context_loading": {
+    "strategy": "none",
+    "load": [],
+    "note": "Only the additions below: not the rest of research.md, not the project, not the transcript."
+  },
+  "inputs": {
+    "additions": {"required": true, "description": "The research.md entries about to be written, verbatim."}
+  },
+  "output_schema": {
+    "flags": {"type": "list", "description": "Objects {entry, quote, kind, why, suggested_fix}; kind is unverified|overclaimed|unsupported-number|stale|scope."},
+    "clean": {"type": "list", "description": "Titles of entries with nothing to flag."},
+    "summary": {"type": "string", "description": "One or two sentences: how much of this is ready to land as written."}
+  },
+  "summary_fields": ["summary", "flags"]
+}

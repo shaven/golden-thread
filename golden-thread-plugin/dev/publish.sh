@@ -24,6 +24,7 @@
 # shipped without them.
 set -uo pipefail
 cd "$(dirname "${BASH_SOURCE[0]}")/.."
+PUBLISH_ROOT=$(pwd)
 DRY=no; LIST=no
 for a in "$@"; do
   case "$a" in
@@ -41,7 +42,7 @@ STEPS=(
   "pushed|the commit exists on the remote others read|git_pushed"
   "released|tag v<version> on the remote and a GitHub Release for it, so the repo's 'Latest' is this release|check_released"
   "gt-src|the shared working copy holds this release, verified by selftest|dev/sync-gt-src.sh {dry}"
-  "announced|a Discussion names this version (warn only — needs gh)|check_announced"
+  "announced|a Discussion names this version (warn only — needs gh; release_announce=draft or post writes or posts it)|check_announced"
   "logged|the vault records the publish|log_to_vault {dry}"
 )
 
@@ -96,7 +97,24 @@ check_announced() {
   # and this is the one step that depends on a network and a logged-in gh.
   # The version is matched in Discussion titles AND bodies, dots literal and bounded on
   # both sides, so 0.12.1 is never "announced" by a post about 0.12.10.
-  local ver="${1:-$GTV}" slug owner name json
+  #
+  # The gt setting `release_announce` (off, draft or post) widens this: draft writes the
+  # announcement to a file, post creates the Discussion -- both via dev/announce.py, which
+  # never fails the step. off (the default, and anything unrecognised) is the warning below.
+  local ver="${1:-$GTV}" slug owner name json mode
+  mode=$(python3 -c '
+import json, os
+try:
+    v = json.load(open(os.path.expanduser("~/.claude/vault-config.json"))).get("release_announce")
+except Exception:
+    v = None
+v = v.strip().lower() if isinstance(v, str) else ""
+print(v if v in ("off", "draft", "post") else "off")' 2>/dev/null) || mode=off
+  if [ "$mode" != off ]; then
+    python3 "$PUBLISH_ROOT/dev/announce.py" --changelog "${GT_CHANGELOG:-$PUBLISH_ROOT/../CHANGELOG.md}" \
+      --version "$ver" --mode "$mode" $([ "$DRY" = yes ] && echo --dry-run) | sed 's/^/    /'
+    return 0
+  fi
   command -v gh >/dev/null 2>&1 || { echo "    gh not installed — cannot check"; return 0; }
   slug=$(github_repo) || { echo "    origin is not a GitHub remote — cannot check"; return 0; }
   owner=${slug% *}; name=${slug#* }
@@ -159,7 +177,9 @@ for s in "${STEPS[@]}"; do
   fi
   # shellcheck disable=SC2086
   if eval "$cmd" > /tmp/publish-$id.log 2>&1; then
-    tail -2 /tmp/publish-$id.log | sed 's/^/    /'
+    # announced shows all of its output: under --dry-run that is the announcement itself.
+    if [ "$id" = announced ]; then cat /tmp/publish-$id.log; else
+    tail -2 /tmp/publish-$id.log | sed 's/^/    /'; fi
     echo "ok    $id"
   else
     tail -12 /tmp/publish-$id.log | sed 's/^/    /'

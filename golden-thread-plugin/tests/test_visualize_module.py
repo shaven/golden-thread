@@ -122,8 +122,9 @@ class VisualizeModule(unittest.TestCase):
                          ["visualize_publish", "visualize_publish_visibility"])
         self.assertTrue((VIS / m["demo"]).is_file())
         self.assertIn("the gt-visualize skill", (VIS / m["demo"]).read_text("utf-8"))
-        self.assertEqual(m["requires_gt"], gt_requires_range(GT.name),
-                         "requires_gt must admit the gt in this tree")
+        # gt-visualize keeps its own version train (like gt-usage); what matters is that its
+        # requires_gt admits the gt in this tree, which module-check --gt above proves.
+        self.assertTrue(m["requires_gt"].startswith(">="), m["requires_gt"])
 
     def test_manifest_matches_the_tree(self):
         p = subprocess.run([PYTHON, str(REPO / "dev" / "plugins.py"), "manifest-check",
