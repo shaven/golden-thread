@@ -14,7 +14,11 @@ Feature request 2026-09-29-gt-visualize-3d-codebase-view. Contracts pinned here:
   * `--redact` leaves no fixture name in the page, and one salt hashes identically twice;
   * an --out inside the vault is refused and nothing is written;
   * outside git, churn is off and the output line says so;
-  * install.sh installs the module by default and `--without visualize` removes it.
+  * install.sh installs the module by default and `--without visualize` removes it;
+  * (2026-09-30-gt-visualize-guided-walkthrough) `story scene|part|questions` read only a valid
+    story, and every expected answer is text from it; `tour-state` round-trips under a
+    sandbox vault, --dry-run writes nothing, and a file another live session claims is
+    refused; the four walkthrough skills exist and name their prediction pause.
 """
 import hashlib
 import json
@@ -26,8 +30,8 @@ import time
 import unittest
 from pathlib import Path
 
-from _harness import Sandbox, GT, WIKI, REPO, PYTHON, SCRIPTS, GIT_ID, latest_version_dir, \
-    gt_requires_range, load_module
+from _harness import Sandbox, GT, WIKI, REPO, PYTHON, SCRIPTS, TOOLS, GIT_ID, \
+    latest_version_dir, gt_requires_range, load_module
 
 VIS = latest_version_dir(REPO / "golden-thread-visualize")
 SCRIPT = VIS / "scripts" / "gt_visualize.py"
@@ -115,7 +119,7 @@ class VisualizeModule(unittest.TestCase):
                          ("visualize", "gt-visualize", VIS.name))
         self.assertEqual((self.plugin["name"], self.plugin["version"]),
                          ("gt-visualize", m["version"]))
-        self.assertEqual(m["skills"], ["gt-visualize"])
+        self.assertEqual(m["skills"], ["gt-visualize", "tour", "whatis", "trace", "explain-back"])
         self.assertEqual(m["scripts"], ["gt_visualize.py"])
         self.assertEqual((m["hooks"], m["hookdir_scripts"], m["replaces_core"]), ([], [], []))
         self.assertEqual([s["key"] for s in m["settings"]],
@@ -531,6 +535,280 @@ class VisualizeExplain(Sandbox):
         self.assertEqual(p.returncode, 1, p.stdout + p.stderr)
         self.assertIn("inside the vault", p.stderr)
         self.assertEqual(sorted(x.name for x in self.vault.rglob("*")), ["Projects"])
+
+
+def _story_strings(s):
+    """Every string value in a story, however deep."""
+    if isinstance(s, str):
+        yield s
+    elif isinstance(s, dict):
+        for v in s.values():
+            yield from _story_strings(v)
+    elif isinstance(s, list):
+        for v in s:
+            yield from _story_strings(v)
+
+
+def _at(s, path):
+    """Resolve a `from` path such as `scenes[1].body[0]` against the story."""
+    cur = s
+    for name, idx in re.findall(r"([A-Za-z_]+)(?:\[(\d+)\])?", path):
+        cur = cur[name]
+        if idx:
+            cur = cur[int(idx)]
+    return cur
+
+
+class VisualizeStory(Sandbox):
+    """`story scene|part|questions`: what the walkthrough skills read, and nothing invented."""
+
+    def setUp(self):
+        super().setUp()
+        self.story = story()
+        self.path = self.tmp / "story.json"
+        self.path.write_text(json.dumps(self.story), encoding="utf-8")
+
+    def run_story(self, *args, expect=0):
+        p = self.py(SCRIPT, "story", *args)
+        self.assertEqual(p.returncode, expect, p.stdout + p.stderr)
+        return json.loads(p.stdout) if expect == 0 else p
+
+    def test_scene_by_index_and_by_title_agree(self):
+        by_index = self.run_story("scene", self.path, "2")
+        by_title = self.run_story("scene", self.path, "a REQUEST")
+        self.assertEqual(by_index, by_title)
+        self.assertEqual((by_index["index"], by_index["of"], by_index["altitude"]), (2, 4, "L1"))
+        self.assertEqual([p["id"] for p in by_index["shown"]], ["user", "api", "gate"])
+        self.assertEqual(by_index["focus"], ["gate"])
+        self.assertEqual(by_index["hops"], [
+            {"n": 1, "link": "user>api", "from": "user", "to": "api", "kind": "data",
+             "label": "request"},
+            {"n": 2, "link": "deny", "from": "gate", "to": "user", "kind": "block",
+             "label": "refused"}])
+        self.assertEqual(by_index["next"], {"index": 3, "title": "Work in the background"})
+        first = self.run_story("scene", self.path, "1")
+        self.assertEqual((first["altitude"], first["hops"], first["previous"]), ("L0", [], None))
+        self.assertEqual(len(first["shown"]), 8, "scene 1 shows everything")
+
+    def test_a_return_flow_travels_back_along_its_link(self):
+        self.story["scenes"][2]["flows"][2] = {"link": "worker>db", "kind": "return"}
+        self.path.write_text(json.dumps(self.story), encoding="utf-8")
+        hop = self.run_story("scene", self.path, "3")["hops"][2]
+        self.assertEqual((hop["from"], hop["to"], hop["kind"]), ("db", "worker", "return"))
+
+    def test_unknown_scene_is_refused_with_the_choices(self):
+        for which in ("9", "0", "No such scene"):
+            with self.subTest(which=which):
+                p = self.run_story("scene", self.path, which, expect=1)
+                self.assertIn("no scene", p.stderr)
+                self.assertIn("2 A request", p.stderr)
+                self.assertEqual(p.stdout, "")
+
+    def test_an_invalid_story_is_never_walked(self):
+        self.story["scenes"][0]["focus"] = ["api"]
+        self.path.write_text(json.dumps(self.story), encoding="utf-8")
+        for args in (("scene", self.path, "1"), ("part", self.path, "api"),
+                     ("questions", self.path)):
+            with self.subTest(args=args[0]):
+                p = self.run_story(*args, expect=1)
+                self.assertIn("rule S1", p.stderr)
+                self.assertIn("nothing to walk", p.stderr)
+
+    def test_part_altitude_follows_its_kind(self):
+        self.story["parts"][5]["kind"] = "file"
+        self.path.write_text(json.dumps(self.story), encoding="utf-8")
+        want = {"user": ("L2", None), "gate": ("L2", None), "api": ("L2", "L3"),
+                "db": ("L2", "L3"), "cache": ("L2", "L3"), "worker": ("L3", None)}
+        for pid, (alt, into) in want.items():
+            with self.subTest(part=pid):
+                d = self.run_story("part", self.path, pid)
+                self.assertEqual(d["altitude"], alt)
+                self.assertEqual(d["step_into"] and d["step_into"]["altitude"], into)
+
+    def test_part_neighbours_links_and_scenes(self):
+        d = self.run_story("part", self.path, "gate")
+        self.assertEqual(d["part"]["label"], "Auth gate")
+        self.assertEqual(d["group_members"], ["api", "gate", "cache"])
+        self.assertEqual(d["neighbours"], {"previous": "api", "next": "cache"})
+        self.assertEqual([r["part"] for r in d["links_in"]], ["api"])
+        self.assertEqual([r["part"] for r in d["links_out"]], ["db", "user"])
+        self.assertEqual([s["index"] for s in d["scenes"]], [1, 2, 4])
+        self.assertEqual(d["focused_in"], [2])
+        edge = self.run_story("part", self.path, "api")["neighbours"]
+        self.assertEqual(edge, {"previous": None, "next": "gate"})
+        p = self.run_story("part", self.path, "blimp", expect=1)
+        self.assertIn("no part 'blimp'", p.stderr)
+
+    def test_questions_are_3_to_5_and_every_answer_is_the_storys_own_text(self):
+        texts = list(_story_strings(self.story))
+        for scope in (None, "db", "gate,user"):
+            with self.subTest(parts=scope):
+                args = ("questions", self.path) + (("--parts", scope) if scope else ())
+                qs = self.run_story(*args)["questions"]
+                self.assertTrue(3 <= len(qs) <= 5, len(qs))
+                self.assertEqual([q["n"] for q in qs], list(range(1, len(qs) + 1)))
+                self.assertTrue({"behaviour", "change impact", "rationale"} <=
+                                {q["seam"] for q in qs})
+                for q in qs:
+                    self.assertTrue(q["question"].strip())
+                    self.assertEqual(len(q["expected"]), len(q["from"]))
+                    for exp, src in zip(q["expected"], q["from"]):
+                        self.assertTrue(any(exp in t for t in texts),
+                                        "%r is not text from the story" % exp)
+                        got = _at(self.story, src)
+                        got = got if isinstance(got, str) else "\n".join(got)
+                        self.assertIn(exp, got, "%s does not hold %r" % (src, exp))
+
+    def test_questions_scope_is_checked(self):
+        p = self.run_story("questions", self.path, "--parts", "blimp", expect=1)
+        self.assertIn("'blimp' not a part id", p.stderr)
+        p = self.run_story("questions", self.path, "--parts", "admin", expect=1)
+        self.assertIn("no middle scene shows admin", p.stderr)
+        p = self.run_story("scene", self.path, "1", "--parts", "db", expect=1)
+        self.assertIn("--parts belongs to `story questions`", p.stderr)
+
+
+class VisualizeTourState(Sandbox):
+    """`tour-state`: saved progress in the project's own vault folder, claim-before-write."""
+
+    REL = "Projects/quokka/visualize/tour-state.json"
+
+    def setUp(self):
+        super().setUp()
+        self.vault = self.tmp / "vault"
+        gt = self.vault / "Projects" / "golden-thread"
+        (gt / "tools").mkdir(parents=True)
+        (gt / "sessions").mkdir()
+        shutil.copy(TOOLS / "gt_session.py", gt / "tools" / "gt_session.py")
+        (self.vault / "Projects" / "quokka").mkdir()
+        self.state = self.vault / self.REL
+        self.story = self.tmp / "story.json"
+        self.story.write_text(json.dumps(story()), encoding="utf-8")
+
+    def tour(self, action, *args, expect=0):
+        p = self.py(SCRIPT, "tour-state", action, "--project", "quokka", *args,
+                    "--vault", self.vault)
+        self.assertEqual(p.returncode, expect, p.stdout + p.stderr)
+        return p
+
+    def vault_files(self):
+        return sorted(str(p.relative_to(self.vault)) for p in self.vault.rglob("*"))
+
+    def test_set_then_get_round_trips_with_the_private_header(self):
+        self.assertFalse(json.loads(self.tour("get").stdout)["saved"])
+        self.tour("set", "--story", self.story, "--scene", "A request")
+        self.tour("set", "--scene", "3", "--stepped-into", "gate", "--stepped-into", "gate")
+        raw = self.state.read_text(encoding="utf-8")
+        d = json.loads(raw)
+        self.assertEqual(next(iter(d)), "_header", "the header comes first in the file")
+        for words in ("PRIVATE", "NOT A METRIC"):
+            self.assertIn(words, d["_header"])
+        got = json.loads(self.tour("get").stdout)
+        self.assertEqual((got["saved"], got["scene"], got["seen"], got["stepped_into"]),
+                         (True, 3, [2, 3], ["gate"]))
+        self.assertEqual(got["story_title"], "How the kestrel pipeline works")
+        self.assertFalse(got["story_changed"])
+        self.story.write_text(json.dumps(story(subtitle="A different story now")), "utf-8")
+        self.assertTrue(json.loads(self.tour("get").stdout)["story_changed"])
+        self.assertEqual(list(self.state.parent.iterdir()), [self.state], "no temp left behind")
+
+    def test_dry_run_writes_nothing(self):
+        before = self.vault_files()
+        p = self.tour("set", "--story", self.story, "--scene", "2", "--dry-run")
+        self.assertIn("dry run: would write %s" % self.REL, p.stdout)
+        self.assertIn("NOT A METRIC", p.stdout)
+        self.assertEqual(self.vault_files(), before)
+        self.tour("set", "--story", self.story, "--scene", "2")
+        saved = self.state.read_bytes()
+        self.tour("set", "--scene", "4", "--finished", "--dry-run")
+        self.assertEqual(self.state.read_bytes(), saved)
+
+    def test_a_file_claimed_by_another_live_session_is_refused(self):
+        self.tour("set", "--story", self.story, "--scene", "2")
+        saved = self.state.read_bytes()
+        p = self.py(self.vault / "Projects/golden-thread/tools/gt_session.py",
+                    "--vault", self.vault, "--id", "wombat-live", "register", "--task", "t",
+                    "--files", self.REL, env={"CLAUDE_PID": str(os.getpid())})
+        self.assertOk(p)
+        p = self.tour("set", "--scene", "3", expect=5)
+        self.assertIn("claimed by live session wombat-live", p.stderr)
+        self.assertEqual(self.state.read_bytes(), saved)
+        # The holder itself may write.
+        p = self.run_cmd([PYTHON, SCRIPT, "tour-state", "set", "--project", "quokka",
+                          "--scene", "3", "--vault", self.vault],
+                         env={"CLAUDE_SESSION_ID": "wombat-live",
+                              "CLAUDE_PID": str(os.getpid())})
+        self.assertOk(p)
+        self.assertEqual(json.loads(self.state.read_text("utf-8"))["scene"], 3)
+
+    def test_bad_input_is_refused_before_any_write(self):
+        before = self.vault_files()
+        for args, want in ((("set", "--scene", "2"), "no story recorded"),
+                           (("set", "--story", self.story, "--scene", "9"), "no scene"),
+                           (("set", "--story", self.story, "--stepped-into", "blimp"),
+                            "no part 'blimp'"),
+                           (("get", "--scene", "2"), "only reads")):
+            with self.subTest(args=args):
+                p = self.tour(*args, expect=1)
+                self.assertIn(want, p.stderr)
+        p = self.py(SCRIPT, "tour-state", "set", "--project", "ocelot", "--vault", self.vault)
+        self.assertEqual(p.returncode, 1)
+        self.assertIn("no project ocelot", p.stderr)
+        p = self.py(SCRIPT, "tour-state", "get", "--project", "../x", "--vault", self.vault)
+        self.assertEqual(p.returncode, 1)
+        self.assertEqual(self.vault_files(), before)
+
+
+WALKTHROUGH = ("tour", "whatis", "trace", "explain-back")
+
+
+class VisualizeWalkthroughSkills(unittest.TestCase):
+    def text(self, name):
+        return (VIS / "skills" / name / "SKILL.md").read_text(encoding="utf-8")
+
+    def test_the_four_skills_exist_with_triggers_and_a_prediction_pause(self):
+        for name in WALKTHROUGH:
+            with self.subTest(skill=name):
+                t = self.text(name)
+                self.assertRegex(t, r"\A---\nname: %s\ndescription: " % re.escape(name))
+                self.assertIn("Use when the user says:", t)
+                self.assertIn("/gt-visualize:%s" % name, t)
+                self.assertIn("Prediction pause", t)
+                self.assertIn("gt_visualize.py", t)
+        main = SKILL.read_text(encoding="utf-8")
+        for name in WALKTHROUGH:
+            self.assertIn("/gt-visualize:%s" % name, main)
+
+    def test_trace_labels_static_and_only_offers_the_test(self):
+        t = self.text("trace")
+        self.assertIn("STATIC walkthrough", t)
+        self.assertIn("no invented values", t.lower())
+        self.assertIn("only on the user's yes", t)
+
+    def test_explain_back_is_opt_in_and_wired_into_nothing_automatic(self):
+        self.assertIn("Opt-in only", self.text("explain-back"))
+        roots = [GT] + [latest_version_dir(REPO / n) for n in (
+            "golden-thread-flow", "golden-thread-demo", "golden-thread-watch",
+            "golden-thread-farm", "golden-thread-report-card", "golden-thread-usage")
+            if (REPO / n).is_dir()]
+        for root in roots:
+            for p in root.rglob("*"):
+                if p.is_file() and p.suffix in (".py", ".sh", ".md", ".json"):
+                    self.assertNotIn("explain-back", p.read_text("utf-8", "replace"),
+                                     "%s refers to explain-back" % p)
+        self.assertIn("Never run it unasked", SKILL.read_text(encoding="utf-8"))
+
+    def test_no_file_names_the_third_party_plugin(self):
+        # Assembled from pieces so this file does not itself carry the names (the scrub gate
+        # matches the organisation's first four letters as a whole word, hence the split).
+        forbidden = ["review" + "-process", "IS" + "BN" + "Cloud" + "Ops"]
+        for p in sorted(VIS.rglob("*")):
+            if not p.is_file():
+                continue
+            text = p.read_text("utf-8", "replace").lower()
+            for word in forbidden:
+                self.assertNotIn(word.lower(), text, "%s names %s" % (p.relative_to(VIS),
+                                                                     word[:4] + "..."))
 
 
 class VisualizeInstall(Sandbox):

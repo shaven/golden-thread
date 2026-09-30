@@ -4,7 +4,7 @@
 > **Claims last checked against the code:** 2026-09-17 — see *The documents, and what belongs in each* in [`CLAUDE.md`](../CLAUDE.md).
 
 Complete reference for gt's twenty-eight skills and its seven modules. Written against **gt v0.17.10**
-(gt-wiki 0.2.3; gt-usage 0.1.3; gt-demo, gt-watch, gt-report-card, gt-farm and gt-flow 0.17.10; gt-visualize 0.3.0 —
+(gt-wiki 0.2.3; gt-usage 0.1.3; gt-demo, gt-watch, gt-report-card, gt-farm and gt-flow 0.17.10; gt-visualize 0.4.0 —
 those five are versioned with gt and move with every release, changed or not).
 
 ---
@@ -2506,6 +2506,31 @@ if you want the next render to start from it.
 
 Exit codes: `0` written · `1` bad arguments, an unreadable path, a refused `--out` or a
 bundle that fails its hash · `3` nothing to draw.
+
+**Guided walkthrough** (gt-visualize 0.4.0). Four skills turn an explainer into a guided session,
+each reading the story only through the script, never inventing a value:
+
+- `/gt-visualize:tour [focus]` — scene by scene: before each scene a prediction pause asks what
+  connects its parts, then the scene and its hop map are revealed. Progress is saved per project
+  (`Projects/<slug>/visualize/tour-state.json`, marked private and not a metric); a later session
+  resumes with a two-question recap.
+- `/gt-visualize:whatis <part-id>` — what one part does at its own level of detail, with step
+  into / step out / step over / where.
+- `/gt-visualize:trace <scene-or-part>` — runs a scene forward hop by hop on a real test where one
+  exists, otherwise a clearly labelled STATIC walkthrough; ends with a hop table and offers a
+  scenario test, written only on your yes.
+- `/gt-visualize:explain-back [--diff <ref>]` — opt-in only: 3–5 questions about the story's
+  seams, answers checked against the story.
+
+```bash
+python3 $VIS/gt_visualize.py story scene <story> <title|index>
+python3 $VIS/gt_visualize.py story part <story> <id>
+python3 $VIS/gt_visualize.py story questions <story> [--parts a,b]
+python3 $VIS/gt_visualize.py tour-state get|set --project <slug> [--vault V] [--dry-run]
+```
+
+A story that fails `--check` is refused. `tour-state set` is refused (exit 5) when another live
+session has claimed the file.
 
 **Publish** (gt-visualize 0.3.0) — a page is local until you ask to share it. `publish` runs a
 scrub gate (credential scan, IPv4 addresses, home-folder paths, your scrub terms), prints the plan

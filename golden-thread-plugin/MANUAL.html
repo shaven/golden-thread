@@ -119,7 +119,7 @@ th, td { border:1px solid #ddd; padding:3px 5px; text-align:left; vertical-align
 <strong>Claims last checked against the code:</strong> 2026-09-17 — see <em>The documents, and what belongs in each</em> in <a href="../CLAUDE.md"><code>CLAUDE.md</code></a>.</p>
 </blockquote>
 <p>Complete reference for gt's twenty-eight skills and its seven modules. Written against <strong>gt v0.17.10</strong>
-(gt-wiki 0.2.3; gt-usage 0.1.3; gt-demo, gt-watch, gt-report-card, gt-farm and gt-flow 0.17.10; gt-visualize 0.3.0 —
+(gt-wiki 0.2.3; gt-usage 0.1.3; gt-demo, gt-watch, gt-report-card, gt-farm and gt-flow 0.17.10; gt-visualize 0.4.0 —
 those five are versioned with gt and move with every release, changed or not).</p>
 <hr />
 <h2 id="the-model">The model</h2>
@@ -2959,6 +2959,28 @@ if you want the next render to start from it.</p>
 </ul>
 <p>Exit codes: <code>0</code> written · <code>1</code> bad arguments, an unreadable path, a refused <code>--out</code> or a
 bundle that fails its hash · <code>3</code> nothing to draw.</p>
+<p><strong>Guided walkthrough</strong> (gt-visualize 0.4.0). Four skills turn an explainer into a guided session,
+each reading the story only through the script, never inventing a value:</p>
+<ul>
+<li><code>/gt-visualize:tour [focus]</code> — scene by scene: before each scene a prediction pause asks what
+  connects its parts, then the scene and its hop map are revealed. Progress is saved per project
+  (<code>Projects/&lt;slug&gt;/visualize/tour-state.json</code>, marked private and not a metric); a later session
+  resumes with a two-question recap.</li>
+<li><code>/gt-visualize:whatis &lt;part-id&gt;</code> — what one part does at its own level of detail, with step
+  into / step out / step over / where.</li>
+<li><code>/gt-visualize:trace &lt;scene-or-part&gt;</code> — runs a scene forward hop by hop on a real test where one
+  exists, otherwise a clearly labelled STATIC walkthrough; ends with a hop table and offers a
+  scenario test, written only on your yes.</li>
+<li><code>/gt-visualize:explain-back [--diff &lt;ref&gt;]</code> — opt-in only: 3–5 questions about the story's
+  seams, answers checked against the story.</li>
+</ul>
+<pre><code class="language-bash">python3 $VIS/gt_visualize.py story scene &lt;story&gt; &lt;title|index&gt;
+python3 $VIS/gt_visualize.py story part &lt;story&gt; &lt;id&gt;
+python3 $VIS/gt_visualize.py story questions &lt;story&gt; [--parts a,b]
+python3 $VIS/gt_visualize.py tour-state get|set --project &lt;slug&gt; [--vault V] [--dry-run]
+</code></pre>
+<p>A story that fails <code>--check</code> is refused. <code>tour-state set</code> is refused (exit 5) when another live
+session has claimed the file.</p>
 <p><strong>Publish</strong> (gt-visualize 0.3.0) — a page is local until you ask to share it. <code>publish</code> runs a
 scrub gate (credential scan, IPv4 addresses, home-folder paths, your scrub terms), prints the plan
 — target, visibility, final URL — and publishes only when re-run with <code>--yes</code>, which the skill

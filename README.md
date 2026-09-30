@@ -581,6 +581,8 @@ Two scripts in `golden-thread-wiki` come directly from Jonathan's work:
   `git fetch` + `git diff base..head`, with `upstream_sha:` frontmatter for a precise
   diff baseline; web-only sources are flagged for the LLM to compare.
 
+**Sergey Kryvets** recommended adding a visualization tool to Golden Thread — a great idea that became **gt-visualize**: the 3D code city, the scroll-driven explainers that show how a system's parts work together, publishing, and the guided walkthrough. Thank you, Sergey.
+
 ## License
 
 [MIT](LICENSE).

@@ -11,6 +11,22 @@ release's own summary line, kept short rather than reconstructed after the fact.
 
 ---
 
+## gt-visualize 0.4.0 — 2026-09-30
+
+**A guided walkthrough of any explainer** — feature request `2026-09-30-gt-visualize-guided-walkthrough`
+(re-filed in the queue's format from `2026-09-30-gt-visualize-altitude-verbs`). Four skills:
+`/gt-visualize:tour` (scene by scene with a prediction pause, progress saved per project and marked
+private), `/gt-visualize:whatis` (one part at its own level of detail), `/gt-visualize:trace` (a scene
+run forward hop by hop on a real test, or a labelled STATIC walkthrough — never invented values; a
+scenario test only on your yes) and `/gt-visualize:explain-back` (opt-in questions on the story's
+seams). New script commands `story scene|part|questions` and `tour-state get|set` (claim-before-write,
+`--dry-run`). Built in gt's own terms; it depends on no other plugin. gt stays at 0.17.10.
+
+Thanks to **Sergey Kryvets**, who recommended adding a visualization tool to Golden Thread in the
+first place — the idea that became gt-visualize.
+
+---
+
 ## gt 0.17.10 — 2026-09-30
 
 Four owner requests: queued vault writes for concurrent agents, specialist agents by job type,

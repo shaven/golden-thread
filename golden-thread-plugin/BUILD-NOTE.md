@@ -22,7 +22,7 @@ this tree was cut from.
 | `gt` | **0.17.10** | 0.17.9 |
 | `gt-demo`, `gt-flow`, `gt-report-card`, `gt-watch` | **0.17.10** | 0.17.9 (content unchanged) |
 | `gt-farm` | **0.17.10** | 0.17.9 (results now go through the write queue) |
-| `gt-visualize` | 0.3.0 | unchanged |
+| `gt-visualize` | **0.4.0** | 0.3.0 (guided walkthrough) |
 | `gt-usage` | 0.1.3 | unchanged |
 | `gt-wiki` | 0.2.3 | unchanged |
 

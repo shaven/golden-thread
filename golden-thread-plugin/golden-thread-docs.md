@@ -3,7 +3,7 @@
 > **Reader:** quick lookup, and the printed PDF
 > **Claims last checked against the code:** 2026-09-17 — see *The documents, and what belongs in each* in [`CLAUDE.md`](../CLAUDE.md).
 
-## Version gt 0.17.10 / gt-wiki 0.2.3 / gt-usage 0.1.3 / gt-visualize 0.3.0 / gt-demo, gt-watch, gt-report-card, gt-farm, gt-flow 0.17.10
+## Version gt 0.17.10 / gt-wiki 0.2.3 / gt-usage 0.1.3 / gt-visualize 0.4.0 / gt-demo, gt-watch, gt-report-card, gt-farm, gt-flow 0.17.10
 
 ---
 
@@ -176,7 +176,7 @@ Optional parts, each a separate plugin in the `golden-thread-plugin` marketplace
 | *(no command)* | `report-card` (`gt-report-card`) · on | The session report card at `/compact` and session end — saved as a notice and shown at the next session start, because output at those events is never displayed — and the project close-out question. Settings `report_card`, `closeout_check`. |
 | `/gt-farm:gt-farm` | `farm` (`gt-farm`) · **off** fresh, on for upgraders | Route bulk, mechanical, or second-opinion tasks to an external AI service as a self-contained work packet. All four gates (Stateless, Self-contained, Checkable, Releasable) must pass before a task leaves. Results come back unverified. Was `/gt:gt-farm`; a machine upgrading from a gt that shipped it keeps it on. |
 | `/gt-flow:gt-flow` | `flow` (`gt-flow`) · on | New in 0.15.0. Renders `events.jsonl` as one offline HTML file: a lane per project, time left to right, an arrow each time an item climbed a level. `--redact` hashes every name before the page is shared; task events are hidden until `--tasks` or a click; `--project`, `--since`. Never writes the vault. |
-| `/gt-visualize:gt-visualize` | `visualize` (`gt-visualize`) · on | New in gt-visualize 0.3.0. Two modes, each one offline HTML file with three.js inlined. **explain**: a scroll-driven walkthrough of how a codebase's parts work together — scenes highlight parts and animate the flows between them, from a story Claude writes out of the code and the vault (`--check` validates it). **render**, the code city: directories are districts, files are buildings — height by lines, footprint by size, colour by language (gt's filetype definitions) or by git churn over `--since` days. Orbit, hover, click to focus, search. `--redact` hashes every name before sharing; an `--out` inside the vault is refused. |
+| `/gt-visualize:gt-visualize` | `visualize` (`gt-visualize`) · on | New in gt-visualize 0.4.0. Two modes, each one offline HTML file with three.js inlined. **explain**: a scroll-driven walkthrough of how a codebase's parts work together — scenes highlight parts and animate the flows between them, from a story Claude writes out of the code and the vault (`--check` validates it). **render**, the code city: directories are districts, files are buildings — height by lines, footprint by size, colour by language (gt's filetype definitions) or by git churn over `--since` days. Orbit, hover, click to focus, search. `--redact` hashes every name before sharing; an `--out` inside the vault is refused. |
 | `/gt-usage:gt-usage` | `usage` (`gt-usage`) 0.1.3 · on | New. Reports the 5-hour, weekly and monthly-spend windows from the readings its status line records, and what ending or cutting a session would save. A window the plan does not report is shown as absent, never as 0%. Settings: `usage_meter`, `usage_alert`. Never writes the vault. |
 
 ### Movement events (0.15.0)
