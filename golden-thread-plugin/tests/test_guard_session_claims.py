@@ -95,9 +95,9 @@ class GuardTest(GuardTestBase):
         self.vault = self.tmp / "vault"
         (self.vault / SESSIONS).mkdir(parents=True)
         self.config(vault_path=str(self.vault))
-        self.target = self.vault / "Projects" / "alpha" / "research.md"
+        self.target = self.vault / "Projects" / "alpha" / "research.json"
 
-    def session(self, sid="other", claims=("Projects/alpha/research.md",), host="elsewhere",
+    def session(self, sid="other", claims=("Projects/alpha/research.json",), host="elsewhere",
                 pid=None, last_execution=None, name=None, machine=None):
         fm = [f"session_id: {sid}", "task: testing the guard"]
         if machine is not None:
@@ -122,7 +122,7 @@ class GuardTest(GuardTestBase):
         hso = self.guard(self.target, env={"CLAUDE_SESSION_ID": "me"})
         self.assertAllow(hso)
         self.assertIn("NOT registered", hso.get("additionalContext", ""))
-        self.assertIn("Projects/alpha/research.md", hso["additionalContext"])
+        self.assertIn("Projects/alpha/research.json", hso["additionalContext"])
         self.assertIn("gt_session.py", hso["additionalContext"])
 
     def test_a_registered_session_hears_nothing(self):
@@ -138,7 +138,7 @@ class GuardTest(GuardTestBase):
         hso = self.guard(self.target)
         self.assertDeny(hso)
         reason = hso["permissionDecisionReason"]
-        self.assertIn("Projects/alpha/research.md", reason)
+        self.assertIn("Projects/alpha/research.json", reason)
         self.assertIn("session : other", reason)
         self.assertIn("testing the guard", reason)
         self.assertIn("Projects/golden-thread/pending/", reason)
@@ -211,16 +211,16 @@ class GuardTest(GuardTestBase):
     def test_directory_claim_covers_files_beneath(self):
         self.session(claims=("Projects/alpha/",), last_execution=local_stamp(1))
         self.assertDeny(self.guard(self.target))
-        self.assertDeny(self.guard(self.vault / "Projects" / "alpha" / "deep" / "x.md"))
-        self.assertAllow(self.guard(self.vault / "Projects" / "alphabet" / "x.md"),
+        self.assertDeny(self.guard(self.vault / "Projects" / "alpha" / "deep" / "x.json"))
+        self.assertAllow(self.guard(self.vault / "Projects" / "alphabet" / "x.json"),
                          "a claim on Projects/alpha must not cover Projects/alphabet")
-        self.assertAllow(self.guard(self.vault / "Projects" / "alpha.md"))
+        self.assertAllow(self.guard(self.vault / "Projects" / "alpha.json"))
 
     def test_target_reached_through_a_symlinked_vault_path_is_still_guarded(self):
         self.session(last_execution=local_stamp(1))
         alias = self.tmp / "vault-alias"
         alias.symlink_to(self.vault, target_is_directory=True)
-        self.assertDeny(self.guard(alias / "Projects" / "alpha" / "research.md"))
+        self.assertDeny(self.guard(alias / "Projects" / "alpha" / "research.json"))
 
     # -- allow ------------------------------------------------------------------------
     def test_own_claim_never_blocks(self):
@@ -233,7 +233,7 @@ class GuardTest(GuardTestBase):
     def test_session_id_falls_back_to_the_filename(self):
         p = self.vault / SESSIONS / "fromname_2026-09-11_1100.md"
         p.write_text(f"---\nhost: {HOST}\npid: {os.getpid()}\n---\n\n"
-                     "- `Projects/alpha/research.md`\n", encoding="utf-8")
+                     "- `Projects/alpha/research.json`\n", encoding="utf-8")
         self.assertAllow(self.guard(self.target, env={"CLAUDE_CODE_SESSION_ID": "fromname"}))
         self.assertDeny(self.guard(self.target))
 
@@ -251,10 +251,10 @@ class GuardTest(GuardTestBase):
 
     def test_unclaimed_file_and_readme_are_not_blocked(self):
         self.session(last_execution=local_stamp(1))
-        self.assertAllow(self.guard(self.vault / "Projects" / "alpha" / "design.md"))
+        self.assertAllow(self.guard(self.vault / "Projects" / "alpha" / "design.json"))
         (self.vault / SESSIONS / "README.md").write_text(
-            "---\nsession_id: readme\n---\n\n- `Projects/beta/x.md`\n", encoding="utf-8")
-        self.assertAllow(self.guard(self.vault / "Projects" / "beta" / "x.md"),
+            "---\nsession_id: readme\n---\n\n- `Projects/beta/x.json`\n", encoding="utf-8")
+        self.assertAllow(self.guard(self.vault / "Projects" / "beta" / "x.json"),
                          "README.md in sessions/ is documentation, not a claim")
 
     def test_non_write_tools_are_allowed(self):
@@ -264,8 +264,8 @@ class GuardTest(GuardTestBase):
                 self.assertAllow(self.guard(self.target, tool=tool))
 
     def test_target_outside_vault_is_allowed(self):
-        self.session(claims=("Projects/alpha/research.md",), last_execution=local_stamp(1))
-        self.assertAllow(self.guard(self.tmp / "elsewhere" / "Projects" / "alpha" / "research.md"))
+        self.session(claims=("Projects/alpha/research.json",), last_execution=local_stamp(1))
+        self.assertAllow(self.guard(self.tmp / "elsewhere" / "Projects" / "alpha" / "research.json"))
 
     def test_no_sessions_dir_or_no_vault_is_allowed(self):
         shutil.rmtree(self.vault / SESSIONS)
@@ -296,7 +296,7 @@ class GuardTest(GuardTestBase):
         self.session(host=HOST, pid=os.getpid())         # a live claim exists, on another file
         payload = {"session_id": "caller", "hook_event_name": "PreToolUse",
                    "tool_name": "Write",
-                   "tool_input": {"file_path": str(self.vault / "index.md"), "content": "x"}}
+                   "tool_input": {"file_path": str(self.vault / "index.json"), "content": "x"}}
         proc = self.run_cmd([PYTHON, self.hooks / "guard_session_claims.py"],
                             input=json.dumps(payload))
         self.assertEqual(proc.returncode, 0,
@@ -376,6 +376,73 @@ class GuardTest(GuardTestBase):
         self.assertDeny(self.guard(self.target, env={"TZ": "UTC"}))
 
 
+class QueueFirstTest(GuardTestBase):
+    """Core rule 1 since 0.17.11 (owner 2026-10-01): vault CONTENT is written only through the
+    write queue. A direct Write/Edit to any vault .md outside gt's own trees is denied whether or
+    not anyone claims it; the obvious shell writes are denied too; everything else is untouched."""
+
+    def setUp(self):
+        super().setUp()
+        self.vault = self.tmp / "vault"
+        (self.vault / SESSIONS).mkdir(parents=True)
+        self.config(vault_path=str(self.vault))
+
+    def bash(self, command, cwd=None):
+        payload = {"session_id": "caller", "hook_event_name": "PreToolUse", "tool_name": "Bash",
+                   "tool_input": {"command": command}, "cwd": str(cwd or self.tmp)}
+        return self.guard_raw(json.dumps(payload))
+
+    def assertQueueDeny(self, hso, msg=""):
+        self.assertDeny(hso, msg)
+        reason = hso["permissionDecisionReason"]
+        self.assertIn("queue first", reason)
+        self.assertIn("gt_write_queue.py", reason)
+        self.assertIn("gt_broker.py drain", reason)
+
+    def test_every_write_tool_on_vault_content_is_denied_unclaimed(self):
+        for rel in ("Projects/alpha/research.md", "Projects/alpha/design.md", "INBOX.md",
+                    "Knowledge/Some Page.md", "global-memory/x.md", "Daily Notes/2026-10-01.md",
+                    "Projects/alpha/memory/note.md", "index.md"):
+            for tool in ("Write", "Edit", "MultiEdit"):
+                with self.subTest(rel=rel, tool=tool):
+                    self.assertQueueDeny(self.guard(self.vault / rel, tool=tool))
+
+    def test_the_reason_names_the_path_and_the_generated_file_tools(self):
+        r = self.guard(self.vault / "Projects" / "alpha" / "research.md")["permissionDecisionReason"]
+        self.assertIn("Projects/alpha/research.md", r)
+        self.assertIn("gt_log.py add", r)
+        self.assertIn("gt_adr.py allocate", r)
+
+    def test_gt_owned_trees_and_non_markdown_are_not_queue_governed(self):
+        for rel in ("Sources/a.md", "core-rules/core_x.md", ".obsidian/x.md",
+                    "Projects/golden-thread/spool/queue/a.md", "Projects/golden-thread/sessions/s.md",
+                    "Projects/golden-thread/tools/README.md", "Projects/alpha/data.json",
+                    "Projects/alpha/tool.py"):
+            with self.subTest(rel=rel):
+                self.assertAllow(self.guard(self.vault / rel))
+
+    def test_markdown_outside_the_vault_is_not_ours(self):
+        self.assertAllow(self.guard(self.tmp / "elsewhere" / "notes.md"))
+
+    def test_shell_writes_into_vault_content_are_denied(self):
+        t = self.vault / "Projects" / "alpha" / "research.md"
+        for cmd in (f'echo x >> "{t}"', f"echo x > '{t}'", f"printf x>>{t}",
+                    f'cat <<EOF > "{t}"\nx\nEOF', f'echo x | tee -a "{t}"',
+                    f"sed -i '' 's/a/b/' '{t}'", f"cp /tmp/a.md '{t}'", f"mv /tmp/a.md {t}",
+                    "echo x >> Projects/alpha/research.md"):
+            with self.subTest(cmd=cmd):
+                self.assertQueueDeny(self.bash(cmd, cwd=self.vault))
+
+    def test_shell_reads_and_writes_elsewhere_are_allowed(self):
+        t = self.vault / "Projects" / "alpha" / "research.md"
+        for cmd in (f'cat "{t}"', f'grep -n x "{t}"', f'cp "{t}" /tmp/copy.md',
+                    "echo x > /tmp/scratch.md", f'echo x > "{self.vault}/Projects/alpha/data.json"',
+                    f'python3 gt_write_queue.py --vault "{self.vault}" --path Projects/alpha/research.md --op append --content-file /tmp/q.md',
+                    'echo "unbalanced', "2>&1 >/dev/null ls"):
+            with self.subTest(cmd=cmd):
+                self.assertAllow(self.bash(cmd, cwd=self.tmp))
+
+
 class GuardWithSessionToolTest(GuardTestBase):
     """End to end with the real vault and the real gt_session.py claim files."""
 
@@ -399,22 +466,22 @@ class GuardWithSessionToolTest(GuardTestBase):
         self.assertOk(proc, f"gt_session.py {' '.join(args)}")
 
     def test_claim_blocks_other_session_until_released_or_dead(self):
-        target = self.vault / "Projects" / "golden-thread" / "README.md"
+        target = self.vault / "Projects" / "golden-thread" / "state.json"
         self.gt_session("register", "--task", "guard e2e")
-        self.gt_session("claim", "Projects/golden-thread/README.md")
+        self.gt_session("claim", "Projects/golden-thread/state.json")
 
         b = {"CLAUDE_CODE_SESSION_ID": "sess-B"}
         self.assertDeny(self.guard(target, env=b), "session B must not write A's claimed file")
         self.assertAllow(self.guard(target, env={"CLAUDE_CODE_SESSION_ID": "sess-A"}),
                          "session A may write its own claim")
-        self.assertAllow(self.guard(self.vault / "index.md", env=b), "unclaimed file")
+        self.assertAllow(self.guard(self.vault / "index.json", env=b), "unclaimed file")
 
         self._stop_holder()
         self.assertAllow(self.guard(target, env=b), "A's process died: its claim is void")
 
     def test_release_clears_the_claim(self):
-        target = self.vault / "index.md"
-        self.gt_session("register", "--task", "guard e2e", "--files", "index.md")
+        target = self.vault / "index.json"
+        self.gt_session("register", "--task", "guard e2e", "--files", "index.json")
         b = {"CLAUDE_CODE_SESSION_ID": "sess-B"}
         self.assertDeny(self.guard(target, env=b))
         self.gt_session("release")

@@ -117,17 +117,49 @@ class WeeklyTest(WeeklyBase):
         self.assertIn("Findings: **3**", first)
         self.assertIn("Findings: **3**", second, "second run counted the first report")
 
-    def test_live_session_claim_on_inbox_is_respected(self):
+    def broker_rows(self, v):
+        rows = []
+        for f in sorted((v / "Projects/golden-thread/spool/broker").glob("log-*.jsonl")):
+            rows += [json.loads(l) for l in f.read_text().splitlines() if l.strip()]
+        return rows
+
+    def queued(self, v):
+        q = v / "Projects/golden-thread/spool/queue"
+        return sorted(q.glob("*.json")) if q.is_dir() else []
+
+    def test_the_inbox_line_arrives_through_the_write_broker(self):
+        """0.17.11: the line is queued and drained, never appended by the script itself."""
         v = self.wired_vault()
         self.seed_findings(v)
-        sessions = v / "Projects" / "golden-thread" / "sessions"
-        sessions.mkdir(parents=True, exist_ok=True)
-        (sessions / "2026-09-11_abc.md").write_text("claims:\n- INBOX.md\n")
-        before = (v / "INBOX.md").read_text()
         self.run_weekly()
+        (row,) = [r for r in self.broker_rows(v) if r["path"] == "INBOX.md"]
+        self.assertEqual((row["op"], row["decision"], row["session"]),
+                         ("append", "apply", "gt-lint-weekly"))
+        self.assertEqual(self.queued(v), [])
+        self.run_weekly()                       # same day: the script's own check, no request
+        self.assertEqual(len(self.broker_rows(v)), 1)
+
+    def test_live_session_claim_on_inbox_is_respected(self):
+        """A LIVE claim on INBOX.md holds the line in the queue (it was dropped before 0.17.11);
+        the next drain after the claim ends applies it."""
+        v = self.wired_vault()
+        self.seed_findings(v)
+        sess = v / "Projects" / "golden-thread" / "tools" / "gt_session.py"
+        env = {"CLAUDE_SESSION_ID": "inbox-holder", "CLAUDE_PID": str(os.getpid())}
+        self.assertOk(self.py(sess, "--vault", v, "register", "--task", "t", "--files",
+                              "INBOX.md", env=env))
+        before = (v / "INBOX.md").read_text()
+        proc = self.run_weekly()
         self.assertEqual((v / "INBOX.md").read_text(), before)
         self.assertTrue((v / ".gt/lint/latest.md").is_file())
         self.assertIn("claimed by a live session", self.log.read_text())
+        self.assertIn("left queued", proc.stdout)
+        self.assertEqual(len(self.queued(v)), 1)
+        self.assertEqual(self.broker_rows(v)[-1]["decision"], "held")
+        self.assertOk(self.py(sess, "--vault", v, "release", env=env))
+        self.assertOk(self.py(SCRIPTS / "gt_broker.py", "drain", "--vault", v))
+        self.assertEqual(len(self.inbox_lines(v)), 1)
+        self.assertEqual(self.queued(v), [])
 
     def test_stale_session_claim_does_not_block(self):
         v = self.wired_vault()

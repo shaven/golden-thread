@@ -4,12 +4,17 @@ Contracts pinned here:
   * `log` accepts only the closed vocabulary and appends, never rewrites;
   * `index` replaces an existing `[[Page]]` entry IN PLACE (even when --section
     names another section), adds a new one under --section, appends otherwise;
-  * a failed command leaves the file byte-identical.
+  * a failed command leaves the file byte-identical;
+  * inside a Golden Thread vault (0.2.4) it writes nothing itself: `log` goes through
+    gt_log.py (log.md is generated), `index` through the write queue and broker.
 """
 import datetime
+import json
+import re
+import shutil
 import unittest
 
-from _harness import Sandbox, WIKI_SCRIPTS
+from _harness import Sandbox, WIKI_SCRIPTS, SCRIPTS, TOOLS
 
 LOG = WIKI_SCRIPTS / "wiki_log.py"
 OPS = ("ingest", "query", "lint", "refresh", "graduate", "retire", "relocate")
@@ -153,6 +158,120 @@ class WikiLogTest(Sandbox):
         self.assertOk(p, "replacing an entry whose new summary holds a backslash crashed "
                          "(wiki_log.py passes the summary to re.sub as a replacement template)")
         self.assertIn("- [[Gamma]] — " + summary + "\n", self.index.read_text(encoding="utf-8"))
+
+
+class WikiLogInGtVaultTest(Sandbox):
+    """gt-wiki 0.2.4: inside a Golden Thread vault wiki_log.py writes nothing itself (Core
+    rule 1). log.md is generated, so `log` goes through gt_log.py; `index` becomes one
+    write-queue request, drained at once by gt_broker.py, or deposited for the next drain
+    when gt's scripts cannot be found."""
+
+    def setUp(self):
+        super().setUp()
+        self.vault = self.tmp / "vault"
+        self.gt = self.vault / "Projects" / "golden-thread"
+        (self.gt / "tools").mkdir(parents=True)
+        (self.gt / "sessions").mkdir()
+        (self.gt / "README.md").write_text("# golden-thread\n\n## Tasks\n", encoding="utf-8")
+        for tool in TOOLS.glob("*.py"):
+            shutil.copy(tool, self.gt / "tools" / tool.name)
+        self.index = self.vault / "index.md"
+        self.index.write_text(INDEX, encoding="utf-8")
+        self.queue = self.gt / "spool" / "queue"
+
+    def wl(self, *args, scripts=None):
+        return self.py(LOG, self.vault, *args,
+                       env={"GT_CORE_SCRIPTS": str(scripts or SCRIPTS),
+                            "CLAUDE_CODE_SESSION_ID": "wiki-test"})
+
+    def pending(self):
+        return sorted(self.queue.glob("*.json")) if self.queue.is_dir() else []
+
+    # -- log ----------------------------------------------------------------------
+    def test_log_goes_through_gt_log_and_log_md_is_generated(self):
+        p = self.wl("log", "ingest", "Some Source", "--line", "first", "--line", "second")
+        self.assertOk(p)
+        today = datetime.date.today().isoformat()
+        spooled = "".join(f.read_text(encoding="utf-8")
+                          for f in (self.gt / "spool" / "log").glob("*.md"))
+        self.assertRegex(spooled, re.escape(today) + r".* \[ingest\] Some Source — first; second")
+        text = (self.vault / "log.md").read_text(encoding="utf-8")
+        self.assertIn("[ingest] Some Source — first; second", text)
+        self.assertNotIn("## [", text, "the standalone-wiki entry shape was written to log.md")
+
+    def test_log_without_gt_log_writes_nothing_and_fails(self):
+        for f in (self.gt / "tools").glob("*.py"):
+            f.unlink()
+        p = self.wl("log", "lint", "Weekly", scripts=self.tmp / "no-gt")
+        self.assertEqual(p.returncode, 3, p.stderr)
+        self.assertIn("NOT written", p.stderr)
+        self.assertIn("[lint] Weekly", p.stderr)
+        self.assertFalse((self.vault / "log.md").exists())
+
+    def test_closed_vocabulary_still_applies(self):
+        p = self.wl("log", "update", "Title")
+        self.assertNotEqual(p.returncode, 0)
+        self.assertIn("op must be one of", p.stderr)
+
+    # -- index --------------------------------------------------------------------
+    def test_new_entry_is_queued_as_append_and_drained_into_the_section(self):
+        p = self.wl("index", "Beta", "second tool", "--section", "Tools")
+        self.assertOk(p)
+        self.assertIn("[apply]", p.stdout)
+        tools = self.index.read_text(encoding="utf-8").split("## Tools")[1].split("## Concepts")[0]
+        self.assertLess(tools.index("[[Alphabet Soup"), tools.index("- [[Beta]] — second tool"))
+        self.assertEqual(self.pending(), [], "the request was left in the queue")
+        log = "".join(f.read_text() for f in (self.gt / "spool" / "broker").glob("log-*.jsonl"))
+        self.assertIn('"append"', log)
+
+    def test_existing_entry_is_replaced_in_its_section(self):
+        p = self.wl("index", "Gamma", "rewritten summary", "--section", "Tools")
+        self.assertOk(p)
+        text = self.index.read_text(encoding="utf-8")
+        self.assertIn("- [[Gamma]] — rewritten summary", text.split("## Concepts")[1])
+        self.assertEqual(text.count("[[Gamma]]"), 1, "entry was duplicated")
+        self.assertIn("- [[Alpha]] — first tool", text.split("## Tools")[1])
+
+    def test_backslashes_and_metacharacters_stay_literal(self):
+        summary = r"matches \d+ in C:\temp\new"
+        self.assertOk(self.wl("index", "C++ (lang) [draft]?", "first", "--section", "Concepts"))
+        self.assertOk(self.wl("index", "C++ (lang) [draft]?", summary))
+        text = self.index.read_text(encoding="utf-8")
+        self.assertEqual(text.count("[[C++ (lang) [draft]?]]"), 1)
+        self.assertIn("- [[C++ (lang) [draft]?]] — " + summary + "\n", text)
+
+    def test_missing_section_queues_nothing(self):
+        before = self.index.read_bytes()
+        p = self.wl("index", "Beta", "x", "--section", "Tool")
+        self.assertNotEqual(p.returncode, 0)
+        self.assertIn("section '## Tool' not found", p.stderr)
+        self.assertEqual(self.index.read_bytes(), before)
+        self.assertEqual(self.pending(), [])
+
+    def test_entry_above_the_first_section_is_refused(self):
+        self.index.write_text("# Index\n\n- [[Top]] — preamble entry\n\n## Tools\n", encoding="utf-8")
+        before = self.index.read_bytes()
+        p = self.wl("index", "Top", "new")
+        self.assertNotEqual(p.returncode, 0)
+        self.assertIn("not inside a `## ` section", p.stderr)
+        self.assertEqual(self.index.read_bytes(), before)
+        self.assertEqual(self.pending(), [])
+
+    def test_without_gt_scripts_the_request_is_deposited_for_the_next_drain(self):
+        before = self.index.read_bytes()
+        p = self.wl("index", "Gamma", "later", scripts=self.tmp / "no-gt")
+        self.assertOk(p)
+        self.assertIn("next `gt_broker.py drain`", p.stdout)
+        self.assertEqual(self.index.read_bytes(), before, "index.md was written directly")
+        [req_file] = self.pending()
+        req = json.loads(req_file.read_text(encoding="utf-8"))
+        self.assertEqual((req["op"], req["section"], req["path"], req["session"]),
+                         ("replace-section", "Concepts", "index.md", "wiki-test"))
+        # gt's own validator accepts it, and the broker applies it
+        d = self.py(SCRIPTS / "gt_broker.py", "drain", "--vault", self.vault)
+        self.assertOk(d)
+        self.assertIn("- [[Gamma]] — later", self.index.read_text(encoding="utf-8"))
+        self.assertEqual(self.pending(), [])
 
 
 if __name__ == "__main__":

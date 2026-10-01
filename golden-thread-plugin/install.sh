@@ -860,6 +860,12 @@ With no vault and no --vault:
 If the release ships machine migrations, they run after the plugin files and hooks are
 in place; a failed one stops the install with exit 7 (nothing is rolled back).
 
+With a vault configured, the install ends by running the installed
+`gt_doctor.py post-install --stage install` (the release gate) and prints its table. Rows that
+cannot be true until /gt:gt-upgrade has run show PENDING. Any FAIL row stops with exit 9
+(nothing is rolled back); the full gate, after the upgrade and a restart, is
+  python3 ~/.claude/golden-thread/hooks/gt_doctor.py post-install --vault <vault>
+
 Environment: GT_VAULT (same as --vault), GT_VERSION (same as the version argument).
 USAGE
       exit 0 ;;
@@ -2658,6 +2664,63 @@ else
     if [ -n "$AG_BREW" ]; then echo "  $AG_BREW"; fi
     if [ -n "$AG_NPM" ];  then echo "  $AG_NPM"; fi
   fi
+fi
+
+# ── Post-install validation: the release gate, run by default (0.17.11) ─────────
+#
+# Owner requirement: the gate that proves THIS machine is correct for THIS release runs on
+# every install, not only when someone remembers it. It is the INSTALLED doctor that runs --
+# what the machine will actually execute -- pinned to the release just installed (--release)
+# so a rollback is judged against what it installed, not the newest dir in the tree.
+#
+# --stage install: what cannot be true until /gt:gt-upgrade has run (the vault's rule-1
+# copy, its migrations) is PENDING with the next step, never PASS and never FAIL. A real FAIL
+# stops the install with exit 9 -- distinct from 4 (no vault), 6 (manifest), 7 (machine
+# migration), 8 (checksum). Nothing is rolled back: the files are the release's.
+#
+# Skipped, and said so, when no vault is configured (the gate checks the vault) or when the
+# installed doctor predates the profile (a rollback to a release without it). The SessionStart
+# check (gt_version_check.py) runs the same gate once per installed version.
+post_install_gate() {
+  local doc="$HOME/.claude/golden-thread/hooks/gt_doctor.py" vault out rc=0
+  vault=$(python3 -c "import json,os;p=os.path.expanduser('~/.claude/vault-config.json');print(json.load(open(p)).get('vault_path','')) if os.path.exists(p) else print('')" 2>/dev/null) || vault=""
+  echo ""
+  if [ -z "$vault" ] || [ ! -d "$vault" ]; then
+    echo "Post-install validation: skipped — no vault configured (it validates against one)."
+    return 0
+  fi
+  if [ ! -f "$doc" ] || ! grep -q "def post_install_main" "$doc" 2>/dev/null; then
+    echo "Post-install validation: skipped — the installed gt_doctor.py has no post-install profile."
+    return 0
+  fi
+  echo "Post-install validation (gt_doctor.py post-install --stage install):"
+  out=$(python3 "$doc" post-install --vault "$vault" --release "$SRC" \
+        --plugin-root "$SCRIPT_DIR" --stage install 2>&1) || rc=$?
+  printf '%s\n' "$out" | sed 's/^/  /' || true
+  # Exit 9 only on rc 1: the gate RAN and a row proved the install broken. Vault-state rows are
+  # PENDING at this stage (a failed vault upgrade never fails the install), and a gate that
+  # could not run at all is said out loud here, not passed off as a broken install.
+  if [ "$rc" -ne 0 ] && [ "$rc" -ne 1 ]; then
+    echo "  ⚠ the post-install validation could not run (exit $rc) — run it after restarting:"
+    echo "    python3 \"$doc\" post-install --vault \"$vault\""
+    return 0
+  fi
+  if [ "$rc" -eq 1 ]; then
+    echo ""
+    echo "════════════════════════════════════════════════════════════════════════"
+    echo "INSTALL FAILED VALIDATION — the FAIL row(s) above are real; nothing was rolled back."
+    echo "Fix each (its fix: line), then re-run install.sh. Exit 9 means exactly this."
+    echo "════════════════════════════════════════════════════════════════════════"
+    return 9
+  fi
+  echo "  After /gt:gt-upgrade and a Claude Code restart, the full gate (PENDING becomes FAIL):"
+  echo "    python3 \"$doc\" post-install --vault \"$vault\""
+  return 0
+}
+PI_RC=0
+post_install_gate || PI_RC=$?
+if [ "$PI_RC" -ne 0 ]; then
+  exit "$PI_RC"
 fi
 
 echo "Restart Claude Code to load the plugins."

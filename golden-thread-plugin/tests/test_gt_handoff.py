@@ -13,13 +13,14 @@ Contract:
 """
 import json
 import os
+import shutil
 import subprocess
 import sys
 import tempfile
 import unittest
 from pathlib import Path
 
-from _harness import GT
+from _harness import GT, Sandbox, SCRIPTS, TOOLS
 
 SCRIPT = GT / "scripts" / "gt_handoff.py"
 
@@ -120,6 +121,88 @@ class HandoffTest(unittest.TestCase):
                             "--project", "nosuch"], capture_output=True, text=True)
         self.assertEqual(r.returncode, 3)
         self.assertIn("no README.md", r.stderr)
+
+
+class ThroughTheQueue(Sandbox):
+    """0.17.11: a handoff inside the vault is a queued `create`, applied by the broker."""
+
+    def setUp(self):
+        super().setUp()
+        self.vault = self.tmp / "vault"
+        self.proj = self.vault / "Projects" / "alpha"
+        self.proj.mkdir(parents=True)
+        (self.proj / "README.md").write_text("# Alpha\n\nThe goal.\n\n## Tasks\n\n")
+        tools = self.vault / "Projects" / "golden-thread" / "tools"
+        tools.mkdir(parents=True)
+        for t in ("gt_task.py", "gt_tasks.py", "gt_session.py"):
+            shutil.copy(TOOLS / t, tools / t)
+        self.sess = tools / "gt_session.py"
+        self.spool = self.vault / "Projects" / "golden-thread" / "spool"
+        self.out = self.proj / "handoff" / "the-handoff.md"
+        self.rel = "Projects/alpha/handoff/the-handoff.md"
+
+    def ho(self, *args):
+        return self.py(SCRIPT, "--vault", self.vault, "--project", "alpha",
+                       "--out", self.out, *args)
+
+    def rows(self):
+        out = []
+        for f in sorted((self.spool / "broker").glob("log-*.jsonl")):
+            out += [json.loads(l) for l in f.read_text().splitlines() if l.strip()]
+        return out
+
+    def queued(self):
+        q = self.spool / "queue"
+        return sorted(q.glob("*.json")) if q.is_dir() else []
+
+    def test_the_handoff_arrives_as_a_create_through_the_broker(self):
+        self.assertOk(self.ho())
+        self.assertIn("Handoff: alpha", self.out.read_text())
+        (row,) = self.rows()
+        self.assertEqual((row["path"], row["op"], row["decision"]), (self.rel, "create", "apply"))
+        self.assertEqual(self.queued(), [])
+
+    def test_without_force_an_existing_handoff_is_refused_before_anything_is_queued(self):
+        self.out.parent.mkdir(parents=True)
+        self.out.write_text("someone's record\n")
+        p = self.ho()
+        self.assertEqual(p.returncode, 3)
+        self.assertIn("--force", p.stderr)
+        self.assertEqual(self.out.read_text(), "someone's record\n")
+        self.assertEqual((self.queued(), self.rows()), ([], []))
+
+    def test_force_over_an_existing_handoff_is_escalated_never_overwritten(self):
+        self.out.parent.mkdir(parents=True)
+        self.out.write_text("someone's record\n")
+        p = self.ho("--force")
+        self.assertEqual(p.returncode, 3, p.stdout + p.stderr)
+        self.assertIn("Nothing was replaced", p.stderr)
+        self.assertEqual(self.out.read_text(), "someone's record\n")
+        (row,) = self.rows()
+        self.assertEqual(row["decision"], "escalate")
+        conflict = (self.vault / row["conflict"]).read_text()
+        self.assertIn("someone's record", conflict)
+        self.assertIn("Handoff: alpha", conflict, "the new version must be kept for the owner")
+        self.assertIn("#conflict", (self.proj / "README.md").read_text())
+        self.assertEqual(self.queued(), [])
+
+    def test_a_handoff_path_claimed_by_a_live_session_stays_queued(self):
+        env = {"CLAUDE_SESSION_ID": "holder", "CLAUDE_PID": str(os.getpid())}
+        self.assertOk(self.py(self.sess, "--vault", self.vault, "register", "--task", "t",
+                              "--files", self.rel, env=env))
+        p = self.ho()
+        self.assertEqual(p.returncode, 3, p.stdout + p.stderr)
+        self.assertIn("queued, NOT written yet", p.stderr)
+        self.assertIn("holder", p.stderr)
+        self.assertFalse(self.out.exists())
+        self.assertEqual(len(self.queued()), 1)
+        self.assertEqual(self.rows()[-1]["decision"], "held")
+
+    def test_out_outside_the_vault_is_written_directly(self):
+        out = self.tmp / "elsewhere" / "h.md"
+        self.assertOk(self.py(SCRIPT, "--vault", self.vault, "--project", "alpha", "--out", out))
+        self.assertTrue(out.is_file())
+        self.assertEqual((self.queued(), self.rows()), ([], []))
 
 
 if __name__ == "__main__":

@@ -15,12 +15,28 @@ it at startup, look things up while working, and write back what they learn.
 Its distinguishing idea is the second problem, the one most memory systems never
 address: **writing a rule down does not mean it gets followed.**
 
-Plugin **v0.17.10**. Ten Core rules currently enforced, five of them *validated* — a
+Plugin **v0.17.11**. Ten Core rules currently enforced, five of them *validated* — a
 hook inspects the finished reply (`Stop`) or the tool call about to run (`PreToolUse`)
 and blocks it if the rule was broken.
 
 
 > [!IMPORTANT]
+> **0.17.11: agents write to the vault through the write queue, never directly.**
+>
+> - **Core rule 1 is now "queue first".** A session queues every vault write and the broker
+>   applies it; the guard denies a direct Write/Edit to a vault note, and the visible shell
+>   writes (`>`, `>>`, `tee`, `sed -i`, `cp`/`mv` into the vault). Run `/gt:gt-upgrade` after
+>   installing so the vault gets the new rule text.
+> - **Two new queue operations**, `set-property` (one frontmatter key) and `replace-file` (the whole
+>   file, guarded by the hash of what was read), and `gt_broker.py audit` to list vault files
+>   changed outside the broker.
+> - **Skills and scripts write through the queue** — gt-work and the other skills, the modules, and
+>   `gt_daily`, `gt_task`, `gt_handoff` and friends. The daily note now puts each fact under its own
+>   heading.
+> - **New optional module `gt-lotr` 0.1.0 (off by default)** — LOTR, also called gt MCP: one
+>   gateway to rule them all. Four MCP tools in front of GitHub, Jira, Microsoft Graph and other
+>   REST APIs; `./install.sh --with lotr`.
+>
 > **0.17.10**: queued vault writes for concurrent agents (a write broker), specialist agents by job type (off by default), and release announcements that can post themselves (off by default). (0.17.9: a richer daily note with named sections, and gt-visualize publishing.)
 >
 > **0.17.5**: the component check survives a moved plugin source; an unregistered vault write is warned about as it happens.
@@ -166,7 +182,7 @@ The Core tier is deliberately small; every addition dilutes the reliability of t
 
 | Rule | Enforcement | What it does |
 |---|---|---|
-| `core_concurrent_session_claim` | **validated** | Register the session and claim a vault file before writing it; never write one another live session holds |
+| `core_concurrent_session_claim` | **validated** | Write vault content only through the write queue and apply it with `gt_broker.py drain`; never edit a vault file directly, and never write one another live session has claimed (queue-first since 0.17.11) |
 | `core_no_secrets_in_transcript` | **validated** | Never put a secret's value into the session — not to inspect, redact or check it |
 | `core_timestamp_every_message` | **validated** | Begin every reply with the current wall-clock timestamp |
 | `core_global_memory_scope` | reminder | `global-memory/` holds only facts needed in *every* project |
@@ -199,6 +215,7 @@ costly, so a broken hook announces itself.
 | `golden-thread-plugin/golden-thread-flow/<ver>/` | Module `flow` (plugin `gt-flow`) — an offline timeline of knowledge moving up the ladder |
 | `golden-thread-plugin/golden-thread-visualize/<ver>/` | Module `visualize` (plugin `gt-visualize`) — a codebase in 3D: how-it-works walkthroughs and a code city |
 | `golden-thread-plugin/golden-thread-usage/<ver>/` | Module `usage` (plugin `gt-usage`) — the plan-allowance meter, quiet until a window is near its ceiling |
+| `golden-thread-plugin/golden-thread-lotr/<ver>/` | Module `lotr` (plugin `gt-lotr`) — LOTR, also called gt MCP: one gateway in front of GitHub, Jira, Microsoft Graph and other REST APIs; off by default |
 | `golden-thread-plugin/install.sh` | Installs gt and every module that is on, wires the hooks, applies upgrades |
 
 The vault *content* lives in a separate private repo. This one is the machinery.
@@ -231,12 +248,18 @@ bash golden-thread-plugin/install.sh --vault <path>
 # then restart Claude Code — plugins and hooks load at session start
 ```
 
-That installs gt and every **module** that is on. Six ship: `wiki`, `demo`,
-`watch`, `report-card` and `flow` are on by default; `farm` is off for a fresh install and
-kept on when you upgrade from a gt that had `/gt:gt-farm`. Choose with `--list-modules`,
+That installs gt and every **module** that is on. Nine ship: `wiki`, `demo`,
+`watch`, `report-card`, `flow`, `visualize` and `usage` are on by default; `farm` is off for a
+fresh install and kept on when you upgrade from a gt that had `/gt:gt-farm`; `lotr` (new in
+0.17.11) is off until you ask for it with `--with lotr`. Choose with `--list-modules`,
 `--without <name>` and `--with <name>`; the choice is remembered. Re-running it upgrades from any older release to
 the newest, removing what old releases left behind and applying vault upgrades when your
 vault is committed. See the [Install Guide](golden-thread-plugin/INSTALL.md).
+
+Once installed, code in your own projects passes four gates by default before it reaches its
+repository, and gt never pushes — [Default release gates](golden-thread-plugin/MANUAL.md#default-release-gates-what-your-project-passes-before-it-reaches-its-repository):
+
+![Default release gates: tests seen to pass, gt-allin, gt-allin-commit and the commit guard, then your own push](golden-thread-plugin/docs/release-process.svg)
 
 Scaffold a vault, or adopt an existing one:
 
@@ -298,6 +321,7 @@ Module skills (each present only while its module is on):
 | `/gt-farm:gt-farm` | `farm` | Hands bulk or mechanical work to an external AI service as a self-contained packet with a strict return contract. The packet is identical whether you paste it into a web UI or send it to an API. Was `/gt:gt-farm`; off for a fresh install. |
 | `/gt-flow:gt-flow` | `flow` | Draws how knowledge moved through the vault — one lane per project, an arrow each time an item climbed a level — as one offline HTML file. `--redact` before sharing. |
 | `/gt-visualize:gt-visualize` | `visualize` | Explains a codebase in 3D — a scroll-driven walkthrough whose scenes highlight parts and animate the flows between them, written from the code and the vault — or draws it as an interactive code city — directories as districts, files as buildings; height by lines, colour by language or git churn — as one offline HTML file with three.js inlined. `--redact` before sharing. |
+| `/gt-lotr:gt-lotr` | `lotr` | LOTR, also called gt MCP: one gateway to rule them all. Four fixed MCP tools (`find`, `call_read`, `call_write`, `call_consent`) in front of any number of connections, with a registry of who talks to whom, as whom, from which machine. Credentials are references, never values. Off by default: `install.sh --with lotr`. |
 | `/gt-demo:gt-demo` | `demo` | A guided tour of the whole system against a throwaway vault, so nothing you try touches your own. |
 | `/gt-wiki:gt-wiki` … | `wiki` | Five skills for a standalone LLM wiki: query, ingest, init, lint, refresh. |
 
@@ -393,7 +417,7 @@ different facts and only one of them is reassuring.
 
 | Command | What it does |
 |---|---|
-| `gt_daily.py --vault V [--date YYYY-MM-DD] [--repo PATH …] [--dry-run] [--check]` | Writes the day's **facts** into `Daily Notes/<date>.md`: tasks closed, commits per repo, event counts, wiki item counts, an active span per project. Terse by design — it does not explain, summarise or interpret, because a generated block that editorialised would encode a reading of the day that is not yours. One fenced, clearly-marked block, replaced whole each run, under its own heading; it never touches `## Noticed`, which is your unfiled capture surface and the section `/gt:gt-review` sweeps. Git is the primary source and events are enrichment: on 2026-09-27 the event log held 5 events on a day with 10 commits across three work streams. |
+| `gt_daily.py --vault V [--date YYYY-MM-DD] [--repo PATH …] [--dry-run] [--check]` | Writes the day's **facts** into `Daily Notes/<date>.md`: tasks closed, commits per repo, event counts, wiki item counts, an active span per project. Terse by design — it does not explain, summarise or interpret, because a generated block that editorialised would encode a reading of the day that is not yours. Each fact goes under its heading in a marked block, replaced whole each run (new projects, tasks closed and commits under `## Did`; ADRs under `## Decided`; tasks added and due under `## Open at end of day`), with the counts in a footer block; your own lines stay above the blocks, and it never touches `## Noticed`, which is your unfiled capture surface and the section `/gt:gt-review` sweeps. Git is the primary source and events are enrichment: on 2026-09-27 the event log held 5 events on a day with 10 commits across three work streams. |
 | `gt_state.py check [--margin N] [--write]` · `write [--reason R]` · `show` · `hook` | Writes the session's state **before** the context runs out, not as it does. **The signal is `ctx_pct` — context fill — and never `rate_limits`**: a real reading was `{"five_hour": 5, "seven_day": 10, "ctx_pct": 91}`, so triggering on the allowance meter would have fired at entirely the wrong moment and looked correct doing it. It fires once per crossing, at a margin (default 5) below the `usage_alert` flag point. PreCompact is the **backstop, not the primary** — it fires when compaction is already starting, so the write competes with the thing it exists to survive — and the write says which one it was. Never fatal, never blocking; a missing usage ledger reads as *cannot tell*, never as *plenty of room*. |
 | `gt_surface.py check [--vault V] [--dry-run] [--json]` · `must-do [--vault V]` · `handoffs --project SLUG [--vault V]` | The **reader** for everything above, run at `SessionStart` (0.17.2). Every session: a **MUST DO** block from `<vault>/deadlines.md` — one table, `\| item \| category \| due \| see \|` — overdue 🔴 or due within 14 days 🟡, counted down from the row's date at run time, never stored. Every session until it is handled or deferred to a date: each waiting handoff, one line — path, project, age, open items — never its body (setting `handoff_surface`: `any` by default, `project` for only when `/gt:gt-open` opens that project, `manual` for only on request). Once each: a state file `gt_state.py` wrote; after a compaction the newest goes back to the model in full. **Surfacing is the alarm; the task is the record** — it never creates or closes a task and never writes the vault, only a machine-local "already shown" ledger. A clean start says "nothing waiting". Setting `surface`. |
 | `gt_handoff_status.py list --vault V [--project SLUG] [--all] [--json]` · `mark FILE --vault V --status handled\|open\|deferred [--until YYYY-MM-DD] [--reason TEXT] [--dry-run]` | Whether a handoff is still waiting on someone (0.17.2). `open` keeps surfacing; `deferred` must carry a future `--until` date and is open again on that date ("later, some time" is `handled` with a reason); `handled` is marked by a person **or** follows when every task citing the handoff's filename is checked off; `history` is a pre-0.17.2 handoff with no status, over a week old, with no open citing task — so an upgrade does not resurface every old one. `mark` appends to the handoff's status log. It never loads a handoff's body. |

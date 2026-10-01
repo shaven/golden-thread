@@ -118,9 +118,9 @@ th, td { border:1px solid #ddd; padding:3px 5px; text-align:left; vertical-align
 <p><strong>Reader:</strong> a daily user — the deepest document, where the <em>why</em> lives
 <strong>Claims last checked against the code:</strong> 2026-09-17 — see <em>The documents, and what belongs in each</em> in <a href="../CLAUDE.md"><code>CLAUDE.md</code></a>.</p>
 </blockquote>
-<p>Complete reference for gt's twenty-eight skills and its seven modules. Written against <strong>gt v0.17.10</strong>
-(gt-wiki 0.2.3; gt-usage 0.1.3; gt-demo, gt-watch, gt-report-card, gt-farm and gt-flow 0.17.10; gt-visualize 0.4.0 —
-those five are versioned with gt and move with every release, changed or not).</p>
+<p>Complete reference for gt's twenty-eight skills and its nine modules. Written against <strong>gt v0.17.11</strong>
+(gt-wiki 0.2.4; gt-usage 0.1.3; gt-demo, gt-watch, gt-report-card, gt-farm and gt-flow 0.17.11; gt-visualize 0.4.1;
+gt-lotr 0.1.0 — the five named with 0.17.11 are versioned with gt and move with every release, changed or not).</p>
 <hr />
 <h2 id="the-model">The model</h2>
 <p>Claude forgets everything between sessions. The vault doesn't. Golden Thread's
@@ -676,6 +676,21 @@ missing from <code>MEMORY.md</code> is a file Claude will never load.</p>
 files it as a task or a project, and checks the inbox line off with a <code>→ [[slug]]</code>
 pointer. An idea filed as a task gets <code>p:: 3</code> and no due date — a due date on an
 idea makes the deadline rule rank it above real work.</p>
+<h3 id="writing-anything-into-the-vault">Writing anything into the vault</h3>
+<pre><code>gt_write_queue.py …   →   gt_broker.py drain
+</code></pre>
+<p>Since 0.17.11 every vault write a session makes goes through the write queue (Core rule 1). The
+skills already do it; a direct <code>Write</code>/<code>Edit</code> to a vault note is denied, and the denial prints the
+exact queue command. A write that is <strong>held</strong> is waiting for another session's claim, not failed;
+one that is <strong>escalated</strong> is yours to decide, as a <code>#conflict</code> task. Your own edits in Obsidian are
+untouched. See <em>Writing to the shared files</em>.</p>
+<h3 id="reaching-github-jira-or-microsoft-365-from-a-session">Reaching GitHub, Jira or Microsoft 365 from a session</h3>
+<pre><code>/gt-lotr:gt-lotr     (find, then read / write / consent)
+</code></pre>
+<p>With the <code>lotr</code> module on, a session asks the gateway in plain words — "my open PRs", "today's
+calendar" — gets candidates with the tier the gateway assigned, and calls the one it needs. The
+gateway, not the assistant, decides what is a write and what needs your confirmation. See
+<em>Reaching other systems</em>.</p>
 <h3 id="closing-a-project">Closing a project</h3>
 <p>Delivery is not closure. A shipped project whose tasks stay open keeps escalating
 through its past due dates and outranks live work; on 2026-09-05 a talk delivered
@@ -898,6 +913,55 @@ conflict it has already written, or overwrite a Core rule that already exists �
 added, existing ones left alone.</p>
 <hr />
 <h2 id="writing-to-the-shared-files">Writing to the shared files</h2>
+<h3 id="the-write-queue-core-rule-1-queue-first-01711">The write queue — Core rule 1, queue first (0.17.11)</h3>
+<p>More than one session, and more than one agent, writes this vault at once. Since 0.17.11 they all
+go in one way: <strong>write vault content only through the write queue (<code>gt_write_queue.py</code>), then apply
+it with <code>gt_broker.py drain</code>; never edit a vault file directly, and never write one another live
+session has claimed.</strong> The rule id is still <code>core_concurrent_session_claim</code>; its meaning changed
+(owner, 2026-10-01: <em>"the agents write to the queues rather than directly to the files"</em>).</p>
+<p>Why the change: "claim, then write" depended on every writer remembering to claim and on the
+write depending on the claim. On 2026-10-01 it failed twice in one hour — a Bash append went
+through a live claim, and a refused claim printed CONFLICT but the next command was not chained to
+it and wrote anyway. A queued request never touches its target, so the safe path is the only path.</p>
+<pre><code class="language-bash">H=~/.claude/golden-thread/hooks
+python3 $H/gt_write_queue.py --vault &lt;vault&gt; --path &lt;rel .md&gt; \
+    --op append|replace-section|create|set-property|replace-file \
+    [--section &quot;&lt;heading&gt;&quot;] [--key K --value V] --content-file &lt;file&gt; --session &lt;id&gt;
+python3 $H/gt_broker.py drain --vault &lt;vault&gt;                  # apply, oldest first, then exit
+python3 $H/gt_broker.py status --vault &lt;vault&gt;                 # how many are waiting
+python3 $H/gt_broker.py audit --vault &lt;vault&gt; [--since 24]     # .md files the broker did not write
+</code></pre>
+<ul>
+<li><strong>Five operations.</strong> <code>append</code>, <code>replace-section</code> and <code>create</code> (0.17.10), plus <code>set-property</code> —
+  one top-level frontmatter key — and <code>replace-file</code> — the whole file, guarded by the hash of what
+  was read (0.17.11). There is no delete or move: <code>gt_demote.py</code>, and demoting a Core rule out of
+  <code>core-rules/</code>, still do that directly.</li>
+<li><strong>Held means waiting, not failed.</strong> A write to a file another live session has claimed stays
+  queued; the next drain applies it, and session start shows "WRITE QUEUE: N waiting". Claims
+  still exist — they are what the broker honours.</li>
+<li><strong>Escalated means the owner decides.</strong> Conflicting replacements, a target that changed after the
+  request was queued, a target moved or deleted since (the broker never recreates a file at its
+  old path), and <strong>every</strong> write to a <code>design.md</code> or <code>global-memory/</code> write nothing: each version is
+  kept in <code>spool/broker/conflicts/</code> and a <code>#conflict</code> task points at it.</li>
+<li><strong>What the guard denies.</strong> <code>guard_session_claims</code> denies a direct <code>Write</code>/<code>Edit</code> to any vault
+  <code>.md</code> outside <code>Sources/</code>, <code>core-rules/</code>, <code>.obsidian/</code>, <code>.git/</code>, <code>.gt/</code> and gt's own <code>spool/</code>,
+  <code>sessions/</code> and <code>tools/</code> — claimed or not — and the visible shell writes: <code>&gt;</code>, <code>&gt;&gt;</code>, <code>tee</code>,
+  <code>sed -i</code>, and <code>cp</code>/<code>mv</code> into the vault. The denial carries the exact queue command.</li>
+<li><strong>What it does not see.</strong> A script that opens a file itself; your own edits in Obsidian (no hook
+  sees them, and the broker never overwrites them — a queued write to a file you changed is
+  escalated); files outside the vault. That part of the rule is a reminder, not validated.</li>
+<li><strong>What routes through it.</strong> gt-work and fifteen other core skills, the module skills, and the
+  scripts <code>gt_daily</code>, <code>gt_task</code>, <code>gt_lint_weekly</code>, <code>gt_handoff</code>, <code>gt_handoff_status</code> and
+  <code>wiki_log</code>. <code>gt_write_queue.py</code>, <code>gt_broker.py</code> and <code>gt_demote.py</code> are installed into the hooks
+  dir so scheduled jobs and the vault's tools can reach them; without them the 22:00 daily-note
+  job exits 3 with "write queue is not installed".</li>
+<li><strong><code>audit</code> is a report, not an alarm.</strong> It lists vault <code>.md</code> files changed in the window that the
+  broker did not write; your Obsidian edits appear there too.</li>
+<li><strong>One known gap: two machines, one Dropbox-synced queue.</strong> The drain lock is a file in the vault,
+  and Dropbox does not make it atomic across machines. Drain from one machine.</li>
+</ul>
+<p>The generated files below keep their own tools — the queue refuses them.</p>
+<h3 id="generated-files-logmd-decisionsmd-tasksmd">Generated files: <code>log.md</code>, <code>decisions.md</code>, <code>TASKS.md</code></h3>
 <p><code>log.md</code>, <code>decisions.md</code> and <code>TASKS.md</code> are <strong>generated</strong>. They are the files every
 session writes and none owns, and in one working tree that means last-writer-wins with
 no conflict marker to warn you. So none of them is written directly.</p>
@@ -1191,8 +1255,9 @@ assistant's or someone else's. <code>[since::]</code> is stamped automatically.<
 at nothing and says what it looked for.</p>
 <p><strong>One store, one parser.</strong> Tasks stay in the README; <code>gt_task.py</code> is a writer and a reader for that
 section, not a second database, and it parses with <code>gt_tasks.py</code>'s own rules. Hand-written tasks
-are unchanged and work with every command here. <strong>Core rule 1 holds</strong>: the tool refuses to write a
-README another live session has claimed.</p>
+are unchanged and work with every command here. <strong>Core rule 1 holds</strong> (queue-first since 0.17.11):
+the tool never edits a README itself — it queues the write and drains at once, and a README another
+live session has claimed leaves the write queued for the next drain (exit 1, and it says so).</p>
 <h3 id="gtgt-task-list"><code>/gt:gt-task-list</code></h3>
 <p>Read-only: open tasks, filtered, without loading any project's context. Most urgent first.</p>
 <pre><code class="language-bash">python3 &lt;vault&gt;/Projects/golden-thread/tools/gt_task.py list --vault &quot;&lt;vault&gt;&quot; [FILTER ...] [--json]
@@ -1443,6 +1508,63 @@ is. The skill names no particular AI service: which services you have is your
 configuration (<code>farm_services</code> in <code>vault-config.json</code> names a table of them). Copying a
 packet uses whichever clipboard tool the machine has — <code>pbcopy</code>, <code>wl-copy</code>, <code>xclip</code> or
 <code>clip.exe</code> — and with none, you are given the packet file's path instead.</p>
+<hr />
+<h2 id="reaching-other-systems">Reaching other systems</h2>
+<p>A session that needs GitHub, Jira, Microsoft 365 or another REST API would otherwise carry one
+MCP server per system, hundreds of operations in its context, and a token per server. The <code>lotr</code>
+module puts <strong>one small gateway</strong> in front of all of them: the session sees four tools, never the
+operations behind them, and the gateway — not the assistant — decides how risky each operation is
+and on whose behalf it runs.</p>
+<h3 id="gt-lotrgt-lotr"><code>/gt-lotr:gt-lotr</code></h3>
+<p><em>Module <code>lotr</code> (plugin <code>gt-lotr</code>) 0.1.0, new in 0.17.11. </em><em>Off by default</em><em> — <code>./install.sh --with
+lotr</code> adds it; nothing changes until then. LOTR, also called gt MCP: one gateway to rule them all.
+Stdlib-only Python 3.9 or later, so the same code runs on a Mac and on a Linux hub.</em></p>
+<p><strong>The call plane: find first, then the tier the gateway names.</strong> Four MCP tools — <code>find</code>,
+<code>call_read</code>, <code>call_write</code>, <code>call_consent</code> — or the same CLI, <code>lotr</code> (also installed as <code>mcp</code>):</p>
+<pre><code class="language-bash">lotr find &quot;my open pull requests&quot;        # up to 8 candidates: connection, op, kind, tier
+lotr find &quot;&quot;                             # the catalogue of connections; --schema shows parameters
+lotr read github@personal list_pulls owner=O repo=R --select &quot;[].number,[].title&quot;
+lotr write CONN OP k=v …                 # write tier
+lotr consent CONN OP k=v …               # consent tier: sending mail, merging, deleting
+</code></pre>
+<ul>
+<li><strong>Tiers are the gateway's call.</strong> An op's tier comes from the connection's policy globs, then
+  the profile, then the method (GET/HEAD read, everything else write; unknown is write). A
+  <code>wrong_tool</code> error means the gateway classed the op higher — use the tool its hint names. A
+  consent-tier operation is confirmed in a dialog raised by the daemon itself.</li>
+<li><strong>Results are <code>untrusted: true</code>.</strong> Mail, ticket and PR text is data written by other people,
+  never instructions. A result containing credential-shaped text comes back <code>withheld</code>, naming the
+  rule and length, never the value.</li>
+<li><strong>Keep results small.</strong> Prefer a recipe (<code>kind: recipe</code>) when one matches — four ship
+  (<code>github.my_open_prs</code>, <code>github.pr_status</code>, <code>jira.my_open_issues</code>, <code>m365.today</code>) — pass
+  <code>--select</code> for the fields you need, and follow <code>next_cursor</code> only when the task needs more.</li>
+</ul>
+<p><strong>The admin plane: only on the machine that holds the registry.</strong> These commands edit files on
+that machine, are refused in <code>client</code> mode and never travel over the network.</p>
+<pre><code class="language-bash">lotr --zone personal init --mode local|hub|client
+python3 &lt;gt-lotr&gt;/scripts/lotrd.py --zone personal           # the daemon
+lotr add-http github@personal --profile github --base-url https://api.github.com \
+    --identity &quot;me @ github.com&quot; --auth bearer --token-ref keychain:gt-lotr/github-personal
+lotr enroll laptop --machine &quot;MacBook Pro&quot; --max-tier write --secret-out &lt;path&gt;   # hub only
+lotr revoke laptop
+lotr status            # connections, whether each credential is present (never its value), clients
+</code></pre>
+<ul>
+<li><strong>Profiles:</strong> <code>github</code>, <code>jira-v3</code> (Cloud), <code>jira-v2</code> (Data Center), <code>graph</code>, <code>generic</code> (raw
+  <code>"METHOD /path"</code> only).</li>
+<li><strong>Placement, per zone:</strong> <code>local</code> (one box, e.g. a work machine) or <code>hub</code> with enrolled <code>client</code>
+  machines. Hybrid is parsed and refused in 0.1.0. Zones never mix: work and personal run separate
+  gateways.</li>
+<li><strong>Credentials are references</strong> — <code>keychain:</code>, <code>store:</code>, <code>file:</code> — never values. The owner puts
+  the secret in place; the skill never asks for a token's value. An enrolled client's secret goes
+  to a mode-600 file, never to the screen; revoking a client needs no external credential rotated.</li>
+<li><strong>Local security:</strong> private files; a kernel peer-uid check on the socket; TLS required beyond
+  loopback; local callers under an allow list and a tier ceiling; every call audited to
+  <code>state/audit.jsonl</code> with a hash of its arguments, never the arguments.</li>
+<li><strong>On a work machine</strong> connections use that machine's own keychain, and employer hostnames stay
+  in its local registry, never in the vault — vault notes use connection ids.</li>
+</ul>
+<p>Design and decisions: vault <code>Projects/golden-thread/mcp-gateway/</code>, ADR-1..6.</p>
 <hr />
 <h2 id="knowledge-management">Knowledge management</h2>
 <h3 id="gtgt-promote"><code>/gt:gt-promote</code></h3>
@@ -2427,6 +2549,26 @@ this specific change. Never work around a missing receipt; run the tests, becaus
 is the claim the rule was built to stop trusting. When reporting a successful commit, <strong>say
 which tests the receipt covers</strong>. The refusals are the feature.</p>
 <hr />
+<h2 id="default-release-gates-what-your-project-passes-before-it-reaches-its-repository">Default release gates: what your project passes before it reaches its repository</h2>
+<p>This is what gt does <strong>by default</strong> when code in a project you work on with gt goes out to its
+repository. Each numbered box is a gate: what it checks, what fails it, and whether it runs by
+itself or only when you run it. Push is never one of them — gt does not push.</p>
+<p><img alt="Default release gates: write the code; gate 1, tests seen to pass; gate 2, /gt:gt-allin; gate 3, /gt:gt-allin-commit; gate 4, the automatic commit guard; then your own push and the /gt:gt-work write-back, with the Stop validator and the vault write guard running on every turn" src="docs/release-process.svg" /></p>
+<ol>
+<li><strong>Tests seen to pass</strong> (you run them) — the project's own tests; a pass records a receipt, and editing a file afterwards voids it for that file.</li>
+<li><strong><code>/gt:gt-allin</code></strong> (optional) — code scan, credentials, vault lint, install health, runbooks, tests and stale validations; exit 1 on findings, exit 3 when a check could not run, and it changes nothing.</li>
+<li><strong><code>/gt:gt-allin-commit</code></strong> (optional) — runs the same checks, then refuses (exit 1) on findings, a check that did not run, a staged file no receipt covers, or <code>main</code>/<code>master</code>; it commits but never pushes.</li>
+<li><strong>Commit guard</strong> (automatic, <code>core_test_before_commit</code>, <code>test_gate auto</code>) — denies any <code>git commit</code> a session runs when code is staged, the repo has a test command, and no passing receipt is newer than every staged file. Docs-only commits pass; <code>.gt-no-test-gate</code> exempts a repo.</li>
+</ol>
+<p>Then <strong>you push</strong>, by hand: <code>gt-allin --suggest-push</code> prints the command only when every check ran
+clean. <code>/gt:gt-work</code> writes the findings back to the vault through the write queue. On every turn
+the Stop validator blocks a reply that prints a credential or has no timestamp, and the vault
+guard denies a direct write to a vault note. Not on by default in your project: the pre-commit
+credential hook and <code>Session-Edit:</code> trailers live in the vault repo's own <code>.githooks/</code>.</p>
+<p>Each gate exists because the step it covers was once left to memory and went wrong: a commit
+went out with a stale file after its tests had been run before the last edits, which is why the
+receipt is tied to file times rather than to anyone's word.</p>
+<hr />
 <h2 id="checks-and-cadences">Checks and cadences</h2>
 <p>Three cadences run the same checks over deliberately different file sets, and the difference is
 the point:</p>
@@ -2710,11 +2852,20 @@ tool's writing.</p>
 <p><strong>Terse by design.</strong> It does not explain, summarise or interpret. The owner writes the meaning;
 a generated block that editorialised would encode a reading of the day that is not theirs. For
 the wiki it records how many items and how much time, never what they said.</p>
-<p>It <strong>never touches a line outside its block</strong>, and specifically never touches <code>## Noticed</code> —
+<p><strong>Where each fact goes</strong> (0.17.11): under the heading it belongs to, in its
+own marked block after whatever you wrote there — new projects, tasks closed and commits under
+<code>## Did</code>; ADRs added that day (read from the <code>decisions.md</code> diffs) under <code>## Decided</code>; tasks
+added and open ones due today under <code>## Open at end of day</code>. Totals, event counts and the active
+span stay in a footer block at the bottom. A heading the note lacks is added. A note written by an
+earlier release, with everything in the bottom block, is rearranged on its next run.</p>
+<p><strong>Through the queue</strong> (0.17.11): the note is written as one <code>replace-file</code> request per run and
+applied by the broker (Core rule 1), so a run never overwrites an edit made after it read the note
+— that is escalated instead.</p>
+<p>It <strong>never touches a line outside its blocks</strong>, and specifically never touches <code>## Noticed</code> —
 that is the unfiled capture surface <code>/gt:gt-review</code> sweeps, and a tool tidying it would defeat
 the sweep. Exit <code>1</code> means nothing to report for the day, which is not an error; a crash
 exits <code>3</code> (0.17.2), never <code>1</code>. <code>--check</code>
-verifies every dependency and exits; <code>--dry-run</code> prints the block and writes nothing.</p>
+verifies every dependency and exits; <code>--dry-run</code> prints the note as it would be written and writes nothing.</p>
 <h3 id="gt_statepy-write-the-state-before-the-context-runs-out"><code>gt_state.py</code> — write the state before the context runs out</h3>
 <pre><code class="language-bash">python3 $SCRIPTS/gt_state.py check [--margin N] [--write] [--json]
 python3 $SCRIPTS/gt_state.py write [--reason R]
@@ -2775,7 +2926,7 @@ the report card shows what the <em>previous</em> session computed at its end, wh
 be computed live at every start.</p>
 <h3 id="session-identity-which-machine-wrote-a-claim">Session identity — which machine wrote a claim</h3>
 <p><code>gt_session.py</code> claims a file for a session, and the <code>guard_session_claims</code> hook refuses a write
-to a file another live session holds (Core rule 1). "Live" is judged by the recorded <strong>pid</strong> — but
+to a file another live session holds, while the broker holds a queued write to it (Core rule 1). "Live" is judged by the recorded <strong>pid</strong> — but
 a pid only means something on the machine that recorded it. So every reader first asks: <em>was this
 written here?</em></p>
 <p>Until 0.17.2 the answer was "the recorded host equals this hostname". A hostname is not an
@@ -2897,7 +3048,7 @@ lane split into the ladder's levels (memory → research/decisions/design → Kn
 global-memory → Core); an arrow joins the level an item left to the level it reached, so a
 promotion is an arrow climbing. It reads <code>Projects/golden-thread/events.jsonl</code> and never
 writes the vault.</p>
-<pre><code class="language-bash">FLOW=~/.claude/plugins/cache/golden-thread-plugin/gt-flow/0.17.10/scripts
+<pre><code class="language-bash">FLOW=~/.claude/plugins/cache/golden-thread-plugin/gt-flow/0.17.11/scripts
 python3 $FLOW/gt_flow.py render --vault &lt;vault&gt; [--out FILE|DIR] [--redact] \
     [--project &lt;slug&gt; ...] [--since YYYY-MM-DD] [--tasks]
 </code></pre>
@@ -2998,7 +3149,8 @@ python3 $VIS/gt_visualize.py publishes                          # everything pub
 <code>visualize_publish_visibility</code> (<code>private</code>/<code>link</code>/<code>public</code>), changed with <code>/gt:gt-settings</code>.</p>
 <h3 id="01710-queued-vault-writes-specialist-agents-release-announcements">0.17.10 — queued vault writes, specialist agents, release announcements</h3>
 <p><strong>Queued vault writes (<code>gt_write_queue.py</code> / <code>gt_broker.py</code>).</strong> When several agents write to one
-vault at once, each can queue its write instead of making it:</p>
+vault at once, each can queue its write instead of making it. (Since 0.17.11 queueing is not
+optional: it is Core rule 1 — see <em>Writing to the shared files</em>.)</p>
 <pre><code class="language-bash">python3 $SCRIPTS/gt_write_queue.py --vault &quot;&lt;vault&gt;&quot; --path Projects/&lt;slug&gt;/research.md \
     --op append|replace-section|create [--section &quot;Findings&quot;] --content &quot;…&quot;   # or --content-file F
 python3 $SCRIPTS/gt_broker.py drain --vault &quot;&lt;vault&gt;&quot; [--dry-run]
@@ -3100,7 +3252,7 @@ answer is not obvious — including when the honest answer is that the fact belo
 project other than the one loaded.</p>
 <hr />
 <h2 id="script-reference">Script reference</h2>
-<pre><code class="language-bash">SCRIPTS=~/.claude/plugins/cache/golden-thread-plugin/gt/0.17.10/scripts
+<pre><code class="language-bash">SCRIPTS=~/.claude/plugins/cache/golden-thread-plugin/gt/0.17.11/scripts
 
 python3 $SCRIPTS/vault_init.py fresh --vault ~/my-vault --domain &quot;My Team&quot;
 

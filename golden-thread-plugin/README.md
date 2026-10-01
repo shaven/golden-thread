@@ -1,12 +1,21 @@
 # Golden Thread Plugin
 
 > **Reader:** someone who has installed it and wants the reference
-> **Claims last checked against the code:** 2026-09-29 (gt 0.17.10) — see *The documents, and what belongs in each* in [`CLAUDE.md`](../CLAUDE.md).
+> **Claims last checked against the code:** 2026-10-01 (gt 0.17.11) — see *The documents, and what belongs in each* in [`CLAUDE.md`](../CLAUDE.md).
 
 A Claude Code plugin that turns an Obsidian vault into the single source of truth for all AI memory across every project and every session.
 
 
 > [!IMPORTANT]
+> **0.17.11 has four themes**; what changed and why is in the CHANGELOG. **Queue first:** Core
+> rule 1 now says every vault write goes through the write queue and `gt_broker.py drain`, and the
+> guard denies a direct Write/Edit to a vault note and the visible shell writes. **Queue ops and
+> audit:** `set-property`, `replace-file`, and `gt_broker.py audit`. **Skills and scripts routed:**
+> the skills, the modules and `gt_daily`, `gt_task`, `gt_lint_weekly`, `gt_handoff`,
+> `gt_handoff_status` and `wiki_log` write through the queue; the daily note files each fact under
+> its own heading. **New module `gt-lotr` 0.1.0, off by default:** LOTR (also called gt MCP), one
+> gateway to rule them all. After installing, restart and run `/gt:gt-upgrade`.
+>
 > **0.17.10**: a write broker for concurrent agents, specialist agents by job type and self-posting release announcements (the last two off by default). **0.17.9**: named daily-note sections and gt-visualize publishing.
 > it took, a vault upgrade counts its steps (`[3/12]`), and a quiet step prints "still working" every 15s.
 >
@@ -149,7 +158,7 @@ Create, see, handle — seeing never loads a project, and nothing is deleted.
 ### Modules
 
 Optional parts of Golden Thread, each a separate plugin in the same marketplace, installed
-by `install.sh` while it is on. Since 0.15.0 there are six.
+by `install.sh` while it is on. There are nine; `lotr` joined in 0.17.11.
 
 | Module (plugin) | Default | Command | What it does |
 |---|---|---|---|
@@ -160,6 +169,7 @@ by `install.sh` while it is on. Since 0.15.0 there are six.
 | `farm` (`gt-farm`) | off (kept on when upgrading from a gt that had it) | `/gt-farm:gt-farm` | Route bulk, mechanical, or second-opinion tasks to an external AI service as a self-contained work packet. All four gates (Stateless, Self-contained, Checkable, Releasable) must pass before a task leaves. Results come back unverified. Was `/gt:gt-farm`. |
 | `flow` (`gt-flow`) | on | `/gt-flow:gt-flow` | Render the vault's event stream as one offline HTML page: a lane per project, an arrow each time knowledge climbed a level. Add `--redact` before sharing it. |
 | `visualize` (`gt-visualize`) | on | `/gt-visualize:gt-visualize` | Explain a codebase as a scroll-driven 3D walkthrough of how its parts work together, or render it as a 3D code city — one offline HTML page (three.js inlined): directories are districts, files are buildings, height is lines, colour is language or git churn. `--redact` before sharing. |
+| `lotr` (`gt-lotr`) | off | `/gt-lotr:gt-lotr` | LOTR, also called gt MCP: one gateway to rule them all. A fixed four-tool MCP surface (`find`, `call_read`, `call_write`, `call_consent`) in front of any number of downstream connections (GitHub, Jira, Microsoft Graph, other REST APIs), with a registry of who talks to whom, as whom, from which machine. The gateway, not the assistant, sets each operation's tier; consent operations are confirmed in a dialog the daemon raises. Credentials are references (keychain, store, file), never values. Turn on with `./install.sh --with lotr`. |
 | `usage` (`gt-usage`) | on | `/gt-usage:gt-usage` | Where this account stands against its Claude plan allowance — the 5-hour, weekly and monthly-spend windows. Records a reading a minute and says nothing until one is worth acting on; `usage_alert always` keeps it on screen. |
 
 #### What flow shows
@@ -369,6 +379,12 @@ bash install.sh --without demo      # leave one out; remembered
 Re-running it upgrades from any older release to the newest, including vault upgrades when your
 vault is committed.
 
+Once installed, code in your own projects passes four gates by default before it reaches its
+repository — tests seen to pass, `/gt:gt-allin`, `/gt:gt-allin-commit` and the automatic commit
+guard — and gt never pushes. See the [MANUAL](MANUAL.md#default-release-gates-what-your-project-passes-before-it-reaches-its-repository).
+
+![Default release gates: tests seen to pass, gt-allin, gt-allin-commit and the commit guard, then your own push](docs/release-process.svg)
+
 A full install writes **fourteen hook registrations across twelve scripts** into
 `~/.claude/settings.json`, from one declaration (`HOOK_REGISTRATIONS` in `gt_components.py`)
 that the installer registers from and the drift check compares against — so they cannot
@@ -489,6 +505,7 @@ first time, so they are written down here rather than only in the changelog.
 # Writing to the shared files — always through the tool, never by hand
 tools/gt_log.py add "<line>"            ← your session's spool; log.md is generated
 tools/gt_adr.py allocate <project>      ← reserves the next ADR number atomically
+gt_write_queue.py … && gt_broker.py drain ← every other vault write (Core rule 1, 0.17.11)
 
 # Periodically
 /gt:gt-lint                   ← catch structural drift
@@ -529,6 +546,19 @@ python3 <vault>/Projects/golden-thread/tools/gt_log.py --vault <vault> add "2026
 # Preview the event history rebuilt from git and log.md (a vault older than the events)
 python3 <vault>/Projects/golden-thread/tools/gt_events.py backfill --vault <vault> --dry-run
 
+# Every other vault write goes through the write queue (Core rule 1, since 0.17.11): queue it,
+# then drain. Ops: append, replace-section, create, set-property (one frontmatter key) and
+# replace-file (the whole file, guarded by the hash of what was read). The skills already do this;
+# the guard's denial message prints the exact command.
+H=~/.claude/golden-thread/hooks
+python3 $H/gt_write_queue.py --vault <vault> --path Projects/p/research.md --op append \
+  --section Findings --content-file note.md
+python3 $H/gt_write_queue.py --vault <vault> --path Projects/p/README.md --op set-property \
+  --key status --value active
+python3 $H/gt_broker.py drain --vault <vault>        # apply, oldest first, then exit
+python3 $H/gt_broker.py status --vault <vault>       # how many are waiting
+python3 $H/gt_broker.py audit --vault <vault> --since 24   # .md files changed NOT by the broker
+
 # One-time, per vault and per project
 python3 <vault>/Projects/golden-thread/tools/gt_log.py --vault <vault> migrate
 python3 <vault>/Projects/golden-thread/tools/gt_adr.py --vault <vault> migrate my-project
@@ -538,7 +568,7 @@ Python scripts can also be run directly from the command line. One variable, so 
 bump does not strand eight copied paths — from the release tree, or from the install:
 
 ```bash
-GT=golden-thread/0.17.10/scripts
+GT=golden-thread/0.17.11/scripts
 # installed instead:  GT=$(ls -d ~/.claude/plugins/cache/golden-thread-plugin/gt/*/scripts | sort -V | tail -1)
 
 # Create a new vault
@@ -637,8 +667,9 @@ python3 $GT/gt_schedule.py install sweep --vault ~/my-vault --repo ~/Projects/my
 
 # Write the day's FACTS into Daily Notes/<date>.md: tasks closed, commits per repo, event
 # counts, wiki item counts, an active span per project. Terse by design -- it does not
-# explain or interpret, because the meaning of the day is the owner's to write. One
-# fenced block, replaced whole each run; it never touches `## Noticed`.
+# explain or interpret, because the meaning of the day is the owner's to write. Each fact
+# goes in a marked block under its heading (Did, Decided, Open at end of day), replaced
+# whole each run, with the counts in a footer; it never touches `## Noticed`.
 python3 $GT/gt_daily.py --vault ~/my-vault --repo ~/Projects/my-project --dry-run
 python3 $GT/gt_daily.py --vault ~/my-vault --check
 

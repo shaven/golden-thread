@@ -253,6 +253,14 @@ def module_cache_findings(repo, home, comp, gt_version=None):
     return problems
 
 
+# install.sh exit 9 (0.17.11): every file was installed and wired, then the post-install
+# release gate (gt_doctor.py post-install) found a FAIL. This checker installs TAMPERED trees
+# under --force-manifest-mismatch on purpose, so the gate failing there is expected -- the
+# component row alone always fails -- and the install is still complete enough to inspect.
+# Treating 9 as "did not install" would hide every finding below behind the gate's verdict.
+INSTALLED = (0, 9)
+
+
 def run_upgrade(repo, home, *extra):
     """install.sh against a vault that already exists (with `extra` arguments, if any)."""
     env = dict(os.environ, HOME=str(home))
@@ -309,7 +317,7 @@ def check(version_dir, keep=False, module_matrix=True):
 
         # PHASE 1 — a first install that names its vault.
         rc, out = run_install(repo, home, vault)
-        if rc != 0:
+        if rc not in INSTALLED:
             problems.append("install.sh exited %s with a vault given:\n%s" % (rc, out[-800:]))
             return problems
 
@@ -322,7 +330,7 @@ def check(version_dir, keep=False, module_matrix=True):
         # configured, and run the installer the way an upgrading user does.
         stripped = strip_enforcement(home, comp)
         rc2, out2 = run_upgrade(repo, home)
-        if rc2 != 0:
+        if rc2 not in INSTALLED:
             problems.append("install.sh exited %s upgrading over an existing vault:\n%s"
                             % (rc2, out2[-800:]))
         for name in stripped:
@@ -443,7 +451,7 @@ def check(version_dir, keep=False, module_matrix=True):
                 break
             args = [a for n in names for a in (flag, n)]
             rc3, out3 = run_upgrade(repo, home, *args)
-            if rc3 != 0:
+            if rc3 not in INSTALLED:
                 problems.append("install.sh exited %s with %s:\n%s" % (rc3, label, out3[-800:]))
                 continue
             for finding in (module_findings(repo, home, comp, gt_version=version_dir.name)

@@ -1,0 +1,75 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 846" width="800" height="846" font-family="Helvetica, Arial, sans-serif" role="img" aria-labelledby="t d">
+<title id="t">Default release gates: what your project passes before it reaches its repository</title>
+<desc id="d">Four gates between writing code and pushing it: tests seen to pass, gt-allin, gt-allin-commit and the automatic commit guard. Push is always the user's own act; gt never pushes.</desc>
+<defs><marker id="a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0 0L10 5L0 10z" fill="#6b7280"/></marker></defs>
+<rect width="800" height="846" fill="#fbfaf7"/>
+<text x="24" y="36" font-size="19" font-weight="700" fill="#1f2937">Default release gates</text>
+<text x="24" y="58" font-size="13" fill="#374151">What your project passes, by default, before its code reaches its repository.</text>
+<text x="24" y="76" font-size="11.5" fill="#6b7280">Each numbered box is a gate: what it checks, what fails it, and who runs it. gt never pushes.</text>
+<rect x="16" y="86" width="120" height="252" rx="6" fill="#eef1f5"/>
+<text x="26" y="106" font-size="12" font-weight="700" fill="#374151">Before the commit</text>
+<text x="26" y="122" font-size="11" fill="#6b7280">Your project's repo</text>
+<rect x="16" y="346" width="120" height="176" rx="6" fill="#eef1f5"/>
+<text x="26" y="366" font-size="12" font-weight="700" fill="#374151">The commit</text>
+<text x="26" y="382" font-size="11" fill="#6b7280">Local, reversible</text>
+<rect x="16" y="530" width="120" height="144" rx="6" fill="#eef1f5"/>
+<text x="26" y="550" font-size="12" font-weight="700" fill="#374151">After the commit</text>
+<text x="26" y="566" font-size="11" fill="#6b7280">Outward-facing</text>
+<rect x="150" y="92" width="630" height="56" rx="8" fill="#f6f6f4" stroke="#c4c8cf" stroke-width="1"/>
+<text x="166" y="119" font-size="14" font-weight="700" fill="#4b5563">Write the code</text>
+<text x="766" y="118" font-size="10.5" font-weight="700" fill="#6b7280" text-anchor="end" letter-spacing="0.6">YOU + THE SESSION</text>
+<text x="166" y="140" font-size="12" fill="#6b7280">In a Claude Code session. Notes about the work go to the vault through the write queue.</text>
+<line x1="465" y1="148" x2="465" y2="166" stroke="#6b7280" stroke-width="1.6" marker-end="url(#a)"/>
+<rect x="150" y="168" width="630" height="72" rx="8" fill="#ffffff" stroke="#2b6cb0" stroke-width="2"/>
+<circle cx="172" cy="190" r="12" fill="#2b6cb0"/>
+<text x="172" y="194.5" font-size="12" font-weight="700" fill="#fff" text-anchor="middle">1</text>
+<text x="192" y="195" font-size="14" font-weight="700" fill="#111827">Tests seen to pass</text>
+<text x="766" y="194" font-size="10.5" font-weight="700" fill="#6b46c1" text-anchor="end" letter-spacing="0.6">YOU RUN THEM</text>
+<text x="192" y="216" font-size="12" fill="#374151"><tspan font-weight="700">Checks:</tspan> the project's own tests (tests/run.sh, pytest, cargo, go, npm test, make test).</text>
+<text x="192" y="232" font-size="12" fill="#374151"><tspan font-weight="700" fill="#b42318">Fails:</tspan> no receipt is recorded. Editing a file after a pass voids the receipt for that file.</text>
+<line x1="465" y1="240" x2="465" y2="258" stroke="#6b7280" stroke-width="1.6" marker-end="url(#a)"/>
+<rect x="150" y="260" width="630" height="72" rx="8" fill="#ffffff" stroke="#2b6cb0" stroke-width="2"/>
+<circle cx="172" cy="282" r="12" fill="#2b6cb0"/>
+<text x="172" y="286.5" font-size="12" font-weight="700" fill="#fff" text-anchor="middle">2</text>
+<text x="192" y="287" font-size="14" font-weight="700" fill="#111827">/gt:gt-allin</text>
+<text x="766" y="286" font-size="10.5" font-weight="700" fill="#6b46c1" text-anchor="end" letter-spacing="0.6">OPTIONAL, YOU RUN IT</text>
+<text x="192" y="308" font-size="12" fill="#374151"><tspan font-weight="700">Checks:</tspan> code scan, credentials, vault lint, install health, runbooks, tests, stale validations.</text>
+<text x="192" y="324" font-size="12" fill="#374151"><tspan font-weight="700" fill="#b42318">Fails:</tspan> exit 1 on findings, exit 3 if a check could not run (“N of M ran”). Changes nothing.</text>
+<line x1="465" y1="332" x2="465" y2="350" stroke="#6b7280" stroke-width="1.6" marker-end="url(#a)"/>
+<rect x="150" y="352" width="630" height="72" rx="8" fill="#ffffff" stroke="#2b6cb0" stroke-width="2"/>
+<circle cx="172" cy="374" r="12" fill="#2b6cb0"/>
+<text x="172" y="378.5" font-size="12" font-weight="700" fill="#fff" text-anchor="middle">3</text>
+<text x="192" y="379" font-size="14" font-weight="700" fill="#111827">/gt:gt-allin-commit</text>
+<text x="766" y="378" font-size="10.5" font-weight="700" fill="#6b46c1" text-anchor="end" letter-spacing="0.6">OPTIONAL, YOU RUN IT</text>
+<text x="192" y="400" font-size="12" fill="#374151"><tspan font-weight="700">Checks:</tspan> runs gt-allin, then a receipt for every staged file, then the branch.</text>
+<text x="192" y="416" font-size="12" fill="#374151"><tspan font-weight="700" fill="#b42318">Fails:</tspan> refused (exit 1) on findings, a check that did not run, no receipt, or main/master.</text>
+<line x1="465" y1="424" x2="465" y2="442" stroke="#6b7280" stroke-width="1.6" marker-end="url(#a)"/>
+<rect x="150" y="444" width="630" height="72" rx="8" fill="#ffffff" stroke="#2b6cb0" stroke-width="2"/>
+<circle cx="172" cy="466" r="12" fill="#2b6cb0"/>
+<text x="172" y="470.5" font-size="12" font-weight="700" fill="#fff" text-anchor="middle">4</text>
+<text x="192" y="471" font-size="14" font-weight="700" fill="#111827">Commit guard (core_test_before_commit)</text>
+<text x="766" y="470" font-size="10.5" font-weight="700" fill="#2b6cb0" text-anchor="end" letter-spacing="0.6">AUTOMATIC</text>
+<text x="192" y="492" font-size="12" fill="#374151"><tspan font-weight="700">Checks:</tspan> every git commit a session runs: code staged, a test command found, a fresh receipt.</text>
+<text x="192" y="508" font-size="12" fill="#374151"><tspan font-weight="700" fill="#b42318">Fails:</tspan> the commit is denied. Docs-only commits pass; .gt-no-test-gate exempts a repo.</text>
+<line x1="465" y1="516" x2="465" y2="534" stroke="#6b7280" stroke-width="1.6" marker-end="url(#a)"/>
+<rect x="150" y="536" width="630" height="56" rx="8" fill="#fff4d6" stroke="#b7791f" stroke-width="2.2" stroke-dasharray="7 4"/>
+<text x="166" y="563" font-size="14" font-weight="700" fill="#7c4a03">Push</text>
+<text x="766" y="562" font-size="10.5" font-weight="700" fill="#b7791f" text-anchor="end" letter-spacing="0.6">YOU, BY HAND</text>
+<text x="166" y="584" font-size="12" fill="#5b3a07">gt never pushes. gt-allin --suggest-push prints the command only if every check ran clean.</text>
+<line x1="465" y1="592" x2="465" y2="610" stroke="#6b7280" stroke-width="1.6" marker-end="url(#a)"/>
+<rect x="150" y="612" width="630" height="56" rx="8" fill="#f6f6f4" stroke="#c4c8cf" stroke-width="1"/>
+<text x="166" y="639" font-size="14" font-weight="700" fill="#4b5563">Write-back: /gt:gt-work</text>
+<text x="766" y="638" font-size="10.5" font-weight="700" fill="#6b7280" text-anchor="end" letter-spacing="0.6">YOU RUN IT</text>
+<text x="166" y="660" font-size="12" fill="#6b7280">Findings go to the vault through the queue; a conflicting write is escalated to you, never overwritten.</text>
+<rect x="16" y="692" width="764" height="74" rx="8" fill="#eaf2fb" stroke="#2b6cb0" stroke-width="1.4"/>
+<text x="30" y="714" font-size="13" font-weight="700" fill="#1e3a5f">Throughout, on every turn</text>
+<text x="766" y="714" font-size="10.5" font-weight="700" fill="#2b6cb0" text-anchor="end" letter-spacing="0.6">AUTOMATIC</text>
+<text x="30" y="734" font-size="12" fill="#374151">The Stop validator blocks a reply that prints a credential or has no timestamp, and the vault guard</text>
+<text x="30" y="750" font-size="12" fill="#374151">denies a direct write to a vault note (Core rule 1: queue first). Both fail open on anything they cannot parse.</text>
+<text x="24" y="792" font-size="11.5" fill="#6b7280">Not on by default in your project: the pre-commit credential hook and Session-Edit trailers are</text>
+<text x="24" y="808" font-size="11.5" fill="#6b7280">the vault repo's own .githooks/. Escapes are loud: GT_TEST_GATE=off for one commit, test_gate off per machine.</text>
+<rect x="24" y="822" width="20" height="13" rx="3" fill="#fff" stroke="#2b6cb0" stroke-width="2"/><text x="50" y="833" font-size="11" fill="#374151">gate</text>
+<rect x="100" y="822" width="20" height="13" rx="3" fill="#f6f6f4" stroke="#c4c8cf"/><text x="126" y="833" font-size="11" fill="#374151">step, not a gate</text>
+<rect x="232" y="822" width="20" height="13" rx="3" fill="#fff4d6" stroke="#b7791f" stroke-width="2" stroke-dasharray="4 2"/><text x="258" y="833" font-size="11" fill="#374151">your own act</text>
+<text x="350" y="833" font-size="11" fill="#374151"><tspan font-weight="700" fill="#2b6cb0">AUTOMATIC</tspan> runs by itself · <tspan font-weight="700" fill="#6b46c1">YOU RUN IT</tspan> only when asked</text>
+</svg>

@@ -258,8 +258,11 @@ class C6FarmSubmitsThroughTheQueue(BrokerBase):
 
     def documented_command(self):
         lines = [ln.strip() for ln in self.SKILL.read_text().splitlines()
-                 if "gt_write_queue.py" in ln and ln.strip().startswith("python3")]
-        self.assertEqual(len(lines), 1, "Step 5 must show exactly one submit command")
+                 if "gt_write_queue.py" in ln and ln.strip().startswith("python3")
+                 and "--origin farm" in ln]
+        # 0.17.11: Step 3 also queues the PACKET (a session write, no --origin farm); the
+        # result submit is the one command that carries --origin farm.
+        self.assertEqual(len(lines), 1, "Step 5 must show exactly one --origin farm submit")
         return lines[0]
 
     def test_the_skill_files_results_through_gt_write_queue(self):
@@ -293,6 +296,138 @@ class C6FarmSubmitsThroughTheQueue(BrokerBase):
         self.drain(expect=0)
         self.assertEqual(self.research(), RESEARCH_TEXT)
         self.assertEqual(self.log_rows()[-1]["decision"], "escalate")
+
+
+class C9SetProperty(BrokerBase):
+    """0.17.11: one frontmatter key through the queue (README `stage:`, a handoff `status:`),
+    so a skill never has to edit frontmatter directly once Core rule 1 is queue-first."""
+
+    README = "Projects/quokka/README.md"
+
+    def setUp(self):
+        super().setUp()
+        (self.vault / self.README).write_text(
+            "---\ntype: project\nstage: research\n---\n\n# quokka\n\n## Tasks\n")
+
+    def setprop(self, key, value, session="sess-a", expect=0):
+        p = self.py(QUEUE, "--vault", self.vault, "--path", self.README, "--op", "set-property",
+                    "--key", key, "--value", value, "--session", session)
+        self.assertEqual(p.returncode, expect, p.stdout + p.stderr)
+        return p
+
+    def readme(self):
+        return (self.vault / self.README).read_text()
+
+    def test_an_existing_key_is_replaced_in_place_and_the_body_is_untouched(self):
+        self.setprop("stage", "active")
+        self.drain(expect=0)
+        self.assertEqual(self.readme(),
+                         "---\ntype: project\nstage: active\n---\n\n# quokka\n\n## Tasks\n")
+        self.assertEqual(self.queued(), [])
+
+    def test_a_missing_key_is_added_to_the_frontmatter(self):
+        self.setprop("pp", "2")
+        self.drain(expect=0)
+        self.assertIn("stage: research\npp: 2\n---", self.readme())
+
+    def test_a_value_changed_since_the_request_is_escalated_not_overwritten(self):
+        self.setprop("stage", "active")
+        (self.vault / self.README).write_text(self.readme().replace("stage: research", "stage: design"))
+        self.drain()
+        self.assertIn("stage: design", self.readme())
+        self.assertIn("escalate", [r["decision"] for r in self.log_rows()])
+
+    def test_the_same_value_is_deduplicated(self):
+        self.setprop("stage", "research")
+        self.drain(expect=0)
+        self.assertEqual([r["decision"] for r in self.log_rows()], ["deduplicate"])
+
+    def test_malformed_set_property_requests_are_refused_at_submit(self):
+        for args in (["--key", "bad key", "--value", "x"], ["--value", "x"],
+                     ["--key", "stage", "--value", "x", "--section", "Tasks"]):
+            with self.subTest(args=args):
+                p = self.py(QUEUE, "--vault", self.vault, "--path", self.README,
+                            "--op", "set-property", *args)
+                self.assertNotEqual(p.returncode, 0)
+        p = self.py(QUEUE, "--vault", self.vault, "--path", self.README, "--op", "append",
+                    "--value", "x")
+        self.assertNotEqual(p.returncode, 0, "--value belongs to set-property only")
+        self.assertEqual(self.queued(), [])
+
+    def test_a_block_list_key_is_refused_at_submit_and_the_file_is_untouched(self):
+        before = "---\nsources:\n  - Sources/a.md\n  - Sources/b.md\nstatus: seed\n---\n\n# p\n"
+        (self.vault / self.README).write_text(before)
+        p = self.py(QUEUE, "--vault", self.vault, "--path", self.README, "--op", "set-property",
+                    "--key", "sources", "--value", "[Sources/c.md]")
+        self.assertNotEqual(p.returncode, 0)
+        self.assertIn("replace-file", p.stderr)
+        self.assertEqual(self.queued(), [])
+        self.assertEqual(self.readme(), before)
+
+    def test_a_file_without_frontmatter_is_escalated(self):
+        p = self.py(QUEUE, "--vault", self.vault, "--path", RESEARCH, "--op", "set-property",
+                    "--key", "status", "--value", "x", "--session", "s")
+        self.assertEqual(p.returncode, 0, p.stderr)
+        self.drain()
+        self.assertEqual([r["decision"] for r in self.log_rows()], ["escalate"])
+
+
+class C10ReplaceFile(BrokerBase):
+    """0.17.11: a tool that owns generated blocks (gt_daily) rewrites the whole note. The broker
+    applies it only if the file is unchanged since the request was made."""
+
+    NOTE = "Daily Notes/2026-10-01.md"
+
+    def submitfile(self, content, session="sess-a"):
+        p = self.py(QUEUE, "--vault", self.vault, "--path", self.NOTE, "--op", "replace-file",
+                    "--content", content, "--session", session)
+        self.assertEqual(p.returncode, 0, p.stdout + p.stderr)
+
+    def note(self):
+        return (self.vault / self.NOTE).read_text()
+
+    def test_an_absent_file_is_created(self):
+        self.submitfile("# 2026-10-01\n\nfirst\n")
+        self.drain(expect=0)
+        self.assertEqual(self.note(), "# 2026-10-01\n\nfirst\n")
+
+    def test_an_unchanged_file_is_replaced_whole(self):
+        (self.vault / "Daily Notes").mkdir()
+        (self.vault / self.NOTE).write_text("# day\n\nold block\n")
+        self.submitfile("# day\n\nnew block\n")
+        self.drain(expect=0)
+        self.assertEqual(self.note(), "# day\n\nnew block\n")
+
+    def test_an_edit_made_after_the_request_is_never_overwritten(self):
+        (self.vault / "Daily Notes").mkdir()
+        (self.vault / self.NOTE).write_text("# day\n\nold block\n")
+        self.submitfile("# day\n\nnew block\n")
+        (self.vault / self.NOTE).write_text("# day\n\nold block\n- owner line\n")
+        self.drain()
+        self.assertIn("owner line", self.note())
+        self.assertEqual([r["decision"] for r in self.log_rows()], ["escalate"])
+
+    def test_a_replace_file_with_a_section_is_refused(self):
+        p = self.py(QUEUE, "--vault", self.vault, "--path", self.NOTE, "--op", "replace-file",
+                    "--content", "x", "--section", "S")
+        self.assertNotEqual(p.returncode, 0)
+
+
+class C11MovedTarget(BrokerBase):
+    """A file moved or deleted after a write was queued is not recreated at the old path."""
+
+    def test_an_append_to_a_file_moved_before_the_drain_is_escalated(self):
+        self.submit("a finding\n")
+        moved = self.vault / "Projects" / "quokka" / "research-old.md"
+        (self.vault / RESEARCH).rename(moved)
+        self.drain()
+        self.assertFalse((self.vault / RESEARCH).exists(), "must not recreate the moved file")
+        self.assertEqual([r["decision"] for r in self.log_rows()], ["escalate"])
+
+    def test_an_append_to_a_file_that_never_existed_still_creates_it(self):
+        self.submit("first line\n", path="Projects/quokka/notes.md")
+        self.drain(expect=0)
+        self.assertTrue((self.vault / "Projects" / "quokka" / "notes.md").exists())
 
 
 class C7EmptyQueueIsSilent(BrokerBase):

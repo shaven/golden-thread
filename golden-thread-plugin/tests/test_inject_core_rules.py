@@ -113,8 +113,10 @@ class InjectHealthyTest(InjectTestBase):
                    if p.name != "core_rule_priority_model.md"]
         self.assertEqual(len(lines), len(shipped),
                          f"one numbered line per shipped core rule; got:\n{ctx}")
-        self.assertIn("Register your session and claim a vault file before writing it; "
-                      "never write a file another live session has claimed.", lines)
+        # Rule 1 revised to queue-first in 0.17.11 (owner, 2026-10-01).
+        self.assertIn("Write vault content only through the write queue (gt_write_queue.py), "
+                      "then apply it with gt_broker.py drain; never edit a vault file directly, "
+                      "and never write one another live session has claimed.", lines)
         self.assertTrue(any(l.startswith("Begin every response with the current wall-clock "
                                          "timestamp") for l in lines))
         self.assertFalse(any("Rule Priority Model" in l or "which rules survive" in l

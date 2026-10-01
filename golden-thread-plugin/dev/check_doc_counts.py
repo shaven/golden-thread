@@ -70,7 +70,7 @@ def derive():
         facts["lint_checks"] = None
     for mod in ("golden-thread-wiki", "golden-thread-demo", "golden-thread-watch",
                 "golden-thread-report-card", "golden-thread-farm", "golden-thread-flow",
-                "golden-thread-visualize"):
+                "golden-thread-visualize", "golden-thread-lotr"):
         v = newest_version(mod)
         if v:
             facts[mod] = v

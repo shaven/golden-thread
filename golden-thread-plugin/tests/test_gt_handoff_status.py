@@ -6,9 +6,11 @@ second step, an upgrade does not resurface every old handoff in the vault, and n
 ever writes outside the vault.
 """
 import json
+import os
+import shutil
 import unittest
 
-from _harness import Sandbox, SCRIPTS
+from _harness import Sandbox, SCRIPTS, TOOLS
 
 TOOL = SCRIPTS / "gt_handoff_status.py"
 HANDOFF = SCRIPTS / "gt_handoff.py"
@@ -85,7 +87,11 @@ class Deferral(StatusBase):
         self.tool("mark", self.rel, "--vault", self.vault, "--status", "deferred",
                  "--until", "2026-10-05")
         self.assertOk(self.tool("mark", self.rel, "--vault", self.vault, "--status", "open"))
-        self.assertNotIn("until:", self.f.read_text())
+        # the queue's set-property cannot delete a key (0.17.11), so the date is replaced
+        self.assertNotIn("2026-10-05", self.f.read_text().split("## Status log")[0])
+        self.assertIn("until: none", self.f.read_text())
+        (r,) = self.listed(today="2026-09-29")
+        self.assertEqual((r["status"], r["until"]), ("open", None))
 
 
 class Legacy(StatusBase):
@@ -132,6 +138,82 @@ class Safety(StatusBase):
         self.assertIn("status: open", new.read_text().split("# Handoff")[0])
         (r,) = self.listed()
         self.assertEqual(r["recorded"], "open")
+
+
+class ThroughTheQueue(StatusBase):
+    """0.17.11: `mark` queues set-property + append; the broker writes the handoff."""
+
+    def rows(self):
+        out = []
+        for f in sorted((self.vault / "Projects/golden-thread/spool/broker").glob("log-*.jsonl")):
+            out += [json.loads(l) for l in f.read_text().splitlines() if l.strip()]
+        return out
+
+    def queued(self):
+        q = self.vault / "Projects/golden-thread/spool/queue"
+        return sorted(q.glob("*.json")) if q.is_dir() else []
+
+    def test_mark_arrives_as_set_property_and_append(self):
+        self.assertOk(self.tool("mark", self.rel, "--vault", self.vault, "--status", "deferred",
+                               "--until", "2026-10-05", "--reason", "later"))
+        self.assertEqual([(r["op"], r.get("section"), r["decision"]) for r in self.rows()],
+                         [("set-property", None, "apply"), ("set-property", None, "apply"),
+                          ("append", "Status log", "apply")])
+        text = self.f.read_text()
+        self.assertIn("status: deferred", text)
+        self.assertIn("until: 2026-10-05", text)
+        self.assertIn("- 2026-09-28 deferred until 2026-10-05: later", text)
+        self.assertEqual(self.queued(), [])
+
+    def claim(self):
+        tools = self.vault / "Projects/golden-thread/tools"
+        tools.mkdir(parents=True, exist_ok=True)
+        shutil.copy(TOOLS / "gt_session.py", tools / "gt_session.py")
+        env = {"CLAUDE_SESSION_ID": "holder", "CLAUDE_PID": str(os.getpid())}
+        self.assertOk(self.py(tools / "gt_session.py", "--vault", self.vault, "register",
+                              "--task", "t", "--files", self.rel, env=env))
+        return tools / "gt_session.py", env
+
+    def test_a_handoff_without_frontmatter_is_one_replace_file_through_the_broker(self):
+        self.f.write_text("# Handoff by hand\n\nbody\n")
+        self.assertOk(self.tool("mark", self.rel, "--vault", self.vault, "--status", "handled",
+                               "--reason", "settled"))
+        text = self.f.read_text()
+        self.assertTrue(text.startswith("---\nstatus: handled\n---\n"), text[:80])
+        self.assertIn("body", text)
+        self.assertIn("- 2026-09-28 handled: settled", text)
+        self.assertEqual([(r["op"], r["decision"]) for r in self.rows()],
+                         [("replace-file", "apply")])
+        self.assertEqual(self.queued(), [])
+
+    def test_an_edit_in_between_is_escalated_not_overwritten(self):
+        self.f.write_text("# Handoff by hand\n\nbody\n")
+        sess, env = self.claim()                  # holds the request in the queue
+        for t in ("gt_task.py", "gt_tasks.py"):   # the broker raises its #conflict task with these
+            shutil.copy(TOOLS / t, sess.parent / t)
+        p = self.tool("mark", self.rel, "--vault", self.vault, "--status", "handled")
+        self.assertEqual(p.returncode, 3, p.stdout + p.stderr)
+        self.assertIn("queued, NOT marked yet", p.stderr)
+        (req_file,) = self.queued()
+        req = json.loads(req_file.read_text())
+        self.assertEqual((req["op"], req["target_existed"]), ("replace-file", True))
+        self.f.write_text("# Handoff by hand\n\nbody, edited by the holder\n")
+        self.assertOk(self.py(sess, "--vault", self.vault, "release", env=env))
+        self.assertOk(self.py(SCRIPTS / "gt_broker.py", "drain", "--vault", self.vault))
+        self.assertEqual(self.f.read_text(), "# Handoff by hand\n\nbody, edited by the holder\n")
+        self.assertEqual(self.rows()[-1]["decision"], "escalate")
+        self.assertIn("#conflict", (self.proj / "README.md").read_text())
+        self.assertEqual(self.queued(), [])
+
+    def test_a_handoff_claimed_by_a_live_session_stays_queued(self):
+        self.claim()
+        before = self.f.read_text()
+        p = self.tool("mark", self.rel, "--vault", self.vault, "--status", "handled")
+        self.assertEqual(p.returncode, 3, p.stdout + p.stderr)
+        self.assertIn("queued, NOT marked yet", p.stderr)
+        self.assertEqual(self.f.read_text(), before)
+        self.assertEqual(len(self.queued()), 2, "status + status-log line both wait")
+        self.assertEqual({r["decision"] for r in self.rows()}, {"held"})
 
 
 if __name__ == "__main__":

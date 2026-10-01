@@ -117,7 +117,7 @@
 <p><strong>Reader:</strong> quick lookup, and the printed PDF
 <strong>Claims last checked against the code:</strong> 2026-09-17 — see <em>The documents, and what belongs in each</em> in <a href="../CLAUDE.md"><code>CLAUDE.md</code></a>.</p>
 </blockquote>
-<h2 id="version-gt-01710-gt-wiki-023-gt-usage-013-gt-visualize-040-gt-demo-gt-watch-gt-report-card-gt-farm-gt-flow-01710">Version gt 0.17.10 / gt-wiki 0.2.3 / gt-usage 0.1.3 / gt-visualize 0.4.0 / gt-demo, gt-watch, gt-report-card, gt-farm, gt-flow 0.17.10</h2>
+<h2 id="version-gt-01711-gt-wiki-024-gt-usage-013-gt-visualize-041-gt-lotr-010-gt-demo-gt-watch-gt-report-card-gt-farm-gt-flow-01711">Version gt 0.17.11 / gt-wiki 0.2.4 / gt-usage 0.1.3 / gt-visualize 0.4.1 / gt-lotr 0.1.0 / gt-demo, gt-watch, gt-report-card, gt-farm, gt-flow 0.17.11</h2>
 <hr />
 <p>Golden Thread turns an Obsidian vault into the single source of truth for all AI memory across every project and every session. The tiered rule model introduced in v0.6.0 now carries <strong>ten hook-backed Core rules</strong> enforced at three points in the turn, 0.9.12 added <code>gt-route</code> for the middle of a session, and 0.9.13 makes the session-start component check verify that the hooks are <strong>wired</strong>, not merely installed, 0.11.0 makes <code>log.md</code> and <code>decisions.md</code> generated files so concurrent sessions cannot overwrite one another, 0.12.3 stops a vault tool running against a vault it was never told to touch, 0.12.4 makes parallel execution the default for divisible work in every project, 0.12.5 stops code being committed before its tests have been seen to pass, 0.13.0 makes an upgrade from any older release end where a fresh install would, 0.14.0 splits optional parts into modules you can decline, and 0.15.0 makes six of them — gt-wiki 0.2.1 (an LLM-powered knowledge base with immutable sources and interlinked pages), gt-demo (the guided tour), gt-watch (upstream repos), gt-report-card (the session report card), gt-farm (work packets for an external AI) and the new gt-flow, which draws the vault's event stream as a timeline of knowledge climbing the ladder. 0.16.0 gave contributed <strong>packs</strong> — plain JSON data, reviewed and merged, never third-party code — somewhere to come from and something to read them, shipping <code>gt-scan</code>, <code>gt-optimize</code>, <code>gt-handoff</code>, <code>gt-allin</code> and <code>gt-allin-commit</code>; 0.16.1 added <code>gt-context</code> (the first consumer of the registry's model-reachable tier) and <code>gt-validation</code> (a verification receipt that goes stale when the file it describes changes); and 0.16.2 re-asserts the Core rules after a compaction as well as on every prompt, lets a module hook declare a <code>timeout</code>, and refuses a copyleft licence by its current SPDX spelling; 0.16.3 makes <code>install.sh</code> refuse when MANIFEST.json is tracked but missing rather than regenerating one, and stops <code>gt_tasks.py</code> overwriting TASKS.md in silence. 0.17.2 adds <code>gt_surface.py</code>, a <code>SessionStart</code> hook that finally reads what earlier sessions wrote for the next one — a live MUST DO block from <code>deadlines.md</code>, every handoff not yet handled, a count of urgent tasks waiting on you, pre-compaction state — adds five skills that create, list and handle tasks and handoffs (<code>gt-task</code>, <code>gt-task-list</code>, <code>gt-task-handle</code>, <code>gt-handoff-list</code>, <code>gt-handoff-handle</code>), and keys session claims on a machine id rather than a hostname.</p>
 <hr />
@@ -148,7 +148,7 @@ global-memory/  (loaded in every session, all projects)
 <tbody>
 <tr>
 <td>1</td>
-<td>Register your session and claim a vault file before writing it; never write a file another live session has claimed.</td>
+<td>Write vault content only through the write queue (<code>gt_write_queue.py</code>), then apply it with <code>gt_broker.py drain</code>; never edit a vault file directly, and never write one another live session has claimed. (Revised in 0.17.11: was "claim, then write"; the rule id <code>core_concurrent_session_claim</code> is unchanged.)</td>
 </tr>
 <tr>
 <td>2</td>
@@ -249,9 +249,12 @@ not a rehearsal. Read-only subcommands are never denied, and anything it cannot 
 certainty is allowed — it fails open, as every guard here does, because a guard that blocks
 wrongly makes every session unusable.</p>
 <p>Since 0.9.5 a third point exists: a <strong><code>PreToolUse</code></strong> hook (<code>guard_session_claims.sh</code>) denies a
-<code>Write</code>/<code>Edit</code> to a vault file another live session holds a claim on. It fails open on any parse
-failure, and deliberately does not cover <code>Bash</code> writes — parsing arbitrary shell fails open so
-often it would train the guard to be ignored.</p>
+<code>Write</code>/<code>Edit</code> to a vault file another live session holds a claim on. <strong>Since 0.17.11 it enforces
+queue-first:</strong> a direct <code>Write</code>/<code>Edit</code> to any vault <code>.md</code> outside <code>Sources/</code>, <code>core-rules/</code>,
+<code>.obsidian/</code>, <code>.git/</code>, <code>.gt/</code> and gt's own <code>spool/</code>, <code>sessions/</code> and <code>tools/</code> is denied, claimed or
+not, with the exact queue command in the reason; so are the visible shell writes into the vault
+(<code>&gt;</code>, <code>&gt;&gt;</code>, <code>tee</code>, <code>sed -i</code>, <code>cp</code>/<code>mv</code>). A script that opens a file itself is not visible to it, and
+the rule says so. It fails open on any parse failure.</p>
 <p><strong>Core/Validated rules are hook-backed.</strong> Hook scripts install to <code>~/.claude/golden-thread/hooks/</code> during <code>install.sh</code>. <code>settings.json</code> references them by absolute path so they survive vault renames and project moves. <code>gt_paths.py</code> is a self-healing resolver — if a recorded path is stale, it locates <code>core-rules/</code> by scanning the vault rather than failing silently.</p>
 <p>The canonical rule definitions live in <code>Projects/golden-thread/core-rules/</code> inside the vault. Editing a rule file there changes what the hook injects — the rule text is never duplicated into the script.</p>
 <p><strong>The canary:</strong> <code>core_timestamp_every_message.md</code> is designated Core/Validated not because a missing timestamp causes real harm, but because it is trivially observable at the top of every reply. When the timestamp disappears, enforcement has broken.</p>
@@ -434,7 +437,7 @@ read refuses too, because "could not check" is not "clear".</p>
 </tr>
 </tbody>
 </table>
-<h2 id="modules-6">Modules (6)</h2>
+<h2 id="modules-9">Modules (9)</h2>
 <p>Optional parts, each a separate plugin in the <code>golden-thread-plugin</code> marketplace, declared by a <code>module.json</code>, versioned with gt and installed by <code>install.sh</code> while on. <code>bash install.sh --list-modules</code> shows each one's state; <code>--without &lt;name&gt;</code> / <code>--with &lt;name&gt;</code> change it and the choice is remembered. A module's hooks are wired only while it is on and are always <em>reporter</em> hooks — a Core-rule enforcement hook can never belong to a module. A module hook may declare an optional <code>timeout</code> in whole seconds (1–600); <code>report-card</code> declares 15 on <code>SessionEnd</code>, because <code>SessionEnd</code> hooks share a 1.5-second budget by default and one that overruns is cancelled with its <strong>output discarded</strong>, so a report card could have started truncating invisibly. Module settings (with an optional long <code>detail</code>) register from <code>module.json</code> and are listed under the module's name in <code>/gt:gt-settings</code>; a value set for a module that is later switched off is kept.</p>
 <table>
 <thead>
@@ -477,8 +480,13 @@ read refuses too, because "could not check" is not "clear".</p>
 </tr>
 <tr>
 <td><code>/gt-visualize:gt-visualize</code></td>
-<td><code>visualize</code> (<code>gt-visualize</code>) · on</td>
+<td><code>visualize</code> (<code>gt-visualize</code>) 0.4.1 · on</td>
 <td>New in gt-visualize 0.4.0. Two modes, each one offline HTML file with three.js inlined. <strong>explain</strong>: a scroll-driven walkthrough of how a codebase's parts work together — scenes highlight parts and animate the flows between them, from a story Claude writes out of the code and the vault (<code>--check</code> validates it). <strong>render</strong>, the code city: directories are districts, files are buildings — height by lines, footprint by size, colour by language (gt's filetype definitions) or by git churn over <code>--since</code> days. Orbit, hover, click to focus, search. <code>--redact</code> hashes every name before sharing; an <code>--out</code> inside the vault is refused.</td>
+</tr>
+<tr>
+<td><code>/gt-lotr:gt-lotr</code></td>
+<td><code>lotr</code> (<code>gt-lotr</code>) 0.1.0 · <strong>off</strong></td>
+<td>New in 0.17.11. LOTR, also called gt MCP: one gateway to rule them all. Four fixed MCP tools — <code>find</code>, <code>call_read</code>, <code>call_write</code>, <code>call_consent</code> — in front of any number of downstream connections (profiles <code>github</code>, <code>jira-v3</code>, <code>jira-v2</code>, <code>graph</code>, <code>generic</code>), with a registry of who talks to whom, as whom, from which machine. CLI <code>lotr</code> (also <code>mcp</code>): <code>find</code>, <code>read</code>/<code>write</code>/<code>consent CONN OP [k=v …] [--select] [--cursor]</code>; admin on the registry machine only: <code>--zone Z init --mode local\|hub\|client</code>, <code>add-http</code>, <code>enroll</code>, <code>revoke</code>, <code>status</code>. Daemon <code>lotrd.py</code>; stdio shim <code>lotr_mcp.py</code>. A <code>wrong_tool</code> error means the gateway classed the op higher; results are <code>untrusted</code>; credential-shaped text is <code>withheld</code>. Credentials are references (<code>keychain:</code>, <code>store:</code>, <code>file:</code>), never values. Hybrid placement is parsed and refused. Turn on with <code>install.sh --with lotr</code>.</td>
 </tr>
 <tr>
 <td><code>/gt-usage:gt-usage</code></td>
@@ -675,6 +683,30 @@ different facts and only one is reassuring.</p>
 </tr>
 </tbody>
 </table>
+<h3 id="writing-to-the-vault-the-queue-core-rule-1-01711">Writing to the vault: the queue (Core rule 1, 0.17.11)</h3>
+<table>
+<thead>
+<tr>
+<th>Command</th>
+<th>What it does</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>gt_write_queue.py --vault V --path REL --op append\|replace-section\|create\|set-property\|replace-file (--content T \| --content-file F \| --value V) [--section H] [--key K] [--session ID] [--origin session\|farm] [--hint H] [--dry-run] [--json]</code></td>
+<td>Asks for a vault write instead of making it; the request never touches its target. <code>set-property</code> (new in 0.17.11) sets one top-level frontmatter key from <code>--key</code>/<code>--value</code>; <code>replace-file</code> (new) replaces the whole file, guarded by the hash of what was read. A farmed result (<code>--origin farm</code>) is only ever applied automatically as <code>create</code>. Installed into the hooks dir since 0.17.11, so scheduled jobs and the vault's tools can reach it.</td>
+</tr>
+<tr>
+<td><code>gt_broker.py drain --vault V [--dry-run] [--json]</code></td>
+<td>Applies every queued write once, oldest first, then exits — no daemon, no hook. Appends merge and near-duplicates drop. A write to a file another live session has claimed is <strong>held</strong> (still queued, applied by a later drain). A write whose target changed after it was queued, or was moved or deleted since, conflicting replacements, and <strong>every</strong> write to a <code>design.md</code> or <code>global-memory/</code> are <strong>escalated</strong>: nothing is written, every version is kept in <code>spool/broker/conflicts/</code>, and a <code>#conflict</code> task goes to the owner. It never recreates a file at its old path.</td>
+</tr>
+<tr>
+<td><code>gt_broker.py status --vault V</code> · <code>audit --vault V [--since HOURS]</code></td>
+<td><code>status</code>: how many writes wait (read-only; also shown at session start as "WRITE QUEUE: N waiting"). <code>audit</code> (new in 0.17.11): vault <code>.md</code> files changed in the window (default 24 h) that the broker did not write — a report, not an alarm; the owner's own Obsidian edits appear too.</td>
+</tr>
+</tbody>
+</table>
+<p>Since 0.17.11 <code>gt_daily</code>, <code>gt_task</code>, <code>gt_lint_weekly</code>, <code>gt_handoff</code>, <code>gt_handoff_status</code> and <code>wiki_log</code> route their vault writes through the queue. <code>log.md</code>, <code>decisions.md</code> and <code>TASKS.md</code> keep their own tools (<code>gt_log.py add</code>, <code>gt_adr.py allocate</code>/<code>merge</code>, <code>gt_tasks.py</code>). Not queue ops: deleting or moving a file (<code>gt_demote.py</code> still does it directly).</p>
 <h3 id="session-capture">Session capture</h3>
 <table>
 <thead>
@@ -686,7 +718,7 @@ different facts and only one is reassuring.</p>
 <tbody>
 <tr>
 <td><code>gt_daily.py --vault V [--date YYYY-MM-DD] [--repo PATH …] [--dry-run] [--check]</code></td>
-<td>Writes the day's FACTS into <code>Daily Notes/&lt;date&gt;.md</code>: tasks closed, commits per repo, event counts, wiki item counts, an active span per project. Terse by design — it does not explain, summarise or interpret, because a generated block that editorialised would encode a reading of the day that is not the owner's. One fenced, clearly-marked block under its own heading, replaced whole each run; it never touches <code>## Noticed</code>, the unfiled capture surface <code>gt-review</code> sweeps. Git is primary and events are enrichment: on 2026-09-27 the event log held 5 events on a day with 10 commits across three work streams.</td>
+<td>Writes the day's FACTS into <code>Daily Notes/&lt;date&gt;.md</code>: tasks closed, commits per repo, event counts, wiki item counts, an active span per project. Terse by design — it does not explain, summarise or interpret, because a generated block that editorialised would encode a reading of the day that is not the owner's. Each fact goes under its heading in a marked block, replaced whole each run (<code>## Did</code>: new projects, tasks closed, commits; <code>## Decided</code>: ADRs added; <code>## Open at end of day</code>: tasks added and due), counts in a footer block; the owner's own lines stay above the blocks, and it never touches <code>## Noticed</code>, the unfiled capture surface <code>gt-review</code> sweeps. Git is primary and events are enrichment: on 2026-09-27 the event log held 5 events on a day with 10 commits across three work streams.</td>
 </tr>
 <tr>
 <td><code>gt_state.py check [--margin N] [--write]</code> · <code>write [--reason R]</code> · <code>show</code> · <code>hook</code></td>

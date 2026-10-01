@@ -11,6 +11,137 @@ release's own summary line, kept short rather than reconstructed after the fact.
 
 ---
 
+## gt 0.17.11 — 2026-10-01
+
+One owner ruling drives most of this release: *"the agents write to the queues rather than directly
+to the files"* (2026-10-01). Core rule 1 becomes queue-first, the queue gains the two operations
+the skills and scripts needed to use it for everything, and they now do. Also: the daily note puts
+each fact under its heading, and a new optional module, **gt-lotr** (LOTR). Module versions:
+gt-wiki 0.2.4; gt-farm, gt-watch, gt-demo, gt-flow and gt-report-card 0.17.11; gt-visualize 0.4.1;
+gt-usage 0.1.3 unchanged; gt-lotr 0.1.0 new.
+
+### Core rule 1 is queue-first
+
+**What.** The rule id is unchanged (`core_concurrent_session_claim`); its meaning is not. It now
+reads: *write vault content only through the write queue (`gt_write_queue.py`), then apply it with
+`gt_broker.py drain`; never edit a vault file directly, and never write one another live session
+has claimed.* The `guard_session_claims` hook enforces it:
+
+- **Denied:** a direct `Write`/`Edit` to any vault `.md`, claimed or not, outside `Sources/`,
+  `core-rules/`, `.obsidian/`, `.git/`, `.gt/` and gt's own `spool/`, `sessions/` and `tools/` —
+  with the exact queue command in the reason. Also denied: the visible shell writes into the vault
+  — `>`, `>>`, `tee`, `sed -i`, and `cp`/`mv`.
+- **Not denied, because not visible:** a script that opens a file itself, the owner's own edits in
+  Obsidian, and files outside the vault. The rule says so; that part of it is a reminder, not
+  validated.
+- **Held, not failed:** a write to a file another live session has claimed stays queued for the
+  next drain; session start shows "WRITE QUEUE: N waiting". Claims still exist — they are what the
+  broker honours.
+- **Every `design.md` and `global-memory/` write goes to the owner** for review — the owner's
+  choice ("queue everything").
+
+**Why.** "Claim, then write" depended on every writer remembering to claim, and on the write
+depending on the claim. On 2026-10-01 it failed twice in one hour: a Bash append went through a
+live claim (the guard never read Bash), and a refused `claim` printed CONFLICT but the next command
+was not chained to it and wrote anyway. A queued request never touches its target, so the safe path
+is the only one. Run `/gt:gt-upgrade` after installing: an old vault copy of the rule still says
+"claim, then write" until it does.
+
+### Two new queue operations, and an audit
+
+**What.** `gt_write_queue.py` gains `set-property` (one top-level frontmatter key, `--key`/`--value`)
+and `replace-file` (the whole file, guarded by the hash of what was read), beside `append`,
+`replace-section` and `create`. The broker now escalates instead of writing when a target was moved
+or deleted after the request was queued — it never recreates a file at its old path — as it already
+did for a target that changed. `gt_broker.py audit [--since H]` lists vault `.md` files changed in
+the window that the broker did not write; it is a report, not an alarm, and the owner's own edits
+appear in it. `gt_write_queue.py`, `gt_broker.py` and `gt_demote.py` are now installed into the
+hooks dir.
+
+**Why.** With only `append`, `replace-section` and `create`, a writer that changes one
+frontmatter key (a handoff's status) or rewrites a file whole (the daily note) had no queued path,
+so the rule could not cover every writer. The audit is the check on what the guard cannot see; the hooks-dir install is what lets
+the nightly jobs and the vault's `gt_task.py` reach the queue at all (without it the 22:00
+daily-note job exits 3, "write queue is not installed").
+
+### Skills, modules and scripts write through the queue
+
+**What.** gt-work and fifteen other core skills, and the module skills (gt-wiki, gt-farm,
+gt-watch, gt-demo), queue their writes and drain once. The scripts `gt_daily`, `gt_task`,
+`gt_lint_weekly`, `gt_handoff`, `gt_handoff_status` and `wiki_log` route their vault writes the
+same way; in a gt vault `wiki_log.py` uses `gt_log.py` and the queue (gt-wiki 0.2.4). The gt-demo
+fixes ride along: demo act 4 and the demo's ADR numbering. `log.md`, `decisions.md` and `TASKS.md`
+keep their own tools. gt-flow and gt-report-card move with gt unchanged; gt-visualize 0.4.1 is
+wording only.
+
+**Why.** A rule the shipped tools break is a rule nobody can follow. A script that edited a claimed
+file because it was not the Write tool would disarm Core rule 1 by the side door.
+
+### The daily note puts each fact where it belongs
+
+`gt_daily.py` wrote the whole day into one
+block at the bottom of `Daily Notes/<date>.md`, so `## Did`, `## Decided` and `## Open at end of
+day` stayed empty however much happened ("it did not put the information into the proper
+locations. It just appended to the bottom" — owner, 2026-10-01). Now new projects, tasks closed and
+commits go under `## Did`; ADRs added that day under `## Decided`; tasks added and open ones due
+today under `## Open at end of day`. Each sits in its own marked block after the owner's lines and
+is replaced whole on a re-run; the owner can keep writing above it. Totals, event counts, the
+active span and notes stay in the footer block. `## Noticed` is still never written to — it is what
+`gt-review` sweeps. A missing heading is added; a note from an earlier release is rearranged on its
+next run.
+
+ADRs are new to the note: read from the git diff of every `Projects/**/decisions.md`, like tasks,
+not from `adr` events — on 2026-09-30 the diff found 7 ADRs where the event log had 4. A reworded
+ADR (same number, new title) is not counted. `--dry-run` now prints the whole note as it would be
+written, so the placement is visible.
+
+`gt_daily` now writes the note through the queue as one `replace-file` per run. The three
+`test_gt_daily` tests that pin the replace-never-append contract pass unchanged, byte-identical to
+their text in commit `22fb651` — the release gate for this change.
+
+### New optional module: gt-lotr 0.1.0 (LOTR, also called gt MCP)
+
+**What.** One gateway to rule them all: a fixed four-tool MCP surface (`find`, `call_read`,
+`call_write`, `call_consent`) in front of any number of downstream connections — GitHub, Jira
+(Cloud and Data Center), Microsoft Graph and other REST APIs — with a registry of who talks to whom,
+as whom, and from which machine. Skill `/gt-lotr:gt-lotr`; CLI `lotr` (also `mcp`), daemon
+`lotrd.py`, stdio shim `lotr_mcp.py`. Stdlib-only Python 3.9+. Placement per zone: `local`, or `hub`
+with enrolled `client` machines (hybrid is parsed and refused). Local security: private files, a
+kernel peer-uid check on the socket, TLS required beyond loopback, local callers under an allow list
+and a tier ceiling, and consent-tier operations confirmed in a dialog the daemon raises itself.
+Credentials are references (keychain, store, file), never values; results are marked untrusted and
+credential-shaped text is withheld. **Off by default** — `./install.sh --with lotr`.
+
+**Why.** One MCP server per system puts hundreds of operations and a token per server into every
+session, and leaves the assistant deciding what is risky. A small fixed surface keeps the context
+small and moves the risk decision to the gateway, where the owner sets it. Design and decisions:
+vault `Projects/golden-thread/mcp-gateway/`, ADR-1..6.
+
+### Repository: workspace files untracked, a fuller `.gitignore`
+
+**What.** The editor workspace file is no longer tracked and `*.code-workspace` is ignored. The
+root `.gitignore` gains editor and IDE files, OS litter, Python caches and virtualenvs, logs, temp
+and patch leftovers, Dropbox conflict copies, and secret-shaped files (`.env`, `*.pem`, `*.key`,
+`*.p12`, `*.pfx`). **Why.** Owner, 2026-10-01: a workspace file is per-machine, never part of the
+project; and a secret-shaped file should be impossible to commit by accident (Core rule 9).
+Checked against `git ls-files`: no tracked file matches a new rule.
+
+### Known, and not fixed
+
+- **No delete or move queue op.** `gt_demote.py`, and demoting a Core rule out of `core-rules/`,
+  still delete or move files directly.
+- **The broker's own `#conflict` task is written directly**, while it holds the drain lock — the
+  one remaining direct vault write by a script, after the same claim check.
+- **`until: none`** in a handoff's frontmatter means "no deferral": the queue cannot delete a
+  frontmatter key.
+- **Two machines, one Dropbox-synced queue are not atomically locked.** The drain lock is a file in
+  the vault; two machines draining in the same few seconds could in principle both apply one
+  request. Drain from one machine. Not yet measured.
+- **A script that opens a vault file itself is invisible to the guard.** Only the visible shell
+  writes are denied; the audit is the after-the-fact check.
+
+---
+
 ## gt-visualize 0.4.0 — 2026-09-30
 
 **A guided walkthrough of any explainer** — feature request `2026-09-30-gt-visualize-guided-walkthrough`

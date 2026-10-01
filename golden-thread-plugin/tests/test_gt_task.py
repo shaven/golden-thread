@@ -2,15 +2,21 @@
 
 What carries weight: a task written here ranks in TASKS.md exactly like a hand-written one (one
 parser, one store); nothing is ever deleted; a drop needs a reason and a deferral a future date;
-an ID taken before someone edited the file can never close the wrong line; and the tool refuses
-to write a README another live session has claimed (Core rule 1).
+an ID taken before someone edited the file can never close the wrong line; and a README another
+live session has claimed is not written -- the write stays queued (Core rule 1).
+
+Since 0.17.11 every README/INBOX write goes through the write queue and is drained by the broker
+at once; the tests assert it ARRIVED that way (a broker log row, an empty queue), not merely that
+the file changed.
 """
 import datetime as dt
 import json
+import os
+import shutil
 import unittest
 
 from test_gt_tasks import readme
-from _harness import Sandbox
+from _harness import Sandbox, SCRIPTS, load_module
 
 TODAY = "2026-09-28"
 
@@ -27,9 +33,36 @@ class TaskBase(Sandbox):
         self.readme_path.write_text(readme("alpha", tasks=["- [ ] existing [p:: 2] [since:: 2026-09-01]"]))
         (self.vault / "Knowledge").mkdir(exist_ok=True)
         (self.vault / "Knowledge" / "Quote API.md").write_text("# Quote API\n")
+        # install.sh puts the broker in the stable hooks dir; that is where gt_task looks
+        self.hooks = self.home / ".claude" / "golden-thread" / "hooks"
+        self.hooks.mkdir(parents=True, exist_ok=True)
+        for n in ("gt_broker.py", "gt_write_queue.py"):
+            shutil.copy(SCRIPTS / n, self.hooks / n)
+        self.spool = self.vault / "Projects" / "golden-thread" / "spool"
 
-    def t(self, *args, today=TODAY):
-        return self.py(self.tool, *args, env={"GT_TODAY": today})
+    def t(self, *args, today=TODAY, env=None):
+        e = {"GT_TODAY": today}
+        e.update(env or {})
+        return self.py(self.tool, *args, env=e)
+
+    def queued(self):
+        q = self.spool / "queue"
+        return sorted(p for p in q.glob("*.json")) if q.is_dir() else []
+
+    def broker_rows(self):
+        rows = []
+        for f in sorted((self.spool / "broker").glob("log-*.jsonl")):
+            rows += [json.loads(l) for l in f.read_text().splitlines() if l.strip()]
+        return rows
+
+    def claim_readme(self):
+        """Another LIVE session claims alpha's README; this test process stands in for it."""
+        sess = self.tools / "gt_session.py"
+        env = {"CLAUDE_SESSION_ID": "other-session", "CLAUDE_PID": str(os.getpid())}
+        self.assertOk(self.py(sess, "--vault", self.vault, "register", "--task", "t", env=env))
+        self.assertOk(self.py(sess, "--vault", self.vault, "claim", "Projects/alpha/README.md",
+                              env=env))
+        return sess, env
 
     def add(self, text, *extra):
         p = self.t("add", text, "--vault", self.vault, "--project", "alpha", *extra)
@@ -148,6 +181,107 @@ class Settle(TaskBase):
                     env={"GT_TODAY": TODAY, "CLAUDE_SESSION_ID": "me"})
         self.assertEqual(p.returncode, 1, p.stdout + p.stderr)
         self.assertIn("another live session", p.stderr)
+        self.assertIn("queued", p.stderr)
+        self.assertIn("- [ ] claimed", self.readme_path.read_text(), "a claimed README was written")
+        self.assertEqual(len(self.queued()), 1, "a held write must stay queued, not be dropped")
+        self.assertEqual(self.broker_rows()[-1]["decision"], "held")
+
+
+class ThroughTheQueue(TaskBase):
+    """0.17.11: the README is never edited by gt_task itself -- the broker applies the write."""
+
+    def test_add_arrives_through_the_broker_and_leaves_the_queue_empty(self):
+        self.add("via the broker", "--p", "1")
+        self.assertIn("- [ ] via the broker", self.readme_path.read_text())
+        (row,) = [r for r in self.broker_rows() if r["path"] == "Projects/alpha/README.md"]
+        self.assertEqual((row["op"], row["section"], row["decision"]),
+                         ("replace-section", "Tasks", "apply"))
+        self.assertEqual(self.queued(), [])
+
+    def test_settle_arrives_through_the_broker(self):
+        tid = self.add("close me")
+        self.assertOk(self.t("done", tid, "--vault", self.vault))
+        self.assertIn("- [x] close me", self.readme_path.read_text())
+        self.assertEqual([r["decision"] for r in self.broker_rows()], ["apply", "apply"])
+        self.assertEqual(self.queued(), [])
+
+    def test_inbox_add_is_an_append(self):
+        (self.vault / "INBOX.md").write_text("# Inbox\n")
+        self.assertOk(self.t("add", "an idea", "--vault", self.vault, "--inbox"))
+        (row,) = self.broker_rows()
+        self.assertEqual((row["path"], row["op"], row["decision"]), ("INBOX.md", "append", "apply"))
+
+    def test_the_printed_id_closes_the_line_it_names(self):
+        tid = self.add("named")
+        self.assertOk(self.t("done", tid, "--vault", self.vault))
+        self.assertIn("- [x] named", self.readme_path.read_text())
+
+    def test_a_held_add_stays_queued_and_lands_once_the_claim_is_gone(self):
+        sess, env = self.claim_readme()
+        p = self.t("add", "waits", "--vault", self.vault, "--project", "alpha",
+                   env={"CLAUDE_SESSION_ID": "me"})
+        self.assertEqual(p.returncode, 1, p.stdout + p.stderr)
+        self.assertIn("another live session", p.stderr)
+        self.assertNotIn("waits", self.readme_path.read_text())
+        self.assertEqual(len(self.queued()), 1)
+        self.assertOk(self.py(sess, "--vault", self.vault, "release", env=env))
+        self.assertOk(self.py(self.hooks / "gt_broker.py", "drain", "--vault", self.vault))
+        self.assertIn("- [ ] waits", self.readme_path.read_text())
+        self.assertEqual(self.queued(), [])
+
+    def test_with_no_broker_installed_the_request_waits_in_the_queue_in_the_shared_format(self):
+        shutil.rmtree(self.hooks)
+        before = self.readme_path.read_text()
+        p = self.t("add", "no broker", "--vault", self.vault, "--project", "alpha")
+        self.assertEqual(p.returncode, 1, p.stdout + p.stderr)
+        self.assertIn("queued, not written yet", p.stderr)
+        self.assertIn("drain --vault", p.stderr, "it must say how to drain")
+        self.assertEqual(self.readme_path.read_text(), before)
+        (req_file,) = self.queued()
+        # the vault tool copies the request format; gt_write_queue is the one definition of it
+        wq = load_module(SCRIPTS / "gt_write_queue.py", "gt_write_queue_for_task_test")
+        self.assertIsNone(wq.validate(json.loads(req_file.read_text()), self.vault))
+        self.assertOk(self.py(SCRIPTS / "gt_broker.py", "drain", "--vault", self.vault))
+        self.assertIn("- [ ] no broker", self.readme_path.read_text())
+
+    def test_inbox_done_is_a_replace_file_through_the_broker(self):
+        (self.vault / "INBOX.md").write_text("# Inbox\n\nprose\n")
+        self.assertOk(self.t("add", "an idea", "--vault", self.vault, "--inbox"))
+        (row,) = self.ids("inbox")
+        self.assertOk(self.t("done", row["id"], "--vault", self.vault, "--reason", "filed"))
+        self.assertIn("- [x] an idea", (self.vault / "INBOX.md").read_text())
+        self.assertEqual([(r["op"], r["decision"]) for r in self.broker_rows()],
+                         [("append", "apply"), ("replace-file", "apply")])
+        self.assertEqual(self.queued(), [])
+
+    def test_an_inbox_edit_made_in_between_is_escalated_not_overwritten(self):
+        inbox = self.vault / "INBOX.md"
+        inbox.write_text("# Inbox\n\n- [ ] an idea [since:: %s]\n" % TODAY)
+        (row,) = self.ids("inbox")
+        shutil.rmtree(self.hooks)              # no broker: the request waits in the queue
+        p = self.t("done", row["id"], "--vault", self.vault)
+        self.assertEqual(p.returncode, 1, p.stdout + p.stderr)
+        (req_file,) = self.queued()
+        req = json.loads(req_file.read_text())
+        self.assertEqual((req["op"], req["target_existed"]), ("replace-file", True))
+        wq = load_module(SCRIPTS / "gt_write_queue.py", "gt_write_queue_for_inbox_test")
+        self.assertIsNone(wq.validate(req, self.vault))
+        edited = inbox.read_text() + "- [ ] someone else's line\n"
+        inbox.write_text(edited)               # an edit lands before the drain
+        self.assertOk(self.py(SCRIPTS / "gt_broker.py", "drain", "--vault", self.vault))
+        text = inbox.read_text()
+        self.assertIn("someone else's line", text, "the in-between edit was overwritten")
+        self.assertNotIn("- [x] an idea", text)
+        self.assertEqual(self.broker_rows()[-1]["decision"], "escalate")
+        self.assertEqual(self.queued(), [])
+
+    def test_the_broker_itself_writes_directly(self):
+        """A conflict task raised inside a drain cannot queue behind that drain's lock."""
+        self.assertOk(self.t("add", "from the broker", "--vault", self.vault, "--project",
+                             "alpha", env={"GT_BROKER_APPLYING": "1"}))
+        self.assertIn("- [ ] from the broker", self.readme_path.read_text())
+        self.assertEqual(self.broker_rows(), [])
+        self.assertEqual(self.queued(), [])
 
 
 class Rollup(TaskBase):

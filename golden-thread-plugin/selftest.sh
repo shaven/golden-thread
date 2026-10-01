@@ -161,5 +161,16 @@ fi
 LINT=$(python3 "$SCRIPTS/gt_lint.py" "$VAULT" 2>&1 | grep '^\[' | grep -vc '^\[source-todo\]' || true)
 if [ "$LINT" = "0" ]; then ok "gt_lint: no findings on the fresh vault beyond source-todo"; else bad "gt_lint: $LINT finding(s)"; python3 "$SCRIPTS/gt_lint.py" "$VAULT" 2>&1 | grep -v 'source-todo' | grep -A1 '^\[' | sed 's/^/      /'; fi
 
+# Post-install release gate in the throwaway environment (0.17.11): the same command a real
+# machine runs after install, at its strictest stage, against this fresh vault. Placement and
+# smoke rows must all PASS (INFO allowed); a FAIL or PENDING here fails the selftest, which
+# makes "temp-environment install + post-install" an automatic release-check gate.
+GTD="$HOME/.claude/golden-thread/hooks/gt_doctor.py"
+if [ -f "$GTD" ] && python3 "$GTD" post-install --vault "$VAULT" --stage final >"$TMP/postinstall.log" 2>&1; then
+  ok "post-install gate: $(tail -1 "$TMP/postinstall.log")"
+else
+  bad "post-install gate"; grep -E '^\s*(FAIL|PENDING)' "$TMP/postinstall.log" | sed 's/^/      /'; tail -1 "$TMP/postinstall.log" | sed 's/^/      /'
+fi
+
 if [ "$fail" = 0 ]; then echo "SELFTEST PASSED  (plugin $VER, throwaway home removed)"; else echo "SELFTEST FAILED"; fi
 exit $fail

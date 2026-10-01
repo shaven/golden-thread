@@ -86,14 +86,17 @@ class ItWritesOnlyItsOwnBlock(DailyBase):
         self.assertEqual(self.note().count("gt_daily:begin"), 1,
                          "the generated block was duplicated")
 
-    def test_it_never_writes_into_the_owners_headings(self):
-        """`## Did` is theirs. A generator writing there makes its counts and their sentences
-        indistinguishable."""
+    def test_its_lines_in_the_owners_headings_are_fenced(self):
+        """Owner, 2026-10-01: the facts go under the heading they belong to, not appended at the
+        bottom. What keeps their sentences and its lines distinguishable is the marked block,
+        and the counts stay in the footer."""
         self.commit("first", {"Projects/alpha/README.md": "# alpha\n"})
         self.run_daily(expect=0)
         body = self.note()
-        did = body.split("## Did", 1)[1].split("##", 1)[0]
-        self.assertNotIn("commit(s)", did, "the generator wrote into `## Did`")
+        did = body.split("## Did", 1)[1].split("\n## ", 1)[0]
+        self.assertIn("gt_daily:did:begin", did)
+        self.assertIn("first", did, "the day's commit is not under `## Did`")
+        self.assertNotIn("commit(s)", did, "the totals belong in the footer")
 
     def test_it_creates_the_note_from_the_template_when_absent(self):
         self.commit("first", {"Projects/alpha/README.md": "# alpha\n"})
@@ -207,6 +210,146 @@ if __name__ == "__main__":
     unittest.main()
 
 
+class ItWritesThroughTheQueue(DailyBase):
+    """0.17.11, Core rule 1 queue-first: the note is written only by gt_broker.py, from one
+    `replace-file` request gt_daily queues and drains at once. What is asserted is the route
+    (a broker log row, an empty queue) and what is NOT written: an owner edit made while the job
+    ran, a claimed note, anything at all on a dry run."""
+
+    REL = "Daily Notes/%s.md" % DATE
+
+    def spool(self, *parts):
+        return self.vault.joinpath("Projects", "golden-thread", "spool", *parts)
+
+    def queued(self):
+        q = self.spool("queue")
+        return sorted(p.name for p in q.glob("*.json")) if q.is_dir() else []
+
+    def broker_rows(self):
+        rows = []
+        for f in sorted(self.spool("broker").glob("log-*.jsonl")):
+            rows += [json.loads(l) for l in f.read_text().splitlines() if l.strip()]
+        return [r for r in rows if r.get("path") == self.REL]
+
+    def with_tools(self):
+        """The vault's own gt_task.py and gt_session.py, so an escalation becomes a real task."""
+        import shutil
+        from _harness import TOOLS
+        tools = self.vault / "Projects" / "golden-thread" / "tools"
+        tools.mkdir(parents=True, exist_ok=True)
+        for t in ("gt_task.py", "gt_tasks.py", "gt_session.py"):
+            shutil.copy(TOOLS / t, tools / t)
+        (self.vault / "Projects" / "golden-thread" / "README.md").write_text(
+            "# golden-thread\n\n## Tasks\n")
+
+    def test_the_note_arrives_through_the_broker_and_the_queue_is_left_empty(self):
+        self.commit("first", {"Projects/alpha/README.md": "# alpha\n"})
+        self.run_daily(expect=0)
+        self.assertIn("gt_daily:begin", self.note())
+        rows = self.broker_rows()
+        self.assertEqual([(r["op"], r["decision"]) for r in rows], [("replace-file", "apply")],
+                         "the note was not written by the broker")
+        self.assertEqual(self.queued(), [], "a request was left in the queue")
+
+    def test_a_rerun_with_nothing_new_is_a_deduplicate_not_a_second_write(self):
+        self.commit("first", {"Projects/alpha/README.md": "# alpha\n"})
+        self.run_daily(expect=0)
+        before = self.note()
+        self.run_daily(expect=0)
+        self.assertEqual(self.note(), before)
+        self.assertEqual([r["decision"] for r in self.broker_rows()], ["apply", "deduplicate"])
+
+    def test_an_owner_edit_between_runs_is_kept_and_the_rerun_goes_through_the_broker(self):
+        self.commit("first", {"Projects/alpha/README.md": "# alpha\n"})
+        self.run_daily(expect=0)
+        note = self.vault / "Daily Notes" / ("%s.md" % DATE)
+        note.write_text(note.read_text().replace("## Did\n\n-\n",
+                                                 "## Did\n\n- written in Obsidian\n", 1))
+        self.commit("second", {"Projects/alpha/README.md": "# alpha\n\nmore\n"})
+        self.run_daily(expect=0)
+        body = self.note()
+        self.assertIn("- written in Obsidian", body, "the owner's edit was lost")
+        self.assertIn("second", body, "the re-run's facts are missing")
+        self.assertEqual(body.count("gt_daily:did:begin"), 1)
+        self.assertEqual([r["decision"] for r in self.broker_rows()], ["apply", "apply"])
+        self.assertEqual(self.queued(), [])
+
+    def test_an_owner_edit_during_the_run_is_escalated_never_overwritten(self):
+        """The window the base hash exists for: the owner saves in Obsidian after gt_daily read
+        the note and before the broker writes. Their text stands and they get a task."""
+        from unittest import mock
+        from _harness import load_module
+        self.with_tools()
+        self.commit("first", {"Projects/alpha/README.md": "# alpha\n"})
+        note = self.vault / "Daily Notes" / ("%s.md" % DATE)
+        note.write_text("# %s\n\n## Did\n\n- before\n\n## Noticed\n\n- [ ]\n" % DATE)
+        with mock.patch.dict("os.environ", self.env, clear=True):
+            mod = load_module(DAILY, "gt_daily_race")
+            real = mod.read_note
+
+            def read_then_owner_edits(target):
+                got = real(target)
+                target.write_text(target.read_text().replace("- before", "- owner, mid-run"))
+                return got
+            import contextlib
+            import io
+            out = io.StringIO()
+            with mock.patch.object(mod, "read_note", read_then_owner_edits), \
+                    contextlib.redirect_stdout(out):
+                code = mod.main(["--vault", str(self.vault), "--date", DATE])
+        self.assertEqual(code, 0)
+        self.assertIn("escalated it to you as a #conflict task", out.getvalue())
+        body = self.note()
+        self.assertIn("- owner, mid-run", body)
+        self.assertNotIn("gt_daily:begin", body, "the generated note overwrote the owner's edit")
+        self.assertEqual([r["decision"] for r in self.broker_rows()], ["escalate"])
+        self.assertIn("#conflict", (self.vault / "Projects" / "golden-thread" / "README.md")
+                      .read_text(), "the owner was not given a task")
+        self.assertEqual(self.queued(), [])
+
+    def test_a_claimed_note_is_held_in_the_queue_and_lands_after_the_claim_ends(self):
+        sessions = self.vault / "Projects" / "golden-thread" / "sessions"
+        sessions.mkdir(parents=True, exist_ok=True)
+        claim = sessions / "deadbeef-1111-2222-3333-444455556666_2026-09-27_1100.md"
+        claim.write_text("status: active\nfiles_claimed:\n- `%s`\n" % self.REL)
+        self.commit("a", {"Projects/alpha/README.md": "# a\n"})
+        proc = self.run_daily(expect=3)
+        self.assertIn("claimed by live session", proc.stderr)
+        self.assertEqual(self.note(), "")
+        self.assertEqual(len(self.queued()), 1, "the held write was not left queued")
+        # A second run while still claimed does not stack a second request.
+        self.run_daily(expect=3)
+        self.assertEqual(len(self.queued()), 1, "a held run queued another request")
+        claim.write_text("status: closed\nfiles_claimed:\n- `%s`\n" % self.REL)
+        self.run_daily(expect=0)
+        self.assertEqual(self.note().count("gt_daily:begin"), 1)
+        self.assertEqual(self.queued(), [])
+        self.assertEqual([r["decision"] for r in self.broker_rows()][-2:],
+                         ["apply", "deduplicate"],
+                         "the held write should land first, then the re-run finds it there")
+
+    def test_dry_run_queues_nothing_and_logs_nothing(self):
+        self.commit("first", {"Projects/alpha/README.md": "# alpha\n"})
+        self.run_daily("--dry-run", expect=0)
+        self.assertEqual(self.queued(), [])
+        self.assertFalse(self.spool("broker").exists(), "--dry-run reached the broker")
+
+    def test_without_the_queue_beside_it_it_cannot_run_and_writes_nothing(self):
+        """The installed copy runs from the hooks dir; a missing queue must not fall back to a
+        direct write."""
+        import shutil
+        lone = self.tmp / "lone"
+        lone.mkdir()
+        shutil.copy(DAILY, lone / "gt_daily.py")
+        self.commit("first", {"Projects/alpha/README.md": "# alpha\n"})
+        proc = self.py(lone / "gt_daily.py", "--vault", self.vault, "--date", DATE)
+        self.assertEqual(proc.returncode, 3, proc.stdout + proc.stderr)
+        self.assertIn("write queue is not installed", proc.stderr)
+        self.assertEqual(self.note(), "")
+        check = self.py(lone / "gt_daily.py", "--vault", self.vault, "--check")
+        self.assertEqual(check.returncode, 3)
+
+
 class ItDoesNotMangleTheTextItQuotes(Sandbox):
     """Two defects found on the FIRST run against real data, both silent.
 
@@ -277,7 +420,7 @@ class TheDaysTasksAndProjects(DailyBase):
             "Projects/beta/README.md": readme("beta", "- [ ] **Edited task** other words\n")})
         out = self.run_daily("--dry-run", expect=0).stdout
         self.assertIn("**Tasks added**", out)
-        added = out.split("**Tasks added**", 1)[1].split("**Commits**", 1)[0]
+        added = out.split("**Tasks added**", 1)[1].split("gt_daily:open:end", 1)[0]
         self.assertIn("Brand new task", added)
         self.assertNotIn("Edited task", added, "an edited task was counted as new")
         self.assertNotIn("[p:: 1]", added)
@@ -294,7 +437,7 @@ class TheDaysTasksAndProjects(DailyBase):
                      "- [ ] **Next week** [due:: 2026-10-04]\n" % (DATE, DATE),
             domain="orchard")})
         out = self.run_daily("--dry-run", expect=0).stdout
-        due = out.split("**Due today (open)**", 1)[1].split("**Commits**", 1)[0]
+        due = out.split("**Due today (open)**", 1)[1].split("gt_daily:open:end", 1)[0]
         self.assertIn("Pay the invoice", due)
         self.assertNotIn("Already sent", due)
         self.assertNotIn("Next week", due)
@@ -315,12 +458,12 @@ class TheDaysTasksAndProjects(DailyBase):
             "Projects/beta/README.md": readme(
                 "beta", "- [ ] **Edited task** first words\n- [ ] **Beta new**\n")})
         out = self.run_daily("--dry-run", expect=0).stdout
-        added = out.split("**Tasks added**", 1)[1].split("**Commits**", 1)[0]
-        self.assertLess(added.index("### orchard"), added.index("Alpha new"))
-        self.assertLess(added.index("### uncategorized"), added.index("Beta new"))
-        self.assertLess(added.index("### orchard"), added.index("### uncategorized"))
-        commits = out.split("**Commits**", 1)[1]
-        self.assertIn("### orchard", commits)
+        added = out.split("**Tasks added**", 1)[1].split("gt_daily:open:end", 1)[0]
+        self.assertLess(added.index("_orchard_"), added.index("Alpha new"))
+        self.assertLess(added.index("_uncategorized_"), added.index("Beta new"))
+        self.assertLess(added.index("_orchard_"), added.index("_uncategorized_"))
+        commits = out.split("**Commits**", 1)[1].split("gt_daily:did:end", 1)[0]
+        self.assertIn("_orchard_", commits)
         self.assertIn("- **alpha** (1)", commits, "a vault commit is filed under its project")
 
     def test_a_project_created_today_is_flagged(self):
@@ -335,6 +478,117 @@ class TheDaysTasksAndProjects(DailyBase):
         self.commit("edit", {"Projects/alpha/README.md": readme("alpha", "- [ ] **X**\n",
                                                                 domain="orchard")})
         self.assertNotIn("New projects", self.run_daily("--dry-run", expect=0).stdout)
+
+
+FULL_TEMPLATE = ("# {{date:YYYY-MM-DD}} ({{date:dddd}})\n\n## Did\n\n-\n\n## Decided\n\n-\n\n"
+                 "## Noticed\n\n- [ ]\n\n## Open at end of day\n\n-\n\n---\n\n"
+                 "<!-- verification habit -->\n")
+
+
+def section(body, heading):
+    """The text under one `## heading`, up to the next heading or the footer."""
+    rest = body.split("\n" + heading + "\n", 1)[1]
+    for stop in ("\n## ", "\n---\n", "\n<!-- gt_daily:begin"):
+        rest = rest.split(stop, 1)[0]
+    return rest
+
+
+class FactsGoUnderTheirHeadings(TheDaysTasksAndProjects):
+    """Owner, 2026-10-01: the job "did not put the information into the proper locations. It
+    just appended to the bottom." Each fact now sits in a marked block under its heading."""
+
+    def setUp(self):
+        super().setUp()
+        (self.vault / "Templates" / "Daily Note.md").write_text(FULL_TEMPLATE)
+
+    def day(self):
+        self.seed()
+        self.commit("a day of work", {
+            "Projects/alpha/README.md": readme(
+                "alpha", "- [x] **Old task** [p:: 2]\n- [ ] **Brand new task**\n"
+                         "- [ ] **Pay the invoice** [due:: %s]\n" % DATE, domain="orchard"),
+            "Projects/alpha/decisions.md": "# Decisions\n\n## ADR-1: Ovens run hot\n\nBody.\n"})
+
+    def test_each_fact_is_under_its_heading_and_noticed_is_untouched(self):
+        self.day()
+        self.run_daily(expect=0)
+        body = self.note()
+        did, decided = section(body, "## Did"), section(body, "## Decided")
+        still, noticed = section(body, "## Open at end of day"), section(body, "## Noticed")
+        self.assertIn("Old task", did)
+        self.assertIn("a day of work", did)
+        self.assertIn("ADR-1: Ovens run hot", decided)
+        self.assertIn("Brand new task", still)
+        self.assertIn("Pay the invoice", still)
+        self.assertNotIn("Brand new task", did)
+        self.assertEqual(noticed.strip(), "- [ ]", "`## Noticed` was written to")
+        footer = body.split("gt_daily:begin", 1)[1]
+        self.assertIn("1 ADR(s)", footer)
+        self.assertNotIn("Old task", footer, "itemised facts are still in the footer")
+
+    def test_the_owners_lines_in_a_section_survive_a_rerun(self):
+        self.day()
+        self.run_daily(expect=0)
+        note = self.vault / "Daily Notes" / ("%s.md" % DATE)
+        note.write_text(note.read_text().replace("## Did\n\n-\n",
+                                                 "## Did\n\n- fixed the oven by hand\n", 1))
+        self.run_daily(expect=0)
+        body = self.note()
+        did = section(body, "## Did")
+        self.assertIn("- fixed the oven by hand", did)
+        self.assertLess(did.index("fixed the oven"), did.index("gt_daily:did:begin"),
+                        "the owner's line should sit above the generated block")
+        for key in ("did", "decided", "open"):
+            self.assertEqual(body.count("gt_daily:%s:begin" % key), 1,
+                             "the %s block was duplicated" % key)
+
+    def test_a_reworded_adr_is_not_a_decision(self):
+        self.seed()
+        self.run_cmd(["git", "-C", str(self.vault), "commit", "-q", "--allow-empty", "-m", "x"])
+        (self.vault / "Projects" / "alpha" / "decisions.md").write_text(
+            "## ADR-1: Ovens run warm\n")
+        self.git("add", "-A")
+        self.run_cmd(["git", "-C", str(self.vault), "commit", "-q", "-m", "old adr"],
+                     env={"GIT_AUTHOR_DATE": "2026-09-26T12:00:00-05:00",
+                          "GIT_COMMITTER_DATE": "2026-09-26T12:00:00-05:00"})
+        self.commit("reword", {"Projects/alpha/decisions.md": "## ADR-1: Ovens run hot\n"})
+        out = self.run_daily("--dry-run", expect=0).stdout
+        self.assertNotIn("gt_daily:decided:begin", out)
+        self.assertIn("0 ADR(s)", out)
+
+    def test_a_sub_projects_adr_is_labelled_with_its_folder(self):
+        self.seed()
+        self.commit("sub adr", {"Projects/alpha/oven/decisions.md": "## ADR-2: Gas, not coal\n"})
+        out = self.run_daily("--dry-run", expect=0).stdout
+        decided = out.split("gt_daily:decided:begin", 1)[1].split("gt_daily:decided:end", 1)[0]
+        self.assertIn("`alpha/oven` — ADR-2: Gas, not coal", decided)
+        self.assertIn("_orchard_", decided, "a sub-project takes its project's domain")
+
+    def test_a_note_with_the_old_bottom_block_is_migrated(self):
+        self.day()
+        note = self.vault / "Daily Notes" / ("%s.md" % DATE)
+        legacy = FULL_TEMPLATE.replace("{{date:YYYY-MM-DD}}", DATE).replace("{{date:dddd}}", "Sunday")
+        note.write_text(legacy + "\n<!-- gt_daily:begin — GENERATED. Edits inside this block are "
+                        "replaced. -->\n\n## Captured automatically — %s\n\n**Tasks closed**\n"
+                        "### orchard\n- `alpha` — Old task\n<!-- gt_daily:end -->\n" % DATE)
+        self.run_daily(expect=0)
+        body = self.note()
+        self.assertEqual(body.count("gt_daily:begin"), 1)
+        self.assertNotIn("### orchard", body, "the old itemised block survived")
+        self.assertIn("Old task", section(body, "## Did"))
+
+    def test_a_missing_heading_is_added_before_the_footer(self):
+        (self.vault / "Templates" / "Daily Note.md").write_text(
+            "# {{date:YYYY-MM-DD}}\n\n## Did\n\n-\n\n## Noticed\n\n- [ ]\n")
+        self.day()
+        self.run_daily(expect=0)
+        body = self.note()
+        self.assertIn("\n## Decided\n", body)
+        self.assertIn("\n## Open at end of day\n", body)
+        self.assertLess(body.index("## Decided"), body.index("## Open at end of day"))
+        self.assertLess(body.index("## Open at end of day"), body.index("gt_daily:begin"))
+        self.assertLess(body.index("gt_daily:did:end"), body.index("## Noticed"),
+                        "the Did block left its section")
 
 
 class ThePushComesFirst(DailyBase):
