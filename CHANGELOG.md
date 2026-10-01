@@ -13,6 +13,17 @@ release's own summary line, kept short rather than reconstructed after the fact.
 
 ## Unreleased — repository tooling (no gt version change)
 
+### remote-test.sh: the full suite off the laptop
+
+`dev/remote-test.sh` runs the full suite on a Linux VM (claudebox on mesxi6, 8 vCPU) and records
+the receipt on the Mac only when the tree that passed is still the tree on disk. Measured
+2026-10-01: **2,487 tests in 214 s on claudebox, against 892 s on the Mac**, where the run drove the
+load average to 50–96 and dropped keystrokes. Your Mac's load stayed under 9 during the remote run.
+Three tests were made portable for it:
+- the ast-grep tier no longer mistakes Linux's `sg` (switch group) for ast-grep;
+- the LOTR consent test injects its dialog with `confirm: dialog`;
+- the runner uses `umask 022`.
+
 ### copygt.sh: gt-src to a validated, committed install in one command
 
 **What.** gt-src now carries two tools at its root, `copygt.sh` and `validate-install.py`, written by
