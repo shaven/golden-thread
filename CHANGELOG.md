@@ -11,6 +11,26 @@ release's own summary line, kept short rather than reconstructed after the fact.
 
 ---
 
+## Unreleased — next gt build
+
+**The daily note puts each fact where it belongs.** `gt_daily.py` wrote the whole day into one
+block at the bottom of `Daily Notes/<date>.md`, so `## Did`, `## Decided` and `## Open at end of
+day` stayed empty however much happened ("it did not put the information into the proper
+locations. It just appended to the bottom" — owner, 2026-10-01). Now new projects, tasks closed and
+commits go under `## Did`; ADRs added that day under `## Decided`; tasks added and open ones due
+today under `## Open at end of day`. Each sits in its own marked block after the owner's lines and
+is replaced whole on a re-run; the owner can keep writing above it. Totals, event counts, the
+active span and notes stay in the footer block. `## Noticed` is still never written to — it is what
+`gt-review` sweeps. A missing heading is added; a note from an earlier release is rearranged on its
+next run.
+
+ADRs are new to the note: read from the git diff of every `Projects/**/decisions.md`, like tasks,
+not from `adr` events — on 2026-09-30 the diff found 7 ADRs where the event log had 4. A reworded
+ADR (same number, new title) is not counted. `--dry-run` now prints the whole note as it would be
+written, so the placement is visible.
+
+---
+
 ## gt-visualize 0.4.0 — 2026-09-30
 
 **A guided walkthrough of any explainer** — feature request `2026-09-30-gt-visualize-guided-walkthrough`

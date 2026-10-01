@@ -2212,11 +2212,18 @@ tool's writing.
 a generated block that editorialised would encode a reading of the day that is not theirs. For
 the wiki it records how many items and how much time, never what they said.
 
-It **never touches a line outside its block**, and specifically never touches `## Noticed` —
+**Where each fact goes** (since the build after 0.17.10): under the heading it belongs to, in its
+own marked block after whatever you wrote there — new projects, tasks closed and commits under
+`## Did`; ADRs added that day (read from the `decisions.md` diffs) under `## Decided`; tasks
+added and open ones due today under `## Open at end of day`. Totals, event counts and the active
+span stay in a footer block at the bottom. A heading the note lacks is added. A note written by an
+earlier release, with everything in the bottom block, is rearranged on its next run.
+
+It **never touches a line outside its blocks**, and specifically never touches `## Noticed` —
 that is the unfiled capture surface `/gt:gt-review` sweeps, and a tool tidying it would defeat
 the sweep. Exit `1` means nothing to report for the day, which is not an error; a crash
 exits `3` (0.17.2), never `1`. `--check`
-verifies every dependency and exits; `--dry-run` prints the block and writes nothing.
+verifies every dependency and exits; `--dry-run` prints the note as it would be written and writes nothing.
 
 ### `gt_state.py` — write the state before the context runs out
 

@@ -32,9 +32,14 @@ owner writes the meaning, and a generated block that editorialises would encode 
 the day that is not theirs. "Capture it all and don't be verbose about every detail" (owner,
 2026-09-27) is the whole specification for the output format.
 
-WHERE IT WRITES: one fenced, clearly-marked block in `Daily Notes/<date>.md`, replaced whole on
-each run. It never touches a line outside that block, and specifically never touches `##
-Noticed`, which is the owner's unfiled capture surface and the section `gt-review` sweeps.
+WHERE IT WRITES (owner, 2026-10-01): each fact under the heading it belongs to -- new projects,
+tasks closed and commits under `## Did`; ADRs added that day under `## Decided`; tasks added and
+open ones due today under `## Open at end of day` -- each in its own marked block after whatever
+the owner wrote there, replaced whole on each run. Totals, event counts, the active span and any
+NOTE stay in one footer block at the bottom. A heading the note lacks is added. It never touches a
+line outside its blocks, and never writes into `## Noticed`, which is the owner's unfiled capture
+surface and the section `gt-review` sweeps. Until then everything went into the one bottom block,
+and the owner's headings stayed empty of the day's facts ("it just appended to the bottom").
 
 GIT IS THE PRIMARY SOURCE, events are enrichment, and the order matters. Measured on
 2026-09-27: `events.jsonl` held 5 events (all `capture`, one project) on a day with 10 commits
@@ -70,8 +75,8 @@ WROTE, NOTHING, USAGE, CANNOT_RUN = 0, 1, 2, 3
 
 BEGIN = "<!-- gt_daily:begin — GENERATED. Edits inside this block are replaced. -->"
 END = "<!-- gt_daily:end -->"
-# The heading the block lives under. Deliberately NOT `## Did`: that one is the owner's, and a
-# generator writing into it would make their sentences and its counts indistinguishable.
+# The heading the FOOTER lives under. The itemised facts go into the owner's headings (PARTS),
+# each inside its own markers, so their sentences and its lines stay distinguishable.
 HEADING = "## Captured automatically"
 
 TASK_DONE = re.compile(r"^\+\s*-\s*\[x\]\s+(.*)$", re.I)
@@ -180,7 +185,7 @@ def by_domain(items, dom):
     """{project: [lines]} -> [(domain, [(project, [lines])])], alphabetical, uncategorized last."""
     groups = collections.defaultdict(list)
     for project in sorted(items):
-        groups[dom.get(project, UNCATEGORIZED)].append((project, items[project]))
+        groups[dom.get(project.split("/")[0], UNCATEGORIZED)].append((project, items[project]))
     keys = sorted(k for k in groups if k != UNCATEGORIZED)
     if UNCATEGORIZED in groups:
         keys.append(UNCATEGORIZED)
@@ -219,6 +224,51 @@ def tasks_added(repo: Path, date: str):
     out = {}
     for project, titles in added.items():
         keep = [t for t in titles if t not in removed.get(project, ())]
+        if keep:
+            out[project] = keep
+    return out
+
+
+ADR_FILES = ":(glob)Projects/**/decisions.md"
+ADR_ADDED = re.compile(r"^\+##\s+((ADR-\d+)\b.*)$")
+ADR_REMOVED = re.compile(r"^-##\s+(ADR-\d+)\b")
+
+
+def adrs_added(repo: Path, date: str):
+    """-> {project: [heading, ...]} for `## ADR-n` headings added in today's commits.
+
+    From the diff, like the tasks: an `adr` event exists only when a skill emitted one, and a
+    decision written by hand would be missing. The key is the folder holding decisions.md, so a
+    sub-project's ADR reads `golden-thread/mcp-gateway`. A heading also removed that day was
+    reworded, not decided, and is not counted -- matched on its number, since a reword changes
+    the title."""
+    since, until = day_bounds(date)
+    out = sh(["git", "-C", str(repo), "log", "--since", since, "--until", until,
+              "--no-merges", "-U0", "-p", "--", ADR_FILES])
+    if not out:
+        return {}
+    added = collections.defaultdict(list)
+    removed = collections.defaultdict(set)
+    project = None
+    for line in out.splitlines():
+        if line.startswith("+++ "):
+            m = re.match(r"\+\+\+ b/Projects/(.+)/decisions\.md$", line)
+            project = m.group(1) if m else None
+        elif line.startswith("--- ") or not project:
+            continue
+        else:
+            m = ADR_REMOVED.match(line)
+            if m:
+                removed[project].add(m.group(1))
+                continue
+            m = ADR_ADDED.match(line)
+            if m:
+                t = (m.group(2), short(m.group(1)))
+                if t[1] and t not in added[project]:
+                    added[project].append(t)
+    out = {}
+    for project, titles in added.items():
+        keep = [t for n, t in titles if n not in removed.get(project, ())]
         if keep:
             out[project] = keep
     return out
@@ -392,47 +442,62 @@ def task_section(L, title, items, dom):
         return
     L.append("**%s**" % title)
     for domain, projects in by_domain(items, dom):
-        L.append("### %s" % domain)
+        L.append("- _%s_" % domain)
         for project, titles in projects:
             for t in titles:
-                L.append("- `%s` — %s" % (project, t))
+                L.append("    - `%s` — %s" % (project, t))
     L.append("")
 
 
+def render_parts(commits_by_repo, closed, added=None, due=None, fresh=None, dom=None,
+                 vault_name=None, adrs=None):
+    """-> {part key: [lines]} for the owner's sections. An empty list means nothing to place.
+
+    Each fact goes where the owner's template has a heading for it (owner, 2026-10-01): what
+    was done under `## Did`, what was decided under `## Decided`, what is still open under `##
+    Open at end of day`. `## Noticed` gets nothing -- it is their unfiled capture surface and
+    gt-review sweeps every open checkbox there."""
+    added, due, fresh, dom, adrs = added or {}, due or {}, fresh or [], dom or {}, adrs or {}
+    did = []
+    if fresh:
+        did += ["**New projects** — " + ", ".join(fresh), ""]
+    task_section(did, "Tasks closed", closed, dom)
+    if any(commits_by_repo.values()):
+        did.append("**Commits**")
+        grouped = commits_by_project(commits_by_repo, vault_name)
+        for domain, projects in by_domain(grouped, dom):
+            did.append("- _%s_" % domain)
+            for label, rows in projects:
+                did.append("    - **%s** (%d)" % (label, len(rows)))
+                for r in rows:
+                    did.append("        - `%s` %s" % (r["sha"], short(r["subject"])))
+        did.append("")
+    decided = []
+    task_section(decided, "ADRs recorded", adrs, dom)
+    still = []
+    task_section(still, "Tasks added", added, dom)
+    task_section(still, "Due today (open)", due, dom)
+    return {"did": did, "decided": decided, "open": still}
+
+
 def render(date, commits_by_repo, closed, events, wiki, span, notes, added=None, due=None,
-           fresh=None, dom=None, vault_name=None):
-    added, due, fresh, dom = added or {}, due or {}, fresh or [], dom or {}
+           fresh=None, dom=None, vault_name=None, adrs=None):
+    """The footer block: totals, event counts, active span and notes. The itemised facts are
+    placed in the owner's sections by render_parts/place_parts, not here."""
+    added, adrs = added or {}, adrs or {}
     L = [BEGIN, "", "%s — %s" % (HEADING, date), ""]
 
     total_commits = sum(len(v or []) for v in commits_by_repo.values())
     kinds = collections.Counter(d.get("kind") for d in events)
     n_closed = sum(len(v) for v in closed.values())
     n_added = sum(len(v) for v in added.values())
+    n_adrs = sum(len(v) for v in adrs.values())
 
     L.append("**Totals** — %d commit(s) in %d repo(s) · %d task(s) closed · %d task(s) added · "
-             "%d event(s) · %d wiki page(s) touched (%d new)"
+             "%d ADR(s) · %d event(s) · %d wiki page(s) touched (%d new)"
              % (total_commits, len([v for v in commits_by_repo.values() if v]), n_closed,
-                n_added, len(events), wiki["touched"], wiki["added"]))
+                n_added, n_adrs, len(events), wiki["touched"], wiki["added"]))
     L.append("")
-
-    if fresh:
-        L.append("**New projects** — " + ", ".join(fresh))
-        L.append("")
-
-    task_section(L, "Tasks closed", closed, dom)
-    task_section(L, "Tasks added", added, dom)
-    task_section(L, "Due today (open)", due, dom)
-
-    if total_commits:
-        L.append("**Commits**")
-        grouped = commits_by_project(commits_by_repo, vault_name)
-        for domain, projects in by_domain(grouped, dom):
-            L.append("### %s" % domain)
-            for label, rows in projects:
-                L.append("- **%s** (%d)" % (label, len(rows)))
-                for r in rows:
-                    L.append("    - `%s` %s" % (r["sha"], short(r["subject"])))
-        L.append("")
 
     if kinds:
         L.append("**Events** — " + " · ".join("%s %d" % (k, n)
@@ -451,10 +516,79 @@ def render(date, commits_by_repo, closed, events, wiki, span, notes, added=None,
     if notes:
         L.append("")
 
-    L.append("_Facts only. The meaning is yours — `## Did`, `## Decided` and `## Noticed` "
-             "above are not touched by this._")
+    L.append("_Facts only, itemised in marked blocks under `## Did`, `## Decided` and `## Open "
+             "at end of day` above. Your own lines there, and all of `## Noticed`, are never "
+             "touched._")
     L.append(END)
     return "\n".join(L) + "\n"
+
+
+# -- the owner's sections: each generated part sits in its own marked block -------------------
+#
+# Under the heading it belongs to, after whatever the owner wrote there. Only the lines between
+# a part's markers are ever replaced, so the owner can write above it at any time of day and a
+# re-run leaves that alone. A heading the note lacks is added (before the footer) rather than
+# the facts being dropped.
+PARTS = (("did", "## Did"), ("decided", "## Decided"), ("open", "## Open at end of day"))
+
+
+def part_begin(key):
+    return "<!-- gt_daily:%s:begin — GENERATED. Edits inside this block are replaced; write " \
+           "above it. -->" % key
+
+
+def part_end(key):
+    return "<!-- gt_daily:%s:end -->" % key
+
+
+def _section_stop(line):
+    """True for a line that ends the section above it."""
+    t = line.strip()
+    return line.startswith("## ") or t == "---" or t.startswith("<!-- gt_daily:")
+
+
+def place_part(text, key, heading, body):
+    """Put one part's block in the note. -> new text. Never alters a line outside its markers."""
+    b, e = part_begin(key), part_end(key)
+    block = [b] + [l for l in body] + [e]
+    while len(block) > 2 and not block[-2].strip():
+        block.pop(-2)
+    lines = text.split("\n")
+    if b in lines and e in lines[lines.index(b):]:
+        i = lines.index(b)
+        j = lines.index(e, i)
+        if body:
+            lines[i:j + 1] = block
+        else:
+            # Nothing to place any more: take the block out, and the blank line put before it.
+            k = i - 1 if i > 0 and not lines[i - 1].strip() else i
+            lines[k:j + 1] = []
+        return "\n".join(lines)
+    if not body:
+        return text
+    if heading in lines:
+        h = lines.index(heading)
+        stop = next((n for n in range(h + 1, len(lines)) if _section_stop(lines[n])), len(lines))
+        last = stop
+        while last > h + 1 and not lines[last - 1].strip():
+            last -= 1
+        lines[last:last] = [""] + block
+        return "\n".join(lines)
+    # No such heading in this note: add it, before the footer and any named section.
+    at = next((n for n, l in enumerate(lines)
+               if l == BEGIN or l.startswith("<!-- gt_daily:section:")), None)
+    if at is None:
+        while lines and not lines[-1].strip():
+            lines.pop()
+        return "\n".join(lines + ["", heading, ""] + block) + "\n"
+    lines[at:at] = [heading, ""] + block + [""]
+    return "\n".join(lines)
+
+
+def place_parts(text, parts):
+    for key, heading in PARTS:
+        text = place_part(text, key, heading, parts.get(key) or [])
+    return text
 
 
 def claim_holder(vault: Path, rel: str):
@@ -649,7 +783,7 @@ def handoff_text(date, rel_note, sections, note_text, comms_on=False):
           "`end` markers." % rel_note, "",
           "**To contribute:** replace the text between YOUR section's markers — keep the markers, "
           "and the `## Title` line under the begin marker. Touch nothing else in the note: the "
-          "generated `gt_daily` block is replaced on every run, and the owner's own headings are "
+          "generated `gt_daily` blocks are replaced on every run, and the owner's own headings are "
           "theirs. gt_daily never overwrites a section, and its next run marks it `filled` here.",
           ""]
     if not comms_on:
@@ -743,7 +877,8 @@ def main(argv=None) -> int:
     ap.add_argument("--date", default=None, help="default: today, local time")
     ap.add_argument("--repo", action="append", default=[],
                     help="a repo to summarise (repeatable). The vault is always included.")
-    ap.add_argument("--dry-run", action="store_true", help="print the block, write nothing")
+    ap.add_argument("--dry-run", action="store_true",
+                    help="print the note as it would be written, write nothing")
     ap.add_argument("--check", action="store_true", help="verify every dependency and exit")
     ap.add_argument("--sections-only", action="store_true",
                     help="make room for the named sections and write the handoff; no facts block")
@@ -815,6 +950,7 @@ def main(argv=None) -> int:
 
     closed = tasks_closed(vault, date)
     added = tasks_added(vault, date)
+    adrs = adrs_added(vault, date)
     due = due_today(vault, date)
     fresh = new_projects(vault, date)
     dom = domains(vault)
@@ -854,8 +990,13 @@ def main(argv=None) -> int:
         if not facts and not sections:
             print("gt-daily: nothing to place — every named section is held back (%s)" % comms_why)
         if facts:
-            print(render(date, commits_by_repo, closed, events, wiki, span, notes, added, due,
-                         fresh, dom, vault_name))
+            # The whole note as it would be written, so the placement is visible, not just the
+            # facts.
+            text = splice(place_parts(text, render_parts(commits_by_repo, closed, added, due,
+                                                         fresh, dom, vault_name, adrs)),
+                          render(date, commits_by_repo, closed, events, wiki, span, notes,
+                                 added, due, fresh, dom, vault_name, adrs))
+            print(text)
         if sections:
             text = ensure_sections(text, sections)
             for s in sections:
@@ -885,8 +1026,10 @@ def main(argv=None) -> int:
         push_note = push_vault(vault)
         if push_note:
             notes.append(push_note)
+        text = place_parts(text, render_parts(commits_by_repo, closed, added, due, fresh, dom,
+                                              vault_name, adrs))
         text = splice(text, render(date, commits_by_repo, closed, events, wiki, span, notes,
-                                   added, due, fresh, dom, vault_name))
+                                   added, due, fresh, dom, vault_name, adrs))
     if sections:
         # After the facts block, so a new note reads: the owner's headings, the facts, then the
         # sections other tools fill. A section already in the note is never moved or altered.

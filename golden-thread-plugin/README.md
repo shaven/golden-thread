@@ -637,8 +637,9 @@ python3 $GT/gt_schedule.py install sweep --vault ~/my-vault --repo ~/Projects/my
 
 # Write the day's FACTS into Daily Notes/<date>.md: tasks closed, commits per repo, event
 # counts, wiki item counts, an active span per project. Terse by design -- it does not
-# explain or interpret, because the meaning of the day is the owner's to write. One
-# fenced block, replaced whole each run; it never touches `## Noticed`.
+# explain or interpret, because the meaning of the day is the owner's to write. Each fact
+# goes in a marked block under its heading (Did, Decided, Open at end of day), replaced
+# whole each run, with the counts in a footer; it never touches `## Noticed`.
 python3 $GT/gt_daily.py --vault ~/my-vault --repo ~/Projects/my-project --dry-run
 python3 $GT/gt_daily.py --vault ~/my-vault --check
 

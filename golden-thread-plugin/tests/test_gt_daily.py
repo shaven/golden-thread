@@ -86,14 +86,17 @@ class ItWritesOnlyItsOwnBlock(DailyBase):
         self.assertEqual(self.note().count("gt_daily:begin"), 1,
                          "the generated block was duplicated")
 
-    def test_it_never_writes_into_the_owners_headings(self):
-        """`## Did` is theirs. A generator writing there makes its counts and their sentences
-        indistinguishable."""
+    def test_its_lines_in_the_owners_headings_are_fenced(self):
+        """Owner, 2026-10-01: the facts go under the heading they belong to, not appended at the
+        bottom. What keeps their sentences and its lines distinguishable is the marked block,
+        and the counts stay in the footer."""
         self.commit("first", {"Projects/alpha/README.md": "# alpha\n"})
         self.run_daily(expect=0)
         body = self.note()
-        did = body.split("## Did", 1)[1].split("##", 1)[0]
-        self.assertNotIn("commit(s)", did, "the generator wrote into `## Did`")
+        did = body.split("## Did", 1)[1].split("\n## ", 1)[0]
+        self.assertIn("gt_daily:did:begin", did)
+        self.assertIn("first", did, "the day's commit is not under `## Did`")
+        self.assertNotIn("commit(s)", did, "the totals belong in the footer")
 
     def test_it_creates_the_note_from_the_template_when_absent(self):
         self.commit("first", {"Projects/alpha/README.md": "# alpha\n"})
@@ -277,7 +280,7 @@ class TheDaysTasksAndProjects(DailyBase):
             "Projects/beta/README.md": readme("beta", "- [ ] **Edited task** other words\n")})
         out = self.run_daily("--dry-run", expect=0).stdout
         self.assertIn("**Tasks added**", out)
-        added = out.split("**Tasks added**", 1)[1].split("**Commits**", 1)[0]
+        added = out.split("**Tasks added**", 1)[1].split("gt_daily:open:end", 1)[0]
         self.assertIn("Brand new task", added)
         self.assertNotIn("Edited task", added, "an edited task was counted as new")
         self.assertNotIn("[p:: 1]", added)
@@ -294,7 +297,7 @@ class TheDaysTasksAndProjects(DailyBase):
                      "- [ ] **Next week** [due:: 2026-10-04]\n" % (DATE, DATE),
             domain="orchard")})
         out = self.run_daily("--dry-run", expect=0).stdout
-        due = out.split("**Due today (open)**", 1)[1].split("**Commits**", 1)[0]
+        due = out.split("**Due today (open)**", 1)[1].split("gt_daily:open:end", 1)[0]
         self.assertIn("Pay the invoice", due)
         self.assertNotIn("Already sent", due)
         self.assertNotIn("Next week", due)
@@ -315,12 +318,12 @@ class TheDaysTasksAndProjects(DailyBase):
             "Projects/beta/README.md": readme(
                 "beta", "- [ ] **Edited task** first words\n- [ ] **Beta new**\n")})
         out = self.run_daily("--dry-run", expect=0).stdout
-        added = out.split("**Tasks added**", 1)[1].split("**Commits**", 1)[0]
-        self.assertLess(added.index("### orchard"), added.index("Alpha new"))
-        self.assertLess(added.index("### uncategorized"), added.index("Beta new"))
-        self.assertLess(added.index("### orchard"), added.index("### uncategorized"))
-        commits = out.split("**Commits**", 1)[1]
-        self.assertIn("### orchard", commits)
+        added = out.split("**Tasks added**", 1)[1].split("gt_daily:open:end", 1)[0]
+        self.assertLess(added.index("_orchard_"), added.index("Alpha new"))
+        self.assertLess(added.index("_uncategorized_"), added.index("Beta new"))
+        self.assertLess(added.index("_orchard_"), added.index("_uncategorized_"))
+        commits = out.split("**Commits**", 1)[1].split("gt_daily:did:end", 1)[0]
+        self.assertIn("_orchard_", commits)
         self.assertIn("- **alpha** (1)", commits, "a vault commit is filed under its project")
 
     def test_a_project_created_today_is_flagged(self):
@@ -335,6 +338,117 @@ class TheDaysTasksAndProjects(DailyBase):
         self.commit("edit", {"Projects/alpha/README.md": readme("alpha", "- [ ] **X**\n",
                                                                 domain="orchard")})
         self.assertNotIn("New projects", self.run_daily("--dry-run", expect=0).stdout)
+
+
+FULL_TEMPLATE = ("# {{date:YYYY-MM-DD}} ({{date:dddd}})\n\n## Did\n\n-\n\n## Decided\n\n-\n\n"
+                 "## Noticed\n\n- [ ]\n\n## Open at end of day\n\n-\n\n---\n\n"
+                 "<!-- verification habit -->\n")
+
+
+def section(body, heading):
+    """The text under one `## heading`, up to the next heading or the footer."""
+    rest = body.split("\n" + heading + "\n", 1)[1]
+    for stop in ("\n## ", "\n---\n", "\n<!-- gt_daily:begin"):
+        rest = rest.split(stop, 1)[0]
+    return rest
+
+
+class FactsGoUnderTheirHeadings(TheDaysTasksAndProjects):
+    """Owner, 2026-10-01: the job "did not put the information into the proper locations. It
+    just appended to the bottom." Each fact now sits in a marked block under its heading."""
+
+    def setUp(self):
+        super().setUp()
+        (self.vault / "Templates" / "Daily Note.md").write_text(FULL_TEMPLATE)
+
+    def day(self):
+        self.seed()
+        self.commit("a day of work", {
+            "Projects/alpha/README.md": readme(
+                "alpha", "- [x] **Old task** [p:: 2]\n- [ ] **Brand new task**\n"
+                         "- [ ] **Pay the invoice** [due:: %s]\n" % DATE, domain="orchard"),
+            "Projects/alpha/decisions.md": "# Decisions\n\n## ADR-1: Ovens run hot\n\nBody.\n"})
+
+    def test_each_fact_is_under_its_heading_and_noticed_is_untouched(self):
+        self.day()
+        self.run_daily(expect=0)
+        body = self.note()
+        did, decided = section(body, "## Did"), section(body, "## Decided")
+        still, noticed = section(body, "## Open at end of day"), section(body, "## Noticed")
+        self.assertIn("Old task", did)
+        self.assertIn("a day of work", did)
+        self.assertIn("ADR-1: Ovens run hot", decided)
+        self.assertIn("Brand new task", still)
+        self.assertIn("Pay the invoice", still)
+        self.assertNotIn("Brand new task", did)
+        self.assertEqual(noticed.strip(), "- [ ]", "`## Noticed` was written to")
+        footer = body.split("gt_daily:begin", 1)[1]
+        self.assertIn("1 ADR(s)", footer)
+        self.assertNotIn("Old task", footer, "itemised facts are still in the footer")
+
+    def test_the_owners_lines_in_a_section_survive_a_rerun(self):
+        self.day()
+        self.run_daily(expect=0)
+        note = self.vault / "Daily Notes" / ("%s.md" % DATE)
+        note.write_text(note.read_text().replace("## Did\n\n-\n",
+                                                 "## Did\n\n- fixed the oven by hand\n", 1))
+        self.run_daily(expect=0)
+        body = self.note()
+        did = section(body, "## Did")
+        self.assertIn("- fixed the oven by hand", did)
+        self.assertLess(did.index("fixed the oven"), did.index("gt_daily:did:begin"),
+                        "the owner's line should sit above the generated block")
+        for key in ("did", "decided", "open"):
+            self.assertEqual(body.count("gt_daily:%s:begin" % key), 1,
+                             "the %s block was duplicated" % key)
+
+    def test_a_reworded_adr_is_not_a_decision(self):
+        self.seed()
+        self.run_cmd(["git", "-C", str(self.vault), "commit", "-q", "--allow-empty", "-m", "x"])
+        (self.vault / "Projects" / "alpha" / "decisions.md").write_text(
+            "## ADR-1: Ovens run warm\n")
+        self.git("add", "-A")
+        self.run_cmd(["git", "-C", str(self.vault), "commit", "-q", "-m", "old adr"],
+                     env={"GIT_AUTHOR_DATE": "2026-09-26T12:00:00-05:00",
+                          "GIT_COMMITTER_DATE": "2026-09-26T12:00:00-05:00"})
+        self.commit("reword", {"Projects/alpha/decisions.md": "## ADR-1: Ovens run hot\n"})
+        out = self.run_daily("--dry-run", expect=0).stdout
+        self.assertNotIn("gt_daily:decided:begin", out)
+        self.assertIn("0 ADR(s)", out)
+
+    def test_a_sub_projects_adr_is_labelled_with_its_folder(self):
+        self.seed()
+        self.commit("sub adr", {"Projects/alpha/oven/decisions.md": "## ADR-2: Gas, not coal\n"})
+        out = self.run_daily("--dry-run", expect=0).stdout
+        decided = out.split("gt_daily:decided:begin", 1)[1].split("gt_daily:decided:end", 1)[0]
+        self.assertIn("`alpha/oven` — ADR-2: Gas, not coal", decided)
+        self.assertIn("_orchard_", decided, "a sub-project takes its project's domain")
+
+    def test_a_note_with_the_old_bottom_block_is_migrated(self):
+        self.day()
+        note = self.vault / "Daily Notes" / ("%s.md" % DATE)
+        legacy = FULL_TEMPLATE.replace("{{date:YYYY-MM-DD}}", DATE).replace("{{date:dddd}}", "Sunday")
+        note.write_text(legacy + "\n<!-- gt_daily:begin — GENERATED. Edits inside this block are "
+                        "replaced. -->\n\n## Captured automatically — %s\n\n**Tasks closed**\n"
+                        "### orchard\n- `alpha` — Old task\n<!-- gt_daily:end -->\n" % DATE)
+        self.run_daily(expect=0)
+        body = self.note()
+        self.assertEqual(body.count("gt_daily:begin"), 1)
+        self.assertNotIn("### orchard", body, "the old itemised block survived")
+        self.assertIn("Old task", section(body, "## Did"))
+
+    def test_a_missing_heading_is_added_before_the_footer(self):
+        (self.vault / "Templates" / "Daily Note.md").write_text(
+            "# {{date:YYYY-MM-DD}}\n\n## Did\n\n-\n\n## Noticed\n\n- [ ]\n")
+        self.day()
+        self.run_daily(expect=0)
+        body = self.note()
+        self.assertIn("\n## Decided\n", body)
+        self.assertIn("\n## Open at end of day\n", body)
+        self.assertLess(body.index("## Decided"), body.index("## Open at end of day"))
+        self.assertLess(body.index("## Open at end of day"), body.index("gt_daily:begin"))
+        self.assertLess(body.index("gt_daily:did:end"), body.index("## Noticed"),
+                        "the Did block left its section")
 
 
 class ThePushComesFirst(DailyBase):
