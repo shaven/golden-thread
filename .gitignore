@@ -13,3 +13,47 @@ __pycache__/
 
 # Editor workspace files are per-machine, never part of the project (owner, 2026-10-01).
 *.code-workspace
+
+# Editors and IDEs
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+*.sublime-project
+*.sublime-workspace
+
+# More OS litter
+._*
+Thumbs.db
+desktop.ini
+Icon?
+
+# Python tooling caches and environments
+*.pyo
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+*.egg-info/
+.venv/
+venv/
+
+# Logs, temp files and patch leftovers
+*.log
+*.tmp
+*.bak
+*.orig
+*.rej
+
+# Cloud-sync conflict copies (Dropbox)
+*conflicted copy*
+
+# Secrets and local environment — never in a repo (Core rule 9)
+.env
+.env.*
+*.pem
+*.key
+*.p12
+*.pfx
