@@ -13,6 +13,7 @@ The load-bearing tests here are not the detection ones. They are:
 import json
 import os
 import re
+import subprocess
 import unittest
 
 from _harness import Sandbox, SCRIPTS
@@ -83,6 +84,14 @@ class ScanBase(Sandbox):
         """
         import shutil as _sh
         binary = os.environ.get("GT_ASTGREP_BIN") or _sh.which("ast-grep") or _sh.which("sg")
+        if binary and not os.environ.get("GT_ASTGREP_BIN"):
+            # On Linux `sg` is usually shadow-utils' switch-group command, not ast-grep.
+            try:
+                v = subprocess.run([binary, "--version"], capture_output=True, text=True, timeout=10)
+                if "ast-grep" not in (v.stdout + v.stderr).lower():
+                    binary = None
+            except Exception:
+                binary = None
         if not binary:
             self.skipTest("no ast-grep binary on PATH; the astgrep tier cannot be tested "
                           "(brew install ast-grep, or set GT_ASTGREP_BIN)")

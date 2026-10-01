@@ -107,7 +107,11 @@ class GatewayE2E(unittest.TestCase):
         os.environ["LOTR_ALLOW_ENV_SECRETS"] = "1"
         os.environ["LOTR_E2E_TOKEN"] = TOKEN
         self.home = Path(tempfile.mkdtemp(dir="/tmp", prefix="gw"))
-        (self.home / "gateway.json").write_text(json.dumps({"schema": 1, "zone": "personal", "mode": "local"}))
+        # confirm "dialog" uses the injected dialog on every platform; the default "auto" refuses
+        # consent off macOS, which is right for the daemon and wrong for a test that injects one.
+        (self.home / "gateway.json").write_text(json.dumps(
+            {"schema": 1, "zone": "personal", "mode": "local",
+             "local": {"allow": ["*"], "max_tier": "consent", "confirm": "dialog"}}))
         (self.home / "registry.json").write_text(json.dumps(
             {"schema": 1, "zone": "personal", "connections": [_conn("github@personal", self.port)],
              "clients": []}))
