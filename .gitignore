@@ -10,3 +10,6 @@
 # Python bytecode
 __pycache__/
 *.pyc
+
+# Editor workspace files are per-machine, never part of the project (owner, 2026-10-01).
+*.code-workspace
