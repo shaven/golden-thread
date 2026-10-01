@@ -12,12 +12,13 @@ Contract:
 import shutil
 import unittest
 
-from _harness import Sandbox, REPO, GT
+from _harness import Sandbox, REPO, GT, needs_dev
 
 CHECK = REPO / "dev" / "check_docstring_flags.py"
 _NO_CACHE = shutil.ignore_patterns("__pycache__", "*.pyc", "*.pyc.*")
 
 
+@needs_dev
 class DocstringFlags(Sandbox):
     def check(self, version_dir):
         return self.py(CHECK, str(version_dir))

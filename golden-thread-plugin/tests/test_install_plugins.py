@@ -24,7 +24,7 @@ import shutil
 import subprocess
 import unittest
 
-from _harness import Sandbox, REPO, GT, WIKI, load_module
+from _harness import Sandbox, REPO, GT, WIKI, load_module, needs_dev
 
 INSTALL = REPO / "install.sh"
 # DERIVED from the declaration install.sh registers FROM. A literal count here tests only
@@ -77,6 +77,7 @@ class ShippedWithMatchesHistory(unittest.TestCase):
 
 
 class PluginDiscoveryAgrees(Sandbox):
+    @needs_dev
     def test_install_sh_discovery_equals_dev_plugins_list(self):
         plugins_py = REPO / "dev" / "plugins.py"
         if not plugins_py.is_file():

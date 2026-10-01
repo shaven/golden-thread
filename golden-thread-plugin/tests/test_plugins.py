@@ -18,11 +18,12 @@ import json
 import shutil
 import unittest
 
-from _harness import Sandbox, REPO, GT
+from _harness import Sandbox, REPO, GT, needs_dev
 
 TOOL = REPO / "dev" / "plugins.py"
 
 
+@needs_dev
 class PluginsTest(Sandbox):
     def plugin(self, root, d, v, name=None, meta=True):
         vd = root / d / v

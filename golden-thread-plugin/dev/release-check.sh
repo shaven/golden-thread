@@ -309,9 +309,9 @@ PY
 [ -z "$MISSING" ] && ok "every skill in README, MANUAL, golden-thread-docs; every setting in MANUAL" || { echo "$MISSING"; bad "docs do not cover the release"; }
 # ../CHANGELOG.md is included deliberately: a changelog nobody checks is the first
 # document to go stale, and it is the one a stranger trusts most.
-# BUILD-NOTE.md is in this list for a reason the others are not: the project CHANGELOG
-# does NOT travel to gt-src, so the build note is the only account of the release that
-# reaches the other machine. One naming the previous version is worse than none.
+# BUILD-NOTE.md is in this list for a reason the others are not: it is the owner's account of the
+# release for the receiving machine (since 2026-10-01 it stays here and the owner relays it; the
+# copygt.sh report replaces it there). One naming the previous version is worse than none.
 STALE=$(for f in README.md MANUAL.md golden-thread-docs.md ONBOARDING.md BUILD-NOTE.md ../README.md ../CHANGELOG.md; do
   [ -f "$f" ] || continue
   grep -q "$GTV" "$f" || echo "$f never names $GTV"

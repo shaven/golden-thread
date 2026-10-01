@@ -20,13 +20,14 @@ import shutil
 from pathlib import Path
 import unittest
 
-from _harness import Sandbox, REPO, GT, WIKI, SCRIPTS, load_module
+from _harness import Sandbox, REPO, GT, WIKI, SCRIPTS, load_module, needs_dev
 
 
 CHECK = REPO / "dev" / "check_wiring_coverage.py"
 IGNORE = shutil.ignore_patterns("__pycache__", "*.pyc", ".DS_Store")
 
 
+@needs_dev
 class WiringCoverage(Sandbox):
     def plugin_copy(self):
         """A writable plugin root, so a test can break one thing on purpose."""
@@ -155,6 +156,7 @@ class WiringCoverage(Sandbox):
         self.assertEqual(p.returncode, 2)
 
 
+@needs_dev
 class ScheduledJobsReachTheHooksDir(Sandbox):
     """Every gt_schedule.JOBS script must be in HOOK_DIR_SCRIPTS (0.17.2).
 
@@ -192,6 +194,7 @@ class ScheduledJobsReachTheHooksDir(Sandbox):
         self.assertTrue(any("gt_nowhere.py" in p for p in problems), problems)
 
 
+@needs_dev
 class ModuleWiring(Sandbox):
     """A fixture module with a reporter hook: wired when on, absent when off."""
 

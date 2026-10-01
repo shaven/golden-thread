@@ -11,6 +11,42 @@ release's own summary line, kept short rather than reconstructed after the fact.
 
 ---
 
+## Unreleased — repository tooling (no gt version change)
+
+### copygt.sh: gt-src to a validated, pushed install in one command
+
+**What.** gt-src now carries two tools at its root, `copygt.sh` and `validate-install.py`, written by
+`dev/sync-gt-src.sh` at every publish and covered by `SHA256SUMS`. On the receiving machine,
+`./copygt.sh --dest <repo>` runs five steps and stops at the first failure:
+
+1. It verifies gt-src against `SHA256SUMS` and `SOURCE.json`. A mismatch exits 3 with nothing
+   written.
+2. It mirrors gt-src onto the repository exactly. It adds, updates and **deletes** every tracked
+   file gt-src no longer carries; `.git` and untracked files are untouched.
+3. It runs `install.sh`.
+4. It validates the install and writes a report:
+   - **PRESENT**, **MISSING**, **WORKED** and **FAILED** sections. A check that could not run is
+     FAILED, never a pass.
+   - A closing `clean: N/N`, counted against what the tree declared.
+   - The validation reuses the release's own `gt_doctor.py post-install` gate rather than a
+     second suite.
+5. It commits and pushes, **only** when the report is clean.
+
+`--dry-run` lists every add, change and delete and writes nothing.
+
+**Also.** gt-src no longer carries `*.code-workspace`, `BUILD-NOTE.md`, either `CLAUDE.md`, the
+plugin's `dev/` or `SUBMISSIONS.md`, so the first `copygt.sh` run removes them from the receiving
+repository. The tests that read `dev/` are marked `@needs_dev` and skip, with the reason, where
+`dev/` is absent.
+
+**Why.** The other machine copied gt-src by hand, and a hand copy only adds. On 2026-10-01 the
+owner had to delete `Golden Thread.code-workspace` from the GitHub repository by hand. It had been
+removed here the day before (`ff0c140`). Every release also ended with "install, then hope",
+with no account of what landed (owner, 2026-10-01: *"What gets checked in is just the code and
+what gets installed with install.sh"*).
+
+---
+
 ## gt 0.17.11 — 2026-10-01
 
 One owner ruling drives most of this release: *"the agents write to the queues rather than directly

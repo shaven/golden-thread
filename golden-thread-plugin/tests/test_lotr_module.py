@@ -19,7 +19,7 @@ import subprocess
 import sys
 import unittest
 
-from _harness import REPO, latest_version_dir
+from _harness import REPO, latest_version_dir, needs_dev
 
 GW = latest_version_dir(REPO / "golden-thread-lotr")
 SCRIPTS = GW / "scripts"
@@ -36,6 +36,7 @@ STDLIB = {
 
 
 class GatewayModule(unittest.TestCase):
+    @needs_dev
     def test_valid_module_admits_this_gt_and_is_off_by_default(self):
         gt = latest_version_dir(REPO / "golden-thread").name
         r = subprocess.run([sys.executable, str(REPO / "dev" / "plugins.py"), "module-check",

@@ -20,7 +20,7 @@ import json
 import re
 import unittest
 
-from _harness import Sandbox, REPO, SCRIPTS, GT, load_module
+from _harness import Sandbox, REPO, SCRIPTS, GT, load_module, needs_dev
 
 PLUGINS = REPO / "dev" / "plugins.py"
 COMPONENTS = SCRIPTS / "gt_components.py"
@@ -61,6 +61,7 @@ def write_module(root, d="golden-thread-zed", version="1.0.0", plugin="gt-zed",
 DROP = object()
 
 
+@needs_dev
 class ModuleFormat(Sandbox):
     def setUp(self):
         super().setUp()

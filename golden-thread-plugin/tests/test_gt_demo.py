@@ -20,7 +20,7 @@ import shutil
 import unittest
 from pathlib import Path
 
-from _harness import Sandbox, GT, WIKI, REPO, PYTHON, latest_version_dir
+from _harness import Sandbox, GT, WIKI, REPO, PYTHON, latest_version_dir, needs_dev
 
 ACTS = 9  # core acts only; module acts (e.g. wiki's and watch's demo/act.md) are added by `tour-acts`
 DEMO_MODULE = latest_version_dir(REPO / "golden-thread-demo")
@@ -359,6 +359,7 @@ class DemoTest(Sandbox):
         self.assertFalse(self.demo.exists())
 
     # -- the module itself -----------------------------------------------------------------
+    @needs_dev
     def test_module_json_lists_exactly_the_files_present(self):
         m = json.loads((DEMO_MODULE / "module.json").read_text())
         plugin = json.loads((DEMO_MODULE / ".claude-plugin" / "plugin.json").read_text())

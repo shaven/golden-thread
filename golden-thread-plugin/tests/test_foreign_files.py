@@ -11,12 +11,13 @@ Contract:
 """
 import unittest
 
-from _harness import Sandbox, REPO
+from _harness import Sandbox, REPO, needs_dev
 
 
 TOOL = REPO / "dev" / "foreign_files.py"
 
 
+@needs_dev
 class ForeignFiles(Sandbox):
     def setUp(self):
         super().setUp()

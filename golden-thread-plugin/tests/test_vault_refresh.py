@@ -17,7 +17,7 @@ import json
 import os
 import tarfile
 
-from _harness import Sandbox, SCRIPTS, TEMPLATES, REPO, core_rules_dir
+from _harness import Sandbox, SCRIPTS, TEMPLATES, REPO, core_rules_dir, needs_dev
 
 REFRESH = SCRIPTS / "vault_refresh.py"
 
@@ -61,6 +61,7 @@ class ShippedHashesCoverTheTree(Base):
         self.assertEqual(missing, [], "not in shipped-hashes.json -- run "
                                       "dev/shipped_hashes.py <release-dir>")
 
+    @needs_dev
     def test_the_generator_check_passes(self):
         p = self.py(REPO / "dev" / "shipped_hashes.py", TEMPLATES.parent, "--check")
         self.assertOk(p, "templates/shipped-hashes.json is stale")

@@ -6,11 +6,12 @@ failed to install from gt-src. `git status` called the tree clean; this must not
 """
 import unittest
 
-from _harness import Sandbox, REPO
+from _harness import Sandbox, REPO, needs_dev
 
 TOOL = REPO / "dev" / "tree_is_commit.py"
 
 
+@needs_dev
 class TreeIsCommit(Sandbox):
     def setUp(self):
         super().setUp()

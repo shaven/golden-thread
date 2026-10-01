@@ -12,7 +12,7 @@ import subprocess
 import sys
 import unittest
 
-from _harness import Sandbox, WIKI, REPO
+from _harness import Sandbox, WIKI, REPO, needs_dev
 
 KEYS = {"schema", "name", "plugin", "version", "requires_gt", "summary", "default", "demo",
         "skills", "scripts", "templates", "hooks", "hookdir_scripts", "settings",
@@ -65,6 +65,7 @@ class WikiModuleJson(Sandbox):
         self.assertEqual(self.mod.get("hookdir_scripts", []), [])
         self.assertEqual(self.mod["replaces_core"], [])
 
+    @needs_dev
     def test_dev_module_check_when_available(self):
         tool = REPO / "dev" / "plugins.py"
         usage = subprocess.run([sys.executable, str(tool)], capture_output=True, text=True)

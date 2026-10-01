@@ -3,7 +3,7 @@ import json
 import unittest
 from pathlib import Path
 
-from _harness import Sandbox, REPO, PYTHON
+from _harness import Sandbox, REPO, PYTHON, needs_dev
 
 FR = REPO / "dev" / "feature_requests.py"
 
@@ -44,6 +44,7 @@ A test runs the example script in a sandbox and checks stdout says hello; anothe
 """
 
 
+@needs_dev
 class FeatureRequestTest(Sandbox):
     def setUp(self):
         super().setUp()

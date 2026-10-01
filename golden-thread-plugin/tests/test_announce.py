@@ -8,7 +8,7 @@ import json
 import shutil
 import unittest
 
-from _harness import Sandbox, REPO, PYTHON
+from _harness import Sandbox, REPO, PYTHON, needs_dev
 
 ANNOUNCE = REPO / "dev" / "announce.py"
 PUBLISH = REPO / "dev" / "publish.sh"
@@ -63,6 +63,7 @@ esac
 """
 
 
+@needs_dev
 class Announce(Sandbox):
     def setUp(self):
         super().setUp()

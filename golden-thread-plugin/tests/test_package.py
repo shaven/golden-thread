@@ -19,7 +19,7 @@ import unittest
 import zipfile
 from pathlib import Path
 
-from _harness import Sandbox, REPO, GT, WIKI, ENFORCEMENT_HOOKS
+from _harness import Sandbox, REPO, GT, WIKI, ENFORCEMENT_HOOKS, needs_dev
 
 TOP = ("package.sh", "install.sh", "selftest.sh", "README.md", "INSTALL.md",
        "ONBOARDING.md", "MANUAL.md")
@@ -34,6 +34,7 @@ def shipped_files(vdir: Path, dirs):
             for p in (vdir / d).rglob("*") if p.is_file()}
 
 
+@needs_dev
 class PackageTest(Sandbox):
     def setUp(self):
         super().setUp()

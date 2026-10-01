@@ -2,8 +2,12 @@
 
 **Read this first if you are the person taking this tree into the other repository.**
 
-This file travels with the publish. `SOURCE.json`, at the root of gt-src, names the exact commit
-this tree was cut from.
+> **This file no longer travels in gt-src** (owner ruling, 2026-10-01). gt-src now carries only the
+> code, what `install.sh` installs, and its own tools (`copygt.sh`, `validate-install.py`,
+> `SHA256SUMS`, `SOURCE.json`). `BUILD-NOTE.md`, both `CLAUDE.md`, `SUBMISSIONS.md`, the plugin's
+> `dev/` and editor `*.code-workspace` files stay on the publishing machine. On the receiving
+> machine, the report `copygt.sh` writes replaces this note; its content reaches you from the owner.
+> `SOURCE.json`, at the root of gt-src, names the exact commit the tree was cut from.
 
 > **gt-src changed shape in 0.17.3 — read this before copying.** It now mirrors the GitHub
 > repository's layout: the repo root (`README.md`, `CHANGELOG.md`, `LICENSE`, `CLAUDE.md`,
@@ -108,7 +112,76 @@ git diff 22fb651 -- golden-thread-plugin/tests/test_gt_daily.py      # the three
 Last checked 2026-10-01 07:20 on `feat/queue-first-writes`: all three bodies byte-identical to
 `22fb651`, and the whole `test_gt_daily` suite passes (`self-verified`). Re-run it at the cut.
 
-## 3. What to run after install
+## 3. What to run on the receiving machine
+
+**One command, from gt-src** (new 2026-10-01; repository tooling, no gt version change):
+
+```bash
+cd <gt-src>
+./copygt.sh --dest <repo> --dry-run   # list every add, change and delete; writes nothing
+./copygt.sh --dest <repo>             # verify, mirror, install, validate; commit + push only if clean
+```
+
+It does, in order, and stops at the first failure:
+
+1. **Verify gt-src.** Every file is checked against `SHA256SUMS`, and `SHA256SUMS` against
+   `SOURCE.json` `tree_sha256`, before anything is touched. A mismatch exits **3**, and nothing is
+   written.
+2. **Mirror onto `<repo>` exactly.** It adds, updates and **deletes** every tracked file gt-src no
+   longer carries. `.git` and untracked local files are left alone.
+   - It refuses a repo with uncommitted changes to tracked files.
+   - It never writes `copygt.sh`, `validate-install.py`, `SHA256SUMS`, `SOURCE.json` or the report
+     into the repo.
+   - **First run:** it deletes the five files that no longer ship (`*.code-workspace`,
+     `BUILD-NOTE.md`, both `CLAUDE.md`, `dev/`, `SUBMISSIONS.md`) from the repo.
+   - **It also deletes release directories older than the previous one**, because gt-src carries
+     only the newest two of each plugin. The dry run lists them, and git history keeps them.
+   - The applied gt-src commit is recorded in `~/.claude/golden-thread/copygt/applied.json`.
+3. **`install.sh`** runs from the repo. Its own post-install gate runs at the end, as before.
+4. **Validate** (`validate-install.py`). It runs `gt_doctor.py post-install` at its `final` stage
+   and checks that every declared plugin and skill landed. The report goes to
+   `~/.claude/golden-thread/copygt/report-<time>.md` (`.json` beside it, install log beside it) and
+   has four sections:
+   - **PRESENT:** plugins, versions, skills, hooks wired, Core rules;
+   - **MISSING:** anything declared but not installed;
+   - **WORKED:** each check that passed;
+   - **FAILED:** each check that failed **or could not run**.
+
+   It ends with **`clean: N/N`**, where N counts what the tree DECLARED: copygt's own steps, two
+   checks per plugin this machine installs, and every row the release's gate can emit.
+5. **Commit and push, only when clean.** The commit message names the gt-src commit and every
+   plugin version. Anything not clean exits **4** before the commit and leaves the report. The
+   copied files stay in the work tree for you to inspect.
+
+Options: `--no-push` (commit, do not push), `--vault V`, `--report FILE` (never inside the repo).
+Exit codes: 0 done, 2 refused, 3 checksum, 4 not clean, 5 commit or push failed.
+
+**The tree_sha256 to compare is the one `sync-gt-src.sh` printed at the latest sync.** The 0.17.11
+publish printed `6209dca0de65aeb65adec0250f0c94e841825ba82e9c8f001fe1eebf6bca12fd`. The re-sync
+that ships `copygt.sh` changes it: the tree gains `copygt.sh` and `validate-install.py` and loses
+the five excluded files. So compare against whatever the publishing machine printed most
+recently, not against a number written here. `copygt.sh` prints the value it verified.
+
+**The same Dropbox-synced vault?** If the receiving machine opens the same vault as the publishing
+Mac, that vault is already upgraded to 0.17.11 here, `PROTOCOL.md` is already merged, and the
+merge base is recorded. `/gt:gt-upgrade` there should report nothing pending. **Never redo the
+merge.**
+
+**Settings are per machine.** `release_announce=post`, `skeptic_pass=on` and
+`agent_specialization=on` were set on the publishing Mac only. The receiving machine keeps its own
+settings; see `/gt:gt-settings`.
+
+### 3a. By hand: the fallback when copygt.sh cannot be used
+
+A hand copy must do what copygt.sh does:
+- **Delete** every tracked file in the repo that gt-src no longer carries. A copy that only adds
+  is how `Golden Thread.code-workspace` outlived its removal.
+- Leave out `copygt.sh`, `validate-install.py`, `SHA256SUMS` and `SOURCE.json`. They are
+  gt-src-only.
+
+The steps below install **from gt-src itself**, which is the one place `SHA256SUMS` sits beside the
+tree. The repo never holds `SHA256SUMS`, so `install.sh` run from the repo reports "not a
+published gt-src", and `--require-checksum` would refuse there.
 
 **The checksum check is automatic — and on this machine, make it strict.** gt-src ships
 `SHA256SUMS` (a sha256 per file, by path) and `SOURCE.json` carries `tree_sha256` — the sha256 of
@@ -221,6 +294,11 @@ Then, in a Claude Code session on that machine:
 - **When to release:** the owner says when. Then push straight to main, with no PR.
 
 ## 6. What will be misread if nobody says it
+
+- **A known guard false positive in 0.17.11, fixed in the next build.** The guard's Bash branch
+  does not expand `$VARIABLES` in a redirect target. It also matches `>` inside quoted strings.
+  So a harmless command can be denied as a vault write. **Workaround:** use literal paths. Write
+  any text containing `>` with the Write tool to a file outside the vault, then queue it.
 
 - **The same rule id now means something different.** An old vault copy of
   `core_concurrent_session_claim.md` still says "claim, then write" until `/gt:gt-upgrade` runs.

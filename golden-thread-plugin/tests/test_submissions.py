@@ -14,6 +14,8 @@ import time
 import unittest
 from pathlib import Path
 
+from _harness import needs_dev
+
 REPO = Path(__file__).resolve().parent.parent
 SCRIPT = REPO / "dev" / "submissions.py"
 
@@ -34,6 +36,7 @@ def pack(**over):
     return d
 
 
+@needs_dev
 class SubmissionsTest(unittest.TestCase):
     def setUp(self):
         self.tmp = tempfile.mkdtemp(prefix="gt-sub-")
@@ -483,6 +486,7 @@ if __name__ == "__main__":
     unittest.main()
 
 
+@needs_dev
 class ShippedPacksPassTheirOwnGate(unittest.TestCase):
     """Every pack gt SHIPS must pass the validator gt asks CONTRIBUTORS to pass.
 

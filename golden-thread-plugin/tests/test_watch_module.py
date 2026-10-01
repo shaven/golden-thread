@@ -14,7 +14,7 @@ import subprocess
 import sys
 import unittest
 
-from _harness import Sandbox, GT, WIKI, REPO, PYTHON, load_module, latest_version_dir
+from _harness import Sandbox, GT, WIKI, REPO, PYTHON, load_module, latest_version_dir, needs_dev
 
 WATCH = latest_version_dir(REPO / "golden-thread-watch")
 INSTALL = REPO / "install.sh"
@@ -86,6 +86,7 @@ class WatchModuleJson(unittest.TestCase):
         for name in re.findall(r"<module:watch>/([A-Za-z0-9_.-]+)", act):
             self.assertTrue((WATCH / "scripts" / name).is_file(), name)
 
+    @needs_dev
     def test_dev_module_and_manifest_check(self):
         for cmd in ("module-check", "manifest-check"):
             p = subprocess.run([PYTHON, str(REPO / "dev" / "plugins.py"), cmd, str(WATCH)],

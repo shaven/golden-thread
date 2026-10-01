@@ -9,7 +9,7 @@ import json
 import shutil
 import unittest
 
-from _harness import Sandbox, TOOLS, REPO, GT, load_module
+from _harness import Sandbox, TOOLS, REPO, GT, load_module, needs_dev
 
 TOOL = TOOLS / "gt_events.py"
 
@@ -172,6 +172,7 @@ class GtEvents(Sandbox):
         self.assertIn("3 event(s)", self.tool("list").stdout)
 
     # -- CLI contract ----------------------------------------------------------
+    @needs_dev
     def test_holds_the_cli_contract(self):
         """check_cli_contract's own check, pointed at this tool's writing verbs."""
         mod = load_module(REPO / "dev" / "check_cli_contract.py", "gt_cli_contract_ev")

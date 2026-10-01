@@ -20,7 +20,7 @@ import subprocess
 import sys
 import unittest
 
-from _harness import Sandbox, REPO, GT, WIKI, SCRIPTS, load_module, latest_version_dir
+from _harness import Sandbox, REPO, GT, WIKI, SCRIPTS, load_module, latest_version_dir, needs_dev
 
 MODULE = latest_version_dir(REPO / "golden-thread-report-card")
 INSTALL = REPO / "install.sh"
@@ -72,6 +72,7 @@ class ReportCardModuleJson(unittest.TestCase):
         self.assertFalse((GT / "scripts" / SCRIPT).exists(),
                          "gt core still ships %s beside the module" % SCRIPT)
 
+    @needs_dev
     def test_dev_module_check_when_available(self):
         tool = REPO / "dev" / "plugins.py"
         usage = subprocess.run([sys.executable, str(tool)], capture_output=True, text=True)

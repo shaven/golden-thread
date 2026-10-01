@@ -25,6 +25,17 @@
 # Only this machine writes gt-src; other machines read it and write only to
 # gt-feature-requests/new/.
 #
+# What gt-src does NOT carry (owner ruling, 2026-10-01: "What gets checked in is just the code and
+# what gets installed with install.sh"): editor files (*.code-workspace), BUILD-NOTE.md, both
+# CLAUDE.md (repo root and plugin root), the plugin's dev/ (release tooling) and SUBMISSIONS.md.
+# They stay in this repository and never reach the receiving one.
+#
+# What ONLY gt-src carries: copygt.sh and validate-install.py at its root, written here from
+# dev/copygt.sh and dev/validate-install.py at every publish so they always match the tree they
+# ship in (SHA256SUMS covers both). The receiving machine runs `./copygt.sh --dest <repo>`: verify,
+# mirror (deletes included), install, validate, and commit + push only when clean. copygt.sh never
+# writes itself, validate-install.py, SHA256SUMS or SOURCE.json into that repository.
+#
 # Destination: $GT_SRC, else ~/Library/CloudStorage/OneDrive-Personal/Projects2/gt-src
 set -euo pipefail
 cd "$(dirname "$0")/.."
@@ -78,6 +89,9 @@ fi
 
 STAGE=$(mktemp -d); VCOPY=""; trap 'rm -rf "$STAGE" "$VCOPY"' EXIT
 git -C "$ROOT" ls-files -z | while IFS= read -r -d '' f; do  # the WHOLE repo, root-relative
+  case "$f" in                                                # never published (owner, 2026-10-01)
+    *.code-workspace|CLAUDE.md|SUBMISSIONS.md|"${PREFIX}CLAUDE.md"|"${PREFIX}BUILD-NOTE.md"|"${PREFIX}dev/"*) continue ;;
+  esac
   for i in "${!PDIRS[@]}"; do                                 # older releases stay home
     case "$f" in
       "$PREFIX${PDIRS[$i]}"/*)
@@ -87,6 +101,12 @@ git -C "$ROOT" ls-files -z | while IFS= read -r -d '' f; do  # the WHOLE repo, r
   done
   mkdir -p "$STAGE/$(dirname "$f")"
   cp -p "$ROOT/$f" "$STAGE/$f"
+done
+# gt-src's own tools, at its root: from this commit's dev/, so they match the tree they ship in.
+for t in copygt.sh validate-install.py; do
+  [ -f "$PLUGIN/dev/$t" ] || { echo "REFUSED: dev/$t is missing — gt-src would ship without it"; exit 2; }
+  cp -p "$PLUGIN/dev/$t" "$STAGE/$t"
+  chmod 755 "$STAGE/$t"
 done
 N=$(find "$STAGE" -type f | wc -l | tr -d ' ')
 [ "$N" -gt 0 ] || { echo "REFUSED: staged 0 files — refusing to publish an empty tree"; exit 2; }
@@ -174,15 +194,27 @@ else
 fi
 [ "$(shasum -a 256 "$DEST/SHA256SUMS" | cut -d' ' -f1)" = "$TREE_SHA" ] || vbad "SHA256SUMS changed in transit"
 P="$DEST/$PREFIX"                     # the plugin root inside the published repo layout
-for f in install.sh selftest.sh build-docs.py README.md MANUAL.md INSTALL.md tests/run.sh dev/release-check.sh dev/plugins.py; do
+for f in install.sh selftest.sh build-docs.py README.md MANUAL.md INSTALL.md tests/run.sh; do
   [ -f "$P$f" ] || vbad "missing $PREFIX$f"
 done
+# gt-src's own tools arrive, executable and listed in SHA256SUMS; the excluded files do not.
+V0=$VFAIL
+for t in copygt.sh validate-install.py; do
+  [ -x "$DEST/$t" ] || vbad "missing or not executable: $t"
+  grep -q "  \./$t\$" "$DEST/SHA256SUMS" || vbad "$t is not covered by SHA256SUMS"
+done
+for f in CLAUDE.md SUBMISSIONS.md "${PREFIX}CLAUDE.md" "${PREFIX}BUILD-NOTE.md" "${PREFIX}dev"; do
+  [ ! -e "$DEST/$f" ] || vbad "$f was published; it must stay out of gt-src"
+done
+[ -z "$(find "$DEST" -name '*.code-workspace' -print -quit)" ] || vbad "a *.code-workspace file was published"
+if [ "$VFAIL" = "$V0" ]; then vok "copygt.sh and validate-install.py present and checksummed; the excluded files are absent"; fi
 # The repo root arrives too -- the reason the layout changed (2026-09-28).
 # Read line by line: a `for f in $(...)` loop split "Golden Thread.code-workspace" into two
 # names and reported a file that was present as missing (first repo-layout publish, 0.17.3).
 while IFS= read -r f; do
   [ -f "$DEST/$f" ] || vbad "missing repo-root file $f"
-done < <(git -C "$ROOT" ls-files --full-name -- ':(top)*' | grep -v /)
+done < <(git -C "$ROOT" ls-files --full-name -- ':(top)*' | grep -v / \
+           | grep -vxE 'CLAUDE\.md|SUBMISSIONS\.md|.*\.code-workspace' || true)
 # Every plugin arrives with its metadata AND its MANIFEST.json (hash trust, since 0.13.0).
 for i in "${!PDIRS[@]}"; do
   for f in .claude-plugin/plugin.json MANIFEST.json; do

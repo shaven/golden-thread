@@ -10,7 +10,7 @@ Contract:
 import shutil
 import unittest
 
-from _harness import Sandbox, REPO, GT
+from _harness import Sandbox, REPO, GT, needs_dev
 
 
 CHECK = REPO / "dev" / "check_cli_contract.py"
@@ -21,6 +21,7 @@ CHECK = REPO / "dev" / "check_cli_contract.py"
 _NO_CACHE = shutil.ignore_patterns("__pycache__", "*.pyc", "*.pyc.*")
 
 
+@needs_dev
 class CliContract(Sandbox):
     def check(self, version_dir):
         return self.py(CHECK, str(version_dir))

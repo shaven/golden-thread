@@ -30,7 +30,7 @@ import time
 import unittest
 from pathlib import Path
 
-from _harness import Sandbox, GT, WIKI, REPO, PYTHON, SCRIPTS, TOOLS, GIT_ID, \
+from _harness import Sandbox, GT, WIKI, REPO, PYTHON, SCRIPTS, TOOLS, GIT_ID, needs_dev, \
     latest_version_dir, gt_requires_range, load_module
 
 VIS = latest_version_dir(REPO / "golden-thread-visualize")
@@ -110,6 +110,7 @@ class VisualizeModule(unittest.TestCase):
         self.module = json.loads((VIS / "module.json").read_text(encoding="utf-8"))
         self.plugin = json.loads((VIS / ".claude-plugin" / "plugin.json").read_text("utf-8"))
 
+    @needs_dev
     def test_module_is_valid_and_agrees_with_plugin(self):
         p = subprocess.run([PYTHON, str(REPO / "dev" / "plugins.py"), "module-check", str(VIS),
                             "--gt", GT.name], capture_output=True, text=True)
@@ -130,6 +131,7 @@ class VisualizeModule(unittest.TestCase):
         # requires_gt admits the gt in this tree, which module-check --gt above proves.
         self.assertTrue(m["requires_gt"].startswith(">="), m["requires_gt"])
 
+    @needs_dev
     def test_manifest_matches_the_tree(self):
         p = subprocess.run([PYTHON, str(REPO / "dev" / "plugins.py"), "manifest-check",
                             str(VIS)], capture_output=True, text=True)

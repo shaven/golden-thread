@@ -13,11 +13,12 @@ import json
 import shutil
 import unittest
 
-from _harness import Sandbox, REPO
+from _harness import Sandbox, REPO, needs_dev
 
 PUBLISH = REPO / "dev" / "publish.sh"
 
 
+@needs_dev
 class CheckAnnounced(Sandbox):
     def setUp(self):
         super().setUp()

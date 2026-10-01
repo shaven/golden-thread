@@ -5,11 +5,12 @@ Uses an invented term ('zorblax') so this test file itself contains nothing to s
 import unittest
 import zipfile
 
-from _harness import Sandbox, REPO
+from _harness import Sandbox, REPO, needs_dev
 
 SC = REPO / "dev" / "scrub_check.py"
 
 
+@needs_dev
 class ScrubCheckTest(Sandbox):
     def setUp(self):
         super().setUp()
@@ -115,6 +116,7 @@ class ScrubCheckTest(Sandbox):
 if __name__ == "__main__":
     unittest.main()
 
+@needs_dev
 class ScrubRemotePdf(Sandbox):
     """PDF text needs a real reader; this machine need not be the one that has it.
 

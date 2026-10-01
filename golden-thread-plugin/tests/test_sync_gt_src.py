@@ -4,17 +4,19 @@ Runs against a throwaway git repo shaped like the plugin root, never the real on
 """
 import json
 import shutil
+import sys
 import tarfile
 import unittest
 from pathlib import Path
 
-from _harness import Sandbox, REPO
+from _harness import Sandbox, REPO, needs_dev
 
 SYNC = REPO / "dev" / "sync-gt-src.sh"
 SCRUB = REPO / "dev" / "scrub_check.py"
 PLUGINS = REPO / "dev" / "plugins.py"
 
 
+@needs_dev
 class SyncGtSrcTest(Sandbox):
     def setUp(self):
         super().setUp()
@@ -28,6 +30,8 @@ class SyncGtSrcTest(Sandbox):
         shutil.copy(SCRUB, r / "dev" / "scrub_check.py")
         shutil.copy(PLUGINS, r / "dev" / "plugins.py")
         shutil.copy(REPO / "dev" / "tree_is_commit.py", r / "dev" / "tree_is_commit.py")
+        for tool in ("copygt.sh", "validate-install.py"):      # gt-src's own tools, written per publish
+            shutil.copy2(REPO / "dev" / tool, r / "dev" / tool)
         # A third plugin proves the sync iterates over what is discovered, not a named pair.
         for plugin, name, versions in (("golden-thread", "gt", ("0.9.8", "0.9.9", "0.10.0")),
                                        ("golden-thread-wiki", "gt-wiki", ("0.1.0", "0.1.1", "0.1.2")),
@@ -41,7 +45,14 @@ class SyncGtSrcTest(Sandbox):
         (r / "install.sh").write_text("#!/bin/sh\necho hi\n")
         (r / "MANUAL.md").write_text("# manual\n")
         (r.parent / "CHANGELOG.md").write_text("# changelog\n")   # a repo-root file
-        (r.parent / "My Project.code-workspace").write_text("{}\n")  # a root file with a space
+        (r.parent / "Read Me First.txt").write_text("hi\n")           # a root file with a space
+        # Owner ruling 2026-10-01: these five never reach gt-src (nor the receiving repo).
+        (r.parent / "My Project.code-workspace").write_text("{}\n")
+        (r / "golden-thread-plugin.code-workspace").write_text("{}\n")
+        (r.parent / "CLAUDE.md").write_text("# dev session notes\n")
+        (r / "CLAUDE.md").write_text("# dev session notes\n")
+        (r / "BUILD-NOTE.md").write_text("# build note\n")
+        (r.parent / "SUBMISSIONS.md").write_text("# submissions\n")
         (r / "golden-thread-plugin.zip").write_text("build artifact\n")
         (r / ".gitignore").write_text("*.zip\n")
         self.repo = r
@@ -86,7 +97,39 @@ class SyncGtSrcTest(Sandbox):
         self.assertEqual(src["layout"], "repository")
         # 0.17.3 (owner): gt-src takes the GitHub repo's layout, repo root included
         self.assertIn("../CHANGELOG.md", got, "repo-root files must publish at gt-src's root")
-        self.assertIn("../My Project.code-workspace", got)
+        self.assertIn("../Read Me First.txt", got)
+
+    def test_the_five_excluded_files_are_never_published(self):
+        """Owner, 2026-10-01: editor files, BUILD-NOTE.md, both CLAUDE.md, dev/ and SUBMISSIONS.md
+        stay out of gt-src -- and so out of the repository copygt.sh fills from it."""
+        self.assertOk(self.sync())
+        got = self.files()
+        for f in ("../My Project.code-workspace", "golden-thread-plugin.code-workspace",
+                  "../CLAUDE.md", "CLAUDE.md", "BUILD-NOTE.md", "../SUBMISSIONS.md"):
+            self.assertNotIn(f, got)
+        self.assertEqual([f for f in got if f.startswith("dev/")], [], "dev/ must not publish")
+        sums = (self.dest / "SHA256SUMS").read_text()
+        for f in ("CLAUDE.md", "BUILD-NOTE.md", "SUBMISSIONS.md", "code-workspace", "/dev/"):
+            self.assertNotIn(f, sums)
+
+    def test_copygt_and_its_validator_land_in_gt_src_and_are_checksummed(self):
+        """copygt.sh is regenerated at EVERY publish from dev/, so it matches the tree it ships in,
+        and SHA256SUMS covers it -- the receiving machine verifies it like any other file."""
+        import hashlib, os
+        self.assertOk(self.sync())
+        sums = {l.split("  ", 1)[1]: l.split("  ", 1)[0]
+                for l in (self.dest / "SHA256SUMS").read_text().splitlines()}
+        for tool in ("copygt.sh", "validate-install.py"):
+            p = self.dest / tool
+            self.assertTrue(p.is_file(), tool)
+            self.assertTrue(os.access(p, os.X_OK), tool + " must be executable")
+            self.assertEqual(p.read_bytes(), (self.repo / "dev" / tool).read_bytes())
+            self.assertEqual(sums.get("./" + tool), hashlib.sha256(p.read_bytes()).hexdigest())
+        # a changed dev/copygt.sh is what the NEXT publish carries
+        (self.repo / "dev" / "copygt.sh").write_text("#!/bin/sh\n# v2\n")
+        self.run_cmd(["git", "-C", self.tmp / "repo", "commit", "-qam", "copygt v2"])
+        self.assertOk(self.sync())
+        self.assertEqual((self.dest / "copygt.sh").read_text(), "#!/bin/sh\n# v2\n")
 
     def test_checksums_let_the_receiving_machine_verify_every_file(self):
         """Owner, 2026-09-28: the installing machine must be able to tell it has the newest
@@ -163,6 +206,38 @@ class SyncGtSrcTest(Sandbox):
         self.assertEqual(len(backups), 1)
         with tarfile.open(backups[0]) as t:
             self.assertIn("./stray.txt", t.getnames())
+
+
+
+class PublishedTestsDoNotNeedDev(Sandbox):
+    """gt-src -- and the repository copygt.sh fills from it -- carries tests/ but not dev/ (owner,
+    2026-10-01). A test that reaches into dev/ must say so with @needs_dev, so the published suite
+    skips it with the reason instead of failing. Measured when this landed (the whole suite run on a
+    copy without dev/): 20 classes and 10 methods in 23 modules failed; they, and 3 tests that
+    already skipped themselves, are marked."""
+
+    def test_every_module_that_reads_dev_marks_it(self):
+        import re
+        pat = re.compile(r"""REPO\s*/\s*["']dev["']""")
+        unmarked = [f.name for f in sorted((REPO / "tests").glob("test_*.py"))
+                    if pat.search(f.read_text(encoding="utf-8")) and "needs_dev" not in f.read_text(encoding="utf-8")]
+        self.assertEqual(unmarked, [], "these read dev/ but never use @needs_dev")
+
+    def test_needs_dev_skips_when_dev_is_absent(self):
+        """The marker itself: copy the harness to a tree with no dev/, and a marked test skips."""
+        t = self.tmp / "tree"
+        (t / "tests").mkdir(parents=True)
+        shutil.copy(REPO / "tests" / "_harness.py", t / "tests" / "_harness.py")
+        shutil.copytree(REPO / "golden-thread", t / "golden-thread",
+                        ignore=shutil.ignore_patterns("__pycache__", "0.1[0-6].*", "0.[0-9].*"))
+        shutil.copytree(REPO / "golden-thread-wiki", t / "golden-thread-wiki",
+                        ignore=shutil.ignore_patterns("__pycache__"))
+        (t / "tests" / "test_probe.py").write_text(
+            "import unittest\nfrom _harness import needs_dev\n\n"
+            "@needs_dev\nclass P(unittest.TestCase):\n    def test_x(self):\n        open('/nonexistent/dev')\n")
+        p = self.run_cmd([sys.executable, "-m", "unittest", "test_probe", "-v"], cwd=t / "tests")
+        self.assertEqual(p.returncode, 0, p.stdout + p.stderr)
+        self.assertIn("dev-only", p.stderr)
 
 
 if __name__ == "__main__":

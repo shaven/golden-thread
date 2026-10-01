@@ -30,6 +30,14 @@ from pathlib import Path
 
 REPO = Path(__file__).resolve().parent.parent
 
+# dev/ (release tooling) is NOT published: gt-src and the repository it fills carry the tests but
+# not dev/ (owner ruling, 2026-10-01). A test that reads dev/ is a dev-only test; mark it (class or
+# method) with @needs_dev so the published suite skips it, with the reason, instead of failing.
+# tests/test_sync_gt_src.py asserts every test module that reaches into dev/ uses this.
+HAS_DEV = (REPO / "dev").is_dir()
+needs_dev = unittest.skipUnless(HAS_DEV, "dev-only: needs dev/, which the published tree "
+                                         "does not carry")
+
 
 def _version_key(name):
     return tuple(int(x) for x in name.split("."))

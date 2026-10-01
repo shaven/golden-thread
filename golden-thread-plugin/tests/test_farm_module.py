@@ -20,7 +20,7 @@ import subprocess
 import sys
 import unittest
 
-from _harness import Sandbox, REPO, GT, WIKI, SCRIPTS, latest_version_dir, gt_requires_range
+from _harness import Sandbox, REPO, GT, WIKI, SCRIPTS, latest_version_dir, gt_requires_range, needs_dev
 
 FARM = latest_version_dir(REPO / "golden-thread-farm")
 SKILL = FARM / "skills" / "gt-farm" / "SKILL.md"
@@ -46,11 +46,13 @@ class FarmModuleJson(unittest.TestCase):
         self.assertIsNotNone(data, "no module.json")
         self.assertEqual(reasons, [])
 
+    @needs_dev
     def test_dev_module_check(self):
         p = subprocess.run([sys.executable, str(REPO / "dev" / "plugins.py"), "module-check",
                             str(FARM)], capture_output=True, text=True)
         self.assertEqual(p.returncode, 0, p.stdout + p.stderr)
 
+    @needs_dev
     def test_manifest_matches_the_tree(self):
         p = subprocess.run([sys.executable, str(REPO / "dev" / "plugins.py"), "manifest-check",
                             str(FARM)], capture_output=True, text=True)

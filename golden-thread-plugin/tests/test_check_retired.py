@@ -8,12 +8,13 @@ import json
 import shutil
 import unittest
 
-from _harness import Sandbox, REPO, GT
+from _harness import Sandbox, REPO, GT, needs_dev
 
 CHECK = REPO / "dev" / "check_retired.py"
 IGNORE = shutil.ignore_patterns("__pycache__", "*.pyc")
 
 
+@needs_dev
 class CheckRetired(Sandbox):
     def setUp(self):
         super().setUp()
@@ -50,6 +51,7 @@ class CheckRetired(Sandbox):
                          "with no retired.json nothing is checked — that must never read as clean")
 
 
+@needs_dev
 class MovedToAModule(Sandbox):
     """0.15.0: a hook-dir script and its registration moved from gt into a module. That is
     not a retirement -- the module installs the same file -- and a retired.json entry for it

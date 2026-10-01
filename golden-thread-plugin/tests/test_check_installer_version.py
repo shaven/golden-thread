@@ -15,12 +15,13 @@ Contract:
 import subprocess
 import unittest
 
-from _harness import Sandbox, REPO
+from _harness import Sandbox, REPO, needs_dev
 
 
 CHECK = REPO / "dev" / "check_installer_version.py"
 
 
+@needs_dev
 class InstallerVersion(Sandbox):
     def fake_repo(self, version="1.0.0"):
         """A miniature plugin root with real git history."""

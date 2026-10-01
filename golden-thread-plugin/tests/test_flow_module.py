@@ -25,7 +25,7 @@ import sys
 import unittest
 from pathlib import Path
 
-from _harness import Sandbox, GT, WIKI, REPO, PYTHON, SCRIPTS, load_module, latest_version_dir, gt_requires_range, CORE_RULES as CORE
+from _harness import Sandbox, GT, WIKI, REPO, PYTHON, SCRIPTS, load_module, latest_version_dir, gt_requires_range, CORE_RULES as CORE, needs_dev
 
 FLOW = latest_version_dir(REPO / "golden-thread-flow")
 SCRIPT = FLOW / "scripts" / "gt_flow.py"
@@ -135,6 +135,7 @@ class FlowModuleJson(unittest.TestCase):
         self.assertIsNotNone(data, "no module.json")
         self.assertEqual(reasons, [])
 
+    @needs_dev
     def test_dev_module_and_manifest_check(self):
         for cmd in ("module-check", "manifest-check"):
             p = subprocess.run([PYTHON, str(REPO / "dev" / "plugins.py"), cmd, str(FLOW)],
