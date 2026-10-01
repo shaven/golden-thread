@@ -1,0 +1,19 @@
+{
+  "name": "github.pr_status",
+  "summary": "Status of one pull request (PR): open/closed/merged, draft, mergeable, head and base branch",
+  "tier": "read",
+  "tags": ["github", "pr", "pull request", "status", "mergeable", "check"],
+  "params": {
+    "owner": {"description": "repository owner (user or organisation login)"},
+    "repo": {"description": "repository name"},
+    "pull_number": {"description": "pull request number"}
+  },
+  "profiles": {
+    "github": {
+      "steps": [
+        {"op": "get_pull", "args": {"owner": "{{owner}}", "repo": "{{repo}}", "pull_number": "{{pull_number}}"}}
+      ]
+    }
+  },
+  "select": "number,title,state,draft,merged,merged_at,mergeable,mergeable_state,rebaseable,head.ref,head.sha,base.ref,user.login,html_url,updated_at,requested_reviewers[].login"
+}

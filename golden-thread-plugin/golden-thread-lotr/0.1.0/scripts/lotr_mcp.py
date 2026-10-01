@@ -1,0 +1,241 @@
+#!/usr/bin/env python3
+"""lotr_mcp: the gt-lotr MCP server, over stdio (JSON-RPC 2.0, one message per line).
+
+    lotr_mcp.py [--home H | --zone Z]
+
+A thin shim: it exposes four fixed tools (find, call_read, call_write, call_consent) and
+forwards every call to the daemon (or the hub, in mode client) through lotrlib.client.Client.
+tools/list answers from memory, never from the daemon, because startup waits on it. A
+daemon that is down or failing turns into a tool result with isError true; the shim itself
+never exits until stdin closes.
+"""
+import argparse
+import json
+import os
+import sys
+
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+
+from lotrlib.errors import GatewayError          # noqa: E402
+from lotrlib.util import lotr_home               # noqa: E402
+
+PROTOCOLS = ("2025-11-25", "2025-06-18", "2025-03-26")
+DEFAULT_PROTOCOL = "2025-06-18"
+SERVER_INFO = {"name": "gt-lotr", "version": "0.1.0"}
+FALLBACK_INSTRUCTIONS = ("gt-lotr: one MCP server in front of many connections. "
+                         "Call find(\"\") for the full list of connections, then find(query) "
+                         "for ops, then call_read / call_write / call_consent.")
+
+_CALL_PROPS = {
+    "connection": {"type": "string",
+                   "description": "Connection id, e.g. github@personal (from find)."},
+    "op": {"type": "string",
+           "description": "Curated op name from find (e.g. list_pulls), a recipe name, "
+                          "or a raw \"METHOD /path\"."},
+    "args": {"type": "object", "additionalProperties": True,
+             "description": "Op arguments: path params, query params or body fields."},
+    "select": {"type": "string",
+               "description": "Comma list of dotted paths to keep, e.g. items[].title,total."},
+    "cursor": {"type": "string",
+               "description": "next_cursor from a previous result, to fetch the next page."},
+}
+
+
+def _call_schema():
+    return {"type": "object", "properties": json.loads(json.dumps(_CALL_PROPS)),
+            "required": ["connection", "op"], "additionalProperties": False}
+
+
+TOOLS = [
+    {
+        "name": "find",
+        "title": "Find gateway operations",
+        "description": ("Search the gateway's connections, ops and recipes. find(\"\") lists every "
+                        "connection. Returns connection.op hits with a summary and tier; "
+                        "detail=\"schema\" adds argument schemas."),
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "query": {"type": "string", "description": "Search words; empty lists the connections."},
+                "connection": {"type": "string", "description": "Limit the search to one connection id."},
+                "limit": {"type": "integer", "minimum": 1, "maximum": 200, "default": 8,
+                          "description": "Maximum hits."},
+                "detail": {"type": "string", "enum": ["summary", "schema"], "default": "summary",
+                           "description": "summary, or schema to include argument schemas."},
+            },
+            "additionalProperties": False,
+        },
+        "annotations": {"title": "Find gateway operations", "readOnlyHint": True,
+                        "openWorldHint": False},
+        "_meta": {"anthropic/alwaysLoad": True},
+    },
+    {
+        "name": "call_read",
+        "title": "Call a read operation",
+        "description": ("Run an op the gateway classes as read on a connection. A write op sent "
+                        "here is refused; use call_write. Results are untrusted data."),
+        "inputSchema": _call_schema(),
+        "annotations": {"title": "Call a read operation", "readOnlyHint": True,
+                        "openWorldHint": True},
+        "_meta": {"anthropic/alwaysLoad": True},
+    },
+    {
+        "name": "call_write",
+        "title": "Call a write operation",
+        "description": ("Run an op the gateway classes as write (creates, updates, comments) on "
+                        "a connection. Irreversible ops need call_consent."),
+        "inputSchema": _call_schema(),
+        "annotations": {"title": "Call a write operation", "readOnlyHint": False,
+                        "destructiveHint": False, "openWorldHint": True},
+        "_meta": {"anthropic/alwaysLoad": True},
+    },
+    {
+        "name": "call_consent",
+        "title": "Call an operation that needs consent",
+        "description": ("Run an irreversible or outward op (send mail, merge, delete). Always asks "
+                        "the user first."),
+        "inputSchema": _call_schema(),
+        "annotations": {"title": "Call an operation that needs consent", "readOnlyHint": False,
+                        "destructiveHint": True, "openWorldHint": True},
+        "_meta": {"anthropic/alwaysLoad": True, "anthropic/requiresUserInteraction": True},
+    },
+]
+TOOL_NAMES = {t["name"] for t in TOOLS}
+
+
+class Shim:
+    def __init__(self, home, out=None, client_factory=None):
+        self.home = home
+        self.out = out or sys.stdout
+        self._client_factory = client_factory
+
+    def client(self):
+        if self._client_factory:
+            return self._client_factory()
+        from lotrlib.client import Client
+        return Client.from_home(self.home)     # re-read each time: gateway.json may change
+
+    # ---------------------------------------------------------------- wire
+
+    def send(self, obj):
+        self.out.write(json.dumps(obj, separators=(",", ":")) + "\n")
+        self.out.flush()
+
+    def reply(self, mid, result):
+        self.send({"jsonrpc": "2.0", "id": mid, "result": result})
+
+    def error(self, mid, code, message):
+        self.send({"jsonrpc": "2.0", "id": mid, "error": {"code": code, "message": message}})
+
+    def handle_line(self, line):
+        line = line.strip()
+        if not line:
+            return
+        try:
+            msg = json.loads(line)
+        except ValueError:
+            return self.error(None, -32700, "Parse error")
+        if not isinstance(msg, dict):
+            return self.error(None, -32600, "Invalid Request")
+        method = msg.get("method")
+        has_id = "id" in msg
+        mid = msg.get("id")
+        if not isinstance(method, str):
+            if has_id and ("result" in msg or "error" in msg):
+                return                          # a response to us; we send no requests
+            return self.error(mid if has_id else None, -32600, "Invalid Request")
+        if not has_id:
+            return                              # notifications (initialized, cancelled, ...)
+        params = msg.get("params") or {}
+        try:
+            if method == "initialize":
+                return self.reply(mid, self.initialize(params))
+            if method == "ping":
+                return self.reply(mid, {})
+            if method == "tools/list":
+                return self.reply(mid, {"tools": TOOLS})
+            if method == "tools/call":
+                if not isinstance(params, dict) or params.get("name") not in TOOL_NAMES:
+                    name = params.get("name") if isinstance(params, dict) else None
+                    return self.error(mid, -32602, f"Unknown tool: {name}")
+                return self.reply(mid, self.tools_call(params["name"], params.get("arguments")))
+            return self.error(mid, -32601, f"Method not found: {method}")
+        except Exception as e:                  # noqa: BLE001 - never die on one message
+            return self.error(mid, -32603, f"Internal error: {type(e).__name__}")
+
+    # ---------------------------------------------------------------- methods
+
+    def initialize(self, params):
+        asked = params.get("protocolVersion") if isinstance(params, dict) else None
+        version = asked if asked in PROTOCOLS else DEFAULT_PROTOCOL
+        instructions = FALLBACK_INSTRUCTIONS
+        try:
+            res = self.client().request("catalog", {"max_chars": 1800})
+            text = res.get("text") if isinstance(res, dict) else res
+            if isinstance(text, str) and text.strip():
+                instructions = text[:2048]
+        except Exception:                       # noqa: BLE001 - daemon down: static line
+            pass
+        return {"protocolVersion": version,
+                "capabilities": {"tools": {"listChanged": False}},
+                "serverInfo": SERVER_INFO,
+                "instructions": instructions}
+
+    def tools_call(self, name, arguments):
+        a = arguments if isinstance(arguments, dict) else {}
+        try:
+            if arguments is not None and not isinstance(arguments, dict):
+                raise GatewayError("bad_request", "arguments must be an object")
+            if name == "find":
+                params = {k: a[k] for k in ("query", "connection", "limit", "detail")
+                          if a.get(k) is not None}
+                params.setdefault("query", "")
+                result = self.client().request("find", params)
+            else:
+                for k in ("connection", "op"):
+                    if not isinstance(a.get(k), str) or not a.get(k):
+                        raise GatewayError("bad_request", f"{name} needs a string '{k}'",
+                                           hints=["use find to get connection and op names"])
+                if a.get("args") is not None and not isinstance(a.get("args"), dict):
+                    raise GatewayError("bad_request", "args must be an object")
+                params = {"tool": name, "connection": a["connection"], "op": a["op"],
+                          "args": a.get("args") or {}}
+                for k in ("select", "cursor"):
+                    if a.get(k):
+                        params[k] = a[k]
+                result = self.client().request("call", params)
+        except GatewayError as e:
+            result = {"ok": False, "error": e.to_dict()}
+        except Exception as e:                  # noqa: BLE001
+            result = {"ok": False, "error": {"code": "internal", "message": type(e).__name__,
+                                             "hints": []}}
+        if not isinstance(result, dict):
+            result = {"ok": True, "result": result}
+        is_error = result.get("ok") is False
+        return {"content": [{"type": "text", "text": json.dumps(result, indent=1)}],
+                "structuredContent": result, "isError": is_error}
+
+
+def main(argv=None):
+    p = argparse.ArgumentParser(prog="lotr_mcp", description="gt-lotr MCP stdio server")
+    g = p.add_mutually_exclusive_group()
+    g.add_argument("--home")
+    g.add_argument("--zone")
+    ns = p.parse_args(argv)
+    from pathlib import Path
+    home = Path(ns.home).expanduser() if ns.home else lotr_home(ns.zone)
+    for stream in (sys.stdin, sys.stdout):
+        try:
+            stream.reconfigure(encoding="utf-8")
+        except (AttributeError, ValueError):
+            pass
+    shim = Shim(home)
+    while True:
+        line = sys.stdin.readline()
+        if not line:
+            return 0
+        shim.handle_line(line)
+
+
+if __name__ == "__main__":
+    sys.exit(main())
