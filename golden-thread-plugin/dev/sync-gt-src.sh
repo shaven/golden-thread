@@ -33,7 +33,7 @@
 # What ONLY gt-src carries: copygt.sh and validate-install.py at its root, written here from
 # dev/copygt.sh and dev/validate-install.py at every publish so they always match the tree they
 # ship in (SHA256SUMS covers both). The receiving machine runs `./copygt.sh --dest <repo>`: verify,
-# mirror (deletes included), install, validate, and commit + push only when clean. copygt.sh never
+# mirror (deletes included), install, validate, and commit only when clean (it never pushes). copygt.sh never
 # writes itself, validate-install.py, SHA256SUMS or SOURCE.json into that repository.
 #
 # Destination: $GT_SRC, else ~/Library/CloudStorage/OneDrive-Personal/Projects2/gt-src

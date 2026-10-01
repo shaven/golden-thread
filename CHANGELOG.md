@@ -13,7 +13,7 @@ release's own summary line, kept short rather than reconstructed after the fact.
 
 ## Unreleased — repository tooling (no gt version change)
 
-### copygt.sh: gt-src to a validated, pushed install in one command
+### copygt.sh: gt-src to a validated, committed install in one command
 
 **What.** gt-src now carries two tools at its root, `copygt.sh` and `validate-install.py`, written by
 `dev/sync-gt-src.sh` at every publish and covered by `SHA256SUMS`. On the receiving machine,
@@ -30,7 +30,8 @@ release's own summary line, kept short rather than reconstructed after the fact.
    - A closing `clean: N/N`, counted against what the tree declared.
    - The validation reuses the release's own `gt_doctor.py post-install` gate rather than a
      second suite.
-5. It commits and pushes, **only** when the report is clean.
+5. It commits, **only** when the report is clean. It never pushes: pushing is a separate step,
+   done only from the publishing machine.
 
 `--dry-run` lists every add, change and delete and writes nothing.
 

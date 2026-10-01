@@ -1,10 +1,10 @@
 #!/usr/bin/env bash
-# copygt.sh — take this gt-src into a repository, install it, validate the install, and push.
+# copygt.sh — take this gt-src into a repository, install it, validate the install, and commit.
 #
-#   ./copygt.sh --dest <repo path>             copy, install, validate; commit + push ONLY when clean
+#   ./copygt.sh --dest <repo path>             copy, install, validate; commit ONLY when clean
 #   ./copygt.sh --dest <repo path> --dry-run   list every add, change and delete; write nothing
 #
-#   --no-push       commit when clean, but do not push
+#   It never pushes. Pushing is a separate step, outside this script (owner, 2026-10-01).
 #   --vault V       the vault the validation runs against (default: ~/.claude/vault-config.json)
 #   --report FILE   where the report goes (default ~/.claude/golden-thread/copygt/report-<time>.md,
 #                   with a .json beside it). Never inside the destination.
@@ -25,21 +25,23 @@
 #   4. run validate-install.py: present / missing / worked / failed, ending `clean: N/N` against
 #      what was DECLARED. "Could not run" is never a pass;
 #   5. only when fully clean: commit in the destination (the message names the gt-src commit and
-#      the versions) and push. Anything not clean stops before the commit and leaves the report.
+#      the versions). Anything not clean stops before the commit and leaves the report.
+#      It never pushes: publishing to a remote is outside this script (owner, 2026-10-01: "It
+#      doesn't and shouldn't do the push into github in that file").
 #
-# Exit: 0 done (clean; committed and pushed, or nothing to commit) · 2 refused (usage, destination)
+# Exit: 0 done (clean; committed, or nothing to commit) · 2 refused (usage, destination)
 #       3 gt-src failed its checksum, nothing written · 4 not clean, nothing committed, report left
-#       5 the commit or the push failed (the report says clean; the copy stays in the work tree)
+#       5 the commit failed (the report says clean; the copy stays in the work tree)
 set -euo pipefail
 SRC="$(cd "$(dirname "$0")" && pwd -P)"
-DEST=""; DRY=no; PUSH=yes; VAULT=""; REPORT=""
+DEST=""; DRY=no; VAULT=""; REPORT=""
 usage() { sed -n '2,10p' "$0" | sed 's/^# \{0,1\}//'; }
 while [ $# -gt 0 ]; do
   case "$1" in
     --dest)      [ $# -ge 2 ] || { echo "REFUSED: --dest needs a path"; exit 2; }; DEST="$2"; shift 2 ;;
     --dest=*)    DEST="${1#--dest=}"; shift ;;
     --dry-run)   DRY=yes; shift ;;
-    --no-push)   PUSH=no; shift ;;
+    --no-push)   shift ;;   # accepted for older notes; copygt.sh never pushes
     --vault)     [ $# -ge 2 ] || { echo "REFUSED: --vault needs a path"; exit 2; }; VAULT="$2"; shift 2 ;;
     --vault=*)   VAULT="${1#--vault=}"; shift ;;
     --report)    [ $# -ge 2 ] || { echo "REFUSED: --report needs a path"; exit 2; }; REPORT="$2"; shift 2 ;;
@@ -268,13 +270,13 @@ VAL_RC=0
   --report "$REPORT" ${VAULT:+--vault "$VAULT"} || VAL_RC=$?
 if [ "$VAL_RC" -ne 0 ]; then
   echo ""
-  echo "NOT CLEAN — nothing was committed or pushed. Report: $REPORT"
+  echo "NOT CLEAN — nothing was committed. Report: $REPORT"
   echo "The copied files stay in $DEST's work tree; fix what the report lists and run copygt.sh again."
   exit 4
 fi
 
-# ── 5. commit and push, only now ──────────────────────────────────────────────
-echo "== 5. commit$( [ "$PUSH" = yes ] && echo ' and push')"
+# ── 5. commit, only now (never push: that is outside this script) ─────────────
+echo "== 5. commit"
 "$PY" -c "import json,sys; sys.stdout.write(''.join(p + '\0' for p in json.load(open(sys.argv[1]))['paths']))" \
   "$WORK/mirror.json" > "$WORK/paths"
 if [ -s "$WORK/paths" ]; then
@@ -290,13 +292,4 @@ Applied by copygt.sh from gt-src commit $COMMIT (tree_sha256 $TREE).
 Validated clean after install: $(sed -n 's/^clean: //p' "$REPORT" | tail -1)."
 git -C "$DEST" commit -q -m "$MSG" || { echo "FAILED: git commit"; exit 5; }
 echo "committed $(git -C "$DEST" rev-parse --short HEAD): gt-src ${COMMIT:0:12}"
-if [ "$PUSH" = no ]; then
-  echo "not pushed (--no-push). Report: $REPORT"
-  exit 0
-fi
-if git -C "$DEST" rev-parse --abbrev-ref --symbolic-full-name '@{u}' >/dev/null 2>&1; then
-  git -C "$DEST" push -q || { echo "FAILED: git push (the commit is in place; push it by hand)"; exit 5; }
-else
-  git -C "$DEST" push -q -u origin HEAD || { echo "FAILED: git push to origin (the commit is in place; push it by hand)"; exit 5; }
-fi
-echo "pushed. Report: $REPORT"
+echo "not pushed: copygt.sh never pushes. Push from the publishing machine only. Report: $REPORT"

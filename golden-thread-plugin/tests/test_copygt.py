@@ -2,10 +2,11 @@
 
 The receiving machine runs `copygt.sh --dest <repo>`: verify gt-src against SHA256SUMS, mirror it
 onto the repository (deletes included; .git and untracked files untouched), run install.sh, run
-validate-install.py, and commit + push only when the validation is fully clean.
+validate-install.py, and commit only when the validation is fully clean. It never pushes:
+pushing is outside copygt.sh (owner, 2026-10-01).
 
 Everything runs against a throwaway gt-src, a throwaway destination repository with a bare
-`origin` standing in for GitHub (the push is real, to that stub), and a throwaway HOME.
+`origin` standing in for GitHub (it must never move: copygt.sh does not push), and a throwaway HOME.
 
 Both tools live in dev/ here and only in gt-src there, so this whole module is dev-only.
 """
@@ -14,6 +15,7 @@ import json
 import os
 import shutil
 import subprocess
+import unittest
 from pathlib import Path
 
 from _harness import Sandbox, REPO, needs_dev, latest_version_dir
@@ -340,7 +342,7 @@ class ValidationReportTest(CopygtBase):
 
 @needs_dev
 class EndToEndTest(CopygtBase):
-    """copy -> real install.sh -> validate -> commit -> push (to the bare stub), in a sandbox HOME."""
+    """copy -> real install.sh -> validate -> commit, never push, in a sandbox HOME."""
 
     def setUp(self):
         super().setUp()
@@ -356,7 +358,8 @@ class EndToEndTest(CopygtBase):
                        untracked={"local-notes.txt": "mine\n"})
         self.report = self.tmp / "reports" / "e2e.md"
 
-    def test_a_clean_run_commits_and_pushes(self):
+    def test_a_clean_run_commits_and_never_pushes(self):
+        before = self.head(self.remote)
         self.config(vault_path=str(self.make_vault()))
         p = self.copygt("--dest", self.dest, "--report", self.report)
         self.assertEqual(p.returncode, 0, p.stdout[-6000:] + p.stderr[-2000:]
@@ -366,7 +369,9 @@ class EndToEndTest(CopygtBase):
         a, b = n.split("/")
         self.assertEqual(a, b, text)
         head = self.head(self.dest)
-        self.assertEqual(self.head(self.remote), head, "the clean run did not push")
+        self.assertNotEqual(head, before, "the clean run did not commit")
+        self.assertEqual(self.head(self.remote), before, "copygt.sh pushed; it must never push")
+        self.assertIn("never pushes", p.stdout)
         msg = self.run_cmd(["git", "-C", self.dest, "log", "-1", "--format=%B"]).stdout
         self.assertIn(self.commit, msg)
         self.assertIn("gt ", msg)
@@ -384,13 +389,13 @@ class EndToEndTest(CopygtBase):
         self.assertIn("nothing to commit", p2.stdout)
         self.assertEqual(self.head(self.dest), head)
 
-    def test_a_run_that_is_not_clean_neither_commits_nor_pushes(self):
+    def test_a_run_that_is_not_clean_does_not_commit(self):
         # No vault: the gate's vault rows cannot run, and "could not run" is never a pass.
         head = self.head(self.dest)
         p = self.copygt("--dest", self.dest, "--report", self.report)
         self.assertEqual(p.returncode, 4, p.stdout[-4000:])
         self.assertEqual(self.head(self.dest), head)
-        self.assertEqual(self.head(self.remote), head, "the push stub was called on a run that was not clean")
+        self.assertEqual(self.head(self.remote), head, "the remote moved on a run that was not clean")
         data = json.loads(self.report.with_suffix(".json").read_text())
         self.assertFalse(data["clean"])
         self.assertIn("could-not-run", {c["state"] for c in data["checks"]})
@@ -423,3 +428,12 @@ class ScrubGate(Sandbox):
 if __name__ == "__main__":
     import unittest
     unittest.main()
+
+
+@needs_dev
+class NeverPushes(unittest.TestCase):
+    def test_copygt_has_no_push_command(self):
+        text = (REPO / "dev" / "copygt.sh").read_text()
+        code = [l for l in text.splitlines() if not l.lstrip().startswith("#")]
+        self.assertFalse([l for l in code if "git" in l and " push" in l],
+                         "copygt.sh must never run git push; pushing is outside it")

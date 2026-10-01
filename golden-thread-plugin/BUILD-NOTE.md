@@ -119,7 +119,7 @@ Last checked 2026-10-01 07:20 on `feat/queue-first-writes`: all three bodies byt
 ```bash
 cd <gt-src>
 ./copygt.sh --dest <repo> --dry-run   # list every add, change and delete; writes nothing
-./copygt.sh --dest <repo>             # verify, mirror, install, validate; commit + push only if clean
+./copygt.sh --dest <repo>             # verify, mirror, install, validate; commit only if clean
 ```
 
 It does, in order, and stops at the first failure:
@@ -149,12 +149,13 @@ It does, in order, and stops at the first failure:
 
    It ends with **`clean: N/N`**, where N counts what the tree DECLARED: copygt's own steps, two
    checks per plugin this machine installs, and every row the release's gate can emit.
-5. **Commit and push, only when clean.** The commit message names the gt-src commit and every
+5. **Commit, only when clean. It never pushes.** Pushing is outside copygt.sh, and by ADR-15 only
+   the publishing Mac pushes to GitHub. The commit message names the gt-src commit and every
    plugin version. Anything not clean exits **4** before the commit and leaves the report. The
    copied files stay in the work tree for you to inspect.
 
-Options: `--no-push` (commit, do not push), `--vault V`, `--report FILE` (never inside the repo).
-Exit codes: 0 done, 2 refused, 3 checksum, 4 not clean, 5 commit or push failed.
+Options: `--vault V`, `--report FILE` (never inside the repo).
+Exit codes: 0 done, 2 refused, 3 checksum, 4 not clean, 5 commit failed. (`--no-push` is still accepted and changes nothing.)
 
 **The tree_sha256 to compare is the one `sync-gt-src.sh` printed at the latest sync.** The 0.17.11
 publish printed `6209dca0de65aeb65adec0250f0c94e841825ba82e9c8f001fe1eebf6bca12fd`. The re-sync
