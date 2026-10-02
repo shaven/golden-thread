@@ -3,7 +3,7 @@
 > **Reader:** a daily user — the deepest document, where the *why* lives
 > **Claims last checked against the code:** 2026-10-01 (gt 0.18.0) — see *The documents, and what belongs in each* in [`CLAUDE.md`](../CLAUDE.md).
 
-Complete reference for gt's thirty-five skills and its nine modules. Written against **gt v0.18.0**
+Complete reference for gt's thirty-six skills and its nine modules. Written against **gt v0.18.0**
 (gt-wiki 0.2.5; gt-usage 0.1.4; gt-demo, gt-watch, gt-report-card, gt-farm and gt-flow 0.18.0; gt-visualize 0.4.2;
 gt-lotr 0.1.1 — the five named with 0.18.0 are versioned with gt and move with every release, changed or not).
 
@@ -133,6 +133,27 @@ before merge**, and that a pack can only reach a session already trusting the va
 promotion is likewise recorded in `PROTOCOL.md` as a *measured* mitigation, not a preference:
 published attack success against agent memory runs 45–85% for compaction poisoning, and
 correlates directly with how eagerly an agent writes to memory.)
+
+### Model intent: `gt_model.py` (0.18.0)
+
+A skill or agent says what kind of model it needs — `model_intent: fast | balanced | deep` in its
+frontmatter — never which model. The `model` slot maps intent to a model alias; the core pack
+(`packs/core/model.intents.pack.json`) ships fast → haiku, balanced → sonnet, deep → opus, each row
+with the date it was verified, because a model name ages on someone else's schedule.
+
+```bash
+python3 $SCRIPTS/gt_model.py resolve [INTENT] [--vault V] [--json]   # what an intent means here, and from where
+python3 $SCRIPTS/gt_model.py skill PATH/SKILL.md                     # a skill's declared intent, resolved
+python3 $SCRIPTS/gt_model.py check PATH ...                          # refuse unknown model_intent values
+```
+
+Every resolution names the model and its source. An intent nothing maps is reported UNMAPPED and
+runs at `balanced` — it never refuses to run; a skill that declares nothing runs on the session's
+own model. To change a mapping, put `model.mine.pack.json` in `<vault>/Projects/golden-thread/packs/`
+with `{"intent": "deep", "model": "<alias>", "verified": "YYYY-MM-DD"}` entries (the core row is
+then SHADOWED); to unmap one, `"retract": [{"intent": "deep"}]`. Exit `0` resolved (UNMAPPED
+included) · `1` registry problems or a bad value · `2` unknown intent. `gt_code_review.py plan`
+prints each dimension's resolved model, and `/gt:gt-validate` declares `deep`.
 
 ### What `/gt:gt-scan` can check, and how to ask
 
@@ -418,6 +439,23 @@ price set by how large it had grown. `gt-minimize` measures the session and the 
 left, keeps the few things worth keeping (to `Knowledge/` or `INBOX.md`), and tells you to
 `/compact` or `/clear` while that is still cheap. Anything mid-flight goes to
 `/gt:gt-create handoff` first. See [`/gt:gt-minimize`](#gtgt-minimize).
+
+### Working on more than one machine
+
+```
+/gt:gt-sync pull   →   work   →   /gt:gt-work   →   /gt:gt-sync push
+```
+
+Pull first on a machine that has been away, so you do not open a project from files another machine
+already replaced; push after the write-back. gt only fast-forwards: when both machines have commits,
+it stops and shows the counts, and reconciling is yours. Setting `sync_check` adds a "vault is
+behind" line at session start. See [`/gt:gt-sync`](#gtgt-sync).
+
+### Being reminded when no session is running
+
+Add the dated item as a row of `deadlines.md`, turn on a channel (macOS notification, SMS or Discord
+through your relay, or email), prove it with `gt_reminder.py check`, and schedule the daily job. See
+[Reminders](#reminders-outside-a-session-gt_reminderpy).
 
 ### You just learned something — where does it go?
 
@@ -739,6 +777,15 @@ afterwards — it is the traceable "why".
 that does not exist yet is still created at `Projects/<parent>/`. The generated `CLAUDE.md` now
 names the sub-project's real folder (`Projects/<parent>/<slug>/`); one generated before 0.18.0
 said `Projects/<slug>/`, which does not exist — fix its *Deeper context* line by hand.
+
+**Naming a project on the command line (0.18.0).** Anywhere a tool takes a project — `--project`,
+`--slug`, `--to`, a task ID — you may give a sub-project's bare slug (`child`) or its path
+(`parent/child`). The tool finds the one project folder with that name or README `slug:`. No match:
+it stops and says so, and nothing is created. Two matches (`parent/dup` and `other/dup`): it stops
+and lists both; pass the path. Task IDs carry the resolved path (`parent/child:12:ab12cd`). Until
+0.18.0 most tools joined `Projects/` with the slug, so they missed sub-projects and some created a
+stray top-level `Projects/<slug>/memory/` or `handoff/`; if your vault has one, move its contents
+into `Projects/<parent>/<slug>/` and delete it.
 
 ### `/gt:gt-upgrade`
 
@@ -1106,6 +1153,24 @@ skips anything already captured and offers the rest one at a time, each routed t
 runbook step, a memory note or `/gt:gt-promote` — through the queue, never a direct edit. (A
 separate `gt-learn` skill was proposed; the owner folded it in here so findings have one path.)
 
+**Link suggestions after a Knowledge write (0.18.0).** CONVENTIONS calls cross-domain links the
+most valuable and the most often missed, and a session that writes a Knowledge page rarely knows
+which pages elsewhere should link to it. After gt-work writes one, it lists up to five pages that
+probably should — cross-domain first, then by shared tags (3 points each) and shared title words
+(1 each) — each with its reason and a link type (cross-domain, hub, upstream, downstream, sibling).
+Pick by number; each pick adds `- [[Target]]` to this page's `## Related` and `- [[This page]]` to
+the target's, through the queue. Skip, and nothing is written. Only the frontmatter of the other
+pages is read. A page's domain is its `domain:`, else the `index.md` heading it is listed under,
+else its first tag.
+
+```bash
+python3 $SCRIPTS/gt_link_suggest.py suggest --vault V --page Knowledge/P.md [--limit 5] [--json]
+python3 $SCRIPTS/gt_link_suggest.py apply   --vault V --page Knowledge/P.md --to TARGET [...] [--forward-only] [--dry-run] [--json]
+```
+
+Exit `0` ok, including no candidates · `1` a write was refused · `2` usage. Matching is lexical —
+no synonyms — and `/gt:gt-promote` does not run the pass yet.
+
 **It offers a handoff for what did not reach a file (0.17.1).** Classifying findings tells
 `gt-work` not only what to write but what it is *not* writing — a decision that needs you,
 something mid-flight, a question raised and unanswered. Those live in the conversation, and the
@@ -1260,6 +1325,37 @@ Prefer keeping filenames. If you must repoint, match the *whole* link —
 Empties `INBOX.md`: reads every unchecked line (and daily notes, if configured),
 asks where each belongs, files it as a task or project, and checks the inbox line
 off with a pointer. Regenerates the rollup at the end.
+
+### `/gt:gt-sync`
+
+*New in 0.18.0.* The vault is a git repository so that what one machine learns reaches the others,
+but until now nothing in gt moved it: a session could open a project from files another machine
+had already superseded, write on top of them, and leave a divergence to untangle. Run
+`/gt:gt-sync pull` before starting work on a machine that has been away, and `/gt:gt-sync push`
+after `/gt:gt-work`; a bare `/gt:gt-sync` shows where the vault stands.
+
+```bash
+python3 ~/.claude/golden-thread/hooks/gt_sync.py status [--vault V] [--no-fetch] [--json]
+python3 ~/.claude/golden-thread/hooks/gt_sync.py pull   [--vault V] [--dry-run] [--json]
+python3 ~/.claude/golden-thread/hooks/gt_sync.py push   [--vault V] [--dry-run] [--json]
+python3 ~/.claude/golden-thread/hooks/gt_sync.py behind [--vault V] [--mode cached|fetch]
+```
+
+- **`status`** fetches (time-bounded), then reports commits ahead and behind, uncommitted changes
+  and the age of the last fetch.
+- **`pull`** fetches, then `git pull --ff-only`. **When both sides have commits it stops** and
+  shows the two counts before git does anything: gt never merges or rebases the vault; reconciling
+  is yours. Uncommitted edits that touch incoming files are refused by git, and gt does not stash.
+- **`push`** runs the push check and refuses unless the vault is ahead of a real upstream, and
+  refuses when origin has commits this machine lacks — pull first. It runs no credential scan of
+  its own; the vault's pre-commit gate is that.
+- **`--dry-run`** fetches nothing and names the command it would run.
+
+Every git call names the vault (`git -C`), never prompts, and has a timeout. To be told at session
+start that the vault is behind, set `sync_check`: `cached` compares with the refs on disk (no
+network; the line states their age), `fetch` runs one fetch bounded to 4 seconds. The line joins
+the existing push-check report. Exit `0` ok or nothing to do · `1` refused or git failed · `2`
+usage, no vault, or not a git repository.
 
 ---
 
@@ -1578,6 +1674,61 @@ that. A row that does not parse is skipped **and counted**; the rest still repor
 like a credential is **withheld**, never printed, because this output reaches both your terminal
 and the model's context. `gt_surface.py must-do` prints the block on its own.
 
+### Reminders outside a session — `gt_reminder.py`
+
+*New in 0.18.0.* The MUST DO block reaches you only when a session starts; a credential rotation
+once sat 15 days overdue that way. The reminder tool sends the same overdue and near rows of
+`deadlines.md` through channels you choose. Each push channel is **off by default**:
+
+| Channel | Setting | Needs |
+|---|---|---|
+| session start | `surface` (on) | nothing — the MUST DO block |
+| macOS notification | `reminder_macos` | nothing (it appears as Script Editor; its notifications must be allowed) |
+| SMS or Discord through your notification relay | `reminder_relay` = `sms` / `discord` | `~/.claude/golden-thread/reminder/relay.json` (URL, optional auth), mode 600, written by your secrets store |
+| email (SMTP) | `reminder_email` | `~/.claude/golden-thread/reminder/email.json`, mode 600, written by your secrets store |
+
+To set one up:
+
+1. Read its setup: `gt_reminder.py setup macos|relay|email`.
+2. Relay and email only: have your secrets store install the credentials file, mode 600. A looser
+   file is refused before it is read, and no credential value ever appears in a setting, the vault,
+   the log or any output.
+3. Turn it on: `gt_settings.py set reminder_macos on` (or `reminder_relay sms|discord`,
+   `reminder_email on`).
+4. Prove it: `gt_reminder.py check <channel>` sends a **real** test message and says DELIVERED only
+   on positive evidence (HTTP 2xx, SMTP accepted, `osascript` exit 0); anything else is "could not
+   deliver", exit 1.
+5. Schedule it: `gt_schedule.py install reminder --vault "<vault>" [--hour H --minute M]` (daily
+   08:30). It refuses unless a mirror exists, a channel is on and every enabled channel is
+   configured, then proves the job through launchd — which sends a real reminder if anything is due.
+
+`reminder_days` (7) is the window; overdue items are always included. The job sends once a day
+while an item is overdue — that is the nag; delete the row when the work is done.
+
+**Why the job reads a mirror, not the vault.** macOS refuses a launchd job access to
+`~/Library/CloudStorage`: it can see the vault and read nothing, which is how the weekly lint died
+for three Mondays. So the job reads `~/.claude/golden-thread/reminder/deadlines.json` (mode 600),
+refreshed by `gt_reminder.py mirror --vault V` (the schedule install runs it) and at session start by
+`gt_surface` whenever a push channel is on or a mirror exists. Countdowns are computed from the due
+dates when the reminder is sent, so an old mirror only misses rows added or deleted since; one over
+7 days old says "dates as of …". Credential-shaped labels are withheld before they reach it. Full
+Disk Access for python (every script would get the whole disk) and moving the vault were rejected.
+
+```bash
+python3 $SCRIPTS/gt_reminder.py status                 # each channel's setting and readiness, mirror age, job installed?
+python3 $SCRIPTS/gt_reminder.py setup CHANNEL          # macos | relay | email | session
+python3 $SCRIPTS/gt_reminder.py check CHANNEL [--json] # sends a real test
+python3 $SCRIPTS/gt_reminder.py mirror --vault V [--dry-run]
+python3 $SCRIPTS/gt_reminder.py run [--dry-run] [--json] [--check] [--scheduled]
+python3 $SCRIPTS/gt_reminder.py import-tsv --vault V --tsv FILE [--only TEXT ...] [--category C] [--dry-run]
+```
+
+`import-tsv` folds an old `label<TAB>date` list into `deadlines.md` through the write queue, so there
+stays one list. The relay payload is gt's own shape (`{severity, source, host, route, text, detail,
+ts}`) — route on `route` — or `format: discord-webhook` posts straight to a Discord webhook. Exit
+`0` ok or nothing due · `1` a channel could not deliver, or the preflight failed · `2` usage · `3` no
+mirror.
+
 ## Context management
 
 ### `/gt:gt-minimize`
@@ -1802,6 +1953,26 @@ understand it?* and *has it stopped changing?* — and only on a yes places it a
 deliberately not read: whether a runbook fact has stopped changing is your call, and those still
 graduate by hand. A bare sub-project slug works. Exit `0` drafted · `2` unknown project.
 
+### Review scheduling: `last_reviewed`
+
+`review-due` (the wiki lint) is a reminder to re-check a page, not a sign it is stale. Until 0.18.0
+it aged a page from `updated:` — the last write — so a page written once and never consulted looked
+as current as one reread last week. Now the clock also restarts when gt **reads** the page:
+`/gt:gt-query` stamps the pages its answer came from, and `/gt:gt-open` stamps Knowledge pages it
+loads as project context, by queueing `last_reviewed: YYYY-MM-DD` as a `set-property` write (at most
+once a page a day; `updated:` is never touched). The lint (gt-wiki 0.2.5) ages a page from the newer
+of the two, prints `(last review <date>)` for stamped pages, and reports an unstamped page exactly as
+before, so existing declines still match. Decision and `kind: principle` pages stay exempt. Setting
+`review_stamp` (`on`). By hand:
+
+```bash
+python3 $SCRIPTS/gt_review_stamp.py --vault "<vault>" "Knowledge/Page.md" [--date D] [--dry-run] [--json]
+```
+
+It refuses anything outside `Knowledge/`, a missing page and `_template.md`. Exit `0` stamped or
+nothing to do · `1` refused · `2` usage. A stamp records a read, not a verification; the standalone
+gt-wiki skills do not stamp.
+
 ### `/gt:gt-refresh`
 
 Checks `Sources/` for upstream changes. Supersedes with a **new** immutable file
@@ -2016,7 +2187,7 @@ clean report from a check pinned to the wrong release reads exactly like a healt
 that is how 0.9.4 sat uninstalled on 2026-08-30 beside a component check reporting clean
 against 0.6.0. Say the version, then the findings.
 
-Fourteen checks, each answering a different question:
+Fifteen checks, each answering a different question:
 
 | Check | Question |
 |---|---|
@@ -2032,6 +2203,7 @@ Fourteen checks, each answering a different question:
 | `gt-src` | does the publish destination still match what was published? Since 0.17.3 every file is checked against gt-src's `SHA256SUMS`, and files changed since publish, missing, or not written by the publisher are each named (only where `$GT_SRC` or `gt_src` in `vault-config.json` names one) |
 | `lint` | what does the vault linter say, in one line? |
 | `astgrep` | is the optional structural matcher here, and new enough? Absent is fine — its rules are SKIPPED, not silently passed |
+| `checkers` | how many validation checkers are installed, and is any missing a tool it needs? (0.18.0; see [`gt_check.py`](#gt_checkpy-checkers-a-module-contributes)) |
 | `repo-target` | which git repo does this working directory resolve to, and is it the vault? (0.18.0) Always a **note** (`i`) |
 | `hooks-schema` | does every `settings.json` hook entry name an event Claude Code fires and, on a tool event, a tool it has? (0.18.0) |
 
@@ -2317,6 +2489,15 @@ is registered here and can be switched off.
 | `memory_contradiction_check` | `off` · `on` | `on` | Whether `/gt:gt-work` checks the memory notes it wrote against their neighbours for contradictions (0.18.0) |
 | `promotion_candidates` | `off` · `on` | `on` | Whether `/gt:gt-work` lists the promotion candidates a script can see (0.18.0) |
 | `promotion_overlap` | `60` · `70` · `80` · `90` | `80` | Word overlap (%) at which two projects' `research.md` sections become a `Knowledge/` candidate (0.18.0) |
+| `review_stamp` | `off` · `on` | `on` | Stamp `last_reviewed` when `/gt:gt-query` or `/gt:gt-open` reads a Knowledge page (0.18.0) |
+| `sync_check` | `off` · `cached` · `fetch` | `off` | At session start, say whether the vault is behind its upstream — from the refs on disk, or after one 4-second fetch (0.18.0) |
+| `reminder_days` | `1` · `3` · `7` · `14` · `30` | `7` | Reminders cover overdue items plus those due within this many days (0.18.0) |
+| `reminder_macos` | `off` · `on` | `off` | macOS notification from the reminder job (0.18.0) |
+| `reminder_relay` | `off` · `sms` · `discord` | `off` | Send reminders to your notification relay (`reminder/relay.json`, mode 600) (0.18.0) |
+| `reminder_email` | `off` · `on` | `off` | One reminder email over SMTP (`reminder/email.json`, mode 600) (0.18.0) |
+| `commit_checks` | `off` · `on` | `off` | Refuse a commit whose staged content no passing `gt_check.py` run covers (0.18.0) |
+| `addon_fixes` | `off` · `propose` · `apply` | `propose` | What happens to a checker's fix proposals; only first-party checkers auto-apply (0.18.0) |
+| `addon_fix_size_limit` | `1k` · `4k` · `16k` · `64k` · `256k` | `16k` | Most bytes one fix may add or remove (0.18.0) |
 
 **Settings that come from modules.** Since 0.15.0 a module declares its own settings in
 its `module.json` — `key`, `default`, `values`, `summary`, and an optional long `detail`
@@ -2529,6 +2710,32 @@ credentials, run that; `/gt:gt-scan` does not cover them, and `gt_sweep.py` runs
 
 Findings are advice about conventions, not defects. Do not "fix" a repo's naming wholesale
 because a pack disagreed with it.
+
+### Resuming an interrupted scan or ingest (0.18.0)
+
+Scans and ingests save their place as they go. Interrupted by a context limit, a cancel or a crash,
+the next `/gt:gt-scan` or `/gt:gt-ingest` on the same target asks "A previous scan was interrupted at
+item N of M. Resume it?" — **from any session**, not only the one that was interrupted. Resuming
+skips the scan members already done (and, in the `language` member, the files already scanned), or
+the ingest candidates already migrated, and the final report merges the earlier results with the
+new. A run without `--resume` starts fresh. Checkpoints live in the vault spool
+(`Projects/golden-thread/spool/<tool>/`, else `~/.claude/golden-thread/spool/`), are deleted when a
+run completes, and abandoned ones are pruned after 7 days (at every session registration).
+
+```bash
+python3 $SCRIPTS/gt_checkpoint.py find  --tool scan|ingest|scan-language [--target PATH] [--vault V] [--json]
+python3 $SCRIPTS/gt_checkpoint.py show  FILE
+python3 $SCRIPTS/gt_checkpoint.py prune [--vault V] [--days 7] [--dry-run]
+python3 $SCRIPTS/gt_scan.py <path> --resume CHECKPOINT      # or --no-checkpoint to write none
+python3 $SCRIPTS/gt_ingest.py <dir> [--vault V] [--no-checkpoint]
+python3 $SCRIPTS/gt_ingest.py --resume CK [--json] | --done CK --index N [--result TEXT] | --status CK
+```
+
+A leaf interrupted mid-walk stops the scan with exit 75, so the resume continues inside that
+member. A resumed language scan refuses ("the tree changed under the files it had done") when those
+files are no longer the first of the walk — it never guesses. The `code` member resumes per member,
+not per file: its ast-grep pass runs once over the whole tree. `GT_CHECKPOINT_ABORT_AFTER=N` stops a
+tool after N items with the checkpoint kept, to rehearse a resume.
 
 ### `/gt:gt-allin`
 
@@ -2832,6 +3039,85 @@ like any other. A report that quoted the finding would undo the tool it is repor
 `show` exits `1` when there are no reports yet, which is a different thing from a clean history
 and reads differently on purpose.
 
+### `gt_check.py` — checkers a module contributes
+
+*New in 0.18.0.* A **checker** is a deterministic check — valid HTML, a MIME type, a formatter, a
+commit-message convention — that a module contributes and gt hosts. Only checkers are modular;
+Core-rule enforcement never is. Before this, each such check would have been its own hook, with its
+own matching, output and per-commit cost, and nothing told you which were installed or why a commit
+was refused.
+
+```bash
+python3 $SCRIPTS/gt_check.py list [--for PATH ...] [--json]
+python3 $SCRIPTS/gt_check.py run  [PATH ...] [--staged] [--repo DIR] [--json] [--no-receipt] [--dry-run]
+python3 $SCRIPTS/gt_check.py run  --event commit-msg --message-file F
+```
+
+`list` shows every checker of every module that is on: `module/id`, what it applies to, its tools
+("tools ok", "no tools required", "MISSING TOOL(S): x"), and "not first-party" when its script does
+not match the release MANIFEST. `run` runs only the checkers whose globs or MIME type match, in
+parallel, and prints one report. Every checker answers `pass`, `fail` or `cannot-check`, and
+**`cannot-check` is never a pass**: a missing tool, a timeout (its process group is killed) or output
+that is not the result shape is `cannot-check` with the reason. Checkers are read-only — each runs on
+a snapshot outside the repo and vault, and changing the snapshot is a `fail`. Exit `0` all passed ·
+`1` a fail or cannot-check · `2` usage · `3` nothing applied (never the same as clean). Each run is
+recorded in `~/.claude/golden-thread/check-runs.jsonl` (each file, the hash of the bytes each checker
+saw, each verdict).
+
+**The commit gate.** With `commit_checks` on, the existing commit guard refuses a commit whose staged
+bytes no passing run covers, naming the file and the checker: run `gt_check.py run --staged` before
+committing. One commit: `GT_CHECK_GATE=off git commit …`; one repo: `.gt-no-test-gate`. Off by
+default, and with it off commits behave as before. `commit-msg` checkers run when invoked, but
+nothing calls them at commit time yet. `/gt:gt-validate` asks `gt_check.py list --for <file>` first
+and lets a checker settle a mechanical claim; the fresh-context validator is for claims no checker
+covers. `/gt:gt-doctor` has a `checkers` row. `install.sh --without <module>` removes its checkers.
+
+**For module authors.** In `module.json`:
+
+```json
+"checkers": [{"id": "html-valid", "script": "check_html.py", "globs": ["*.html"],
+              "requires_tools": ["tidy"], "timeout": 20, "fixes": ["*.html"], "rules": ["html"]}]
+```
+
+The checker reads `{"schema":1,"checker","event","root","files":[…],"message_file"}` on stdin, with
+the snapshot as its working directory, and prints
+`{"schema":1,"verdict":"pass|fail|cannot-check","reason"?,"findings":[{"file","line","rule","message"}],"proposals"?:[…]}`.
+The module validator refuses unknown keys (named), a script outside `scripts/`, an event other than
+`pre-commit` or `commit-msg`, a rule set other than `html`, a `fixes` glob naming `core-rules`,
+`global-memory`, `Sources`, `.git`, `.githooks` or `.claude`, and a checker that applies to nothing.
+No checkers ship with gt itself; each is its own module.
+
+### `gt_apply.py` — fixing what a checker found
+
+A checker may return **proposals** — a unified diff against the exact bytes it examined, the finding
+it addresses and a reason. `gt_apply.py` is the only thing that writes them; setting `addon_fixes`
+decides when: `off` discards them, `propose` (default) keeps and shows them, `apply` applies after a
+check run.
+
+```bash
+python3 $SCRIPTS/gt_apply.py list [--all] [--json] [--vault V]
+python3 $SCRIPTS/gt_apply.py show ID [--json]
+python3 $SCRIPTS/gt_apply.py apply (ID ... | --all) [--dry-run]
+python3 $SCRIPTS/gt_apply.py undo ID [--dry-run]       # restores the exact original bytes
+```
+
+An apply passes, in order: the module's `fixes` grant and the checker's own findings → protected paths
+(`core-rules/`, `global-memory/`, `Sources/`, `.git/`, `.githooks/`, `~/.claude`, the plugin source —
+whatever the grant) → one in-place edit of one existing file (no create, delete, rename, mode change,
+symlink, binary or whole-file replace) → the base hash → content rules (no added bidi-control or
+zero-width characters; no added text matching the `secrets` slot or a scrub term, never printed; a
+size change within `addon_fix_size_limit`; under `"rules": ["html"]` no new `<script>`, inline event
+attribute or URL to a new host) → no live session's claim → **every installed checker that applies,
+re-run on a staged copy**, none of which may go from pass to fail, and the proposer's finding gone
+(else `did-not-fix`) → a compare-and-swap write under a per-file lock (vault Markdown through the
+write queue). A refusal leaves the file byte-identical and records why. Only a **first-party**
+checker (script hash equals the MANIFEST row) may auto-apply under `addon_fixes apply`; anything else
+is capped at propose, and the output says "capped to propose". The fix is left uncommitted, for the
+commit gate to re-check. Each apply, refusal, rollback and undo is one `addon.fix` event. Proposals
+live in `<vault>/Projects/golden-thread/ext-proposals/`, originals in
+`~/.claude/golden-thread/proposals/backups/`. Exit `0` applied · `1` refused, did-not-fix or nothing
+to do · `2` usage.
+
 ### `gt_code_review.py` — the framework, not the opinions
 
 ```bash
@@ -2884,6 +3170,7 @@ python3 $SCRIPTS/gt_schedule.py remove  daily
 | `daily` | 22:00 | `gt_daily.py` — the day's facts into `Daily Notes/<today>.md` | `0`, `1` (nothing to report) |
 | `lint-weekly` | Mondays 07:00 | vault + wiki lint, reported into the vault | `0` |
 | `sweep` | Mondays 07:30 (0.17.2) | `gt_sweep.py` — whole-tree secrets + code sweep, verdict filed in the vault. Takes `--vault` and exactly one `--repo` | `0` |
+| `reminder` | 08:30 (0.18.0) | `gt_reminder.py run --scheduled` — overdue and due-soon deadlines through the enabled channels; reads the mirror, never the vault. See [Reminders](#reminders-outside-a-session-gt_reminderpy) | `0` |
 
 **A scheduled job runs the installed copy** in `~/.claude/golden-thread/hooks/` — a script under
 CloudStorage fails under launchd — and `install` refuses a job whose script is not there. Until
@@ -3241,8 +3528,11 @@ python3 $FLOW/gt_flow.py render --vault <vault> [--out FILE|DIR] [--redact] \
 
 - **`--redact` before the page leaves your own screen** — an Artifact, a chat, a ticket, a
   screenshot. Every project, path, task id, domain and session becomes a short salted hash
-  and notes are dropped; levels, kinds and counts stay. The salt is random per render, so
-  two redacted files cannot be joined. If the redaction self-check fails, nothing is written.
+  and notes are dropped; levels, kinds and counts stay. Hashes are at least 6 hex characters
+  (gt-flow 0.18.0; they were 4, and two renders shared one about once in 1,024 runs). Inside one
+  render, two names that truncate alike get a longer hash, so a page never shows two names under
+  one hash. The salt is random per render and never written, so two redacted files cannot be
+  joined. If the redaction self-check fails, nothing is written.
 - Task events (`task.open`, `task.done`) are hidden at first — on a real vault they are most
   of the stream. They are one click away in the Kinds filter; `--tasks` shows them from the start.
 - `--project` is repeatable and includes sub-projects; `--since` takes a date or an ISO-8601 instant.
@@ -3501,6 +3791,14 @@ duplicated across projects' runbooks — the detection step of `/gt:gt-runbook-l
 | `gt_optimize_session.py [--days N] [--brief] [--check [PCT]] [--json]` | prompt-cache writes by cause | `1` avoidable · `3` over `--check` · `4` could not run |
 | `gt_minimize.py [--session ID \| --transcript F \| --latest] [--json]` | this session's billed context, estimated breakdown, cache warmth (read-only) | `2` cannot tell which session · `4` could not run |
 | `gt_handoff.py … [--session ID] [--since-commit SHA] [--dry-run]` | the handoff, with *What Changed This Session* | |
+| `gt_sync.py status [--no-fetch] · pull · push [--dry-run] [--json] · behind [--mode cached\|fetch]` (hooks dir) | the vault against its git remote ([`/gt:gt-sync`](#gtgt-sync)) | `1` refused or git failed |
+| `gt_reminder.py status · setup CH · check CH · mirror · run · import-tsv` | reminders through push channels ([Reminders](#reminders-outside-a-session-gt_reminderpy)) | `1` could not deliver · `3` no mirror |
+| `gt_check.py list · run [--staged] [--event commit-msg]` | checkers modules contribute ([`gt_check.py`](#gt_checkpy-checkers-a-module-contributes)) | `1` fail or cannot-check · `3` nothing applied |
+| `gt_apply.py list · show · apply · undo` | apply a checker's fix proposal through every gate | `1` refused or did-not-fix |
+| `gt_model.py resolve · skill · check` | model intent → model ([Model intent](#model-intent-gt_modelpy-0180)) | `2` unknown intent |
+| `gt_checkpoint.py find · show · prune` | resumable scans and ingests | |
+| `gt_link_suggest.py suggest · apply` | link suggestions after a Knowledge write | `1` a write refused |
+| `gt_review_stamp.py --vault V PAGE … [--date D]` | queue `last_reviewed` on Knowledge pages | `1` refused |
 | `~/.claude/golden-thread/hooks/guard_foreign_checkout.py list` · `add PATH [--label L] [--route R] [--dry-run]` · `remove PATH [--dry-run]` | declare checkouts another machine owns ([Foreign checkouts](#foreign-checkouts-a-commit-in-another-machines-checkout)) | |
 
 ---

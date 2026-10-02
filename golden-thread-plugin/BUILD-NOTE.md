@@ -18,17 +18,18 @@
 
 | Plugin | Version | Note |
 |---|---|---|
-| gt (core) | **0.18.0** | verb-first skills, gt-close, gt-plan/gt-implement, ADR expiry and lineage, gt-brief, gt-optimize session member and archive, gt-minimize, write-back checks, catch-up brief, doctor rows, foreign-checkout guard |
-| gt-wiki | **0.2.5** | `requires_gt` admits 0.18 |
-| gt-demo, gt-farm, gt-flow, gt-report-card, gt-watch | **0.18.0** | they move with gt |
+| gt (core) | **0.18.0** | verb-first skills, gt-close, gt-plan/gt-implement, ADR expiry and lineage, gt-brief, gt-optimize session member and archive, gt-minimize, write-back checks, catch-up brief, doctor rows, foreign-checkout guard, checker host and fix writer, model intent, gt-sync, reminders, resumable scans and ingests |
+| gt-wiki | **0.2.5** | `review-due` ages a page from the newer of `last_reviewed` and `updated` |
+| gt-flow | **0.18.0** | redacted hashes at least 6 hex characters; draws the new `addon.fix` event |
+| gt-demo, gt-farm, gt-report-card, gt-watch | **0.18.0** | they move with gt |
 | gt-visualize | **0.4.2** | `requires_gt` admits 0.18 |
 | gt-usage | **0.1.4** | `requires_gt` admits 0.18 |
 | gt-lotr | **0.1.1** | `requires_gt` admits 0.18; still off by default |
 
-Skills **28 → 35**: `gt-handle`, `gt-list`, `gt-close`, `gt-plan`, `gt-implement`, `gt-brief`,
-`gt-minimize`. Nothing removed: `gt-task`, `gt-handoff`, `gt-task-list`, `gt-handoff-list`,
+Skills **28 → 36**: `gt-handle`, `gt-list`, `gt-close`, `gt-plan`, `gt-implement`, `gt-brief`,
+`gt-minimize`, `gt-sync`. Nothing removed: `gt-task`, `gt-handoff`, `gt-task-list`, `gt-handoff-list`,
 `gt-task-handle`, `gt-handoff-handle` stay as deprecated aliases through 0.18.x. gt_lint checks
-**19 → 23**. Settings: nine new. Hook registrations **14 → 16** (both new ones `install.sh`-owned).
+**19 → 23**. Settings: eighteen new (33 in all). Hook registrations **14 → 16** (both new ones `install.sh`-owned).
 
 ## 2. What changed, and why
 
@@ -58,6 +59,22 @@ The short version:
   `gt_state` speaks to the user via `systemMessage` and reads only its own session's ledger rows.
 - **Install health and guards:** doctor rows `repo-target` (a note, `i`) and `hooks-schema`;
   `guard_foreign_checkout.sh` denies commit/push in a declared foreign checkout.
+- **Checks modules contribute:** `gt_check.py` hosts module checkers (`checkers` key in
+  `module.json`; `cannot-check` never passes; `commit_checks` gates commits, off by default);
+  `gt_apply.py` is the only writer of their fixes (`addon_fixes`, hardened: CAS write, re-check by
+  every checker, content rules, first-party-only auto-apply). New event kind `addon.fix`.
+- **Model intent:** `model_intent: fast|balanced|deep`, resolved by `gt_model.py` through the new
+  `model` pack slot (`packs/core/model.intents.pack.json`); the session member's price table moved
+  to `scripts/gt_model_prices.json`, so no script names a model.
+- **Across machines and outside sessions:** `gt-sync` (fast-forward only; `sync_check` off by
+  default); `gt_reminder.py` with macOS, relay (SMS/Discord) and email channels, all off by
+  default, and a `reminder` scheduled job that reads a mirror, never the vault.
+- **Resumable batches:** `gt_checkpoint.py`; `gt_scan.py --resume`, `gt_ingest.py --resume/--done`.
+- **Link suggestions** after a Knowledge write; **review stamps** (`last_reviewed`) from gt-query
+  and gt-open.
+- **Every slug-taking tool** resolves sub-projects through `gt_spool.resolve_project`;
+  `gt_memory_check.py` with an unknown slug now exits 2 (was a silent 0).
+- **Hook allowlists** checked against Claude Code's hooks and tools docs: 33 events, 48 tools.
 - **Repository tooling:** `dev/remote-test.sh` (the suite on a remote Linux runner),
   `copygt.sh`, `dev/feature_requests.py --src` descends into `golden-thread-plugin/`.
 
@@ -185,6 +202,23 @@ Then, in a Claude Code session on that machine:
    `hooks-schema`. `guard_foreign_checkout.sh` and `log_knowledge_read.sh` show `unwired` until
    `install.sh` has run.
 3. **Declare any foreign checkout** on this machine (see §5).
+3a. **Reminders, if wanted on this machine** (all channels are off until you do this):
+    1. `python3 ~/.claude/golden-thread/hooks/gt_reminder.py setup macos|relay|email` — read the
+       channel's setup.
+    2. Relay or email: have the secrets store write `~/.claude/golden-thread/reminder/relay.json`
+       or `email.json`, **mode 600** (never paste a credential into a session).
+    3. `gt_settings.py set reminder_macos on` (or `reminder_relay sms|discord`,
+       `reminder_email on`); optionally `reminder_days`.
+    4. `gt_reminder.py check <channel>` — sends a real test; must say DELIVERED. For macOS,
+       allow Script Editor's notifications first.
+    5. `gt_schedule.py install reminder --vault <vault>` — writes the mirror, installs the 08:30
+       job and proves it through launchd (a real reminder is sent if anything is due). This is the
+       only proof through launchd; the tests stop at `launchctl`.
+    6. Retiring the staged `Projects/secrets-management/deadline-reminder/` waits until one real
+       reminder has arrived. Its list can be folded in with `gt_reminder.py import-tsv --only
+       "Ladder decision"` — the other row is an older wording of rows `deadlines.md` already has.
+3b. **Two machines on one vault:** `gt_settings.py set sync_check cached` for a free "vault is
+    behind" line at session start; `/gt:gt-sync pull` before work, `push` after `/gt:gt-work`.
 4. **Run the gate again** and drain anything waiting:
    `python3 ~/.claude/golden-thread/hooks/gt_broker.py drain --vault <vault>`.
 
@@ -210,12 +244,11 @@ Then, in a Claude Code session on that machine:
   suppress narrative pages as they come up.
 - **Pinning research findings.** gt-work allows adding `[pinned]` to an existing `##` heading in
   `research.md` — a narrow exception to append-only that PROTOCOL/CONVENTIONS do not yet word.
-- **Stale references to the old skill names** remain in shipped text: `gt_settings.py`'s
-  `handoff_surface` help (`/gt:gt-handoff-handle`), gt-open and gt-work in a few lines, and
-  gt-minimize (`/gt:gt-handoff`, four places). The aliases make them work; whether to sweep them
-  before release or with the alias removal is the owner's call.
-- **`hooks/known_events.json` / `known_tools.json`** were written from knowledge of Claude Code's
-  hook events (reference 2026-10), not checked against the live docs. Review them before release.
+- **gt-open's project steps still name the old skills** — kept deliberately for the alias parity
+  test; every other shipped text now names `gt-create handoff` / `gt-handle handoff`. Sweep them
+  when the aliases are removed.
+- **`commit_checks` and `addon_fixes apply`** are off / propose by default and no checkers ship;
+  turning them on means nothing until a checker module is installed.
 - **When to release:** the owner says when. Then push straight to main, with no PR.
 
 ## 6. What will be misread if nobody says it
@@ -236,7 +269,14 @@ Then, in a Claude Code session on that machine:
   quoted strings and heredocs (e.g. `<YYYY>.md` in a Python heredoc) and can deny a harmless
   command as a vault write. Write such text with the Write tool to a file outside the vault, or put
   the script in a file and run it.
-- **`test_package.test_a_stale_zip_is_replaced` can fail under parallel load.** A known flake; re-run
-  it alone before treating it as a regression.
+- **Known load flakes:** `test_package.test_a_stale_zip_is_replaced` and four
+  `test_install_vault_upgrade` units fail only under the 16-worker full run and pass in isolation.
+  Re-run them alone before treating one as a regression.
+- **`gt_check.py run` exit 3 is "nothing applied", not clean** — with no checker modules installed,
+  every run says so.
+- **A vault whose `tools/gt_events.py` predates 0.18.0 refuses an `addon.fix` event** until
+  `/gt:gt-upgrade` refreshes the vault tools.
+- **Reminder "DELIVERED" for macOS** means `osascript` exited 0; if Script Editor's notifications are
+  off, nothing appears.
 - **Run the suite on the remote runner, not the Mac** (`GT_TEST_VERSION=0.18.0 bash
   dev/remote-test.sh -j 2 …`). A local full run drove the Mac's load to 50–96.

@@ -1,7 +1,7 @@
 # Contributing a pack to Golden Thread
 
 > **Reader:** an outside contributor sending a pack
-> **Claims last checked against the code:** 2026-09-17 — see *The documents, and what belongs in each* in [`CLAUDE.md`](CLAUDE.md).
+> **Claims last checked against the code:** 2026-10-01 (gt 0.18.0) — see *The documents, and what belongs in each* in [`CLAUDE.md`](CLAUDE.md).
 
 Golden Thread has **no plugin runtime**. Nobody's code runs on anyone's machine as a
 third-party add-on. Instead you **submit a pack**, it is reviewed, and if accepted it is
@@ -77,15 +77,31 @@ small packs teach it a language it has never seen**, with no change to any code:
 
 Send them together and say so in the pull request; they are reviewed as one contribution.
 
-### Some slots are open but nothing reads them yet
+### Every open slot has a reader
 
-`dev/submissions.py slots` lists every open slot. `gt_registry.py slots` additionally says
-which ones a shipped tool actually **reads**, and today `secrets`, `lint`, `vocabulary`,
-`validation_rules` and `runbook` have no consumer: a pack for one of them validates, merges,
-resolves correctly — and then changes nothing until the tool that reads it ships.
+`dev/submissions.py slots` lists every open slot; `gt_registry.py slots` also names the shipped
+tool that **reads** each one (`gt_registry.CONSUMERS`, and a test asserts each really does). As of
+0.18.0 every slot has one — `lint` is read by `gt_scan_code.py`, `secrets` by `gt_secrets.py`,
+`vocabulary`, `validation_rules` and `runbook` by `gt_context.py`, `model` by `gt_model.py`. If a
+future slot opens before its reader ships, `gt_registry.py slots` will say so; ask before spending
+time on one.
 
-That is stated plainly rather than discovered, because a definition nothing reads is the most
-demoralising kind of contribution to make. Ask before spending time on one.
+### The `model` slot (0.18.0)
+
+Skills and agents declare a model **intent** — `model_intent: fast | balanced | deep` — never a
+model name. The `model` slot (Tier D, because the resolved name is printed) maps an intent to a
+model alias:
+
+```json
+{"intent": "deep", "model": "opus", "verified": "2026-10-01"}
+```
+
+`intent` is one of `fast`, `balanced`, `deep`; `model` is a short token (an alias such as the core
+pack's `haiku` / `sonnet` / `opus`, not a dated model id); `verified` is the date the mapping was
+last checked, a new field kind (`date`, `YYYY-MM-DD`). The date is required because a model name
+ages on someone else's schedule: a row is only as good as the day it was checked. A contributed
+skill can be checked on its own with `python3 dev/submissions.py skill path/to/SKILL.md`, which
+refuses an unknown `model_intent` value and names the file, line and value.
 
 ---
 

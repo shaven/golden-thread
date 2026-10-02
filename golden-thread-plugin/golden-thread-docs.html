@@ -259,7 +259,7 @@ the rule says so. It fails open on any parse failure.</p>
 <p>The canonical rule definitions live in <code>Projects/golden-thread/core-rules/</code> inside the vault. Editing a rule file there changes what the hook injects — the rule text is never duplicated into the script.</p>
 <p><strong>The canary:</strong> <code>core_timestamp_every_message.md</code> is designated Core/Validated not because a missing timestamp causes real harm, but because it is trivially observable at the top of every reply. When the timestamp disappears, enforcement has broken.</p>
 <hr />
-<h2 id="gt-skills-35">gt Skills (35)</h2>
+<h2 id="gt-skills-36">gt Skills (36)</h2>
 <h3 id="setup">Setup</h3>
 <table>
 <thead>
@@ -302,11 +302,15 @@ the rule says so. It fails open on any parse failure.</p>
 </tr>
 <tr>
 <td><code>/gt:gt-ingest</code></td>
-<td>Bulk-import an existing project's memory files, CLAUDE.md rules, and notes into the vault. External sources are stored immutably in <code>Sources/</code> before being synthesized into Knowledge pages.</td>
+<td>Bulk-import an existing project's memory files, CLAUDE.md rules, and notes into the vault. External sources are stored immutably in <code>Sources/</code> before being synthesized into Knowledge pages. Resumable from any session since 0.18.0 (<code>--resume CK</code>, <code>--done CK --index N</code>).</td>
 </tr>
 <tr>
 <td><code>/gt:gt-review</code></td>
 <td>Empty the inbox: sweep <code>INBOX.md</code> — plus Obsidian daily notes if you keep them — for captured-but-unfiled thoughts and route each one into a tracked project.</td>
+</tr>
+<tr>
+<td><code>/gt:gt-sync</code></td>
+<td>Vault ↔ its git remote (0.18.0, <code>gt_sync.py</code>): <code>status</code> (ahead/behind/uncommitted), <code>pull</code> (fast-forward only; stops on divergence), <code>push</code> (push check must pass; refused while behind). <code>sync_check</code> (<code>off</code>/<code>cached</code>/<code>fetch</code>) adds a behind line at session start.</td>
 </tr>
 </tbody>
 </table>
@@ -420,7 +424,7 @@ read refuses too, because "could not check" is not "clear".</p>
 <tbody>
 <tr>
 <td><code>/gt:gt-validate</code></td>
-<td>Verify a claim by re-deriving it with a fresh-context validator — never by reviewing the reasoning that produced it. Use before recording a finding as fact or before a production change.</td>
+<td>Verify a claim by re-deriving it with a fresh-context validator — never by reviewing the reasoning that produced it. Use before recording a finding as fact or before a production change. Since 0.18.0: <code>gt_check.py list --for</code> first; <code>model_intent: deep</code>.</td>
 </tr>
 </tbody>
 </table>
@@ -451,7 +455,7 @@ read refuses too, because "could not check" is not "clear".</p>
 </tr>
 <tr>
 <td><code>/gt:gt-scan</code></td>
-<td>Scan code against the language definitions in effect on this machine — naming conventions and encoding, per language, all of it from packs rather than from the script (fourteen languages ship with definitions; <code>gt_scan_language.py --languages</code> lists what is in effect here). An aggregator over leaf scanners: it reports how many members RAN alongside what they found, because "nothing is wrong" and "nothing was checked" otherwise print identically.</td>
+<td>Scan code against the language definitions in effect on this machine — naming conventions and encoding, per language, all of it from packs rather than from the script (fourteen languages ship with definitions; <code>gt_scan_language.py --languages</code> lists what is in effect here). An aggregator over leaf scanners: it reports how many members RAN alongside what they found, because "nothing is wrong" and "nothing was checked" otherwise print identically. Resumable since 0.18.0 (<code>gt_scan.py --resume CHECKPOINT</code>).</td>
 </tr>
 <tr>
 <td><code>/gt:gt-allin</code></td>
@@ -475,7 +479,7 @@ read refuses too, because "could not check" is not "clear".</p>
 </tr>
 <tr>
 <td><code>/gt:gt-settings</code></td>
-<td>View and change what Golden Thread does on its own. gt's own settings are <code>component_updates</code>, <code>version_check</code>, <code>orphan_check</code>, <code>push_check</code>, <code>surface</code>, <code>daily_comms_content</code>, <code>release_announce</code>, <code>agent_specialization</code>, <code>skeptic_pass</code>, <code>handoff_surface</code>, <code>task_surface</code>, <code>test_gate</code>, <code>parallel_work</code>, <code>parallel_max</code>, <code>protected_paths</code>, and new in 0.18.0 <code>brief_absence_days</code>, <code>foreign_checkout_guard</code>, <code>decision_signals</code>, <code>knowledge_access_log</code>, <code>optimize_session_days</code>, <code>optimize_avoidable_pct</code>, <code>memory_contradiction_check</code>, <code>promotion_candidates</code> and <code>promotion_overlap</code>; each installed module registers its own from <code>module.json</code> and they are listed under the module's name (<code>report_card</code>, <code>closeout_check</code>, <code>usage_meter</code>, <code>usage_alert</code>, <code>visualize_publish</code>, <code>visualize_publish_visibility</code>, <code>watch</code>). Every automatic behaviour is registered here and every one can be switched off.</td>
+<td>View and change what Golden Thread does on its own. gt's own settings are <code>component_updates</code>, <code>version_check</code>, <code>orphan_check</code>, <code>push_check</code>, <code>surface</code>, <code>daily_comms_content</code>, <code>release_announce</code>, <code>agent_specialization</code>, <code>skeptic_pass</code>, <code>handoff_surface</code>, <code>task_surface</code>, <code>test_gate</code>, <code>parallel_work</code>, <code>parallel_max</code>, <code>protected_paths</code>, and new in 0.18.0 <code>brief_absence_days</code>, <code>foreign_checkout_guard</code>, <code>decision_signals</code>, <code>knowledge_access_log</code>, <code>optimize_session_days</code>, <code>optimize_avoidable_pct</code>, <code>memory_contradiction_check</code>, <code>promotion_candidates</code>, <code>promotion_overlap</code>, <code>review_stamp</code>, <code>sync_check</code>, <code>reminder_days</code>, <code>reminder_macos</code>, <code>reminder_relay</code>, <code>reminder_email</code>, <code>commit_checks</code>, <code>addon_fixes</code> and <code>addon_fix_size_limit</code>; each installed module registers its own from <code>module.json</code> and they are listed under the module's name (<code>report_card</code>, <code>closeout_check</code>, <code>usage_meter</code>, <code>usage_alert</code>, <code>visualize_publish</code>, <code>visualize_publish_visibility</code>, <code>watch</code>). Every automatic behaviour is registered here and every one can be switched off.</td>
 </tr>
 </tbody>
 </table>
@@ -840,6 +844,38 @@ different facts and only one is reassuring.</p>
 <tr>
 <td><code>log_knowledge_read.sh</code> (hook, <code>PostToolUse</code> matcher <code>Read</code>)</td>
 <td>Appends one line per Read of a Knowledge page to <code>&lt;vault&gt;/usage/knowledge.jsonl</code> (git-ignored; setting <code>knowledge_access_log</code>).</td>
+</tr>
+<tr>
+<td><code>gt_check.py list [--for PATH] [--json]</code> · <code>run [PATH …] [--staged] [--event commit-msg --message-file F] [--json] [--no-receipt] [--dry-run]</code></td>
+<td>The validation host: runs every module checker that applies; <code>pass</code> / <code>fail</code> / <code>cannot-check</code>, and <code>cannot-check</code> never passes. Exit 1 on a fail or cannot-check, 3 when nothing applied. Receipts feed the commit gate when <code>commit_checks</code> is on.</td>
+</tr>
+<tr>
+<td><code>gt_apply.py list [--all]</code> · <code>show ID</code> · <code>apply (ID … \| --all) [--dry-run]</code> · <code>undo ID</code></td>
+<td>The only writer of a checker's fix proposals: grant, protected paths, one in-place edit, content rules, claims, a re-check by every checker, compare-and-swap write; first-party only for auto-apply (<code>addon_fixes</code>, <code>addon_fix_size_limit</code>).</td>
+</tr>
+<tr>
+<td><code>gt_model.py resolve [INTENT]</code> · <code>skill PATH</code> · <code>check PATH …</code></td>
+<td>What <code>model_intent</code> (fast/balanced/deep) resolves to here, and from which pack; refuses unknown values.</td>
+</tr>
+<tr>
+<td><code>gt_sync.py status · pull · push · behind</code> (hooks dir)</td>
+<td>The script behind <code>/gt:gt-sync</code>; <code>behind</code> prints the session-start line.</td>
+</tr>
+<tr>
+<td><code>gt_reminder.py status · setup CH · check CH [--json] · mirror --vault V · run [--scheduled] · import-tsv</code></td>
+<td>Reminders through macOS notification, the notification relay (SMS/Discord) or email, each off by default; <code>check</code> sends a real test; the <code>reminder</code> scheduled job reads a mirror, never the vault.</td>
+</tr>
+<tr>
+<td><code>gt_checkpoint.py find --tool scan\|ingest\|scan-language</code> · <code>show FILE</code> · <code>prune [--days 7]</code></td>
+<td>Resumable batch checkpoints, readable by any session; pruned after 7 days.</td>
+</tr>
+<tr>
+<td><code>gt_link_suggest.py suggest --page P</code> · <code>apply --page P --to T … [--forward-only]</code></td>
+<td>Up to five unlinked Knowledge pages, cross-domain first; writes only the picked links, both ways, through the queue.</td>
+</tr>
+<tr>
+<td><code>gt_review_stamp.py --vault V PAGE … [--date D] [--dry-run] [--json]</code></td>
+<td>Queue <code>last_reviewed</code> on Knowledge pages gt-query and gt-open read (<code>review_stamp</code>); gt-wiki 0.2.5's <code>review-due</code> ages from it.</td>
 </tr>
 </tbody>
 </table>

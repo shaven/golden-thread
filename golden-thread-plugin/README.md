@@ -7,7 +7,7 @@ A Claude Code plugin that turns an Obsidian vault into the single source of trut
 
 
 > [!IMPORTANT]
-> **0.18.0 has seven themes**; what changed and why is in the CHANGELOG, how to use each in the
+> **0.18.0 has ten themes**; what changed and why is in the CHANGELOG, how to use each in the
 > MANUAL. **One verb per action:** `gt-create`, `gt-open`, `gt-list`, `gt-handle` and the new
 > `gt-close` take the artifact (project, task, handoff) as their argument; the six old task and
 > handoff skills still work through 0.18.x as deprecated aliases. **A coding loop:** `gt-plan`
@@ -18,8 +18,12 @@ A Claude Code plugin that turns an Obsidian vault into the single source of trut
 > before you cut it. **Write-back that checks itself:** contradictions, promotion candidates and a
 > research digest. **Returning after time away:** a catch-up brief in `gt-open` and *What Changed
 > This Session* in the handoff. **Install health and guards:** doctor rows `repo-target` and
-> `hooks-schema`, and a guard that refuses commits in another machine's checkout. After
-> installing, restart and run `/gt:gt-upgrade`.
+> `hooks-schema`, and a guard that refuses commits in another machine's checkout. **Checks modules
+> contribute:** `gt_check.py` hosts module checkers (`cannot-check` never passes) and `gt_apply.py`
+> is the only writer of their fixes. **Model intent:** skills declare `fast`/`balanced`/`deep`,
+> resolved by `gt_model.py`. **Across machines and outside sessions:** `gt-sync`, and reminders by
+> macOS notification, SMS/Discord or email (each off by default). Scans and ingests **resume** after
+> an interruption, from any session. After installing, restart and run `/gt:gt-upgrade`.
 >
 > Earlier: **0.17.11** made Core rule 1 queue-first (every vault write goes through the write
 > queue) and added the optional `gt-lotr` module; **0.17.2** added surfacing at session start and
@@ -67,7 +71,7 @@ Facts move up the hierarchy as they prove themselves general. They never move ba
 
 ---
 
-## Thirty-Five Skills (plus modules)
+## Thirty-Six Skills (plus modules)
 
 ### Setup
 
@@ -83,8 +87,9 @@ Facts move up the hierarchy as they prove themselves general. They never move ba
 | `/gt:gt-open` | Load a project at the start of a session. Reads all project docs in order (idea → research → decisions → design → spec → runbook → memory), then summarizes the project state and asks where to pick up. Names that project's waiting handoffs without reading them. Since 0.18.0: leads with a generated catch-up brief after `brief_absence_days` away (`--brief` / `--no-brief`, `gt_catchup.py`), reads `research-digest.md` when it is current, says which repo a repo-scoped command will hit, and opens one handoff or task (`handoff [id]`, `task <id>`). |
 | `/gt:gt-route` | Mid-session check: what has this session actually become, where does its output belong, and is it happening in the right project, harness and model? Serves the middle of a session, where `gt-open` cannot see yet and `gt-work` sees too late. Cheap and repeatable — not a gate. |
 | `/gt:gt-work` | Write back session findings at the end of a session. Appends to `research.md`, adds ADRs to `decisions.md`, refines `design.md`, creates `spec.md` when design is complete, and flags content for PROTOCOL.md. Offers a handoff for what did not reach a file — which the next session is now shown at start. Since 0.18.0 it asks about ADR supersession and expiry and memory entities, regenerates `research-digest.md` (`gt_digest.py`), flags contradicting memory notes (`gt_memory_check.py`) and promotion candidates (`gt_promote_detect.py`), and ends with a *Learn* step for reusable patterns. |
-| `/gt:gt-ingest` | Bulk-import an existing project's memory files, CLAUDE.md rules, and notes into the vault. External sources are stored immutably in `Sources/` before being synthesized into Knowledge pages. |
+| `/gt:gt-ingest` | Bulk-import an existing project's memory files, CLAUDE.md rules, and notes into the vault. External sources are stored immutably in `Sources/` before being synthesized into Knowledge pages. Since 0.18.0 an interrupted ingest resumes from any session (`gt_checkpoint.py`). |
 | `/gt:gt-review` | Empty the inbox. Reads `<vault>/INBOX.md` first — the capture point any session drops a line into — and then Obsidian daily notes, but only if the vault is configured for them. Routes each captured item into a tracked project. |
+| `/gt:gt-sync` | Keep the vault in step with its git remote across machines (0.18.0, `gt_sync.py`): `status` (ahead, behind, uncommitted), `pull` (fast-forward only — stops on divergence, never merges), `push` (only after the push check passes, and refused while behind). Setting `sync_check` adds a "vault is behind" line at session start. |
 
 ### Coding Work
 
@@ -126,7 +131,7 @@ nothing is deleted.
 
 | Command | What it does |
 |---|---|
-| `/gt:gt-validate` | Verify a claim by re-deriving it with a fresh-context validator — never by reviewing the reasoning that produced it. Use before recording a finding as fact or before a production change. |
+| `/gt:gt-validate` | Verify a claim by re-deriving it with a fresh-context validator — never by reviewing the reasoning that produced it. Use before recording a finding as fact or before a production change. Since 0.18.0 it asks `gt_check.py list --for` first, so an installed checker settles a mechanical claim, and it declares `model_intent: deep` (`gt_model.py`). |
 
 ### Maintenance
 
@@ -134,7 +139,7 @@ nothing is deleted.
 |---|---|
 | `/gt:gt-upgrade` | Bring an existing vault up to the installed release: run the migrations it has not had, take the release's changes into `PROTOCOL.md` and `CONVENTIONS.md` without losing local edits, add newly shipped Core rules, stamp the vault. Rehearse with `--dry-run`; it refuses a dirty tree and backs up before applying. |
 | `/gt:gt-doctor` | One report for the whole install: plugin version, component drift, hook wiring, the vault's release stamp and pending migrations, the scheduled jobs' last exits, stray workers, unpushed commits, publish-destination drift and a lint summary. Since 0.18.0, `repo-target` (which repo a repo-scoped command will hit — a note, never a finding) and `hooks-schema` (hook entries naming an event, tool or file Claude Code does not have). Exit 2 means a check *could not run*, which is deliberately distinct from clean. |
-| `/gt:gt-scan` | Scan code against the language definitions in effect on this machine — naming conventions and encoding, per language, all of it from definition packs rather than from the script, so a contributed language pack teaches it a new language with no code change. An aggregator over leaf scanners: it reports how many members RAN alongside what they found. |
+| `/gt:gt-scan` | Scan code against the language definitions in effect on this machine — naming conventions and encoding, per language, all of it from definition packs rather than from the script, so a contributed language pack teaches it a new language with no code change. An aggregator over leaf scanners: it reports how many members RAN alongside what they found. Since 0.18.0 an interrupted scan resumes where it stopped, from any session. |
 | `/gt:gt-optimize` | Find what costs context and earns nothing back, as two members: `vault` — a fact duplicated across memory files, a dead index row, a `global-memory/` file over budget or naming one project, a relative date, a Knowledge page nobody reads, what each project costs to open (`--cost`); and `session` — prompt-cache writes lost to expiry or a changed prefix (`gt_optimize_session.py`). Reporting never writes; `--demote`, `--archive` and `--supersede` write only with `--apply`, through the queue, and delete nothing. |
 | `/gt:gt-allin` | Every check in one command — scan, lint, the optimize report, install health, the credential scan, the runbook lint, and the wiki lint while gt-wiki is installed — reporting how many members actually ran, not just what they found. Never pushes and never applies a change. |
 | `/gt:gt-allin-commit` | The separate, deliberate act: commit once the checks pass and a test receipt covers every staged file. Refuses on the default branch, refuses without evidence, and never pushes — a commit is reversible, a push is not. |
@@ -142,7 +147,7 @@ nothing is deleted.
 | `/gt:gt-validation` | Record what a validation established, and what it could not determine, stamped with the file's content hash so the definition expires when the file changes. |
 | `/gt:gt-lint` | Audit the vault for structural problems: broken wikilinks, orphaned pages, missing index entries, unlisted memory files, Knowledge pages citing superseded sources, stale pages, and Core rules that are stored but not enforced. Since 0.18.0 four checks file questions to the review queue: `adr-expires`, `bundled-concept`, `decision-candidate`, `memory-entity-orphan`. Applies fixes with your approval. |
 | `/gt:gt-runbook-lint` | Scan all project `runbook.md` files for content that has drifted into multiple runbooks. Classifies duplicated content by type and routes it to the right shared layer (PROTOCOL.md, Knowledge page, or repo CLAUDE.md) via `gt-promote`. |
-| `/gt:gt-settings` | View and change what Golden Thread does automatically. Twenty-four settings ship with gt — `component_updates`, `version_check`, `orphan_check`, `push_check`, `surface`, `daily_comms_content`, `release_announce`, `agent_specialization`, `skeptic_pass`, `handoff_surface`, `task_surface`, `test_gate`, `parallel_work`, `parallel_max`, `protected_paths`, and new in 0.18.0 `brief_absence_days`, `foreign_checkout_guard`, `decision_signals`, `knowledge_access_log`, `optimize_session_days`, `optimize_avoidable_pct`, `memory_contradiction_check`, `promotion_candidates`, `promotion_overlap` — plus every setting an installed module adds (`report_card`, `closeout_check`, `usage_meter`, `usage_alert`, `visualize_publish`, `visualize_publish_visibility`, `watch`). Every automatic behaviour can be switched off. |
+| `/gt:gt-settings` | View and change what Golden Thread does automatically. Thirty-three settings ship with gt — `component_updates`, `version_check`, `orphan_check`, `push_check`, `surface`, `daily_comms_content`, `release_announce`, `agent_specialization`, `skeptic_pass`, `handoff_surface`, `task_surface`, `test_gate`, `parallel_work`, `parallel_max`, `protected_paths`, and new in 0.18.0 `brief_absence_days`, `foreign_checkout_guard`, `decision_signals`, `knowledge_access_log`, `optimize_session_days`, `optimize_avoidable_pct`, `memory_contradiction_check`, `promotion_candidates`, `promotion_overlap`, `review_stamp`, `sync_check`, `reminder_days`, `reminder_macos`, `reminder_relay`, `reminder_email`, `commit_checks`, `addon_fixes`, `addon_fix_size_limit` — plus every setting an installed module adds (`report_card`, `closeout_check`, `usage_meter`, `usage_alert`, `visualize_publish`, `visualize_publish_visibility`, `watch`). Every automatic behaviour can be switched off. |
 
 ### Modules
 

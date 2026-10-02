@@ -36,6 +36,9 @@ and blocks it if the rule was broken.
 > - **Less to carry.** `/gt:gt-optimize` now measures what your sessions spend rebuilding the prompt
 >   cache, and can archive old research; `/gt:gt-minimize` prunes a session before you step away;
 >   `/gt:gt-open` leads with a short catch-up after time away.
+> - **Across machines and outside sessions.** `/gt:gt-sync` pulls and pushes the vault between
+>   machines (fast-forward only); reminders reach you by macOS notification, SMS or Discord through
+>   your relay, or email — each off by default, each with a test that sends a real message.
 > - **Guards.** A commit or push in a checkout you declared as another machine's is refused, and
 >   `/gt:gt-doctor` says which repo a review command will actually look at. Run `/gt:gt-upgrade`
 >   after installing.
@@ -204,7 +207,7 @@ costly, so a broken hook announces itself.
 
 | Path | What it is |
 |---|---|
-| `golden-thread-plugin/golden-thread/<ver>/` | The `gt` plugin — 35 skills, scripts, templates, hooks, packs |
+| `golden-thread-plugin/golden-thread/<ver>/` | The `gt` plugin — 36 skills, scripts, templates, hooks, packs |
 | `golden-thread-plugin/golden-thread-wiki/<ver>/` | Module `wiki` (plugin `gt-wiki`) — 5 skills for LLM wiki vaults |
 | `golden-thread-plugin/golden-thread-demo/<ver>/` | Module `demo` (plugin `gt-demo`) — the guided PizzaBot 3000 tour |
 | `golden-thread-plugin/golden-thread-watch/<ver>/` | Module `watch` (plugin `gt-watch`) — follow upstream git repos, P0 on a security fix |
@@ -277,7 +280,7 @@ cannot be reached and the rules are not loaded — the banner names the cause.
 
 ## The skills
 
-Thirty-five skills in gt, plus the skills of its modules (listed after gt's own). Each composes through files rather than through other skills, so
+Thirty-six skills in gt, plus the skills of its modules (listed after gt's own). Each composes through files rather than through other skills, so
 removing any one leaves the rest working.
 
 | Skill | What it does |
@@ -291,12 +294,13 @@ removing any one leaves the rest working.
 | `gt-query` | Answers "how does this work?" — reads `index.md`, follows wikilinks into `Knowledge/`, then falls back to grep and project memory. Flags anything returned that is marked `status: stale`. Also answers "how did we decide X?" (`--lineage`, the chain of ADRs that replaced each other) and "what do we know about X?" (`--entity`). |
 | `gt-ingest` | Imports an existing project's notes. Copies, never moves or deletes. Stores external sources immutably in `Sources/` before synthesising them, so the raw input survives whatever you later conclude from it. |
 | `gt-review` | Empties the inbox: routes each captured-but-unfiled line (INBOX.md, plus daily notes if you keep them) into a tracked project. |
+| `gt-sync` | Keeps the vault in step across machines: shows how far ahead or behind its remote it is, pulls only by fast-forward — stopping, never merging, when both sides have moved — and pushes only after the push check passes. |
 | `gt-refresh` | Checks `Sources/` for upstream changes. Supersedes with a *new* immutable file carrying `supersedes:` rather than editing the old one, so the record of what you believed and when stays intact. |
 | `gt-upgrade` | Updates the VAULT after `install.sh` updates the plugin — the step that did not exist until a 0.11.0 migration had to be run by hand across 43 projects. Migrations detect their own work, documents are three-way merged against a base the vault carries, and a step that needs a person is reported rather than guessed at. |
 | `gt-doctor` | Answers "is this install healthy?" in one command — version, component drift, hook wiring, the vault's release stamp and pending migrations, the scheduled jobs' last exits, stray workers, unpushed commits, publish drift, lint. Every answer is stated relative to the release it was checked against, because a clean report from a check pinned to the wrong version reads exactly like a healthy install. |
 | `gt-lint` | Runs 23 deterministic health checks — broken links, orphans, index gaps, scope leaks, staleness, superseded sources — plus `core-unenforced`, which catches a rule that is stored but never re-asserted, and four that file questions for you: an ADR whose expiry may have come, a page covering two topics, a decision stated in prose with no ADR, a memory note missing its entity tags. |
 | `gt-optimize` | Finds what you pay for on every turn and get nothing back for — a fact duplicated across memory files, a dead index row, a `global-memory/` file over budget, a Knowledge page nobody reads — and, since 0.18.0, what your sessions spend rebuilding the prompt cache after sitting idle past its lifetime. Reporting never writes; moving a note somewhere cheaper or archiving old research happens only when asked, and deletes nothing. |
-| `gt-scan` | Checks code against the language definitions this machine actually has — naming and encoding, per language, entirely from packs: a contributed language pack teaches it a new language with no code change. It reports how many checks RAN next to what they found, so a scan that could not load its definitions can never be mistaken for a clean tree. |
+| `gt-scan` | Checks code against the language definitions this machine actually has — naming and encoding, per language, entirely from packs: a contributed language pack teaches it a new language with no code change. It reports how many checks RAN next to what they found, so a scan that could not load its definitions can never be mistaken for a clean tree. An interrupted scan resumes where it stopped, from any later session. |
 | `gt-allin` | One command for every check, built so a skipped check can never pass for a clean one: the headline is "N of M members ran", and a member that could not execute outranks a member that found something. Since 0.17.2 it also runs the credential scan, the runbook lint and — while gt-wiki is installed — the wiki lint. It does not push — an aggregator is where a partial run is easiest to mistake for a complete one, and pushing there would break the very rule about seeing tests pass that the tool exists to serve. |
 | `gt-context` | Renders what this vault's definitions SAY, for a session to read — the first consumer of the registry's model-reachable tier. Wrapped in an envelope that marks it as data rather than instruction, because a renderer can make content identifiable but cannot make it true. |
 | `gt-validation` | Writes down what a validation established about a file, including what it could NOT determine, stamped with the file's content hash. Edit the file and the recorded definition goes visibly stale — because every serious defect this project has shipped was a claim that outlived its implementation. |
