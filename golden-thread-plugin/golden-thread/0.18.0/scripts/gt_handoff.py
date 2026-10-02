@@ -6,6 +6,7 @@ it. The design session ends holding context that never reached a file, and the n
 confident and wrong.
 
   gt_handoff.py --vault V --project SLUG [--repo PATH] [--out PATH] [--force] [--json]
+                [--session ID] [--since-commit SHA]
 
 `--force` asks to replace an existing handoff file. Without it an existing file is REFUSED rather
 than overwritten: a handoff is someone's record of a session, and overwriting one loses it silently.
@@ -27,6 +28,16 @@ It does NOT write the narrative -- what we decided, why, and what to do next. Th
 skill's job, with a person, because it is the part that requires knowing what happened. A script
 that invents that section produces a document that READS finished and is not, which is worse
 than no handoff at all: the next session inherits false confidence instead of no confidence.
+
+WHAT CHANGED THIS SESSION (0.18.0). "What is the current state" is not "what did this session
+add". The vault tool gt_session.py records the vault's HEAD as `start_commit:` when a session
+registers; this reads it from `Projects/golden-thread/sessions/<id>_*.md` (the id from
+`--session`, else $CLAUDE_CODE_SESSION_ID / $CLAUDE_SESSION_ID / $GT_SESSION_ID) and appends
+`## What Changed This Session`: new memory files (with their frontmatter description),
+research.md files with the `##` headings added, new ADRs (spool slots and decisions.md
+headings), design.md files touched, and Knowledge pages created or updated -- derived from
+`git diff --name-status <start>..HEAD` and labelled `self-verified`. `--since-commit` overrides
+the start. With no start commit to be found the section is omitted, never guessed.
 
 THE VERIFICATION LINE. Every claim in the output is labelled `verified`, `unverified` or
 `unknown`, per Core rule 10. A handoff is exactly where an unverified claim gets promoted to
@@ -161,6 +172,122 @@ def repo_facts(repo):
     return out
 
 
+# -- what changed this session (0.18.0) ---------------------------------------------------------
+SESSION_ENV = ("CLAUDE_CODE_SESSION_ID", "CLAUDE_SESSION_ID", "GT_SESSION_ID")
+
+
+def start_commit_for(vault, session):
+    """-> (sha, source) from the session's registration file, or (None, why)."""
+    sid = session or next((os.environ[v].strip() for v in SESSION_ENV if os.environ.get(v)), None)
+    if not sid:
+        return None, "no session id (pass --session or --since-commit)"
+    d = os.path.join(vault, "Projects", "golden-thread", "sessions")
+    try:
+        names = sorted(n for n in os.listdir(d) if n.startswith(sid + "_") and n.endswith(".md"))
+    except OSError:
+        names = []
+    for n in reversed(names):
+        text = _read(os.path.join(d, n)) or ""
+        m = re.search(r"^start_commit:\s*([0-9a-f]{7,64})\s*$", text, re.M)
+        if m:
+            return m.group(1), "Projects/golden-thread/sessions/%s" % n
+    return None, "no start_commit recorded for session %s" % sid
+
+
+def _git_show(vault, rev, path):
+    return _run(["git", "show", "%s:%s" % (rev, path)], vault) if rev else None
+
+
+def _headings(text, level="## "):
+    return [ln.strip() for ln in (text or "").split("\n") if ln.startswith(level)]
+
+
+def _description(text):
+    m = re.search(r"^---\s*\n(.*?)\n---", text or "", re.S)
+    if m:
+        d = re.search(r"^description:\s*(.+)$", m.group(1), re.M)
+        if d:
+            return d.group(1).strip().strip('"').strip("'")
+    return None
+
+
+def vault_changes(vault, start):
+    """-> dict of categorised changes start..HEAD, or None when git cannot answer."""
+    if not _run(["git", "rev-parse", "--verify", "-q", start + "^{commit}"], vault):
+        return None
+    raw = _run(["git", "diff", "--name-status", "--no-renames", "%s..HEAD" % start, "--", "."],
+               vault)
+    if raw is None:
+        return None
+    out = {"memory": [], "research": [], "adrs": [], "design": [], "knowledge": [],
+           "start": start}
+    seen_adr = set()
+    for line in raw.split("\n"):
+        if not line.strip() or "\t" not in line:
+            continue
+        status, path = line.split("\t", 1)
+        st = status[:1]
+        if st == "D":
+            continue
+        parts = path.split("/")
+        if (len(parts) >= 4 and parts[0] == "Projects" and "memory" in parts[2:-1]
+                and path.endswith(".md") and parts[-1] != "MEMORY.md" and st == "A"):
+            out["memory"].append((path, _description(_git_show(vault, "HEAD", path))))
+        elif len(parts) >= 3 and parts[0] == "Projects" and parts[-1] == "research.md":
+            new = _headings(_git_show(vault, "HEAD", path))
+            old = set(_headings(_git_show(vault, start, path))) if st != "A" else set()
+            added = [h for h in new if h not in old]
+            if added:
+                out["research"].append((path, added))
+        elif (len(parts) >= 5 and parts[:4] == ["Projects", "golden-thread", "spool", "decisions"]
+              and re.fullmatch(r"\d{4}\.md", parts[-1]) and st == "A"):
+            for h in _headings(_git_show(vault, "HEAD", path)):
+                if h.startswith("## ADR-") and h not in seen_adr:
+                    seen_adr.add(h)
+                    out["adrs"].append((parts[4], h[3:]))
+        elif len(parts) >= 3 and parts[0] == "Projects" and parts[-1] == "decisions.md":
+            old = set(_headings(_git_show(vault, start, path))) if st != "A" else set()
+            for h in _headings(_git_show(vault, "HEAD", path)):
+                if h.startswith("## ADR-") and h not in old and h not in seen_adr:
+                    seen_adr.add(h)
+                    out["adrs"].append((parts[1], h[3:]))
+        elif len(parts) >= 3 and parts[0] == "Projects" and parts[-1] == "design.md":
+            out["design"].append(path)
+        elif parts[0] == "Knowledge" and path.endswith(".md"):
+            out["knowledge"].append((path, "created" if st == "A" else "updated"))
+    return out
+
+
+def render_changes(ch, source):
+    """The `## What Changed This Session` section, as Markdown lines."""
+    L = ["## What Changed This Session", "",
+         "_(comparing %s → HEAD; derived from `git diff --name-status`, start commit from %s — "
+         "`self-verified`)_" % (ch["start"][:12], source), ""]
+    if not any(ch[k] for k in ("memory", "research", "adrs", "design", "knowledge")):
+        L += ["No vault changes this session.", ""]
+        return L
+    if ch["memory"]:
+        L += ["**New memory files (%d):**" % len(ch["memory"])]
+        L += ["- %s%s" % (p, (' — "%s"' % d) if d else "") for p, d in ch["memory"]] + [""]
+    if ch["research"]:
+        L += ["**Updated research entries (%d):**" % len(ch["research"])]
+        for p, heads in ch["research"]:
+            L.append("- %s — %d new section(s) appended: %s"
+                     % (p, len(heads), "; ".join(h.lstrip("# ").strip() for h in heads)))
+        L.append("")
+    if ch["adrs"]:
+        L += ["**New ADRs (%d):**" % len(ch["adrs"])]
+        L += ['- %s: "%s"' % (proj, t) for proj, t in ch["adrs"]] + [""]
+    if ch["design"]:
+        L += ["**Updated design files (%d):**" % len(ch["design"])]
+        L += ["- %s" % p for p in ch["design"]] + [""]
+    if ch["knowledge"]:
+        new = sum(1 for _, k in ch["knowledge"] if k == "created")
+        L += ["**Knowledge pages (%d new, %d updated):**" % (new, len(ch["knowledge"]) - new)]
+        L += ["- %s — %s" % (p, k) for p, k in ch["knowledge"]] + [""]
+    return L
+
+
 # The things a handoff must NOT let the next session assume. Each is stated as a question the
 # next session has to answer for itself, because none of them can be observed from here.
 CANNOT_KNOW = [
@@ -174,7 +301,7 @@ CANNOT_KNOW = [
 ]
 
 
-def render(slug, facts, repo, when):
+def render(slug, facts, repo, when, changes=None):
     L = []
     # `status: open` is what keeps it in front of people until someone deals with it
     # (gt_handoff_status, 0.17.2). Before 0.17.2 nothing recorded whether a handoff had been
@@ -222,6 +349,8 @@ def render(slug, facts, repo, when):
         for item in f["value"]:
             L.append("- %s" % item)
         L.append("")
+    if changes:
+        L += render_changes(changes["changes"], changes["source"])
     L.append("## The design, in the author's words")
     L.append("")
     L.append("> TO BE WRITTEN BY THE SESSION THAT DID THE WORK. A script cannot write this "
@@ -293,6 +422,12 @@ def main(argv=None):
     ap.add_argument("--force", action="store_true",
                     help="overwrite an existing handoff")
     ap.add_argument("--json", action="store_true")
+    ap.add_argument("--session", help="session id whose start_commit to diff from (default: "
+                                      "the CLAUDE_CODE_SESSION_ID environment)")
+    ap.add_argument("--since-commit", help="diff the vault from this commit instead of the "
+                                           "session's recorded start_commit")
+    ap.add_argument("--dry-run", action="store_true",
+                    help="print the handoff that would be written; write nothing")
     args = ap.parse_args(argv)
 
     # A slug, not a path. `--project ../../elsewhere` and an absolute slug both wrote outside
@@ -310,13 +445,29 @@ def main(argv=None):
     repo = os.path.abspath(os.path.expanduser(args.repo)) if args.repo else None
     facts.update(repo_facts(repo))
 
+    if args.since_commit:
+        start, src = args.since_commit.strip(), "--since-commit"
+    else:
+        start, src = start_commit_for(vault, args.session)
+    changes = None
+    if start:
+        ch = vault_changes(vault, start)
+        if ch is not None:
+            changes = {"changes": ch, "source": src}
+        else:
+            print("note: could not diff the vault from %s; no 'What Changed' section" % start,
+                  file=sys.stderr)
+
     when = datetime.datetime.now().strftime("%Y-%m-%d %H:%M %Z").strip()
-    text = render(args.project, facts, repo, when)
+    text = render(args.project, facts, repo, when, changes)
 
     if args.json:
         print(json.dumps({"version": 1, "project": args.project, "generated": when,
                           "facts": facts, "cannot_know": CANNOT_KNOW,
-                          "markdown": text}, indent=2))
+                          "vault_changes": changes, "markdown": text}, indent=2))
+        return 0
+    if args.dry_run:
+        print(text)
         return 0
 
     out = args.out or os.path.join(vault, "Projects", args.project, "handoff",
