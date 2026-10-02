@@ -1,6 +1,7 @@
 ---
 name: gt-handoff
 description: "Deprecated alias, removed after 0.18.x — use /gt:gt-create handoff. Kept working for one release: it does exactly what /gt:gt-create handoff does (write a handoff document for the next session)."
+model_intent: balanced
 ---
 
 # gt-handoff (deprecated alias)

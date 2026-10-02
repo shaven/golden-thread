@@ -1,6 +1,7 @@
 ---
 name: gt-allin
 description: "Run every check in one command — scan, lint, optimize report, install health, credentials, runbook and wiki lint, the repo's tests, validation receipts — and report how many actually ran, not just what they found. Never pushes, never applies a change."
+model_intent: balanced
 ---
 
 # Golden Thread All-In

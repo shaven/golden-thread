@@ -1,6 +1,7 @@
 ---
 name: gt-lotr
 description: "LOTR (also called gt MCP), the gt gateway. Reach GitHub, Jira, Microsoft 365 and any other registered system through one small gateway, and manage what it may reach. CALL PLANE: find an operation across every connection, then call it with the right tier (read, write, consent). ADMIN PLANE: set the gateway up on this machine or a hub, add a connection, enroll or revoke a client machine, check status. Use when the user says: use LOTR, lotr, gt mcp, use gt mcp, use the gateway, find in the gateway, what can the gateway reach, add a connection, connect GitHub/Jira/Graph to the gateway, enroll this machine, revoke a laptop, gateway status, my open PRs, my Jira issues, today's calendar (when a gateway is configured)."
+model_intent: fast
 ---
 
 # Golden Thread LOTR

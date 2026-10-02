@@ -1,6 +1,7 @@
 ---
 name: gt-context
 description: "Render the model-reachable definitions — vocabulary, validation rules, runbooks — from the definition packs in effect here, inside an explicit untrusted-data envelope, so a session can read what words mean in this vault."
+model_intent: fast
 ---
 
 # Golden Thread Context

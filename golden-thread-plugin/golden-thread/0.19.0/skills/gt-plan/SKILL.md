@@ -1,6 +1,7 @@
 ---
 name: gt-plan
 description: "Plan a piece of coding work before any code is written: restate the requirement, read the project's design and spec, surface risks and unknowns, and write a numbered, phased plan (each phase with a goal and a done condition) that waits for the user's explicit approval. Use when the user says: plan this, make a plan for, plan before coding, write an implementation plan, how should we build this, plan the change."
+model_intent: deep
 ---
 
 # Golden Thread — Plan

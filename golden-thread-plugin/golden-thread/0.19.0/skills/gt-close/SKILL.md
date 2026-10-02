@@ -1,6 +1,7 @@
 ---
 name: gt-close
 description: "Close a project, a task or a handoff the guided way. A project: review every open task and handoff (close, drop, move to another project, or keep shelved), offer to graduate what it learned, then archive it in place — or move it to Archive/ on request. A task: mark it done. A handoff: mark it handled. Use when the user says: close the project, close out X, we're done with this project, wrap up the project, retire this project, close this task, mark that handoff handled, close the handoff."
+model_intent: balanced
 ---
 
 # Golden Thread — Close

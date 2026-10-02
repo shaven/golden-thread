@@ -1,6 +1,7 @@
 ---
 name: gt-wiki-ingest
 description: "Add material to the user's LLM Wiki. Use when the user says: add this to the wiki, ingest this article / doc / README / transcript, capture this into the wiki, save this source, remember this, wiki this. Takes a URL, a file path, or pasted text; stores it immutably in Sources/ and starts the ingest discussion. Vault path via ~/.claude/vault-config.json."
+model_intent: balanced
 ---
 
 # LLM Wiki — Ingest

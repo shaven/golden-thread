@@ -1,6 +1,7 @@
 ---
 name: gt-usage
 description: "Show where this account stands against its Claude plan allowance — the 5-hour, weekly and monthly-spend windows — and what ending or cutting a session would save. Use when the user says: how much have I used, am I near my limit, what is my usage, how close am I to the cap, show my allowance, what is this session costing."
+model_intent: fast
 ---
 
 # Golden Thread Usage

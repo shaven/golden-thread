@@ -1,6 +1,7 @@
 ---
 name: gt-create
 description: "Create a project, a task or a handoff — the create verb, with the artifact as its argument. Project: scaffold the standard structure and fill the brain dump. Task: one well-formed line, like a developer's TODO, optionally tied to a vault page, wiki page or source. Handoff: the facts for the next session, labelled by source and verification state, plus the design narrative in this session's words. Use when the user says: new project, create a project, start a project called X, add project X, make a sub-project under Y, add a task, make a task for, remind me to, todo:, track this as a task, write a handoff, hand this off to the next session."
+model_intent: balanced
 ---
 
 # Golden Thread Create

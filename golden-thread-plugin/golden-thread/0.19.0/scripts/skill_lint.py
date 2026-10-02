@@ -80,7 +80,10 @@ def triggers(desc):
 
 
 def main(argv):
-    roots = argv[1:] or ["."]
+    # --require-intent (0.19.0): every skill must declare a model_intent. dev/release-check.sh
+    # passes it for shipped plugins; a vault's own skills are not held to it.
+    require_intent = "--require-intent" in argv[1:]
+    roots = [a for a in argv[1:] if a != "--require-intent"] or ["."]
     skills = find_skills(roots)
     if not skills:
         print(f"No SKILL.md files found under: {', '.join(roots)}")
@@ -130,7 +133,27 @@ def main(argv):
     print("mechanically checkable and is not asserted here. Referring a user to")
     print("another skill is fine; requiring one to have run is not.")
 
-    return 2 if (collisions or bad_intents) else 0
+    silent = []
+    if require_intent:
+        silent = missing_intents(skills)
+        if silent:
+            print("NO model_intent DECLARED — refused (--require-intent):\n")
+            for s in silent:
+                print("  " + s)
+            print()
+
+    return 2 if (collisions or bad_intents or silent) else 0
+
+
+def missing_intents(skills):
+    """-> [path] of every skill whose frontmatter declares no model_intent."""
+    import importlib.util
+    here = Path(__file__).resolve().parent / "gt_model.py"
+    spec = importlib.util.spec_from_file_location("gt_model_for_lint", str(here))
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    return sorted(str(p) + ": no model_intent (fast | balanced | deep)"
+                  for _d, p in skills.values() if mod.read_intent(p)[0] is None)
 
 
 def model_intent_problems(skills):

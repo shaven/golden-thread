@@ -1,6 +1,7 @@
 ---
 name: gt-task-list
 description: "Deprecated alias, removed after 0.18.x — use /gt:gt-list tasks. Kept working for one release: it does exactly what /gt:gt-list tasks does (show open tasks, filtered (read-only))."
+model_intent: fast
 ---
 
 # gt-task-list (deprecated alias)

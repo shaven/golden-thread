@@ -1,6 +1,7 @@
 ---
 name: gt-init
 description: "Initialize the Golden Thread vault and wire it to the current project, or re-run to verify an existing setup is correct."
+model_intent: balanced
 ---
 
 # Golden Thread Init

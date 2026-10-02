@@ -1,6 +1,7 @@
 ---
 name: gt-runbook-lint
 description: "Scan all project runbooks for content that has drifted into multiple runbooks and should be promoted to a shared layer. Use when the user says: lint runbooks, check runbooks for drift, scan for duplication across runbooks, find graduation candidates in runbooks."
+model_intent: balanced
 ---
 
 # Golden Thread Runbook Lint

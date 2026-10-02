@@ -1,6 +1,7 @@
 ---
 name: gt-optimize
 description: "Find what costs context and earns nothing back — in the vault (duplicated facts, dead index rows, relative dates, memory over budget, single-project globals, Knowledge pages nobody reads, what each project costs to open) and in sessions (prompt-cache writes lost to expiry or a changed prefix). Reporting never writes; the write actions are `--demote`, `--archive` and `--supersede`, each of which moves or marks content and leaves a pointer behind."
+model_intent: balanced
 ---
 
 # Golden Thread Optimize

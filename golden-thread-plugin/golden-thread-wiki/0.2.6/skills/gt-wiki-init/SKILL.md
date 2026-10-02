@@ -1,6 +1,7 @@
 ---
 name: gt-wiki-init
 description: "Set up a new LLM Wiki vault from scratch. Use when the user says: set up the wiki, initialize my vault, create a knowledge base, install the wiki structure, get me started with the gt-wiki plugin. Gathers the vault path and domain, then runs the bundled init script which generates everything deterministically."
+model_intent: balanced
 ---
 
 # LLM Wiki — Init

@@ -1,6 +1,7 @@
 ---
 name: gt-scan
 description: "Scan a tree against the definitions in effect here — source validation against the `lint` rules, plus naming conventions and file encoding per language — and report which checks ran, not just what they found."
+model_intent: fast
 ---
 
 # Golden Thread Scan

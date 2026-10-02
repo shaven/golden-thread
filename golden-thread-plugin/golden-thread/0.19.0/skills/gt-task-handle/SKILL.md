@@ -1,6 +1,7 @@
 ---
 name: gt-task-handle
 description: "Deprecated alias, removed after 0.18.x — use /gt:gt-handle task. Kept working for one release: it does exactly what /gt:gt-handle task does (work through open tasks)."
+model_intent: balanced
 ---
 
 # gt-task-handle (deprecated alias)

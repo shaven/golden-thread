@@ -1,6 +1,7 @@
 ---
 name: gt-list
 description: "Show what is waiting without opening anything — handoffs (open, or whose deferral has ended) and open tasks filtered by project, priority, mine, overdue, stale, deferred or ref. Read-only. Use when the user says: list the handoffs, what handoffs are waiting, show handoffs, any handoffs pending, which handoffs are deferred, list tasks, show my tasks, what tasks are open, what's overdue, show p1 tasks, what is waiting."
+model_intent: fast
 ---
 
 # Golden Thread — List

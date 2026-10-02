@@ -1,6 +1,7 @@
 ---
 name: gt-refresh
 description: "Check a Golden Thread vault's Sources/ for upstream changes and supersede outdated ones. Use when the user says: refresh the vault, check the vault's sources, are my project sources still current, supersede a stale source. For a standalone LLM Wiki vault use gt-wiki-refresh instead. Sources are immutable — updating means superseding with a new file, never editing the old one."
+model_intent: balanced
 ---
 
 # Golden Thread Refresh

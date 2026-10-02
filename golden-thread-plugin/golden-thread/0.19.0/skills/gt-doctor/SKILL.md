@@ -1,6 +1,7 @@
 ---
 name: gt-doctor
 description: "Check the health of this Golden Thread install in one command: plugin version, component drift, hook wiring, module states, pending vault migrations, stray workers, unpushed commits, publish-destination drift and a lint summary. Use when the user says: is everything healthy, check my install, gt doctor, health check, what state is golden thread in, is anything broken, why is a hook not firing."
+model_intent: fast
 ---
 
 # Golden Thread Doctor

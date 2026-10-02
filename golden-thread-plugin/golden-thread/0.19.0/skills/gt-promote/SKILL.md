@@ -1,6 +1,7 @@
 ---
 name: gt-promote
 description: "Graduate a fact, finding, or idea up the knowledge hierarchy: project memory → decisions/research → Knowledge wiki page → global-memory."
+model_intent: deep
 ---
 
 # Golden Thread Promote

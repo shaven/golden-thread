@@ -1,6 +1,7 @@
 ---
 name: gt-sync
 description: "Keep the vault in step with its git remote across machines: show how far ahead or behind origin it is, pull newer knowledge from another machine (fast-forward only, never a merge), or push this machine's session commits after the push check passes. Use when the user says: sync the vault, pull the vault, push the vault, is the vault up to date, is the vault behind, gt sync, get the latest vault, publish my vault commits."
+model_intent: fast
 ---
 
 # Golden Thread Sync

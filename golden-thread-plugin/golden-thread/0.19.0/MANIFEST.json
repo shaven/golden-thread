@@ -257,8 +257,8 @@
    "sha256": "1b958e3f06b7a9246659ee8cffbdb5791b42fab2df614ddd044f5fcf5043a1f6"
   },
   "scripts/gt_model.py": {
-   "bytes": 8802,
-   "sha256": "28b1f16b733eab37c2d4f2df1df26ab1c3c412ba6a9635eda5b4c776dbc4792a"
+   "bytes": 9244,
+   "sha256": "a958d86a2056dc1e1924dbd5cc641f9af9af9d9331a6e29e410455c54ddd3c01"
   },
   "scripts/gt_model_prices.json": {
    "bytes": 730,
@@ -377,8 +377,8 @@
    "sha256": "165a5ac61a4d501d74e2500c1363e1aa69207ecd22b7450028cd1dc4ec175fa3"
   },
   "scripts/skill_lint.py": {
-   "bytes": 5994,
-   "sha256": "872af7ba0b8ebc3b4d074fe426a0d036ddcd472c5535f34de26b8c975a892544"
+   "bytes": 7041,
+   "sha256": "8c226688ab280bdce2f428a5010e63cf5d21ffb4543d102ceddd518cc0802096"
   },
   "scripts/vault_init.py": {
    "bytes": 99530,
@@ -629,7 +629,7 @@
    "sha256": "05a5e61333b0ba5d6f97866735268f7f99ff354d9502b2b05e0e512a86f82a6b"
   }
  },
- "generated": "2026-10-02T10:33:45",
+ "generated": "2026-10-02T10:45:13",
  "hooks": [
   {
    "args": [

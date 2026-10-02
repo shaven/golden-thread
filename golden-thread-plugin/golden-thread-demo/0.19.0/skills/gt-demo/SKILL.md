@@ -1,6 +1,7 @@
 ---
 name: gt-demo
 description: "Run a live Golden Thread demo in its own throwaway vault: a guided tour of PizzaBot 3000 that runs itself (nine core acts plus one per installed module that ships one) — the presenter only clicks Next. Commands: start (build the demo vault), tour (run the guided tour), end (show what the demo produced), clean (rebuild the demo vault), remove (delete the demo), status. Use when the user says: run the demo, start the demo, demo Golden Thread, give the tour, reset the demo, clean up the demo, remove the demo."
+model_intent: fast
 ---
 
 # Golden Thread Demo

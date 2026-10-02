@@ -113,7 +113,7 @@ done
 
 step "skills"
 for i in "${!PDIRS[@]}"; do
-  OUT=$(python3 "$GT/scripts/skill_lint.py" "${PDIRS[$i]}" 2>&1); rc=$?
+  OUT=$(python3 "$GT/scripts/skill_lint.py" "${PDIRS[$i]}" --require-intent 2>&1); rc=$?
   [ $rc -eq 0 ] && ok "skill_lint (${PNAMES[$i]})" || { echo "$OUT" | tail -15; bad "skill_lint (${PNAMES[$i]})"; }
 done
 

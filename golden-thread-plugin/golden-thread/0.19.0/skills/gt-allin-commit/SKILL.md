@@ -1,6 +1,7 @@
 ---
 name: gt-allin-commit
 description: "Commit once the checks pass and a test receipt covers every staged file. Refuses without evidence, refuses on the default branch, and never pushes."
+model_intent: balanced
 ---
 
 # Golden Thread All-In Commit

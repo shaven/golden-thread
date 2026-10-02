@@ -1,6 +1,7 @@
 ---
 name: gt-lint
 description: "Audit the Golden Thread vault for broken links, orphaned pages, missing index entries, unlisted memory files, bloated global-memory files, project-specific facts in global scope, and Knowledge pages citing superseded sources."
+model_intent: balanced
 ---
 
 # Golden Thread Lint

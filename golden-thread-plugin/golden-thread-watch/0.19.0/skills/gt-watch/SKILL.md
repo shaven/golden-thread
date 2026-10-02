@@ -1,6 +1,7 @@
 ---
 name: gt-watch
 description: "Watch any git repo the user depends on and raise a P0 when it ships a security fix. Commands: add <git-url>, remove <slug>, list, check (fetch now), show <slug> (explain the queued changes), ack [<slug>] (mark seen). Use when the user says: watch a repo, track a repo, follow this library, is anything new upstream, what changed upstream, security fix upstream, stop watching X, mark the watch seen."
+model_intent: fast
 ---
 
 # Golden Thread Watch

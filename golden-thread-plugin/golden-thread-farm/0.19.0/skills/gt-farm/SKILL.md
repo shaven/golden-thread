@@ -1,6 +1,7 @@
 ---
 name: gt-farm
 description: "Hand a task to an external AI service instead of doing it here, as a self-contained work packet with a strict return contract. Use when the user says: farm this out, make a work packet, send this to another AI, get a non-Claude second opinion. Also when work is bulk, mechanical, or wants a genuinely non-Claude second opinion — bulk page fetching, freshness sweeps, broad cited research, independent verification. Produces a packet the user pastes into a web UI today and a script sends to an API later; the packet is identical either way."
+model_intent: balanced
 ---
 
 # Golden Thread Farm

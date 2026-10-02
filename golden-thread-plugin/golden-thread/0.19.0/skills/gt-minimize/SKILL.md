@@ -1,6 +1,7 @@
 ---
 name: gt-minimize
 description: "Prune a heavy session before cutting it: measure what it carries and whether its prompt cache is still warm, keep the few things worth keeping (promoted to Knowledge/ or INBOX.md), let the rest go, and tell the user to /compact or /clear now while cutting is cheap. Use when the user says: minimize this session, prune this session, trim the context before I step away, gt-minimize."
+model_intent: balanced
 ---
 
 # Golden Thread Minimize

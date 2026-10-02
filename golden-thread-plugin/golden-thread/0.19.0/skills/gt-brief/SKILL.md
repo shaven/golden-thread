@@ -1,6 +1,7 @@
 ---
 name: gt-brief
 description: "Draft a self-contained CLAUDE.md section for a project's code repo from its vault notes — what it is, the stable decisions, where it runs, what not to do — printed for review, never written. Use when the user says: /gt-brief, brief the repo, draft the repo CLAUDE.md, graduate this project to its repo, what should the repo's CLAUDE.md say."
+model_intent: balanced
 ---
 
 # Golden Thread — Brief a repo

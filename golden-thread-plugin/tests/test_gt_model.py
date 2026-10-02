@@ -232,5 +232,60 @@ class TheMappingPackIsTheOnlyPlace(unittest.TestCase):
             self.assertRegex(e.get("verified", ""), r"^\d{4}-\d{2}-\d{2}$", e)
 
 
+# 0.19.0 (request model-and-effort-per-plugin): every shipped skill declares an intent, from
+# this table. A skill left out ran on whatever the session used, which is the gap the policy
+# closes; a skill moved between tiers is a decision, so the table is asserted, not inferred.
+FAST = {"gt-task-list", "gt-handoff-list", "gt-list", "gt-context", "gt-settings", "gt-doctor",
+        "gt-scan", "gt-query", "gt-sync", "gt-flow", "gt-usage", "gt-watch", "gt-demo",
+        "gt-lotr"}
+DEEP = {"gt-validate", "gt-validation", "gt-plan", "gt-implement", "gt-promote"}
+
+
+class EveryShippedSkillDeclaresItsIntent(TheMappingPackIsTheOnlyPlace):
+
+    def test_each_skill_declares_the_intent_the_table_gives_it(self):
+        import importlib.util
+        spec = importlib.util.spec_from_file_location("gt_model_t", str(GT_MODEL))
+        gm = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(gm)
+        wrong, seen = [], 0
+        for vd in self.shipped_dirs():
+            for f in sorted(vd.glob("skills/*/SKILL.md")):
+                name = f.parent.name
+                want = "fast" if name in FAST else "deep" if name in DEEP else "balanced"
+                got = gm.read_intent(f)
+                got = got[0] if isinstance(got, tuple) else got
+                seen += 1
+                if got != want:
+                    wrong.append("%s: %r, table says %s" % (f.relative_to(REPO), got, want))
+        self.assertGreater(seen, 40)
+        self.assertEqual(wrong, [])
+
+    def test_skill_lint_require_intent_refuses_a_skill_with_none(self):
+        import subprocess, sys, tempfile
+        root = Path(tempfile.mkdtemp(prefix="gt-intent-"))
+        self.addCleanup(__import__("shutil").rmtree, str(root), True)
+        skill(root, "declared", "fast")
+        skill(root, "silent")
+        p = subprocess.run([sys.executable, str(SKILL_LINT), str(root), "--require-intent"],
+                           capture_output=True, text=True)
+        self.assertEqual(p.returncode, 2, p.stdout)
+        self.assertIn("silent/SKILL.md", p.stdout)
+        self.assertNotIn("declared/SKILL.md", p.stdout)
+        p = subprocess.run([sys.executable, str(SKILL_LINT), str(root)],
+                           capture_output=True, text=True)
+        self.assertEqual(p.returncode, 0, "without the flag a silent skill is allowed")
+
+    def test_agent_spec_tiers_map_onto_intents(self):
+        import importlib.util
+        spec = importlib.util.spec_from_file_location("gt_model_t2", str(GT_MODEL))
+        gm = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(gm)
+        self.assertEqual([gm.intent_for_tier(t) for t in ("fast", "standard", "careful")],
+                         ["fast", "balanced", "deep"])
+        with self.assertRaises(ValueError):
+            gm.intent_for_tier("cheapest")
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -1,6 +1,7 @@
 ---
 name: gt-settings
 description: "View and change what Golden Thread does on its own — component drift checking at session start, the session report card at compact, the upstream watch, and whatever an installed module adds. Every optional automatic behaviour is registered in one place, and `show` is the authoritative list."
+model_intent: fast
 ---
 
 # Golden Thread Settings

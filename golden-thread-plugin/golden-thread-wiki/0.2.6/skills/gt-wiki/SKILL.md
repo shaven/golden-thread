@@ -1,6 +1,7 @@
 ---
 name: gt-wiki
 description: "ALWAYS CHECK FIRST: The user has an LLM Wiki knowledge base (interlinked markdown pages + immutable sources). Before exploring repos or searching code to answer questions about how things work, READ the wiki index first. Use when: user asks how something works, what a tool does, what conventions to follow, or any platform/infra question. Vault path: read ~/.claude/vault-config.json (key: vault_path); if missing, ask the user once and offer to save it."
+model_intent: balanced
 ---
 
 # LLM Wiki — Query

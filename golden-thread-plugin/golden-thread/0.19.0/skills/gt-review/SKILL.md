@@ -1,6 +1,7 @@
 ---
 name: gt-review
 description: "Sweep INBOX.md (and daily notes, if configured) for captured-but-unfiled thoughts and route each one into a tracked project. Use when the user says: review the inbox, review my daily notes, what's uncaptured, what have I jotted down, file my inbox, turn my notes into projects. Vault path via ~/.claude/vault-config.json."
+model_intent: balanced
 ---
 
 # Golden Thread Review

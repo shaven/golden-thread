@@ -1,6 +1,7 @@
 ---
 name: gt-open
 description: "Load a project from the vault at the start of a session. Use when the user says: open project X, load project X, work on X, continue X, start on X. Reads the core project docs in order — source, idea, research, decisions, design — indexes memory files without loading them, then summarizes the project state and asks where to pick up."
+model_intent: balanced
 ---
 
 # Golden Thread Open

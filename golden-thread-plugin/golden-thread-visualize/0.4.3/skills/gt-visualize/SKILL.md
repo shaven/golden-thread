@@ -1,6 +1,7 @@
 ---
 name: gt-visualize
 description: "Show a codebase in 3D, two ways. EXPLAIN: a scroll-driven 3D walkthrough of how a system's parts work together — scenes that highlight parts and animate the flows between them, written from the code and the vault. CODE CITY: every directory a district, every file a building, height by lines, colour by language or git churn. Both render one self-contained offline HTML file with three.js inlined, which can then be PUBLISHED to a claude.ai Artifact, GitHub Pages or a gist after a scrub gate and the user's yes. Use when the user says: explain how this codebase works, show how the parts work together, architecture walkthrough, visualize how it works, visualize this codebase, visualize the repo, show me the code in 3D, code city, 3D view of the repo, map this codebase, which files change the most, publish the visualization, share the walkthrough."
+model_intent: balanced
 ---
 
 # Golden Thread Visualize

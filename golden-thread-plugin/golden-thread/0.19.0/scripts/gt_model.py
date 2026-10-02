@@ -53,6 +53,18 @@ FRONTMATTER_KEY = re.compile(r"^model_intent:[ \t]*(.*?)[ \t]*$")
 OK, PROBLEMS, USAGE = 0, 1, 2
 
 
+# Agent specs predate intents and say `model_tier`; one vocabulary from here on (0.19.0).
+TIER_INTENT = {"fast": "fast", "standard": "balanced", "careful": "deep"}
+
+
+def intent_for_tier(tier):
+    """An agent spec's model_tier as a model_intent. Raises ValueError for anything else."""
+    try:
+        return TIER_INTENT[tier]
+    except KeyError:
+        raise ValueError("model_tier %r is not one of %s" % (tier, "|".join(TIER_INTENT)))
+
+
 def mapping(vault=None):
     """-> ({intent: record}, shadowed, retracted, problems) from the registry."""
     effective, shadowed, retracted, problems = gt_registry.resolve(SLOT, vault=vault)

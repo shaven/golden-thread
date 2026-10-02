@@ -1,6 +1,7 @@
 ---
 name: tour
 description: "Walk a newcomer through a gt-visualize explainer scene by scene: scene 1 is the system's job in one scenario, and before each next scene a prediction pause asks what connects its parts, then the scene is the reveal and its flows are the hop map. At any scene the user can step into a part or step over to the next scene. Progress is saved per project so a later session resumes with a two-question recap. Drawn only from the story JSON and the project's vault pages. Use when the user says: tour the explainer, give me a tour of the explainer, walk me through the explainer, step through the explainer scenes, resume the explainer tour, continue the explainer tour."
+model_intent: balanced
 ---
 
 # Tour: a guided walk through an explainer

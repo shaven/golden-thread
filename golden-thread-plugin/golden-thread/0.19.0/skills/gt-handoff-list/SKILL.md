@@ -1,6 +1,7 @@
 ---
 name: gt-handoff-list
 description: "Deprecated alias, removed after 0.18.x — use /gt:gt-list handoffs. Kept working for one release: it does exactly what /gt:gt-list handoffs does (show the waiting handoffs (read-only))."
+model_intent: fast
 ---
 
 # gt-handoff-list (deprecated alias)

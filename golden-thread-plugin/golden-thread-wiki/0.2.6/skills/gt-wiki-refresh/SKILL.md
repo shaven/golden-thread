@@ -1,6 +1,7 @@
 ---
 name: gt-wiki-refresh
 description: "Check the user's LLM Wiki sources for upstream changes and supersede outdated ones. Use when the user says: refresh the wiki, check sources for updates, is the wiki still current, update from upstream. Runs on a user-selected subset of sources by default. Vault path via ~/.claude/vault-config.json."
+model_intent: balanced
 ---
 
 # LLM Wiki — Refresh

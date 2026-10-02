@@ -1,6 +1,7 @@
 ---
 name: gt-handle
 description: "Work through what is waiting, one item at a time — handoffs (close each open item, keep it as a task, or defer the whole handoff to a date) or tasks (close, drop with a reason, defer, move, or keep) — with a filter to choose which. Use when the user says: handle the handoffs, deal with the handoff, clear the handoffs, defer that handoff, work through the handoffs, handle my tasks, work through the tasks, clear the backlog, triage tasks, get rid of old tasks. To only SEE them, use gt-list."
+model_intent: balanced
 ---
 
 # Golden Thread — Handle

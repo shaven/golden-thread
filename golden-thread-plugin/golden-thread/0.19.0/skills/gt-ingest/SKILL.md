@@ -1,6 +1,7 @@
 ---
 name: gt-ingest
 description: "Import an existing project's memory files, CLAUDE.md constraints, and notes into the Golden Thread vault without destructive writes. Nothing is deleted from the original locations. External sources (URLs, docs) are stored immutably in Sources/ before being synthesized into Knowledge pages."
+model_intent: balanced
 ---
 
 # Golden Thread Ingest

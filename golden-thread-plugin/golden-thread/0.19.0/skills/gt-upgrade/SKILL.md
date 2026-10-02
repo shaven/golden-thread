@@ -1,6 +1,7 @@
 ---
 name: gt-upgrade
 description: "Bring an existing vault up to the installed plugin release: run the migrations it has not had, take the release's changes into PROTOCOL.md and CONVENTIONS.md without losing local edits, add newly shipped Core rules, and stamp the vault. Use when the user says: upgrade the vault, is my vault up to date, I just installed a new version, what do I need to run after installing, migrate the vault."
+model_intent: balanced
 ---
 
 # Upgrade a vault to the installed release

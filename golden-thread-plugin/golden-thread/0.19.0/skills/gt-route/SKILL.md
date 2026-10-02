@@ -1,6 +1,7 @@
 ---
 name: gt-route
 description: "Mid-conversation check: work out what this session has actually become, where its output belongs, and whether it is happening in the right place. Use when the user says: where does this go, where should this live, am I in the right project, should I be in the terminal for this, what should I do with this, I'm not sure where I'm going with this — or whenever the session has drifted far from what it opened with. Not a gate at the start of a session; a cheap check any time."
+model_intent: balanced
 ---
 
 # Golden Thread Route

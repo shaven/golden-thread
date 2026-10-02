@@ -1,6 +1,7 @@
 ---
 name: gt-task
 description: "Deprecated alias, removed after 0.18.x — use /gt:gt-create task. Kept working for one release: it does exactly what /gt:gt-create task does (create a task)."
+model_intent: balanced
 ---
 
 # gt-task (deprecated alias)

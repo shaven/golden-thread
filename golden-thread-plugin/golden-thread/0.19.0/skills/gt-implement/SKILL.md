@@ -1,6 +1,7 @@
 ---
 name: gt-implement
 description: "Carry out an approved gt-plan one phase at a time, test first: write the failing test, make it pass, run the checks and name which tests ran, stop on any failure, and commit only on the user's yes. Refuses without an approved plan. Use when the user says: implement the plan, build it now, execute the plan, start implementing, run the approved plan, next phase."
+model_intent: deep
 ---
 
 # Golden Thread — Implement

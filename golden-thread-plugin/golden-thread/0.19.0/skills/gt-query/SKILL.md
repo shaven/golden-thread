@@ -1,6 +1,7 @@
 ---
 name: gt-query
 description: "Look up a topic in the Golden Thread vault — reads index.md first, follows wiki links, falls back to grep across Knowledge and global-memory."
+model_intent: fast
 ---
 
 # Golden Thread Query

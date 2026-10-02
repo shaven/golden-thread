@@ -1,6 +1,7 @@
 ---
 name: gt-work
 description: "Capture session findings into the vault at the end of a work session — append to research.md, add ADRs to decisions.md, refine design.md, create spec.md when design is complete, update PROTOCOL.md for cross-project process rules."
+model_intent: balanced
 ---
 
 # Golden Thread Work

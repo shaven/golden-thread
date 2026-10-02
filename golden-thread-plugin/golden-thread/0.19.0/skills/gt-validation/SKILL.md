@@ -1,6 +1,7 @@
 ---
 name: gt-validation
 description: "Record what a validation established about a file — what was verified, what could not be determined — stamped with the file's content hash, so the definition goes visibly stale the moment the file changes."
+model_intent: deep
 ---
 
 # Golden Thread Validation Receipts

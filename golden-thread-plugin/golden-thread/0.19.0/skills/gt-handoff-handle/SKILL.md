@@ -1,6 +1,7 @@
 ---
 name: gt-handoff-handle
 description: "Deprecated alias, removed after 0.18.x — use /gt:gt-handle handoff. Kept working for one release: it does exactly what /gt:gt-handle handoff does (work through the waiting handoffs)."
+model_intent: balanced
 ---
 
 # gt-handoff-handle (deprecated alias)
