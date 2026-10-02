@@ -425,3 +425,37 @@ Present the survivors **one at a time**, one line each, and ask where it goes:
 Every save goes through `gt_write_queue.py` + `gt_broker.py drain` (or `gt_adr.py` for an ADR) —
 never Write/Edit on a vault path (Core rule 1). Count what was saved in the Log Entry line
 (`… , L pattern(s) kept`). Nothing found is a fine result; say so in one line and move on.
+
+## ADR fields and memory entities (0.18.0)
+
+**When allocating an ADR, ask two questions** and pass the answers as flags — the fields are
+what `gt-lint`, `gt-brief` and `gt-query`'s lineage mode read:
+
+- *Does this replace an earlier decision?* → `--supersedes <N>` (repeatable). Writes
+  `- **Supersedes**: ADR-N`. Never edit the old ADR; this link is how the chain is traced.
+- *Does this decision have a known expiry condition?* ("until the SDK is upgraded", "while we
+  are under 10k requests/day") → `--expires-when "<condition>"`; a date → `--expires YYYY-MM-DD`.
+  Lint surfaces a condition in the review queue at any age and a date once it has passed, and
+  `gt-brief` keeps an expiring decision out of the repo's stable constraints.
+
+```bash
+python3 <vault>/Projects/golden-thread/tools/gt_adr.py --vault "<vault>" allocate <project> \
+    --title "<title>" [--supersedes N] [--expires-when "<condition>"] [--expires YYYY-MM-DD]
+```
+
+Both are optional; an ADR with neither is unchanged. Written by hand into a body, the lines
+`- **Supersedes**: ADR-N`, `- **Expires when**: <prose>` and `- **Expires**: YYYY-MM-DD` (or
+`expires_when:` in the Knowledge-page spelling) read the same.
+
+**When creating a memory file, ask:** *What entities (services, hosts, components) does this
+memory file cover? List them to enable entity-based lookup.* They go in its frontmatter so
+`/gt:gt-query --entity <name>` finds it:
+
+```yaml
+entities:
+  - auth-service
+  - TOKENSVC
+```
+
+Optional — skip it when the note is not about a nameable thing. Never add entities the user
+did not confirm.

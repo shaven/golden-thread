@@ -8,9 +8,9 @@ Usage:
 
   --json      findings as {"version":1,"vault","findings":[...],"counts"}.
               A default-mode finding is {kind, path, line, message, proposed_fix}:
-              `proposed_fix` is ALWAYS present, and `line` is ALWAYS null — no
-              default-mode check records a line number, and the key is kept only so
-              the two modes share one shape. Under --runbooks a finding is
+              `proposed_fix` is ALWAYS present, and `line` is null for every
+              default-mode check except decision-candidate (0.18.0), the one check
+              whose finding IS a line. Under --runbooks a finding is
               {kind, path, line, message, text, locations} with a real `line`.
   --runbooks  read-only: only report lines duplicated (identical or difflib ratio >= 0.9)
               across two or more Projects/**/runbook.md, kind runbook-duplicate. Fewer
@@ -39,6 +39,15 @@ Checks:
   secrets-gate-unwired  .githooks/pre-commit exists but core.hooksPath does not reach
                        it, so the credential gate is shipped and never runs
   project-missing      A link points at a project folder that no longer exists
+  adr-expires          ADR declaring `Expires when: <condition>` (always) or
+                       `Expires: YYYY-MM-DD` (once past), with the condition text (0.18.0)
+  bundled-concept      Knowledge page with 4+ `## ` headings of which at most 2 share a
+                       keyword with its title/tags -- likely two topics (0.18.0)
+  decision-candidate   design.md/research.md line with a decision-signal phrase ("we
+                       chose", "by design", ...): a possible undocumented ADR (0.18.0).
+                       Records a real `line`. Phrases: gt setting `decision_signals`
+  memory-entity-orphan memory file naming an entity 3+ times without listing it in
+                       `entities:` frontmatter (0.18.0)
 
 Suppression: reads <vault>/lint-declines.md — lines starting with "suppress:". One rule,
 used by every check (see is_suppressed):
@@ -46,6 +55,10 @@ used by every check (see is_suppressed):
   suppress: Projects/alpha/decisions.md      the finding's vault-relative path
   suppress: decisions.md                     that BARE FILE NAME, anywhere in the vault
   suppress: Knowledge/Page.md:[[Gone]]       a sub-key, always scoped by path or name
+  suppress: Projects/a/decisions.md:ADR-7    adr-expires: one ADR
+  suppress: Projects/a/design.md:#1a2b3c4d   decision-candidate: one LINE, by the hash of
+                                             its text, so it survives the line moving
+                                             (`:L12`, by line number, also works)
 
 Matching is case-insensitive. A sub-key (a single wikilink, a cited source, one project
 slug) is NEVER matched on its own: `suppress: alpha` would otherwise silence every
@@ -1352,6 +1365,399 @@ def run_runbooks(vault: Path, as_json: bool):
     sys.exit(1)
 
 
+# ---------------------------------------------------------------------------------------
+# 0.18.0 -- ADR expiry, bundled concepts, decision candidates, memory entities.
+# All four file into the review queue (--queue) like every other check; none writes
+# anything else. Their finding shape is the shared one, so write_queue, --json, the
+# tick carry-over and lint-declines.md suppression need nothing new.
+# ---------------------------------------------------------------------------------------
+
+_ADR_MOD = []
+
+
+def _plugin_adr():
+    """The RELEASE's own gt_adr (templates/tools), for its ADR parser -- or None.
+
+    The plugin copy, not the vault's: the vault's tools may predate the parser, and two
+    parsers would drift (adr-expires, gt_brief and `gt_adr.py lineage` must read the same
+    fields the same way). Loaded under a private name with sys.modules restored, because
+    check_generated_hand_edited imports the VAULT's gt_spool/gt_adr by their real names
+    and must keep getting those.
+    """
+    if _ADR_MOD:
+        return _ADR_MOD[0]
+    import importlib.util
+    tools = Path(__file__).resolve().parent.parent / "templates" / "tools"
+    saved = {k: sys.modules.pop(k) for k in ("gt_spool", "gt_adr") if k in sys.modules}
+    sys.path.insert(0, str(tools))
+    mod = None
+    try:
+        spec = importlib.util.spec_from_file_location("_gt_lint_adr", str(tools / "gt_adr.py"))
+        mod = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(mod)
+    except Exception:
+        mod = None
+    finally:
+        try:
+            sys.path.remove(str(tools))
+        except ValueError:
+            pass
+        sys.modules.pop("gt_spool", None)
+        sys.modules.pop("gt_adr", None)
+        sys.modules.update(saved)
+    _ADR_MOD.append(mod)
+    return mod
+
+
+def check_adr_expires(vault: Path, findings: list, suppressed: set, today: dt.date = None):
+    """ADRs whose truth has a declared end (check: adr-expires).
+
+    The ADR twin of the wiki's `expiry-declared`, with the same rule: a prose condition
+    (`Expires when:`) is surfaced at ANY age, because no tool can tell whether "until the
+    SDK is upgraded" has happened -- only a person can; a date (`Expires:`) is surfaced
+    only once it has passed. The condition text goes in the message, so the queue entry
+    can be judged without opening the file.
+
+    An ADR another ADR already supersedes is skipped: the replacement IS the answer to
+    "has this expired", and listing it would ask a question already settled.
+    """
+    A = _plugin_adr()
+    if A is None:
+        return
+    today = today or dt.date.today()
+    for dec in decisions_files(vault):
+        rel = str(dec.relative_to(vault))
+        if is_suppressed(suppressed, rel, dec.name):
+            continue
+        try:
+            adrs = A.parse_adrs(dec.read_text(encoding="utf-8", errors="replace"))
+        except OSError:
+            continue
+        replaced = A.superseded_by(adrs)
+        for adr in adrs:
+            f, n = adr["fields"], adr["n"]
+            if n in replaced or is_suppressed(suppressed, rel, dec.name, f"ADR-{n}"):
+                continue
+            cond, when = f.get("expires when"), f.get("expires")
+            if cond:
+                msg = f"ADR-{n} ({adr['title']}) expires when: {cond}"
+            elif when:
+                try:
+                    due = dt.date.fromisoformat(when.strip()[:10])
+                except ValueError:
+                    msg = f"ADR-{n} ({adr['title']}) has an unreadable Expires date: {when}"
+                else:
+                    if due >= today:
+                        continue
+                    msg = f"ADR-{n} ({adr['title']}) expired on {due.isoformat()}"
+            else:
+                continue
+            findings.append({
+                "check": "adr-expires",
+                "path": rel,
+                "message": msg,
+                "proposed_fix": (f"Decide whether it still holds. If not, write the replacement "
+                                 f"with `gt_adr.py --vault \"<vault>\" allocate {project_key(vault, dec)} --supersedes "
+                                 f"{n}`; if it does, add `suppress: {rel}:ADR-{n}` to "
+                                 "lint-declines.md (or move the date on in a superseding ADR)."),
+            })
+
+
+_WORD = re.compile(r"[a-z0-9]+")
+_STOP = {"the", "and", "for", "with", "what", "how", "this", "that", "from", "into", "are",
+         "its", "why", "when", "where", "not", "one", "two", "use", "using", "about", "page",
+         "notes", "note", "overview", "see", "also", "more", "other", "our", "your"}
+
+
+def _keywords(text: str) -> set:
+    return {w for w in _WORD.findall(text.lower()) if len(w) >= 3 and w not in _STOP}
+
+
+def _shares_keyword(heading: str, keys: set) -> bool:
+    """`Running migrations` shares `migration`: a prefix match either way, on words of at
+    least four letters, so plurals and -ing forms count without a stemmer."""
+    for w in _keywords(heading):
+        for k in keys:
+            if w == k or (min(len(w), len(k)) >= 4 and (w.startswith(k) or k.startswith(w))):
+                return True
+    return False
+
+
+BUNDLED_MIN_HEADINGS = 4
+# A page is coherent when at least this many of its `## ` sections are on its title/tags.
+# The request fixed "fewer than 2 share -> bundled" and "3 or more share -> coherent" and
+# left exactly two undecided. Two is BUNDLED: a page about two topics, each named once in
+# its title, has exactly two on-topic sections and the rest wandering -- which is the
+# request's own worked example ("Running migrations" and "Testing migrations" both match
+# "migration", and it must fire).
+BUNDLED_COHERENT_AT = 3
+
+
+def check_bundled_concept(vault: Path, findings: list, suppressed: set):
+    """A Knowledge page that has grown into several topics (check: bundled-concept).
+
+    CONVENTIONS: one concept per page. Fires when the page has 4+ distinct `## `
+    headings and at most 2 of them share a keyword with its title or tags. `decision`
+    pages are exempt -- an ADR-shaped page legitimately has many headings. The check
+    never suggests the split; that is a human judgement.
+    """
+    for page in all_knowledge_pages(vault):
+        if page.name.startswith("_"):
+            continue
+        rel = f"Knowledge/{page.name}"
+        if is_suppressed(suppressed, rel, page.name):
+            continue
+        try:
+            text = page.read_text(encoding="utf-8", errors="replace")
+        except OSError:
+            continue
+        fm = parse_frontmatter_map(text)
+        if fm.get("category", "").strip().lower() == "decision":
+            continue
+        heads = []
+        for line in strip_code(text).splitlines():
+            m = re.match(r"^##\s+(.+?)\s*#*\s*$", line)
+            if m and m.group(1) not in heads:
+                heads.append(m.group(1))
+        if len(heads) < BUNDLED_MIN_HEADINGS:
+            continue
+        keys = _keywords(fm.get("title") or page.stem)
+        for tag in parse_frontmatter_field(text, "tags"):
+            keys |= _keywords(tag)
+        on_topic = sum(1 for h in heads if _shares_keyword(h, keys))
+        if on_topic >= BUNDLED_COHERENT_AT:
+            continue
+        findings.append({
+            "check": "bundled-concept",
+            "path": rel,
+            "message": (f"This page covers multiple topics. Consider splitting. {len(heads)} "
+                        f"sections, {on_topic} on its title/tags: " + " · ".join(heads)),
+            "proposed_fix": ("Split the off-topic sections into their own pages and link them; "
+                             f"if it really is one concept, add `suppress: {rel}` to "
+                             "lint-declines.md."),
+        })
+
+
+DEFAULT_DECISION_SIGNALS = (
+    "we chose", "we decided", "this is intentional", "don't change this", "do not change this",
+    "deliberately", "by design", "we use ... instead of", "this workaround",
+    "existing behavior is correct", "existing behaviour is correct", "trade-off we accepted",
+)
+
+
+def decision_signals() -> list:
+    """The phrase list in effect: the defaults, edited by the gt setting `decision_signals`.
+
+    `default` (the setting's default) = the list above. `off` = no phrases, the check is
+    silent. Anything else is `;`-separated edits applied to the defaults: `+phrase` (or a
+    bare `phrase`) adds, `-phrase` removes -- e.g. `+we went with;-deliberately`. `...` in
+    a phrase matches up to 60 characters of anything (`we use ... instead of`)."""
+    raw = "default"
+    try:
+        sys.path.insert(0, str(Path(__file__).resolve().parent))
+        import gt_settings
+        raw = gt_settings.get("decision_signals") or "default"
+    except Exception:
+        pass
+    raw = raw.strip().lower()
+    if raw == "off":
+        return []
+    phrases = list(DEFAULT_DECISION_SIGNALS)
+    for part in raw.split(";"):
+        part = part.strip()
+        if not part or part == "default":
+            continue
+        if part.startswith("-"):
+            phrases = [p for p in phrases if p != part[1:].strip()]
+        else:
+            add = part.lstrip("+").strip()
+            if add and add not in phrases:
+                phrases.append(add)
+    return phrases
+
+
+def _signal_regex(phrase: str):
+    return re.compile(r"\s*".join(r".{1,60}?" if w == "..." else re.escape(w)
+                                 for w in phrase.split()), re.I)
+
+
+def line_hash(line: str) -> str:
+    """The id a decision-candidate suppression uses: stable while the text is."""
+    return hashlib.sha256(" ".join(line.lower().split()).encode("utf-8")).hexdigest()[:8]
+
+
+def _sentence(line: str, start: int) -> str:
+    """The sentence of `line` that contains offset `start`, markdown stripped."""
+    lo = max(line.rfind(". ", 0, start), line.rfind("! ", 0, start), line.rfind("? ", 0, start))
+    lo = 0 if lo < 0 else lo + 2
+    hi = len(line)
+    for mark in (". ", "! ", "? "):
+        i = line.find(mark, start)
+        if i >= 0:
+            hi = min(hi, i + 1)
+    s = re.sub(r"^\s*(?:[-*]\s+|\d+\.\s+|>\s*)", "", line[lo:hi])
+    return re.sub(r"[*_`]", "", s).strip()
+
+
+def check_decision_candidates(vault: Path, findings: list, suppressed: set):
+    """Decisions made in prose and never written as an ADR (check: decision-candidate).
+
+    Scans every project's design.md and research.md, line by line, for a decision-signal
+    phrase (decision_signals()). Headings, fenced code and HTML comments are skipped: a
+    heading names a topic, the prose under it is where the choice is stated. Each hit is
+    a CANDIDATE in the review queue -- with the line number, the phrase, the sentence and
+    a proposed ADR title -- and nothing more: converting it is `gt_adr.py allocate`,
+    declining it is a `suppress:` line. No ADR is ever written by this check.
+    """
+    phrases = decision_signals()
+    if not phrases:
+        return
+    pats = [(p, _signal_regex(p)) for p in phrases]
+    projects = vault / "Projects"
+    if not projects.is_dir():
+        return
+    files = sorted(p for p in projects.rglob("*.md")
+                   if p.name in ("design.md", "research.md")
+                   and "spool" not in p.relative_to(projects).parts)
+    for path in files:
+        rel = str(path.relative_to(vault))
+        if is_suppressed(suppressed, rel, path.name):
+            continue
+        try:
+            lines = path.read_text(encoding="utf-8", errors="replace").splitlines()
+        except OSError:
+            continue
+        fenced = in_comment = False
+        for no, raw in enumerate(lines, 1):
+            s = raw.strip()
+            if s.startswith(("```", "~~~")):
+                fenced = not fenced
+                continue
+            if fenced:
+                continue
+            if "<!--" in s and "-->" not in s.split("<!--", 1)[1]:
+                in_comment = True
+                continue
+            if in_comment:
+                in_comment = "-->" not in s
+                continue
+            if not s or s.startswith("#") or s.startswith("<!--"):
+                continue
+            text = raw.replace("’", "'")
+            for phrase, rx in pats:
+                m = rx.search(text)
+                if not m:
+                    continue
+                if is_suppressed(suppressed, rel, path.name, f"L{no}") or \
+                        is_suppressed(suppressed, rel, path.name, f"#{line_hash(raw)}"):
+                    break
+                sent = _sentence(text, m.start())
+                title = sent[:1].upper() + sent[1:]
+                title = title.rstrip(".!? ")
+                if len(title) > 72:
+                    title = title[:71].rstrip() + "…"
+                clip = sent if len(sent) <= 200 else sent[:199] + "…"
+                findings.append({
+                    "check": "decision-candidate",
+                    "path": rel,
+                    "line": no,
+                    "message": f"line {no}: \"{phrase}\" — {clip}",
+                    "proposed_fix": (f"If it is a decision, record it: `gt_adr.py --vault \"<vault>\" allocate "
+                                     f"{project_key(vault, path)} --title \"{title}\"`. If not, "
+                                     f"add `suppress: {rel}:#{line_hash(raw)}` to "
+                                     "lint-declines.md."),
+                })
+                break                       # one finding per line, whatever else matches
+
+
+# ALLCAPS words that are vocabulary, not things: counting them would ask every memory file
+# to declare "TODO" as an entity.
+_CAPS_STOP = {"TODO", "NOTE", "README", "MEMORY", "CLAUDE", "FIXME", "WARNING", "IMPORTANT",
+              "NEVER", "ALWAYS", "MUST", "AND", "THE", "NOT", "FOR", "YES", "UTC", "ADR",
+              "URL", "JSON", "YAML", "HTML", "HTTP", "HTTPS", "PDF", "CSS", "CLI", "API",
+              "SSH", "DONE", "WHY", "HOW", "WHAT", "ONE", "TWO", "OFF", "NEW", "OLD", "ALL",
+              # emphasis, measured on a real vault: shouted words, not things
+              "WRONG", "RIGHT", "ONLY", "KEPT", "BEFORE", "AFTER", "DONT", "STOP", "BOTH",
+              "EVERY", "ANY", "NONE", "SAME", "EXACTLY", "NOW", "THEN", "THIS", "THAT",
+              "BUT", "WITH", "WITHOUT", "FAIL", "FAILED", "PASS", "PASSED", "TRUE", "FALSE",
+              "LIVE", "REAL", "STILL", "ALSO", "MORE", "LESS", "NEXT", "LAST", "FIRST"}
+# A backticked token counts only when it is shaped like a NAME -- a hyphen, an underscore
+# or a digit inside, or CamelCase -- and not a file or a path. `accounts` is a word and
+# `eval_regen.py` is a file; both were most of the noise on a real vault.
+_IDENT = re.compile(r"^(?=.*(?:[-_0-9]|[a-z][A-Z]))[A-Za-z][A-Za-z0-9_-]{2,39}$")
+
+
+def check_memory_entity_orphan(vault: Path, findings: list, suppressed: set,
+                               threshold: int = 3):
+    """A memory file about something it does not declare (check: memory-entity-orphan).
+
+    Memory files may list `entities:` in frontmatter so `/gt:gt-query --entity <name>`
+    (gt_entities.py) loads only the files about that thing. This suggests the field where
+    a name appears `threshold`+ times in the body and is not in the file's `entities:`:
+    a name some memory file in the vault already declares, an ALLCAPS identifier, or a
+    backticked identifier. A suggestion only -- nothing is tagged without the user.
+    Suppress one name with `suppress: <path>:<name>`.
+
+    ADOPTION GATE. The shape-based guesses (ALLCAPS, backticked) run only in a project
+    where at least one memory file already declares `entities:`. Measured on the owner's
+    vault on 2026-10-01, before anything declared the field: 129 of its memory files
+    would each have been a queue entry on the first run -- a flood that buries every
+    other finding the day the check ships. Declared names are suggested everywhere,
+    because a name someone has declared is evidence, not a guess.
+    """
+    projects = vault / "Projects"
+    if not projects.is_dir():
+        return
+    files = sorted(p for p in projects.rglob("*.md")
+                   if p.parent.name == "memory" and p.name != "MEMORY.md"
+                   and "spool" not in p.relative_to(projects).parts)
+    texts, known, adopted = {}, {}, set()
+    for f in files:
+        try:
+            texts[f] = f.read_text(encoding="utf-8", errors="replace")
+        except OSError:
+            continue
+        for e in parse_frontmatter_field(texts[f], "entities"):
+            known.setdefault(e.lower(), e)
+            adopted.add(f.parent.parent)
+    for f, text in texts.items():
+        rel = str(f.relative_to(vault))
+        if is_suppressed(suppressed, rel, f.name):
+            continue
+        declared = {e.lower() for e in parse_frontmatter_field(text, "entities")}
+        body = re.sub(r"^---\s*\n.*?\n---\s*\n", "", text, count=1, flags=re.S)
+        body = re.sub(r"```.*?```", " ", body, flags=re.S)
+        counts = {}
+        for low, name in known.items():
+            n = len(re.findall(r"(?<![\w-])" + re.escape(low) + r"(?![\w-])", body.lower()))
+            if n:
+                counts[name] = n
+        guess = f.parent.parent in adopted
+        for tok in (re.findall(r"\b[A-Z][A-Z0-9]{2,}\b", body) if guess else ()):
+            if tok not in _CAPS_STOP and tok.lower() not in known:
+                counts[tok] = counts.get(tok, 0) + 1
+        for tok in (re.findall(r"`([^`\s]{3,40})`", body) if guess else ()):
+            if _IDENT.match(tok) and tok.lower() not in known and not tok.isupper():
+                counts[tok] = counts.get(tok, 0) + 1
+        hits = sorted(((n, name) for name, n in counts.items()
+                       if n >= threshold and name.lower() not in declared
+                       and not is_suppressed(suppressed, rel, f.name, name)),
+                      key=lambda x: (-x[0], x[1].lower()))[:5]
+        if not hits:
+            continue
+        names = [name for _, name in hits]
+        findings.append({
+            "check": "memory-entity-orphan",
+            "path": rel,
+            "message": "mentions " + ", ".join(f"{name} ({n}×)" for n, name in hits)
+                       + (" but declares no `entities:`" if not declared
+                          else " not listed in its `entities:`"),
+            "proposed_fix": (f"Add `entities: [{', '.join(names)}]` to its frontmatter so "
+                             "`/gt:gt-query --entity` finds it, or suppress a name with "
+                             f"`suppress: {rel}:<name>`."),
+        })
+
+
 def main():
     parser = argparse.ArgumentParser(description="Golden Thread vault health checker")
     parser.add_argument("vault", type=Path, nargs="?", default=None, help="Path to the vault root")
@@ -1410,6 +1816,11 @@ def main():
     check_secrets_gate_wired(vault, findings, suppressed)
     check_adr_collision(vault, findings, suppressed)
     check_generated_hand_edited(vault, findings, suppressed)
+    # 0.18.0 (lint + ADR group): each files into the review queue like every other check.
+    check_adr_expires(vault, findings, suppressed)
+    check_bundled_concept(vault, findings, suppressed)
+    check_decision_candidates(vault, findings, suppressed)
+    check_memory_entity_orphan(vault, findings, suppressed)
 
     if args.queue:
         for note in write_queue(vault, findings, args.queue):

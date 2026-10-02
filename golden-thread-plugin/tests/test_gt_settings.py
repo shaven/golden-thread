@@ -43,6 +43,8 @@ EXPECTED = {
     "brief_absence_days": ("7", ["off", "3", "7", "14", "30"]),
     # values None == free-form; `validate` carries the shape instead of a closed list.
     "parallel_max": ("auto", None),
+    # 0.18.0: gt-lint decision-candidate phrase list (free-form edits to a built-in list).
+    "decision_signals": ("default", None),
 }
 # install_demo is gone since 0.14.0: the demo is a module and its install is a module
 # choice (install-choices.json), not a gt setting.

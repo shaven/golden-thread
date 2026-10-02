@@ -395,6 +395,28 @@ SETTINGS = {
             "shell command that writes the same file (cp, sed -i, a script); gt's own vault\n"
             "tools are covered by guard_vault_writes instead."),
     },
+    "decision_signals": {
+        "default": "default",
+        "values": None,
+        "validate": "default, off, or ;-separated edits: +phrase adds, -phrase removes",
+        "summary": "Phrases gt-lint's decision-candidate check looks for in design.md/research.md.",
+        "detail": (
+            "default  the built-in list: we chose, we decided, this is intentional,\n"
+            "         don't change this, do not change this, deliberately, by design,\n"
+            "         we use ... instead of, this workaround, existing behavio(u)r is\n"
+            "         correct, trade-off we accepted  (default)\n"
+            "off      no phrases: the check reports nothing\n"
+            "edits    `;`-separated changes to the built-in list -- `+we went with` (or a\n"
+            "         bare `we went with`) adds, `-deliberately` removes. e.g.\n"
+            "         gt_settings.py set decision_signals \"+we went with;-deliberately\"\n"
+            "\n"
+            "Matching is case-insensitive and line by line; `...` in a phrase matches up to\n"
+            "60 characters of anything. A hit is only a CANDIDATE in the review queue --\n"
+            "nothing writes an ADR. Decline one line for good with\n"
+            "`suppress: <path>:#<hash>` in lint-declines.md (the queue entry prints it).\n"
+            "Added 0.18.0: decisions stated in prose and never recorded are re-debated by\n"
+            "the next session, or changed because nothing said they were deliberate."),
+    },
     # install_demo was removed in 0.14.0: the demo is a module, and whether it is
     # installed is a module choice (install.sh --with/--without demo, recorded in
     # ~/.claude/golden-thread/install-choices.json). A user's install_demo key in
@@ -529,6 +551,9 @@ def _freeform_ok(name, value):
     default rather than being written through, so a typo cannot silently uncap or
     serialise every run.
     """
+    if name == "decision_signals":
+        # A phrase list, not a closed set (0.18.0); see its `detail`. One line, non-empty.
+        return bool(value.strip()) and "\n" not in value
     if name != "parallel_max":
         return False
     if value == "auto":

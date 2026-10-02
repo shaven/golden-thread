@@ -108,6 +108,13 @@ shared rule is stated once at the root and **never repeated** in an area file.
 
 **Log it** with `graduate`, naming the destination repo from `source.md`.
 
+**The draft is generated (0.18.0).** `/gt:gt-brief <slug>` (`gt_brief.py`) drafts the section
+from what the vault already holds as stable: the vision line, every ADR that is neither
+superseded nor carrying an expiry field, the topology in `source.md`, and the rejected
+alternatives as "what not to do". It strips ADR numbers, wikilinks and vault paths, prints to
+stdout and writes nothing; the teammate test and the stability judgement stay with a person,
+and `runbook.md` facts still graduate by hand.
+
 ## Promoting to Core
 
 Core is the only tier with an enforcement mechanism, so promotion is a **wiring**
@@ -441,3 +448,22 @@ copies of shared facts are the exact failure mode this vault exists to prevent.
 
 Before touching code on any host, read the project's `source.md` to confirm
 which box serves that role in that environment.
+
+## ADR fields and memory entities
+
+An ADR body may carry structured field lines, written by `tools/gt_adr.py allocate` when its
+flags are given and read by `gt_lint.py`, `gt_brief.py` and `gt_adr.py lineage` (0.18.0):
+
+| Line | Flag | Meaning |
+|---|---|---|
+| `- **Supersedes**: ADR-N` | `--supersedes N` | this decision replaces ADR-N. The old ADR is never edited; this link is the supersession chain. |
+| `- **Expires when**: <prose>` | `--expires-when "..."` | the condition that ends its truth. Same field as a Knowledge page's `expires_when:`; lint lists it in the review queue at any age (`adr-expires`). |
+| `- **Expires**: YYYY-MM-DD` | `--expires YYYY-MM-DD` | a date after which it must be re-checked; listed only once passed. |
+
+The frontmatter spelling (`expires_when:`, `supersedes:`) reads the same. When writing an ADR,
+ask whether it replaces one and whether it has a known expiry; both are optional.
+
+A memory file may list what it is about in an optional `entities:` frontmatter list
+(`entities: [auth-service, TOKENSVC]`). `/gt:gt-query --entity <name>` then loads only the files
+that declare it, and lint's `memory-entity-orphan` suggests the field where a declared name
+recurs. Nothing is ever tagged without a person.

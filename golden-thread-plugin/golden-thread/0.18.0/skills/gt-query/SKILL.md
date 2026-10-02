@@ -57,3 +57,35 @@ python3 "<vault>/Projects/golden-thread/tools/gt_log.py" --vault "<vault>" add \
 - Always read the full Knowledge page, not just the preview — the detail is in the content
 - If a page has `status: stale`, mention it: "Note: this page is marked stale — it may be outdated"
 - If a page has a `sources:` frontmatter field, those are the authoritative references
+
+## Decision lineage — "what is the history of decisions about X?" (0.18.0)
+
+Asked how a decision came to be, or `--lineage <topic>`: trace the supersession chain in the
+project's ADRs instead of reading `decisions.md` top to bottom.
+
+```bash
+python3 "<vault>/Projects/golden-thread/tools/gt_adr.py" --vault "<vault>" lineage <project> "<topic>"
+```
+
+It finds every ADR whose title or body mentions the topic, follows `Supersedes:` fields both
+ways, and prints each chain oldest first: number, date, title, the reason each was superseded
+(the superseding ADR's Context), and the non-superseded one labelled **current** with its
+rejected alternatives. "No decisions found for topic '<topic>'" means none mention it — say so;
+do not fall back to guessing. One project at a time (a sub-project's bare slug works). Chains
+are only as good as the `Supersedes:` fields: an ADR that replaced another in prose alone shows
+as its own one-entry chain — offer to record the link in a new ADR.
+
+## Entity lookup — "what do we know about X?" (0.18.0)
+
+Asked about a thing (a service, a host, a component) or `--entity <name>`: load only the
+memory files that declare it in `entities:` frontmatter, not every memory file.
+
+```bash
+python3 <base_dir>/../../scripts/gt_entities.py --vault "<vault>" lookup "<name>" --project <project>
+```
+
+`<base_dir>` is the path in the `Base directory for this skill:` header. Matching is
+case-insensitive substring on the declared names. Each hit prints its MEMORY.md description
+and the file. "No memory files tagged with entity '<name>'" — then continue with the steps
+above (index, grep), and mention that tagging the relevant memory files with `entities:` would
+make this lookup work next time. `list --project <project>` shows every declared entity.

@@ -6,6 +6,7 @@ metadata:
   type: feedback          # core | feedback | user | reference
   level: generic          # core | context | generic   (default: generic)
   enforcement:            # validated | reminder — required iff level: core, omit for generic
+entities: []              # optional: the services/hosts/components this is about (gt-query --entity)
 ---
 
 <The fact, rule, or finding. One statement per rule, phrased as an imperative.>
