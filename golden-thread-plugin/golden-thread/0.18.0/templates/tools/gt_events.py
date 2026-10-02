@@ -81,7 +81,11 @@ VERSION = 1
 ACTORS = ("claude", "user", "cron", "backfill")
 KINDS = ("capture", "file", "create", "promote", "relocate", "retire", "rename", "merge",
          "archive", "ingest", "task.open", "task.done", "adr", "source.supersede",
-         "announce")
+         "announce",
+         # 0.18.0: gt_apply.py -- one per add-on fix applied, refused or rolled back. The
+         # item is the proposal record under Projects/golden-thread/ext-proposals/; the note
+         # names the add-on, the file and the outcome.
+         "addon.fix")
 KEYS = ("v", "ts", "session", "actor", "kind", "item", "from", "to", "level_from",
         "level_to", "project", "note")
 REQUIRED = KEYS[:-1]

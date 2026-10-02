@@ -68,16 +68,20 @@ TTL_1H = 60 * 60
 READ_SLACK = 0.02
 
 WRITE_5M, WRITE_1H, READ = 1.25, 2.0, 0.1
-# USD per million INPUT tokens, list price, matched by substring in this order. The first match
-# wins, so the specific spellings come before the family names.
-PRICES = (
-    ("claude-3-opus", 15.0), ("claude-opus-4-0", 15.0), ("claude-opus-4-1", 15.0),
-    ("claude-opus-4-20", 15.0),
-    ("opus", 5.0),
-    ("claude-3-haiku", 0.25), ("claude-3-5-haiku", 0.8), ("haiku", 1.0),
-    ("sonnet", 3.0),
-)
-DEFAULT_PRICE = 3.0
+# USD per million INPUT tokens, list price, matched by substring in order (first match wins).
+# The table lives in gt_model_prices.json beside this script: it recognises model ids already
+# in transcripts, and model ids are kept out of code (tests/test_gt_model.py). Unreadable file
+# -> family names only, never a crash.
+def _load_prices():
+    try:
+        with open(os.path.join(HERE, "gt_model_prices.json"), encoding="utf-8") as fh:
+            d = json.load(fh)
+        return tuple((str(n), float(p)) for n, p in d["prices"]), float(d.get("default", 3.0))
+    except (OSError, ValueError, KeyError, TypeError):
+        return (("opus", 5.0), ("haiku", 1.0), ("sonnet", 3.0)), 3.0
+
+
+PRICES, DEFAULT_PRICE = _load_prices()
 
 CAUSES = ("cold", "growth", "expiry", "invalid")
 AVOIDABLE = ("expiry", "invalid")

@@ -1,6 +1,7 @@
 ---
 name: gt-validate
 description: "Independently verify a claim using a fresh-context validation agent. The validator receives only the claim, the rules and the artifact — never the reasoning that produced them — so it re-derives the answer instead of grading an argument. Use when a finding is about to be recorded as fact, before a production change, or when a number matters."
+model_intent: deep
 ---
 
 # Golden Thread Validate
@@ -34,6 +35,27 @@ From the user's request, or from what this session just produced. Reduce it to a
 
 If there are several claims, validate them **separately**. A bundled claim returns a
 bundled verdict, which hides which part failed.
+
+**Step 1b — Can an installed checker decide it?**
+
+Some claims are mechanical: "this page is valid HTML", "this file's content matches its
+MIME type", "every input on this form has a label". A module may have installed a
+**checker** that decides exactly that, deterministically and without a model call. Ask:
+
+```bash
+python3 <base_dir>/../../scripts/gt_check.py list --for <the artifact file(s)>
+```
+
+If a listed checker decides the claim **as stated**, run it instead of an agent:
+
+```bash
+python3 <base_dir>/../../scripts/gt_check.py run <the artifact file(s)> --no-receipt
+```
+
+Report its verdict as the validation result — `pass` → **confirmed**, `fail` → **refuted**
+(name each finding), and `cannot-check` → **cannot-verify**, never a pass. Then go to Step 7.
+Use the fresh-context agent (Steps 2–6) only for a claim no checker covers, or for the part
+of a claim a checker does not decide — and say which part went where.
 
 **Step 2 — Load the project's rule pack**
 
@@ -80,6 +102,16 @@ isolation; withholding *reasoning* is.
 
 Launch a subagent per class with the matching prompt from `prompts/`, plus the packet.
 Run them in the background; they are slow by design because they redo the work.
+
+**Which model.** This skill declares `model_intent: deep` — a wrong verdict is expensive.
+Resolve it before dispatching, and pass the model it names as the subagent's model:
+```bash
+python3 <base_dir>/../../scripts/gt_model.py skill <base_dir> --vault "<vault>"
+```
+Say the line it prints to the user (`model_intent deep -> model …`). If it reports the intent
+**UNMAPPED**, it has already fallen back to `balanced` — use that model and say so; if it
+names no model at all, dispatch without one (the session's own model) and say that too.
+Never pick a model name yourself.
 
 **Specialist spec (only when `agent_specialization` is on).** The setting defaults to
 `off`, and then this paragraph changes nothing. Otherwise first run:

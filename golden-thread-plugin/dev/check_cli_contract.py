@@ -58,6 +58,10 @@ COVERED = {
     "scripts/gt_close.py": ("project", "task", "handoff"),
     # 0.18.0: --archive and --supersede queue writes to research.md (--demote already moved notes)
     "scripts/gt_optimize.py": (),
+    # 0.18.0: the validation host. `run` files fix proposals into the vault's ext-proposals/;
+    # `apply`/`undo` write the fixed file (vault Markdown through the queue).
+    "scripts/gt_check.py": ("run",),
+    "scripts/gt_apply.py": ("apply", "undo"),
 }
 
 EXEMPT = {

@@ -25,8 +25,8 @@
    "sha256": "05b8694b31bf1c8e8d4b46e14d3f7051e1b3f90d93bb396de10c8265dde1875b"
   },
   "hooks/guard_test_before_commit.py": {
-   "bytes": 12515,
-   "sha256": "66e2f2573a885d214f0f379417cbba852d3918378d7a7802e738c86f55ae4191"
+   "bytes": 15579,
+   "sha256": "de979360099104fdf53aa7fc4e7f3f304847fb62c65703b0daf9155d10cc33ab"
   },
   "hooks/guard_test_before_commit.sh": {
    "bytes": 1266,
@@ -104,6 +104,10 @@
    "bytes": 2726,
    "sha256": "e50f630c4b15ff189ebd0bc9d084bd4bc2e41302bce6ff74d3d0b83d9d71694e"
   },
+  "packs/core/model.intents.pack.json": {
+   "bytes": 618,
+   "sha256": "0e20813a6afda31936cd18b588d37b522e9649405fbeefe3451d7ba7d0cb8e34"
+  },
   "packs/core/naming.conventions.pack.json": {
    "bytes": 1593,
    "sha256": "cadd417e1089bd7f8fde376c1e2e2fb4ad675f2a6b6ab8597ee38d2face04f35"
@@ -132,6 +136,10 @@
    "bytes": 12377,
    "sha256": "446a7eb5cb8d553562f5b2572a72fe3ff2e30fffc3e7d0886cdbd703e5730442"
   },
+  "scripts/gt_apply.py": {
+   "bytes": 35930,
+   "sha256": "9ec97e9cb9f25715747f457fed8c6b411b5b61d2fc47d0758732d09a66a52882"
+  },
   "scripts/gt_brief.py": {
    "bytes": 8931,
    "sha256": "7f1e040ddc69177ed2c23590474da44794b6b15bc7d496da76bb709dd81ad8bd"
@@ -144,6 +152,10 @@
    "bytes": 9940,
    "sha256": "8b94e8ef70bc77c90550775bac65e904903a3342e3246cd5f3cb04a6827cb274"
   },
+  "scripts/gt_check.py": {
+   "bytes": 24946,
+   "sha256": "e1b2ec8a535ff3c2f38066607346b7e30bd549c87783899622fd602e1c8c877d"
+  },
   "scripts/gt_check_report.py": {
    "bytes": 7544,
    "sha256": "c1a48c7f5c9eee67641c29e9aa6936c792305e740e7d4732d9728c9f5c8b678d"
@@ -153,12 +165,12 @@
    "sha256": "e55b2a9a50fff813df3ae2001128332c8afeb8834c7056f81f9b696700fe864a"
   },
   "scripts/gt_code_review.py": {
-   "bytes": 15194,
-   "sha256": "b7419f33249edab6cd4dd4c60852bc1d9c162defad2030b8c23b91e7c044788c"
+   "bytes": 15968,
+   "sha256": "f3e480fa740de27dd132b845f778b45b4ed928856b80d88d4b3e460be732ca05"
   },
   "scripts/gt_components.py": {
-   "bytes": 89224,
-   "sha256": "071e12519db9fb2ab670a830492c8f6ed26220247f7c3c50b7a2ee0892400b38"
+   "bytes": 93344,
+   "sha256": "8f16d9e7d62b85f9dd645afa57f2c8236e7a03a2d1fd4aa66e65a0eb48c12844"
   },
   "scripts/gt_context.py": {
    "bytes": 10260,
@@ -177,8 +189,8 @@
    "sha256": "e8d6611ac58adb92198d09a2ce0520a7cb128d48667c8df8018f8cbed6b11bdf"
   },
   "scripts/gt_doctor.py": {
-   "bytes": 98237,
-   "sha256": "dd81daa085083f48a359e030036cd1a73a92bef650cdfcd69c1bb5b824bff7da"
+   "bytes": 99708,
+   "sha256": "6b86616388dab6ca39b170b03d7dbb067db635e37bcfe00b82a019d250f29a4a"
   },
   "scripts/gt_entities.py": {
    "bytes": 5423,
@@ -220,13 +232,21 @@
    "bytes": 10292,
    "sha256": "a3b4f454b6471cc90ca2f6b786310a37a50386243e8b5fc792a29202c842ec39"
   },
+  "scripts/gt_model.py": {
+   "bytes": 8802,
+   "sha256": "28b1f16b733eab37c2d4f2df1df26ab1c3c412ba6a9635eda5b4c776dbc4792a"
+  },
+  "scripts/gt_model_prices.json": {
+   "bytes": 730,
+   "sha256": "60da1783f4ef7519544fa5b51755a7153656b7b0b1cf882aab5e6d765df3cd7c"
+  },
   "scripts/gt_optimize.py": {
    "bytes": 52349,
    "sha256": "14e49ffd98ef54ee246235b1952711f8a558c8f8959681efa730e38f7f4ca0a5"
   },
   "scripts/gt_optimize_session.py": {
-   "bytes": 16675,
-   "sha256": "834664912a202b5c8bbaf87981abc23a951cdcbdfc213b6a265b82d0af35330a"
+   "bytes": 16982,
+   "sha256": "f2af00d9e9b9844a2f506c6782caaacf5bd06d0f513f9bb3f8d4acb27e4f3900"
   },
   "scripts/gt_paths.py": {
    "bytes": 13981,
@@ -241,8 +261,8 @@
    "sha256": "97448249bb05b6a3dbb39cf1ab65aa1ca7bc9390ea427fbd5919a70a2954873c"
   },
   "scripts/gt_registry.py": {
-   "bytes": 36874,
-   "sha256": "af607a4f8e90247837459e431da4fe60c6fcd714fe8aa7947af8f811656936e9"
+   "bytes": 37302,
+   "sha256": "2d459e6cfe810f4e45810559ad4e36d43cedb464f7429584b7fa4b40d5120f37"
   },
   "scripts/gt_scan.py": {
    "bytes": 7987,
@@ -265,8 +285,8 @@
    "sha256": "d2fbf97b57eb729ad399672a77c63745aac4e88140f39c7b989ac122bcbfe3b7"
   },
   "scripts/gt_settings.py": {
-   "bytes": 53111,
-   "sha256": "0a926e498b020ccf5a813d6408805cb4988af9f9cee24b358dd6a18c98697740"
+   "bytes": 55911,
+   "sha256": "abf522f46e90b7c6d876623fbb0c3c35bdea62a21401de4d7bf5913769d30e11"
   },
   "scripts/gt_staged.py": {
    "bytes": 3529,
@@ -285,8 +305,8 @@
    "sha256": "bde971c0a064703029c1f2ebdf9b4b67507081491be0505c46e97a9ce53eb53b"
   },
   "scripts/gt_test_receipt.py": {
-   "bytes": 10040,
-   "sha256": "0d5107d5a35f50fe9fc17f24324512a4bf9bd5dd097d3d1605eb865f7a264ec1"
+   "bytes": 12701,
+   "sha256": "bff6623d0be2825d25103a29cbcdeb6bbb4cd403b13d7face47466c9a6ed0fa9"
   },
   "scripts/gt_upgrade.py": {
    "bytes": 48144,
@@ -309,8 +329,8 @@
    "sha256": "165a5ac61a4d501d74e2500c1363e1aa69207ecd22b7450028cd1dc4ec175fa3"
   },
   "scripts/skill_lint.py": {
-   "bytes": 4723,
-   "sha256": "d56bbd01ce9ba0e74b36ea2bf15fcfccd5d2d4a1ef8fdbdd33d02ae8c36fb7a0"
+   "bytes": 5994,
+   "sha256": "48e2ee412f291637a28f3d0350463c589b9962a414d1a7505fc1f7846bf59317"
   },
   "scripts/vault_init.py": {
    "bytes": 96408,
@@ -469,8 +489,8 @@
    "sha256": "4499af3b2b120031005532dd14cd0107c092e5b8819d25d60d5ff66127c5ad90"
   },
   "templates/tools/gt_events.py": {
-   "bytes": 40106,
-   "sha256": "963a2fffb5b4dab9627e9190babe7e3597826553033e0fb92908f8e3ed00850a"
+   "bytes": 40366,
+   "sha256": "eacf4fbf63f8e04efc3e2b11675972d9e010f640bb2e0e818734d98620058f4f"
   },
   "templates/tools/gt_log.py": {
    "bytes": 15894,
@@ -501,7 +521,7 @@
    "sha256": "05a5e61333b0ba5d6f97866735268f7f99ff354d9502b2b05e0e512a86f82a6b"
   }
  },
- "generated": "2026-10-01T20:56:18",
+ "generated": "2026-10-01T21:04:09",
  "hooks": [
   {
    "args": [

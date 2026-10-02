@@ -79,7 +79,7 @@ SCHEMA_VERSION = 1
 ACTORS = ("claude", "user", "cron", "backfill")
 KINDS = ("capture", "file", "create", "promote", "relocate", "retire", "rename", "merge",
          "archive", "ingest", "task.open", "task.done", "adr", "source.supersede",
-         "announce")
+         "announce", "addon.fix")
 KEYS = ("v", "ts", "session", "actor", "kind", "item", "from", "to", "level_from",
         "level_to", "project", "note")
 
@@ -89,7 +89,9 @@ FAMILIES = (
     ("move", "Move", "triangle", ("promote", "relocate", "rename", "merge")),
     ("leave", "Leave", "square", ("retire", "archive", "source.supersede")),
     ("task", "Task", "diamond", ("task.open", "task.done")),
-    ("say", "Announce", "star", ("announce",)),
+    # addon.fix (gt 0.18.0, gt_apply.py) is a statement about a file, not a movement of
+    # knowledge, so it joins the announcements rather than a ladder family.
+    ("say", "Announce", "star", ("announce", "addon.fix")),
 )
 FAMILY_OF = {k: f[0] for f in FAMILIES for k in f[3]}
 

@@ -136,6 +136,65 @@ def covers(repo, files):
     return True, r, None
 
 
+# ---- check receipts (0.18.0) --------------------------------------------------------
+#
+# gt_check.py -- the validation host -- records what its checkers saw here, in a sibling
+# ledger. Same shape of reasoning as a test receipt, ONE difference: a check receipt names
+# the CONTENT HASH of every file, not a time. A test run covers a tree; a checker verdict is
+# about particular bytes, and the commit guard asks about the bytes in the index, which a
+# timestamp cannot identify (stage, edit, re-stage the old bytes: the times all move).
+
+CHECK_LEDGER = os.path.join(os.path.dirname(LEDGER), "check-runs.jsonl")
+
+
+def read_checks():
+    try:
+        with open(CHECK_LEDGER) as fh:
+            return [json.loads(l) for l in fh if l.strip()]
+    except Exception:
+        return []
+
+
+def record_check(repo, files, ok, event="files"):
+    """One row: {repo, at, head, ok, event, files: {rel: {sha256, checkers: {key: verdict}}}}."""
+    root = repo_root(repo)
+    entry = {"repo": root, "ok": bool(ok), "event": event, "at": time.time(),
+             "at_human": time.strftime("%Y-%m-%d %H:%M:%S %Z"), "head": head(root),
+             "files": files}
+    os.makedirs(os.path.dirname(CHECK_LEDGER), exist_ok=True)
+    rows = read_checks()
+    rows.append(entry)
+    rows = rows[-MAX_LINES:]
+    tmp = CHECK_LEDGER + ".tmp"
+    with open(tmp, "w") as fh:
+        for r in rows:
+            fh.write(json.dumps(r) + "\n")
+    os.replace(tmp, CHECK_LEDGER)
+    return entry
+
+
+def check_covers(repo, hashes):
+    """-> (ok, why, checker). `hashes` is {rel: sha256 of the content being committed}.
+
+    Each file needs the NEWEST receipt row that saw exactly these bytes, and every checker
+    on that row must have passed. `cannot-check` is not a pass. A file the receipt saw with
+    no applicable checker is covered: it was checked, and nothing applied. The first
+    uncovered file is named, and the failing checker with it."""
+    root = repo_root(repo)
+    rows = sorted((r for r in read_checks() if r.get("repo") == root),
+                  key=lambda r: r.get("at", 0), reverse=True)
+    for rel, want in sorted(hashes.items()):
+        row = next((r for r in rows
+                    if ((r.get("files") or {}).get(rel) or {}).get("sha256") == want), None)
+        if row is None:
+            return False, ("no check receipt covers the staged content of %s" % rel), None
+        for key, verdict in sorted((row["files"][rel].get("checkers") or {}).items()):
+            if verdict != "pass":
+                return False, ("%s: checker %s reported %s on this content"
+                               % (rel, key, verdict)), key
+    return True, None, None
+
+
 def _discovery():
     """The commit guard's module, from beside this script (the installed hooks dir) or from
     the release's hooks/ (a copy run from the tree)."""

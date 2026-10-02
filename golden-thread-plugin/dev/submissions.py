@@ -8,6 +8,7 @@ mechanically, the things a human reviewer reliably misses at 11pm.
 
   submissions.py validate <pack.json> [...]      # READY / REJECT, exit 0 / 1
   submissions.py slots                            # the slot table, with reachability
+  submissions.py skill <SKILL.md> [...]           # a contributed skill's model_intent only
 
 DESIGN: PARSE FIRST, THEN CHECK THE DECODED VALUES.
 An earlier version scanned the raw file text for words like "postinstall" and "remove". That
@@ -113,7 +114,16 @@ SLOTS = {
     "vocabulary":       {"model_reachable": True, "fields": {"term": "token", "definition": "text"}},
     "validation_rules": {"model_reachable": True, "fields": {"id": "token", "rule": "text"}},
     "runbook":          {"model_reachable": True, "fields": {"id": "token", "step": "text"}},
+    # 0.18.0: the intent -> model mapping (gt_model.py). Tier D because the resolved name is
+    # printed. `verified` is the date the name was last checked against the provider -- a
+    # model name nobody re-checked reads as evidence while being wrong (see SPDX_LIST_VERSION).
+    "model":            {"model_reachable": True,
+                         "fields": {"intent": "enum:%s" % "|".join(("fast", "balanced", "deep")),
+                                    "model": "token", "verified": "date"}},
 }
+# The one vocabulary a skill or agent may declare as `model_intent` (gt_model.INTENTS). An
+# unknown value is refused here, at submission, rather than discovered when the skill runs.
+MODEL_INTENTS = ("fast", "balanced", "deep")
 
 # The SPDX list is versioned and identifiers are RENAMED between versions: `GPL-3.0` was
 # deprecated in favour of the explicit `GPL-3.0-only` / `GPL-3.0-or-later`. Recording the
@@ -462,7 +472,11 @@ def check_field(slot, where, kind, value):
         check_not_instruction(where, _unseparate(value))
     elif kind.startswith("enum:"):
         if value not in kind[5:].split("|"):
-            _fail("bad-enum", "%s must be one of %s" % (where, kind[5:].replace("|", ", ")))
+            _fail("bad-enum", "%s is %r; it must be one of %s"
+                  % (where, value[:40], kind[5:].replace("|", ", ")))
+    elif kind == "date":
+        if not re.match(r"\d{4}-\d{2}-\d{2}\Z", value):
+            _fail("bad-date", "%s is not a YYYY-MM-DD date" % where)
     else:  # pragma: no cover
         _fail("internal", "unknown field kind %r" % kind)
 
@@ -776,6 +790,30 @@ def validate(path):
     return "READY", "", ""
 
 
+def validate_skill_intent(path):
+    """-> (ok, detail). A contributed SKILL.md (or agent .md) may declare `model_intent` in its
+    frontmatter; any value outside MODEL_INTENTS is refused with its line. Only that field is
+    judged here -- a skill is reviewed by a person, this just makes the vocabulary mechanical."""
+    try:
+        with open(path, encoding="utf-8") as fh:
+            lines = fh.read().splitlines()
+    except (OSError, UnicodeDecodeError) as exc:
+        return False, "unreadable (%s)" % exc.__class__.__name__
+    if not lines or lines[0].strip() != "---":
+        return True, "no frontmatter, no model_intent"
+    for i, line in enumerate(lines[1:], 2):
+        if line.strip() == "---":
+            break
+        m = re.match(r"^model_intent:[ \t]*(.*?)[ \t]*$", line)
+        if m:
+            val = m.group(1).strip().strip("'\"")
+            if val not in MODEL_INTENTS:
+                return False, ("frontmatter line %d: model_intent is %r; it must be one of %s"
+                               % (i, val[:40], ", ".join(MODEL_INTENTS)))
+            return True, "model_intent %s" % val
+    return True, "no model_intent declared (runs on the session's own model)"
+
+
 def cmd_slots():
     print("%-20s %-6s %s" % ("SLOT", "TIER", "FIELDS"))
     for name in sorted(SLOTS):
@@ -794,9 +832,18 @@ def main(argv=None):
     v = sub.add_parser("validate", help="validate one or more packs")
     v.add_argument("paths", nargs="+")
     sub.add_parser("slots", help="print the open slots and their tiers")
+    sk = sub.add_parser("skill", help="check a contributed skill's model_intent")
+    sk.add_argument("paths", nargs="+")
     args = ap.parse_args(argv)
     if args.cmd == "slots":
         return cmd_slots()
+    if args.cmd == "skill":
+        worst = 0
+        for p in args.paths:
+            ok, detail = validate_skill_intent(p)
+            print("%s %s  (%s)" % ("OK      " if ok else "REJECT  ", p, detail))
+            worst = worst if ok else 2
+        return worst
     # 0 ready | 1 needs a human | 2 refused. REVIEW is deliberately not 0: a submission carrying
     # prose a matcher cannot judge must not merge on a green exit code.
     worst = 0
