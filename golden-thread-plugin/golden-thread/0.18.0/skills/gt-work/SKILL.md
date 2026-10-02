@@ -100,6 +100,20 @@ scratchpad, then:
    The pass is advice, never a gate: write-back completes whatever is decided, and a
    skeptic that fails to run is reported in one line, not retried.
 
+#### Research digest (after the research entries land)
+
+Once this session's `research.md` entries are applied (drained), regenerate the project's
+digest — a cheap first read beside the append-only file:
+```bash
+python3 <base_dir>/../../scripts/gt_digest.py write --vault "<vault>" --project <slug>
+```
+It rewrites `Projects/<slug>/research-digest.md` through the write queue: the last 20 `## `
+sections newest first, one line each (heading + first line, nothing inferred), plus up to 5
+sections whose heading carries `[pinned]`. The first time, it also indexes the digest in
+`memory/MEMORY.md`. It never touches `research.md`. A `held` or `escalated` result is reported
+in one line, like any other queued write. To pin a finding, the user adds `[pinned]` to its
+heading — the one edit to an existing research entry that is allowed.
+
 ### decisions.md — generated from atomically allocated ADRs
 
 **Allocate the number before writing the ADR.** Two sessions that both read "the

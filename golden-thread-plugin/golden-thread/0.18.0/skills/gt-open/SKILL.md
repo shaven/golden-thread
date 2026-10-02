@@ -83,6 +83,13 @@ If `source.md` links a fleet page (`**Fleet:** [[INFRASTRUCTURE]]`), read that p
 
 **On `research.md`:** it is append-only and grows without bound. If it exceeds ~200 lines, do not read it whole — read its `##` headings to learn what is covered, then read only the entries relevant to what the user is about to do, plus the most recent few.
 
+**If `research-digest.md` exists and is current, read it instead of the headings.** Ask first:
+`python3 <base_dir>/../../scripts/gt_digest.py check --vault "<vault>" --project <slug>` — exit 0
+means the digest was built from `research.md` exactly as it is now (its frontmatter carries the
+hash). The digest gives one line per recent section plus pinned findings; read the full entries
+in `research.md` only where the work needs them. Exit 1 (missing or stale) → fall back to the
+headings as above. `/gt:gt-work` regenerates the digest.
+
 Then index the memory files — **do not read them all**:
 
 8. `memory/MEMORY.md` — read this index only. It is one line per file (`- [Title](file.md) — description`), which is enough to know what exists and what each file covers.
