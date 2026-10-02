@@ -195,6 +195,17 @@ def setting_off(name):
         return False
 
 
+def _spool():
+    """The vault tools' gt_spool (templates/tools): the ONE slug -> Projects/<path>
+    resolver (0.18.0), shared with gt_adr and vault_init."""
+    tools = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+                         "templates", "tools")
+    if tools not in sys.path:
+        sys.path.insert(0, tools)
+    import gt_spool
+    return gt_spool
+
+
 def main(argv=None):
     ap = argparse.ArgumentParser(description=__doc__.split("\n")[0])
     ap.add_argument("--vault", required=True, help="the vault (never inferred)")
@@ -210,10 +221,21 @@ def main(argv=None):
 
     if args.work and setting_off("memory_contradiction_check"):
         return 0
-    if "/" in args.project or "\\" in args.project or args.project in (".", ".."):
+    if ".." in args.project.split("/") or "\\" in args.project or args.project in (".",) \
+            or os.path.isabs(args.project):
         print("--project takes a slug, not a path: %r" % args.project, file=sys.stderr)
         return 2
     vault = os.path.abspath(os.path.expanduser(args.vault))
+    if os.path.isdir(vault):
+        # The shared resolver (0.18.0): a bare sub-project slug reads
+        # Projects/<parent>/<slug>/memory, not a top-level folder that is not there.
+        S = _spool()
+        try:
+            args.project = S.resolve_project(vault, args.project,
+            allow_unregistered=True)  # an existing folder, as before; never creates
+        except S.ProjectNotFound as exc:
+            print("gt_memory_check: %s" % exc, file=sys.stderr)
+            return 2
     mem_rel = "Projects/%s/memory" % args.project
     mem = os.path.join(vault, mem_rel)
     if not os.path.isdir(vault):

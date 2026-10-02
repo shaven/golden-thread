@@ -122,13 +122,30 @@ def readmes(vault: Path):
     return out
 
 
+def resolve(vault: Path, project: str | None):
+    """-> (rel under Projects/, None) or (None, why). The ONE shared resolver
+    (gt_spool.resolve_project), so a bare sub-project slug finds Projects/<parent>/<slug>,
+    an unknown slug says so, and a slug two projects share names both. Never creates."""
+    if not project or ".." in project.split("/") or project.startswith("/"):
+        return None, "no such project %r" % project
+    try:
+        import gt_spool                       # beside this file in every vault's tools/
+    except ImportError:
+        # A copy of this tool on its own (the broker's fixtures carry only gt_task/gt_tasks):
+        # the pre-0.18.0 exact join, which still never creates anything.
+        ok = (vault / "Projects" / project / "README.md").is_file()
+        return (project, None) if ok else (None, "no such project %r" % project)
+    try:
+        return gt_spool.resolve_project(vault, project), None
+    except gt_spool.ProjectNotFound as exc:
+        return None, str(exc)
+
+
 def target(vault: Path, project: str | None, inbox: bool) -> Path | None:
     if inbox:
         return vault / "INBOX.md"
-    if not project or ".." in project.split("/") or project.startswith("/"):
-        return None
-    p = vault / "Projects" / project / "README.md"
-    return p if p.is_file() else None
+    rel, _ = resolve(vault, project)
+    return vault / "Projects" / rel / "README.md" if rel else None
 
 
 def _h(line: str) -> str:
@@ -465,7 +482,7 @@ def cmd_add(a, vault: Path) -> int:
         return 2
     path = target(vault, a.project, a.inbox)
     if path is None:
-        print("no such project %r (pass --project <slug>, or --inbox)" % a.project,
+        print("%s (pass --project <slug>, or --inbox)" % resolve(vault, a.project)[1],
               file=sys.stderr)
         return 3
     if a.ref:
@@ -502,7 +519,9 @@ def cmd_add(a, vault: Path) -> int:
     if a.dry_run:
         print("would add to %s:\n%s" % (rel, line))
         return 0
-    slug = "inbox" if a.inbox else a.project
+    # the resolved path, not what was typed: it is the slug part of the task ID `list` prints
+    slug = "inbox" if a.inbox else str(path.parent.relative_to(vault / "Projects")).replace(
+        os.sep, "/")
     if os.environ.get(BROKER_APPLYING) == "1":
         holder = claimed_elsewhere(vault, path)
         if holder:
@@ -550,7 +569,7 @@ def locate(vault: Path, tid: str):
     slug, n, h = m.group(1), int(m.group(2)), m.group(3)
     path = (vault / "INBOX.md") if slug == "inbox" else target(vault, slug, False)
     if path is None:
-        return None, "no project %r" % slug
+        return None, resolve(vault, slug)[1]
     lines = path.read_text(encoding="utf-8").splitlines()
     if n < 1 or n > len(lines) or _h(lines[n - 1]) != h:
         return None, ("the task at %s changed since it was listed (someone edited the file) -- "
@@ -652,9 +671,9 @@ def cmd_move(a, vault: Path) -> int:
     src_slug = a.id.rsplit(":", 2)[0]
     dest = target(vault, a.to, False)
     if dest is None:
-        print("no such project %r to move the task to" % a.to, file=sys.stderr)
+        print("%s -- nothing to move the task to" % resolve(vault, a.to)[1], file=sys.stderr)
         return 3
-    if a.to == src_slug:
+    if dest == found[0]:
         print("the task is already in %s" % a.to, file=sys.stderr)
         return 3
     path, i, lines = found

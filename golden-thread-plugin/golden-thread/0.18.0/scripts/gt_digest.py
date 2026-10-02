@@ -108,6 +108,16 @@ def _body(text):
     return re.sub(r"^generated: .*$", "", text or "", count=1, flags=re.M)
 
 
+def _spool():
+    """The vault tools' gt_spool, shipped beside this script under templates/tools: the ONE
+    slug -> Projects/<path> resolver (0.18.0), shared with gt_adr and vault_init."""
+    tools = os.path.join(os.path.dirname(HERE), "templates", "tools")
+    if tools not in sys.path:
+        sys.path.insert(0, tools)
+    import gt_spool
+    return gt_spool
+
+
 def check(vault, slug):
     base = os.path.join(vault, "Projects", slug)
     research = _read(os.path.join(base, "research.md"))
@@ -173,10 +183,20 @@ def main(argv=None):
         if name == "write":
             p.add_argument("--dry-run", action="store_true", help="say what would be queued")
     a = ap.parse_args(argv)
-    if "/" in a.project or a.project in (".", "..") or os.path.isabs(a.project):
+    if ".." in a.project.split("/") or a.project in (".",) or os.path.isabs(a.project) \
+            or "\\" in a.project:
         print("--project takes a slug, not a path: %r" % a.project, file=sys.stderr)
         return 2
     vault = os.path.abspath(os.path.expanduser(a.vault))
+    # The shared resolver (0.18.0): a bare sub-project slug writes beside
+    # Projects/<parent>/<slug>/research.md, never a stray top-level folder.
+    S = _spool()
+    try:
+        a.project = S.resolve_project(vault, a.project,
+            allow_unregistered=True)  # an existing folder, as before; never creates
+    except S.ProjectNotFound as exc:
+        print("gt_digest: %s" % exc, file=sys.stderr)
+        return 3
     if a.cmd == "check":
         ok, why = check(vault, a.project)
         print(json.dumps({"current": ok, "why": why}) if a.json else

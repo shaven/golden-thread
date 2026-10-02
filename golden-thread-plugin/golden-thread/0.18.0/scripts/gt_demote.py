@@ -223,6 +223,15 @@ def title_of(text, fallback):
     return m.group(1).strip() if m else fallback
 
 
+def _spool():
+    """The vault tools' gt_spool, shipped beside this script under templates/tools."""
+    tools = os.path.join(os.path.dirname(HERE), "templates", "tools")
+    if tools not in sys.path:
+        sys.path.insert(0, tools)
+    import gt_spool
+    return gt_spool
+
+
 def destination(vault, rel, to, project):
     """-> (absolute destination, relative destination) or (None, reason)."""
     base = os.path.basename(rel)
@@ -234,12 +243,23 @@ def destination(vault, rel, to, project):
     if to == "project-memory":
         if not project:
             return None, "moving into a project's memory needs --project <slug>"
-        if not SLUG_RE.match(project):
+        parts = project.split("/")
+        if not all(SLUG_RE.match(x) and x not in (".", "..") for x in parts):
             # `--project ../../../ESCAPED` and an absolute path both wrote outside the vault
             # and left a pointer to a page that did not exist (validation 2026-09-16).
+            # `parent/child` is accepted since 0.18.0: it is what the resolver returns.
             return None, ("--project takes a slug, not a path: %r" % project)
-        return (os.path.join(vault, "Projects", project, "memory", base),
-                "Projects/%s/memory/%s" % (project, base))
+        # The ONE shared resolver (gt_spool.resolve_project, 0.18.0): a bare sub-project
+        # slug lands in Projects/<parent>/<slug>/memory/, and an unknown slug is refused
+        # instead of growing a stray top-level Projects/<slug>/ with only a memory/ in it.
+        S = _spool()
+        try:
+            prel = S.resolve_project(vault, project,
+            allow_unregistered=True)  # an existing folder, as before; never creates
+        except S.ProjectNotFound as exc:
+            return None, str(exc)
+        return (os.path.join(vault, "Projects", *prel.split("/"), "memory", base),
+                "Projects/%s/memory/%s" % (prel, base))
     return None, "unknown destination %r" % to
 
 
