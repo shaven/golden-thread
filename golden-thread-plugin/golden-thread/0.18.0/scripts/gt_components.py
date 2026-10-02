@@ -442,7 +442,10 @@ HOOK_DIR_SCRIPTS = ("gt_paths.py", "gt_components.py",
                     "gt_daily.py",         # job `daily` (stdlib only)
                     "gt_sweep.py",         # job `sweep`; its members and their imports follow
                     "gt_secrets.py", "gt_scan_code.py", "gt_check_report.py",
-                    "gt_registry.py", "gt_staged.py")
+                    "gt_registry.py", "gt_staged.py",
+                    # 0.18.0: gt_push_check imports gt_sync for the opt-in behind-check
+                    # (sync_check).
+                    "gt_sync.py")
 
 
 # Every hook entry the plugin expects to find in ~/.claude/settings.json.
