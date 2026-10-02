@@ -107,6 +107,42 @@ for _name, _meta in MODULE_MEMBERS.items():
         MEMBERS[_name] = dict(_meta, path=_path)
 
 
+# The project's RELEASE PIPELINE (0.18.0, gt_pipeline.py) joins the roster only for a repo that
+# has adopted one -- the same rule as a module member: the denominator is what this run DECLARES,
+# and a repo with no release-pipeline.tsv did not declare a pipeline. It runs `release.sh --until
+# owner-gate` with GT_PIPELINE_INSIDE=allin, so the pipeline's own @tests and @allin steps report
+# "covered" rather than running this command inside itself. Never added when this run IS the
+# pipeline's @allin step (GT_PIPELINE_INSIDE=pipeline): that would be allin -> pipeline -> allin.
+PIPELINE_MEMBER = {"script": "gt_pipeline.py",
+                   "what": "the project's release pipeline, every step before the owner gate",
+                   "needs": ("repo",), "timeout": 3600}
+
+
+def add_pipeline_member(repo):
+    if not repo or os.environ.get("GT_PIPELINE_INSIDE") == "pipeline":
+        return False
+    try:
+        import gt_pipeline
+        root = gt_pipeline.repo_root(os.path.abspath(os.path.expanduser(repo)))
+    except Exception:
+        return False
+    if os.path.isfile(os.path.join(root, "release-pipeline.tsv")):
+        MEMBERS["pipeline"] = dict(PIPELINE_MEMBER)
+        return True
+    return False
+
+
+def _record_metric(started, rc, ran):
+    """One execution row for this skill run (gt_metrics.py). Best effort, never fatal."""
+    try:
+        import time
+        import gt_metrics
+        gt_metrics.record_quietly(process="skill:gt-allin",
+                                  duration=time.time() - started, exit_code=rc, units=ran)
+    except Exception:
+        pass
+
+
 def script_path(meta):
     return meta.get("path") or os.path.join(HERE, meta["script"])
 
@@ -150,6 +186,8 @@ def build_cmd(name, meta, vault, repo):
         cmd += ["run", "--repo", repo]
     elif name == "validations":
         cmd += ["list", "--anchor", repo]
+    elif name == "pipeline":
+        cmd += ["run", "--repo", repo, "--until", "owner-gate", "--inside", "allin"]
     return cmd
 
 
@@ -180,6 +218,9 @@ def main(argv=None):
                          % gt_aggregate.DEFAULT_TIMEOUT_S)
     ap.add_argument("--json", action="store_true")
     args = ap.parse_args(argv)
+    import time
+    started = time.time()
+    add_pipeline_member(args.repo)
 
     have = available()
     if args.list:
@@ -238,9 +279,9 @@ def main(argv=None):
                 print("This tool does not push: it cannot know whether the tests you are "
                       "relying on were actually run in this session.")
 
-    if failed:
-        return NO_ANSWER
-    return FINDINGS if found else CLEAN
+    rc = NO_ANSWER if failed else (FINDINGS if found else CLEAN)
+    _record_metric(started, rc, len(ran))
+    return rc
 
 
 if __name__ == "__main__":

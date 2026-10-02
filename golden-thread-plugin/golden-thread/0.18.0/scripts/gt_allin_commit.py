@@ -158,6 +158,8 @@ def main(argv=None):
     print()
 
     refusals = []
+    import time
+    started = time.time()
 
     # 1. The checks. A member that COULD NOT RUN is fatal regardless of --allow-findings:
     #    "I could not check" is not a finding to be accepted, it is an unknown.
@@ -190,6 +192,25 @@ def main(argv=None):
         elif proc.returncode not in (0, 1, 3):
             refusals.append("the checks exited %d, which is not a result this understands"
                             % proc.returncode)
+
+    # 1b. The project's RELEASE PIPELINE (0.18.0). When the repo has adopted one, the run above
+    #     included its pre-commit steps (`release.sh --until owner-gate`, the `pipeline` member).
+    #     A failed step refuses the commit, and --allow-findings cannot wave it through: a gate
+    #     that did not pass is not a finding someone may accept.
+    try:
+        import gt_pipeline
+        if os.path.isfile(os.path.join(repo, gt_pipeline.STEPS_FILE)) and not err:
+            last = gt_pipeline.last_run(gt_pipeline.repo_root(repo))
+            if not last or last.get("finished", 0) < started:
+                refusals.append("the release pipeline's pre-commit steps did not run in this "
+                                "check; run gt_pipeline.py run --repo %s --until owner-gate"
+                                % repo)
+            elif last.get("rc") != 0:
+                refusals.append("release pipeline step %s FAILED; a pre-commit gate that did not "
+                                "pass cannot be accepted with --allow-findings"
+                                % (last.get("failed") or "?"))
+    except ImportError:
+        pass
 
     # 2. The test receipt, checked HERE because a PreToolUse hook cannot see this process.
     proc, err = run_script("gt_test_receipt.py",

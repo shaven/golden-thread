@@ -64,6 +64,11 @@ EXPECTED = {
     "commit_checks": ("off", ["off", "on"]),
     "addon_fixes": ("propose", ["off", "propose", "apply"]),
     "addon_fix_size_limit": ("16k", ["1k", "4k", "16k", "64k", "256k"]),
+    # 0.18.0: execution metrics, scoped receipts, test temp dir, remote runners.
+    "execution_metrics": ("on", ["off", "on"]),
+    "scoped_receipts": ("on", ["off", "on"]),
+    "test_tmpdir": ("off", ["off", "noindex"]),
+    "runners": ("", None),
 }
 # install_demo is gone since 0.14.0: the demo is a module and its install is a module
 # choice (install-choices.json), not a gt setting.

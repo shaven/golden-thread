@@ -10,6 +10,8 @@ pointer behind.
   gt_optimize.py --vault V --archive --project SLUG --before YYYY-MM-DD [--apply | --dry-run]
   gt_optimize.py --vault V --supersede --file REL --entry HEADING --by HEADING [--apply | --dry-run]
   gt_optimize.py --vault V --member vault [--project SLUG] [--cost] [--unused-days N] [--json]
+  gt_optimize.py --vault V --only execution [--project SLUG] [--repo R] [--json]
+  gt_optimize.py --execution --vault V [--project P] [--repo R] [--apply ID [--dry-run]]
 
 AN AGGREGATOR OVER TWO MEMBERS (0.18.0), run through gt_aggregate like gt_scan and gt_allin:
 
@@ -20,7 +22,13 @@ AN AGGREGATOR OVER TWO MEMBERS (0.18.0), run through gt_aggregate like gt_scan a
     session   what a session CARRIES: prompt-cache writes classified by cause, the avoidable
               share, context weight per session. Paid once per resume. gt_optimize_session.py.
 
-A bare run runs both and says `N of 2 member(s) ran`. A member that could not run -- no
+    execution how work EXECUTES: timings, metrics, settings, ranked by measured cost.
+              gt_optimize_exec.py. OPT-IN: reached with `--only execution` (or `--only
+              vault,session,execution`), never part of a bare run, which still runs the two
+              members above. `--execution ...` is an alias that hands every argument straight to
+              gt_optimize_exec.py, so its `--apply ID` (one accepted finding) works through here.
+
+A bare run runs vault and session and says `N of 2 member(s) ran`. A member that could not run -- no
 transcripts on this machine, a crash -- is reported as such and sets exit 3; it is never read as
 a clean result. `--only vault` is the report this tool printed before it became an aggregator,
 with the new finding kinds added to it.
@@ -915,6 +923,11 @@ MEMBERS = {
                 "prompt-cache writes by cause, from the Claude Code transcripts (report only)"),
 }
 MEMBER_ORDER = ("vault", "session")
+# Members a bare run does not include; `--only` names them (0.18.0, g7).
+OPT_IN_MEMBERS = {
+    "execution": ("gt_optimize_exec.py",
+                  "how work executes, ranked by measured cost (report only)"),
+}
 
 
 def vault_member(args, vault):
@@ -960,6 +973,15 @@ def member_cmd(name, args, vault):
             cmd += ["--project", args.project]
         if args.cost:
             cmd.append("--cost")
+    elif name == "execution":
+        script = os.path.join(HERE, OPT_IN_MEMBERS[name][0])
+        if not os.path.isfile(script):
+            return None
+        cmd = [sys.executable, script, "--vault", vault]
+        if args.project:
+            cmd += ["--project", args.project]
+        if args.repo:
+            cmd += ["--repo", args.repo]
     else:
         script = os.path.join(HERE, MEMBERS[name][0])
         if not os.path.isfile(script):
@@ -974,11 +996,12 @@ def member_cmd(name, args, vault):
 
 def aggregate(args, vault):
     import gt_aggregate                                          # noqa: PLC0415
-    wanted, err = gt_aggregate.resolve_wanted(MEMBERS, None, args.only)
+    declared = dict(MEMBERS, **OPT_IN_MEMBERS) if args.only is not None else MEMBERS
+    wanted, err = gt_aggregate.resolve_wanted(declared, None, args.only)
     if err:
         print(err, file=sys.stderr)
         return 2
-    wanted = [m for m in MEMBER_ORDER if m in wanted]
+    wanted = [m for m in MEMBER_ORDER + tuple(OPT_IN_MEMBERS) if m in wanted]
     if not args.json:
         print("running %d optimize member(s): %s -- each reports only"
               % (len(wanted), ", ".join(wanted)))
@@ -1020,10 +1043,21 @@ def aggregate(args, vault):
 
 
 def main(argv=None):
+    # 0.18.0 (g7): `--execution` is an alias for the execution member, handed every argument
+    # unchanged so gt_optimize_exec.py's own options (`--apply ID`, `--repo`) keep working.
+    argv = sys.argv[1:] if argv is None else list(argv)
+    if "--execution" in argv:
+        import gt_optimize_exec                                  # noqa: PLC0415
+        return gt_optimize_exec.main([a for a in argv if a != "--execution"])
     ap = argparse.ArgumentParser(description=__doc__.split("\n")[0])
     ap.add_argument("--vault", required=True, help="the vault to analyse (never inferred)")
     ap.add_argument("--project", help="limit to one project slug")
-    ap.add_argument("--only", help="comma-separated members: vault, session (default: both)")
+    ap.add_argument("--only", help="comma-separated members: vault, session (default: both), "
+                                   "and the opt-in execution")
+    ap.add_argument("--execution", action="store_true",
+                    help="alias: run the execution member (gt_optimize_exec.py) with these "
+                         "arguments, including its --apply ID")
+    ap.add_argument("--repo", help="execution member: also look at this repo's scripts")
     ap.add_argument("--member", choices=("vault",),
                     help="run the vault member directly, as the aggregator does")
     ap.add_argument("--cost", action="store_true",

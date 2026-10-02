@@ -3,6 +3,7 @@
 **Topology:** {{TOPOLOGY}}
 **Repo:** {{REPO_URL}}
 **Fleet:** {{FLEET}}
+**Release pipeline:** {{RELEASE_PIPELINE}}
 
 <!--
 TOPOLOGY TYPES

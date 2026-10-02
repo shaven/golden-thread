@@ -19,6 +19,11 @@ A Bash command containing `git commit` where:
   * there is no PASSING receipt newer than every staged file
     (see gt_test_receipt.py -- a run writes one, editing a file invalidates it).
 
+On a FEATURE branch (not the repo's default branch) a SCOPED receipt also counts, for the files
+it names: `tests/run.sh --affected` runs only the tests mapped to the changed files and records
+one (0.18.0, setting `scoped_receipts`, default on). The default branch still needs a full-suite
+receipt, and so does every release gate -- the full suite runs once per release, not per commit.
+
 The middle clause is the default's clause, not the gate's. `auto` waves through a repo with no
 visible test entry point, because asking a scratch repo to have tests is how a gate gets
 switched off. `test_gate block`, which someone sets deliberately, does NOT: a repo with no
@@ -287,6 +292,33 @@ def check_gate(cwd):
          % (why, ("\n  failing checker: %s" % checker) if checker else ""))
 
 
+def default_branch(root):
+    ref = git(root, "symbolic-ref", "--quiet", "refs/remotes/origin/HEAD").strip()
+    if ref:
+        return ref.rsplit("/", 1)[-1]
+    for cand in ("main", "master"):
+        if git(root, "rev-parse", "--verify", "--quiet", "refs/heads/" + cand).strip():
+            return cand
+    return "main"
+
+
+def allow_scoped(root):
+    """A scoped receipt counts only on a named branch that is not the default branch, and only
+    while the `scoped_receipts` setting is on. Anything unreadable answers no: the full-suite
+    rule is the safe one."""
+    try:
+        import gt_settings
+        if gt_settings.get("scoped_receipts") == "off":
+            return False
+    except Exception:
+        pass
+    branch = git(root, "symbolic-ref", "--quiet", "--short", "HEAD").strip()
+    if not branch:
+        return False
+    return branch.casefold() != default_branch(root).casefold() and \
+        branch.casefold() not in ("main", "master")
+
+
 def main():
     try:
         payload = json.load(sys.stdin)
@@ -324,7 +356,8 @@ def main():
 
     try:
         import gt_test_receipt
-        ok, receipt, stale = gt_test_receipt.covers(root, code)
+        scoped_ok = allow_scoped(root)
+        ok, receipt, stale = gt_test_receipt.covers(root, code, allow_scoped=scoped_ok)
     except Exception as exc:
         # Fail open, but SAY SO. gt_test_receipt.py is installed into this directory by
         # install.sh; if it cannot be imported the gate is inert, and an inert guard
@@ -340,7 +373,10 @@ def main():
         no_objection()
 
     how = how or "this project's tests"
-    if stale:
+    if stale and receipt is None:
+        why = ("%s is covered by no passing receipt (a scoped receipt covers only the files it "
+               "names)." % os.path.relpath(stale, root))
+    elif stale:
         why = ("%s was changed after the last passing run (%s). A receipt only covers "
                "files older than itself." % (os.path.relpath(stale, root),
                                              receipt.get("at_human", "?")))
@@ -352,7 +388,7 @@ def main():
         "  %d code file(s) staged, and their tests have not been seen to pass.\n"
         "  %s\n\n"
         "Do this instead:\n"
-        "  1. Run them:      %s\n"
+        "  1. Run them:      %s%s\n"
         "     then record it: gt_test_receipt.py record --repo . --what \"%s\" --ok\n"
         "     (tests/run.sh and dev/release-check.sh record their own receipts.)\n"
         "  2. This repo has no tests?   touch %s   -- exempt, visibly, for everyone.\n"
@@ -360,7 +396,10 @@ def main():
         "Why: a release was committed on 2026-09-12 with a stale MANIFEST.json. The gate\n"
         "that would have caught it existed and had been run before the last edits rather\n"
         "than after. The discipline was fine; it had no mechanism." %
-        (n, why, how, how, OPT_OUT))
+        (n, why, how,
+         "\n     (on this feature branch, `tests/run.sh --affected` -- only the tests the "
+         "change needs -- also counts)" if scoped_ok and how == "tests/run.sh" else "",
+         how, OPT_OUT))
 
     if setting == "warn":
         no_objection("core_test_before_commit (warn mode): " + reason.replace("BLOCKED", "WARNING"))

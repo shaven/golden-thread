@@ -5,6 +5,9 @@
 #   tests/run.sh test_safe_write    # one file (module name, no .py)
 #   tests/run.sh -j 4               # cap the workers
 #   GT_TEST_SERIAL=1 tests/run.sh   # plain unittest, one process
+#   tests/run.sh --affected         # only the tests the branch's changes need (0.18.0): a pass
+#                                   # records a SCOPED receipt, which the commit guard accepts
+#                                   # on a feature branch only -- never at a release gate
 #
 # Stdlib only. Every test uses a throwaway HOME; nothing on this machine is touched.
 # Complements selftest.sh, which proves the new-user install path end to end; these
@@ -24,6 +27,16 @@ cd "$(dirname "$0")"
 # letting a commit through. Only a FULL run counts: `tests/run.sh test_gt_lint` proves
 # one module, not the tree, and a receipt from it would wave through a commit nothing
 # had covered. Receipts are best-effort -- a clone with no ~/.claude still runs tests.
+scoped_receipt() {
+  # $1 test count, $2 the prun.py --affected mapping (JSON with the `files` it covers).
+  for d in ../golden-thread/*/scripts; do
+    [ -f "$d/gt_test_receipt.py" ] || continue
+    python3 "$d/gt_test_receipt.py" record --repo .. --what "tests/run.sh --affected" \
+      --tests "${1:-0}" --ok --scope scoped --files-from "$2" >/dev/null 2>&1 || true
+    return 0
+  done
+}
+
 receipt() {
   # $1 is the test count parsed from the run, so the receipt says WHAT passed rather
   # than merely that something did. A receipt reading "0 tests" is exactly the kind of
@@ -139,6 +152,22 @@ EOF
 # Only a FULL run is evidence: `tests/run.sh test_gt_lint` proves one module, not the
 # tree, and a receipt from it would wave through a commit nothing had covered.
 FULL_RUN=no; [ $# -eq 0 ] && FULL_RUN=yes
+SCOPED=no
+for _a in "$@"; do [ "$_a" = "--affected" ] && SCOPED=yes; done
+if [ "$SCOPED" = yes ]; then
+  AFF=$(mktemp "${TMPDIR:-/tmp}/gt-affected.XXXXXX")
+  GT_AFFECTED_OUT="$AFF" python3 prun.py "$@" 2>&1 | tee /tmp/gt-tests-$$.log
+  rc=${PIPESTATUS[0]}
+  # The credential and code gates run here too: a scoped receipt licenses a commit as well.
+  if [ $rc -eq 0 ] && [ -s "$AFF" ]; then secrets_gate || rc=$?; fi
+  if [ $rc -eq 0 ] && [ -s "$AFF" ]; then code_gate || rc=$?; fi
+  if [ $rc -eq 0 ] && [ -s "$AFF" ]; then
+    scoped_receipt "$(sed -n 's/^Ran \([0-9]*\) test.*/\1/p' /tmp/gt-tests-$$.log | tail -1)" "$AFF"
+    echo "scoped receipt recorded: it covers the changed files on this feature branch only"
+  fi
+  rm -f /tmp/gt-tests-$$.log "$AFF"
+  exit $rc
+fi
 
 if [ "${GT_TEST_SERIAL:-}" = "1" ]; then
   if [ $# -gt 0 ]; then exec python3 -m unittest -v "$@"; fi

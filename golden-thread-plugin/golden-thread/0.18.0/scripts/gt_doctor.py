@@ -95,6 +95,9 @@ So this states the version every other answer is relative to, at the top, always
   hooks-schema does every settings.json hook entry name an event Claude Code fires and,
               for tool events, a tool it knows? (allowlists hooks/known_events.json and
               hooks/known_tools.json; also any entry pointing at a missing gt hook file)
+  execution   is the parallel profile measured or the default (and how old), is this shell
+              translated under Rosetta, is TMPDIR inside a synced folder? (gt_bench.py health,
+              0.18.0)
 
 A check that cannot run says so and exits 2. "Could not check" is never "clean" --
 that distinction is the whole reason this file exists.
@@ -1982,6 +1985,28 @@ CHECKS = ("version", "components", "wiring", "core-rules", "modules", "vault",
           "schedule", "workers", "push", "gt-src", "lint", "astgrep", "checkers")
 CHECKS += ("repo-target",)      # 0.18.0: which repo would a repo-scoped command answer for?
 CHECKS += ("hooks-schema",)     # 0.18.0: settings.json hooks against Claude Code's events
+CHECKS = CHECKS + ("execution",)        # 0.18.0: gt_bench.health (measured profile, Rosetta)
+
+
+def check_execution(rep):
+    """How work executes here (check: execution): measured vs default parallel profile and its
+    age, a Rosetta-translated shell, TMPDIR in a synced folder. One row; WARN only for the two
+    that cost every run (translation, a synced TMPDIR) -- an unmeasured profile is the default
+    working as designed, so it is reported, not warned about."""
+    scripts = os.path.dirname(os.path.abspath(__file__))
+    if scripts not in sys.path:
+        sys.path.insert(0, scripts)
+    try:
+        import gt_bench
+        rows = gt_bench.health()
+    except Exception as exc:
+        rep.add("execution", UNKNOWN, "could not read the execution profile (%s)"
+                % exc.__class__.__name__)
+        return
+    warn = [r for r in rows if r[0] == "warn"]
+    rep.add("execution", WARN if warn else OK, rows[0][1],
+            "\n".join(m for _, m, _ in rows[1:]),
+            "; ".join(f for _, _, f in warn) if warn else "")
 
 
 def main(argv=None):
@@ -2051,6 +2076,8 @@ def main(argv=None):
         check_hooks_schema(rep)
     if "checkers" in wanted:
         check_checkers(rep, root, vdir)
+    if "execution" in wanted:
+        check_execution(rep)
 
     if a.fix:
         fix_wiring(rep, vdir, vault)

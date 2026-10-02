@@ -73,3 +73,15 @@ It prints the command. Run it when you mean to.
   not just asserting it.
 - If the user asks you to "just commit it", state what is refusing and let them decide. The
   refusals are the feature.
+
+## The release pipeline's pre-commit steps (0.18.0)
+
+In a repo with a release pipeline (`release-pipeline.tsv`), the checks include the pipeline's
+steps before the owner gate. A FAILED step refuses the commit and `--allow-findings` cannot wave
+it through — a gate that did not pass is not a finding someone may accept. Fix the step (or, for
+a default gate that does not apply, `gt_pipeline.py remove <id> --reason "..."`, which is
+recorded), then run this again.
+
+On a feature branch the test-receipt check accepts a **scoped** receipt -- from a test run
+limited to the tests the change needs (`--affected`) -- for the files it covered (setting `scoped_receipts`); the default branch
+and every release gate still need a full-suite receipt.

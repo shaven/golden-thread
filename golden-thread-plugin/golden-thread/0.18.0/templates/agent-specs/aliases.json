@@ -1,0 +1,12 @@
+{
+  "aliases_version": 1,
+  "note": "The 0.17.10 job-type names, kept working for one release. Each renders and checks the stage x kind spec it points to; a record may carry either name. Removed in 0.19.0.",
+  "removed_in": "0.19.0",
+  "aliases": {
+    "ingest-code": {"to": "extract-code"},
+    "ingest-docs": {"to": "extract-docs"},
+    "ingest-tool": {"to": "extract-tool"},
+    "validate": {"to": "verify"},
+    "skeptic": {"to": "reconcile-session", "inputs": {"additions": "findings"}}
+  }
+}

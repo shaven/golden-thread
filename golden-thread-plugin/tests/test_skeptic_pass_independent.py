@@ -42,8 +42,10 @@ class SkepticPassIndependentTest(AgentSpecBase):
     def test_skeptic_alone_spawns_the_shipped_skeptic_spec(self):
         self.settings(skeptic_pass="on")
         r = self.resolve("--skill", "gt-work")
-        self.assertEqual(("skeptic", "spawn", None), (r["job"], r["action"], r["notice"]))
-        self.assertTrue(r["spec"].endswith("skeptic.json"))
+        # 0.18.0 g7: the skeptic is the reconcile stage composed with the session kind.
+        self.assertEqual(("reconcile-session", "spawn", None),
+                         (r["job"], r["action"], r["notice"]))
+        self.assertTrue(r["spec"].endswith("session.json"), r["spec"])
         self.assertEqual("off", r["agent_specialization"])
 
     def test_skeptic_off_says_why(self):
@@ -54,10 +56,16 @@ class SkepticPassIndependentTest(AgentSpecBase):
 
     def test_old_vault_override_does_not_restore_the_coupling(self):
         d = self.vault / "Projects" / "golden-thread" / "packs" / "agent-specs"
-        d.mkdir(parents=True)
+        (d / "kinds").mkdir(parents=True)
+        # the old flat name ...
         spec = json.loads((SPECS / "skeptic.json").read_text())
         spec["requires_settings"] = ["agent_specialization", "skeptic_pass"]
         (d / "skeptic.json").write_text(json.dumps(spec))
+        # ... and the stage x kind shape g7 introduced, both still listing agent_specialization
+        kind = json.loads((SPECS / "kinds" / "session.json").read_text())
+        kind["stages"]["reconcile"]["requires_settings"] = ["agent_specialization",
+                                                           "skeptic_pass"]
+        (d / "kinds" / "session.json").write_text(json.dumps(kind))
         self.settings(skeptic_pass="on")
         r = self.resolve("--skill", "gt-work", "--vault", str(self.vault))
         self.assertEqual(("spawn", "vault"), (r["action"], r["source"]))
@@ -70,6 +78,10 @@ class SkepticPassIndependentTest(AgentSpecBase):
         p = self.py(TOOL, "validate", bad)
         self.assertEqual(1, p.returncode)
         self.assertIn("'skeptic_pass', the master switch", p.stdout)
+
+    def test_shipped_session_kind_gates_reconcile_on_skeptic_pass_alone(self):
+        kind = json.loads((SPECS / "kinds" / "session.json").read_text())
+        self.assertEqual(["skeptic_pass"], kind["stages"]["reconcile"]["requires_settings"])
 
     def test_docs_describe_the_settings_independently(self):
         text = (GT / "skills" / "gt-work" / "SKILL.md").read_text()

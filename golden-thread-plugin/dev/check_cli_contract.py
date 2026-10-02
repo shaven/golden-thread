@@ -72,6 +72,12 @@ COVERED = {
     "scripts/gt_ingest.py": (),
     "scripts/gt_sync.py": ("status", "pull", "push", "behind"),
     "scripts/gt_reminder.py": ("mirror", "import-tsv"),
+    # 0.18.0: execution metrics live in the vault's project folders; the pipeline flag queues
+    # README writes; the staged ingest pipeline writes packets and drafts.
+    "scripts/gt_metrics.py": ("record", "time", "mark"),
+    "scripts/gt_pipeline.py": ("flag", "init", "add", "set", "remove", "render"),
+    "scripts/gt_ingest_pipeline.py": ("survey", "packet", "fan-in", "reconcile", "draft",
+                                      "promote-scan", "promote-plan"),
 }
 
 EXEMPT = {

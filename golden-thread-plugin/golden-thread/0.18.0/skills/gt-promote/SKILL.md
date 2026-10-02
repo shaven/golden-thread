@@ -297,3 +297,24 @@ and links written before the merge still lead somewhere.
 Everything requiring judgement lands in `review-queue.md`. Work through it before
 calling the merge done, and re-run `/gt:gt-lint` — expect `memory-unlisted` until
 `MEMORY.md` is tidied, and `project-missing` if anything still points at the old slug.
+
+## Promote as a staged pipeline (reviewing several candidates)
+
+When the user asks to review promotion candidates — several at once, as in Step 1's "review promotion candidates" — run them through the staged pipeline instead of one pass that does everything. **Promotions stay human-approved:** the pipeline ends in a proposal, and nothing is queued until the owner says yes to it.
+
+| Stage | Who runs it | Parallel |
+|---|---|---|
+| scan | this session collects the candidates; `gt_ingest_pipeline.py promote-scan` records them | one |
+| verify | a zero-context Claude subagent per candidate, spec `verify` (the old `validate`) | **per candidate** |
+| generalize | a subagent per confirmed candidate, spec `generalize` | per candidate |
+| place | a subagent per generalized candidate, spec `place` (overlap, links, index entry) | per candidate |
+| owner approves | the owner, here | — |
+
+Every stage reads only the previous stage's packet in `<vault>/Projects/golden-thread/spool/pipeline/<run>/`; every agent stage is a Claude subagent spawned here, never gt-farm or any non-Claude service. The tool is `<base_dir>/../../scripts/gt_ingest_pipeline.py` (`<tool>`); every command takes `--vault "<vault>"` and `--dry-run`. The specs render only when `agent_specialization` is on (`gt_agent_spec.py resolve --skill gt-promote`); with it off, do each stage yourself in the same order — the verify stage then becomes a `/gt:gt-validate` run per candidate — and still stop at the owner.
+
+1. **Scan.** Write the candidates as a JSON list `[{"claim", "origin": "<vault file › section>", "evidence", "level": "knowledge|global_memory"}]` to a scratch file; `<tool> promote-scan --candidates-file <file> --vault "<vault>"` prints the run id and the candidate ids (`c01`, …).
+2. **Verify, in parallel.** Per candidate: `gt_agent_spec.py render verify --input-file claim=<f> --input-file rules=<f> --input-file artifact=<f> --vault "<vault>"` — it loads no vault context, and you must add none. Spawn all of them in one message. Save each result and run `<tool> packet <run> --stage verify --unit <id> --result-file <file>`. A `refuted` or `cannot-verify` candidate is dropped from the run, with its reason shown.
+3. **Generalize.** Per confirmed candidate: `render generalize --input-file claim=<f> --input-file evidence=<the verify packet's derivation and evidence>`; `packet <run> --stage generalize --unit <id> …`. `generalizes: false` drops it — it stays where it is.
+4. **Place.** Per generalized candidate: `render place --input-file statement=<f> --input level=<level>`; `packet <run> --stage place --unit <id> …`.
+5. **Owner approves.** `<tool> promote-plan <run>` folds the packets into proposals (from → target, action, the general statement, overlaps, links, index entry) and ends `OWNER APPROVAL REQUIRED -- nothing has been written`. There is no command that applies a plan. Show each proposal and ask; for each one the owner approves, do Step 3's writes for that move, then its log entry and event (*Log Entry and event*, above). A proposal the owner declines is simply not written.
+

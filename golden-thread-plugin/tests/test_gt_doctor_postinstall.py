@@ -24,7 +24,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from _harness import Sandbox, REPO, PYTHON, latest_version_dir
+from _harness import Sandbox, REPO, PYTHON, latest_version_dir, cached_sandbox, source_fingerprint
 import test_install as _ti   # module import only: its TestCases must not be collected here
 
 try:
@@ -53,14 +53,32 @@ class InstalledMachine(Sandbox):
         if cls._shared is None:
             super().setUp()
             self.env["PYTHONDONTWRITEBYTECODE"] = "1"
-            repo = _ti.build_repo_fixture(self, self.tmp / "src" / "golden-thread-plugin")
-            if LOTR is not None:
-                shutil.copytree(LOTR, repo / "golden-thread-lotr" / LOTR.name, ignore=_ti.IGNORE)
-            vault = self.make_vault()
-            self.vault, self.repo = vault, repo
+            def build(case):
+                repo = _ti.build_repo_fixture(case, case.tmp / "src" / "golden-thread-plugin")
+                if LOTR is not None:
+                    shutil.copytree(LOTR, repo / "golden-thread-lotr" / LOTR.name,
+                                    ignore=_ti.IGNORE)
+                case.vault, case.repo = case.make_vault(), repo
+                if cls.PRE_INSTALL:
+                    cls.PRE_INSTALL(case)
+                q = case.sh(repo / "install.sh", *cls.INSTALL_ARGS, timeout=600)
+                return {"returncode": q.returncode, "stdout": q.stdout, "stderr": q.stderr}
+
             if cls.PRE_INSTALL:
-                cls.PRE_INSTALL(self)
-            p = self.sh(repo / "install.sh", *cls.INSTALL_ARGS, timeout=600)
+                # Its install depends on what PRE_INSTALL did first: never from the cache.
+                r = build(self)
+            else:
+                # 0.18.0: classes with the same install share ONE build per run
+                # (tests/_harness.cached_sandbox; tests/test_cached_install.py).
+                key = "postinstall|%s|%s" % (" ".join(cls.INSTALL_ARGS),
+                                             source_fingerprint(_ti.GT, _ti.WIKI,
+                                                                *([LOTR] if LOTR else [])))
+                r, _how = cached_sandbox(self, key, build)
+            vault = self.tmp / "vault"
+            repo = self.tmp / "src" / "golden-thread-plugin"
+            self.vault, self.repo = vault, repo
+            p = subprocess.CompletedProcess(["install.sh"], r["returncode"], r["stdout"],
+                                            r["stderr"])
             cls._shared = {"tmp": self.tmp, "home": self.home, "env": self.env,
                            "vault": vault, "repo": repo, "install": p}
         s = cls._shared

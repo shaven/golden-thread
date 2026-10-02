@@ -53,6 +53,7 @@ undocumented behaviour, and that is the thing this file exists to prevent.
 """
 import json
 import os
+import re
 import sys
 
 CONFIG = os.path.expanduser("~/.claude/vault-config.json")
@@ -202,8 +203,9 @@ SETTINGS = {
         "summary": "Whether ingest and validation skills hand their work to a job-typed specialist agent.",
         "detail": (
             "off  every skill runs inline, as before  (default)\n"
-            "on   a skill with a job-type spec (ingest-code, ingest-docs, ingest-tool,\n"
-            "     validate) spawns a specialist agent with that spec applied; its full output\n"
+            "on   a skill with a stage x kind spec (extract, classify, reconcile, draft,\n"
+            "     verify, ... x code, docs, tool, session, wiki -- 0.18.0) spawns a specialist\n"
+            "     agent with that spec applied; its full output\n"
             "     lands in the spool and the session sees a summary\n"
             "\n"
             "Independent of skeptic_pass: this does not switch the gt-work skeptic on or off.\n"
@@ -495,6 +497,69 @@ SETTINGS = {
             "store (~/.claude/golden-thread/reminder/email.json), never here.\n"
             "Setup and test: gt_reminder.py setup email / gt_reminder.py check email."),
     },
+    # ---- 0.18.0: execution (fast build loop, execution metrics, measured profile) ----
+    "execution_metrics": {
+        "default": "on",
+        "values": ["off", "on"],
+        "summary": "Record one row per execution of tests, pipeline steps and gt skills (gt_metrics.py).",
+        "detail": (
+            "on   every instrumented run -- tests/prun.py, a release pipeline step, a gt skill --\n"
+            "     appends one row: process, duration, exit, units, parallelism, tokens where\n"
+            "     known, machine, commit. Arguments are HASHED, never stored, and a value with a\n"
+            "     credential shape is stored only as its hash  (default)\n"
+            "off  nothing is recorded, by anything\n"
+            "\n"
+            "The rows live in the vault project's metrics/ folder (or ~/.claude/golden-thread/\n"
+            "metrics/ for a project with no folder) and never leave the machine except through\n"
+            "the vault. `/gt:gt-optimize --execution` reads them: a rolling baseline per process,\n"
+            "regressions against it, and savings that are measured rather than assumed."),
+    },
+    "scoped_receipts": {
+        "default": "on",
+        "values": ["off", "on"],
+        "summary": "On a feature branch, accept a test receipt from the tests mapped to the changed files.",
+        "detail": (
+            "on   on a branch that is not the default branch, the commit guard accepts a\n"
+            "     receipt from `tests/run.sh --affected` (prun.py --affected) for the files it\n"
+            "     covered. The default branch, and every release gate, still need a FULL-suite\n"
+            "     receipt  (default)\n"
+            "off  every commit needs a full-suite receipt\n"
+            "\n"
+            "Why: gt 0.17.11 ran its ~2,400-test suite about eight times in one day, including\n"
+            "for single-tool changes. The full suite stays required once per release."),
+    },
+    "test_tmpdir": {
+        "default": "off",
+        "values": ["off", "noindex"],
+        "summary": "Where the test runner puts throwaway files (TMPDIR for prun.py).",
+        "detail": (
+            "off      leave TMPDIR as the system sets it  (default)\n"
+            "noindex  a cache folder Spotlight and the sync agents ignore:\n"
+            "         ~/Library/Caches/gt-tests.noindex on macOS, $XDG_CACHE_HOME/gt-tests\n"
+            "         (else ~/.cache/gt-tests) elsewhere\n"
+            "\n"
+            "GT_TEST_TMPDIR=<path> overrides both for one run. On 2026-10-01 a full local run\n"
+            "drove a Mac's load to 50-96: every throwaway install was file churn that the\n"
+            "indexer, the sync agents and the virus scanner all reacted to. Known snag: a\n"
+            "folder carrying com.apple.provenance refused copies from an Intel Homebrew Python\n"
+            "(EPERM) -- `gt_doctor.py --only execution` reports a translated (Rosetta) shell."),
+    },
+    "runners": {
+        "default": "",
+        "values": None,
+        "validate": "comma-separated ssh host aliases, or empty",
+        "summary": "Remote hosts that may run tests and calibration (prun.py --hosts, gt_bench.py --hosts).",
+        "detail": (
+            "empty  no host is ever contacted  (default)\n"
+            "a,b    these ssh aliases may receive a `git archive` of the COMMITTED tree (code\n"
+            "       only -- nothing from the vault ever leaves the machine) and run tests or\n"
+            "       the calibration workload there\n"
+            "\n"
+            "Opt-in by design: nothing is sent anywhere unless it is listed here. gt_bench.py\n"
+            "--hosts measures each one; prun.py --hosts splits units across them, heaviest\n"
+            "first, attributes every failure to its host, and reports an unreachable host as\n"
+            "skipped -- never as passing."),
+    },
     # install_demo was removed in 0.14.0: the demo is a module, and whether it is
     # installed is a module choice (install.sh --with/--without demo, recorded in
     # ~/.claude/golden-thread/install-choices.json). A user's install_demo key in
@@ -742,6 +807,8 @@ def _freeform_ok(name, value):
     if name == "decision_signals":
         # A phrase list, not a closed set (0.18.0); see its `detail`. One line, non-empty.
         return bool(value.strip()) and "\n" not in value
+    if name == "runners":                       # 0.18.0: ssh aliases, comma-separated
+        return bool(re.fullmatch(r"[a-z0-9._@,-]*", value))
     if name != "parallel_max":
         return False
     if value == "auto":
@@ -863,6 +930,12 @@ def write_machine_profile(force=False):
         return None, False
     fresh = detect_machine()
     old = d.get("parallel_profile") or {}
+    # 0.18.0: a MEASURED profile (gt_bench.py) is kept across installs and upgrades while the
+    # hardware is the same -- replacing a measurement with the rule of thumb it replaced would
+    # undo it silently. A new machine or a core-count change still re-detects.
+    if (old.get("source") == "measured" and not force
+            and all(old.get(k) == fresh[k] for k in ("cores", "host"))):
+        return old, False
     same = all(old.get(k) == fresh[k] for k in ("cores", "cpu_max", "io_max", "host"))
     if same and not force:
         return old, False

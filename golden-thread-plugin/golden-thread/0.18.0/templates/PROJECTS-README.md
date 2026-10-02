@@ -21,6 +21,7 @@ TABLE WITHOUT ID
   link(file.folder, slug) AS Project,
   stage AS Stage,
   topology AS Topology,
+  release_pipeline AS Pipeline,
   join(tags, ", ") AS Tags
 FROM "Projects"
 WHERE type = "project" AND file.name = "README"
@@ -32,7 +33,8 @@ SORT domain ASC, stage ASC
 
 ```dataview
 TABLE WITHOUT ID
-  link(file.folder, slug) AS Project, domain AS Domain, topology AS Topology
+  link(file.folder, slug) AS Project, domain AS Domain, topology AS Topology,
+  release_pipeline AS Pipeline
 FROM "Projects"
 WHERE type = "project" AND file.name = "README"
   AND stage != "archived" AND stage != "superseded"

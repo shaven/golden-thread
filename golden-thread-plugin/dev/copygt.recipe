@@ -1,0 +1,301 @@
+# copygt.recipe -- the recipe dev/copygt.sh is GENERATED from (gt_recipe.py, 0.18.0).
+# Edit THIS file, then: python3 golden-thread/<release>/scripts/gt_recipe.py render dev/copygt.recipe --out dev/copygt.sh
+# tests/test_copygt.py fails while the two disagree.
+name: copygt.sh
+mode: plain
+strict: yes
+doc:
+  copygt.sh — take this gt-src into a repository, install it, validate the install, and commit.
+
+    ./copygt.sh --dest <repo path>             copy, install, validate; commit ONLY when clean
+    ./copygt.sh --dest <repo path> --dry-run   list every add, change and delete; write nothing
+
+    It never pushes. Pushing is a separate step, outside this script (owner, 2026-10-01).
+    --vault V       the vault the validation runs against (default: ~/.claude/vault-config.json)
+    --report FILE   where the report goes (default ~/.claude/golden-thread/copygt/report-<time>.md,
+                    with a .json beside it). Never inside the destination.
+
+  This file lives ONLY in gt-src. dev/sync-gt-src.sh writes it there at every publish, from the
+  same commit as everything else in gt-src, so it always matches the tree it ships in; SHA256SUMS
+  covers it. It is never written into the destination, and neither are validate-install.py,
+  SHA256SUMS, SOURCE.json or the report (owner, 2026-10-01: "What gets checked in is just the
+  code and what gets installed with install.sh").
+
+  In order, stopping at the first failure:
+    1. verify gt-src against SHA256SUMS (and SHA256SUMS against SOURCE.json tree_sha256) before
+       touching anything -- a mismatch exits 3 with nothing written;
+    2. make the destination match gt-src EXACTLY: add, update, and delete every tracked file gt-src
+       no longer carries. `.git` and untracked local files are left alone. A hand copy never
+       deleted -- that is how `Golden Thread.code-workspace` outlived its removal (ff0c140);
+    3. run install.sh from the destination;
+    4. run validate-install.py: present / missing / worked / failed, ending `clean: N/N` against
+       what was DECLARED. "Could not run" is never a pass;
+    5. only when fully clean: commit in the destination (the message names the gt-src commit and
+       the versions). Anything not clean stops before the commit and leaves the report.
+       It never pushes: publishing to a remote is outside this script (owner, 2026-10-01: "It
+       doesn't and shouldn't do the push into github in that file").
+
+  Exit: 0 done (clean; committed, or nothing to commit) · 2 refused (usage, destination)
+        3 gt-src failed its checksum, nothing written · 4 not clean, nothing committed, report left
+        5 the commit failed (the report says clean; the copy stays in the work tree)
+  et -euo pipefail
+usage:
+  copygt.sh — take this gt-src into a repository, install it, validate the install, and commit.
+
+    ./copygt.sh --dest <repo path>             copy, install, validate; commit ONLY when clean
+    ./copygt.sh --dest <repo path> --dry-run   list every add, change and delete; write nothing
+
+    It never pushes. Pushing is a separate step, outside this script (owner, 2026-10-01).
+    --vault V       the vault the validation runs against (default: ~/.claude/vault-config.json)
+    --report FILE   where the report goes (default ~/.claude/golden-thread/copygt/report-<time>.md,
+                    with a .json beside it). Never inside the destination.
+option: --dest | value | DEST | | the repository to copy into (required; never inferred)
+option: --dry-run | flag | DRY | yes | list every add, change and delete; write nothing
+option: --no-push | ignore | | | accepted for older notes; copygt.sh never pushes
+option: --vault | value | VAULT | | the vault the validation runs against
+option: --report | value | REPORT | | where the report goes (never inside the destination)
+prologue:
+  SRC="$(cd "$(dirname "$0")" && pwd -P)"
+  if [ -z "$DEST" ]; then
+    echo "REFUSED: --dest <repository path> is required. The destination is never inferred."
+    usage
+    exit 2
+  fi
+  PY="${GT_PYTHON:-python3}"
+step: verify | gate | gt-src matches its SHA256SUMS and SOURCE.json before anything is written | - | yes
+  # ── 1. gt-src must be exactly what was published ──────────────────────────────
+  echo "== 1. verify gt-src ($SRC)"
+  for f in SHA256SUMS SOURCE.json validate-install.py; do
+    [ -f "$SRC/$f" ] || { echo "REFUSED: gt-src has no $f -- not a published gt-src. Nothing was written."; exit 3; }
+  done
+  if command -v shasum >/dev/null 2>&1; then SUMCMD="shasum -a 256"
+  elif command -v sha256sum >/dev/null 2>&1; then SUMCMD="sha256sum"
+  else echo "REFUSED: neither shasum nor sha256sum is installed. Nothing was written."; exit 3; fi
+  SUMS_RC=0
+  SUMS_OUT=$(cd "$SRC" && $SUMCMD -c --quiet SHA256SUMS 2>&1) || SUMS_RC=$?
+  if [ "$SUMS_RC" -ne 0 ]; then
+    echo "REFUSED: gt-src does not match its SHA256SUMS. Nothing was written."
+    printf '%s\n' "$SUMS_OUT" | head -20 | sed 's/^/    /'
+    echo "  Wait for the sync to finish (or ask for a re-publish), then run this again."
+    exit 3
+  fi
+  TREE=$($SUMCMD "$SRC/SHA256SUMS" | cut -d' ' -f1)
+  WANT=$("$PY" -c "import json,sys; print(json.load(open(sys.argv[1])).get('tree_sha256',''))" "$SRC/SOURCE.json" 2>/dev/null || true)
+  if [ "$TREE" != "$WANT" ]; then
+    echo "REFUSED: SHA256SUMS is not the list SOURCE.json was published with (tree $TREE, SOURCE.json says ${WANT:-nothing}). Nothing was written."
+    exit 3
+  fi
+  COMMIT=$("$PY" -c "import json,sys; print(json.load(open(sys.argv[1])).get('commit',''))" "$SRC/SOURCE.json")
+  PLUGIN_PATH=$("$PY" -c "import json,sys; print(json.load(open(sys.argv[1])).get('plugin_path',''))" "$SRC/SOURCE.json")
+  VERSIONS=$("$PY" - "$SRC/SOURCE.json" <<'PYEOF'
+  import json, sys
+  d = json.load(open(sys.argv[1]))
+  skip = {"commit", "layout", "plugin_path", "synced_at", "files", "tree_sha256"}
+  print(", ".join("%s %s" % (k.replace("_", "-"), v) for k, v in d.items() if k not in skip))
+  PYEOF
+  )
+  echo "ok    $(grep -c . "$SRC/SHA256SUMS") files match SHA256SUMS; tree_sha256 $TREE"
+  echo "      gt-src commit $COMMIT: $VERSIONS"
+step: destination | gate | the destination is a clean git repository root, outside gt-src | - | yes
+  # ── the destination: a git repository root, its tracked files committed ──────
+  if [ ! -d "$DEST" ]; then echo "REFUSED: --dest $DEST does not exist"; exit 2; fi
+  DEST="$(cd "$DEST" && pwd -P)"
+  TOP=$(git -C "$DEST" rev-parse --show-toplevel 2>/dev/null || true)
+  if [ -z "$TOP" ] || [ "$(cd "$TOP" && pwd -P)" != "$DEST" ]; then
+    echo "REFUSED: --dest $DEST is not the root of a git repository"; exit 2
+  fi
+  case "$DEST/" in "$SRC/"*) echo "REFUSED: --dest is inside gt-src"; exit 2 ;; esac
+  case "$SRC/" in "$DEST/"*) echo "REFUSED: gt-src is inside --dest"; exit 2 ;; esac
+  DIRTY=$(git --no-optional-locks -C "$DEST" status --porcelain --untracked-files=no)
+  if [ -n "$DIRTY" ]; then
+    echo "$( [ "$DRY" = yes ] && echo WARNING || echo REFUSED ): the destination has uncommitted changes to tracked files:"
+    printf '%s\n' "$DIRTY" | head -20 | sed 's/^/    /'
+    [ "$DRY" = yes ] || { echo "  Commit or discard them first, so the copy's commit holds only the copy."; exit 2; }
+  fi
+
+  STAMP=$(date +%Y%m%d-%H%M%S)
+  STATE="$HOME/.claude/golden-thread/copygt"
+  [ -n "$REPORT" ] || REPORT="$STATE/report-$STAMP.md"
+  REPORT=$("$PY" -c "import os,sys; print(os.path.realpath(os.path.expanduser(sys.argv[1])))" "$REPORT")
+  case "$REPORT" in "$DEST/"*) echo "REFUSED: --report must not be inside the destination"; exit 2 ;; esac
+  [ "$DRY" = yes ] || mkdir -p "$(dirname "$REPORT")"      # a dry run writes nothing, report included
+  WORK=$(mktemp -d "${TMPDIR:-/tmp}/copygt.XXXXXX"); trap 'rm -rf "$WORK"' EXIT
+step: mirror | step | the destination's tracked files match gt-src exactly (adds, changes, deletes) | - | yes
+  # ── 2. mirror ─────────────────────────────────────────────────────────────────
+  # One Python helper plans (and, without --dry-run, applies) the mirror from SHA256SUMS, so a path
+  # with a space survives and the plan IS what gets applied.
+  echo "== 2. mirror gt-src onto $DEST$( [ "$DRY" = yes ] && echo ' (dry run: nothing is written)')"
+  MIRROR_RC=0
+  "$PY" - "$SRC" "$DEST" "$([ "$DRY" = yes ] && echo plan || echo apply)" "$WORK/mirror.json" <<'PYEOF' || MIRROR_RC=$?
+  import hashlib, json, os, shutil, subprocess, sys
+  from pathlib import Path
+
+  src, dest, mode, out = Path(sys.argv[1]), Path(sys.argv[2]), sys.argv[3], Path(sys.argv[4])
+  # gt-src only: never written into the destination. The report lives outside both trees.
+  GT_SRC_ONLY = {"copygt.sh", "validate-install.py", "SHA256SUMS", "SOURCE.json"}
+  # Owner ruling 2026-10-01: never in the repository. sync-gt-src.sh no longer publishes them; this is
+  # the second lock, and a TRACKED copy in the destination is deleted below like any dropped file.
+  EXCLUDED_ROOT = {"CLAUDE.md", "SUBMISSIONS.md"}
+  EXCLUDED_PLUGIN = {"CLAUDE.md", "BUILD-NOTE.md"}
+  plugin_path = json.loads((src / "SOURCE.json").read_text()).get("plugin_path", "").strip("/")
+
+
+  def excluded(rel):
+      parts = rel.split("/")
+      if rel.endswith(".code-workspace"):
+          return True
+      if len(parts) == 1:
+          return rel in GT_SRC_ONLY or rel in EXCLUDED_ROOT
+      if plugin_path and parts[0] == plugin_path:
+          sub = parts[1:]
+          if len(sub) == 1 and sub[0] in EXCLUDED_PLUGIN:
+              return True
+          if sub[0] == "dev":
+              return True
+      return False
+
+
+  want = {}
+  for line in (src / "SHA256SUMS").read_text(encoding="utf-8").splitlines():
+      if not line.strip():
+          continue
+      digest, rel = line[:64], line[66:]
+      rel = rel[2:] if rel.startswith("./") else rel
+      parts = rel.split("/")
+      if rel.startswith("/") or ".." in parts or ".git" in parts:
+          sys.exit("REFUSED: SHA256SUMS lists an unsafe path: %r" % rel)
+      if not excluded(rel):
+          want[rel] = digest
+
+  tracked = subprocess.run(["git", "-C", str(dest), "ls-files", "-z"], capture_output=True,
+                           check=True).stdout.decode("utf-8", "surrogateescape").split("\0")
+  tracked = {t for t in tracked if t}
+
+
+  def sha(p):
+      h = hashlib.sha256()
+      with open(p, "rb") as fh:
+          for chunk in iter(lambda: fh.read(1 << 20), b""):
+              h.update(chunk)
+      return h.hexdigest()
+
+
+  adds, changes, same = [], [], 0
+  for rel in sorted(want):
+      d = dest / rel
+      if not d.exists() and not d.is_symlink():
+          adds.append(rel)
+      elif not d.is_file() or d.is_symlink() or sha(d) != want[rel]:
+          changes.append(rel)
+      else:
+          same += 1
+  deletes = sorted(t for t in tracked if t not in want and (dest / t).exists())
+  for kind, rels in (("add", adds), ("change", changes), ("delete", deletes)):
+      for rel in rels:
+          print("  %-7s %s" % (kind, rel))
+  print("  %d to add, %d to change, %d to delete, %d unchanged"
+        % (len(adds), len(changes), len(deletes), same))
+  result = {"adds": adds, "changes": changes, "deletes": deletes, "unchanged": same,
+            "carried": len(want), "applied": False}
+  if mode == "apply":
+      for rel in adds + changes:
+          d = dest / rel
+          d.parent.mkdir(parents=True, exist_ok=True)
+          if d.is_symlink() or d.is_dir():
+              shutil.rmtree(d) if d.is_dir() and not d.is_symlink() else d.unlink()
+          shutil.copy2(src / rel, d)
+      for rel in deletes:
+          (dest / rel).unlink()
+          parent = (dest / rel).parent
+          while parent != dest and parent.name != ".git":
+              try:
+                  parent.rmdir()            # only ever an EMPTY directory
+              except OSError:
+                  break
+              parent = parent.parent
+      # Verify what landed against the publisher's own hashes, not against gt-src's disk.
+      bad = [rel for rel, dg in want.items() if not (dest / rel).is_file() or sha(dest / rel) != dg]
+      leaked = sorted(n for n in GT_SRC_ONLY if (dest / n).exists() and n in tracked)
+      result.update(applied=True, mismatched=bad, leaked=leaked,
+                    paths=sorted(set(adds) | set(changes) | set(deletes)))
+  out.write_text(json.dumps(result, indent=1))
+  PYEOF
+  if [ "$MIRROR_RC" -ne 0 ]; then echo "FAILED: the mirror step (exit $MIRROR_RC)"; exit 2; fi
+  if [ "$DRY" = yes ]; then
+    echo "(dry run — nothing written; gt-src commit $COMMIT, tree_sha256 $TREE)"
+    exit 0
+  fi
+  "$PY" - "$STATE/applied.json" "$DEST" "$COMMIT" "$TREE" "$VERSIONS" <<'PYEOF'
+  import json, sys, time
+  from pathlib import Path
+  p = Path(sys.argv[1]); p.parent.mkdir(parents=True, exist_ok=True)
+  p.write_text(json.dumps({"dest": sys.argv[2], "commit": sys.argv[3], "tree_sha256": sys.argv[4],
+                           "versions": sys.argv[5], "applied_at": time.strftime("%Y-%m-%dT%H:%M:%S%z")},
+                          indent=1) + "\n")
+  PYEOF
+  echo "      recorded: gt-src commit $COMMIT applied to $DEST ($STATE/applied.json)"
+step: install | step | install.sh ran from the destination | - | yes
+  # ── 3. install ────────────────────────────────────────────────────────────────
+  PLUGIN_DIR="$DEST/${PLUGIN_PATH%/}"
+  echo "== 3. install.sh from $PLUGIN_DIR"
+  INSTALL_RC=0
+  if [ -f "$PLUGIN_DIR/install.sh" ]; then
+    (cd "$PLUGIN_DIR" && bash ./install.sh) < /dev/null > "$WORK/install.log" 2>&1 || INSTALL_RC=$?
+    tail -25 "$WORK/install.log" | sed 's/^/    /'
+    cp "$WORK/install.log" "${REPORT%.md}.install.log"
+    echo "      install.sh exited $INSTALL_RC (full log: ${REPORT%.md}.install.log)"
+  else
+    INSTALL_RC=127
+    echo "FAILED: no install.sh at $PLUGIN_DIR"
+  fi
+step: validate | gate | validate-install.py reports clean over everything declared | - | yes
+  # ── 4. validate ───────────────────────────────────────────────────────────────
+  "$PY" - "$WORK/mirror.json" "$WORK/steps.json" "$INSTALL_RC" "$TREE" "$COMMIT" <<'PYEOF'
+  import json, sys
+  m = json.load(open(sys.argv[1])); rc = int(sys.argv[3])
+  steps = [
+      {"check": "gt-src matches SHA256SUMS (tree %s)" % sys.argv[4][:12], "ok": True,
+       "detail": "verified before anything was written"},
+      {"check": "destination mirrors gt-src %s" % sys.argv[5][:12], "ok": not m.get("mismatched"),
+       "detail": ("%d added, %d changed, %d deleted; %d files match SHA256SUMS"
+                  % (len(m["adds"]), len(m["changes"]), len(m["deletes"]), m["carried"]))
+                 if not m.get("mismatched") else
+                 "%d file(s) differ from SHA256SUMS: %s" % (len(m["mismatched"]),
+                                                            ", ".join(m["mismatched"][:5]))},
+      {"check": "nothing gt-src-only is tracked in the destination", "ok": not m.get("leaked"),
+       "detail": ", ".join(m.get("leaked") or []) or "copygt.sh, validate-install.py, SHA256SUMS, "
+                                                     "SOURCE.json and the report stay out"},
+      {"check": "install.sh", "ok": rc == 0,
+       "detail": "exited 0" if rc == 0 else ("exited %d (9 = its own post-install gate failed)" % rc)},
+  ]
+  json.dump(steps, open(sys.argv[2], "w"), indent=1)
+  PYEOF
+  echo "== 4. validate"
+  VAL_RC=0
+  "$PY" "$SRC/validate-install.py" --src "$SRC" --dest "$DEST" --steps "$WORK/steps.json" \
+    --report "$REPORT" ${VAULT:+--vault "$VAULT"} || VAL_RC=$?
+  if [ "$VAL_RC" -ne 0 ]; then
+    echo ""
+    echo "NOT CLEAN — nothing was committed. Report: $REPORT"
+    echo "The copied files stay in $DEST's work tree; fix what the report lists and run copygt.sh again."
+    exit 4
+  fi
+step: commit | step | a commit in the destination, only when clean; never a push | - | yes
+  # ── 5. commit, only now (never push: that is outside this script) ─────────────
+  echo "== 5. commit"
+  "$PY" -c "import json,sys; sys.stdout.write(''.join(p + '\0' for p in json.load(open(sys.argv[1]))['paths']))" \
+    "$WORK/mirror.json" > "$WORK/paths"
+  if [ -s "$WORK/paths" ]; then
+    git -C "$DEST" add -A -f --pathspec-from-file="$WORK/paths" --pathspec-file-nul || { echo "FAILED: git add"; exit 5; }
+  fi
+  if git -C "$DEST" diff --cached --quiet; then
+    echo "nothing to commit — $DEST already matches gt-src $COMMIT. Report: $REPORT"
+    exit 0
+  fi
+  MSG="gt-src ${COMMIT:0:12}: $VERSIONS
+
+  Applied by copygt.sh from gt-src commit $COMMIT (tree_sha256 $TREE).
+  Validated clean after install: $(sed -n 's/^clean: //p' "$REPORT" | tail -1)."
+  git -C "$DEST" commit -q -m "$MSG" || { echo "FAILED: git commit"; exit 5; }
+  echo "committed $(git -C "$DEST" rev-parse --short HEAD): gt-src ${COMMIT:0:12}"
+  echo "not pushed: copygt.sh never pushes. Push from the publishing machine only. Report: $REPORT"
