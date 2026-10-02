@@ -151,3 +151,19 @@ asking — switching off a check is theirs to decide.
   wholesale because a pack disagreed with it. `code` findings carry the severity their rule
   declares, and that severity is the pack author's opinion too — read the rule, not just the
   level.
+
+## Resuming an interrupted scan (0.18.0)
+
+Before running `gt_scan.py` on a path, look for an earlier run of the same scan that was
+interrupted, in this session or any earlier one:
+```bash
+python3 <base_dir>/../../scripts/gt_checkpoint.py find --tool scan --target "<path>" --vault "<vault>"
+```
+If it prints a line, ask once: "A previous scan was interrupted at item N of M. Resume it? [y/n]"
+- **y** → `gt_scan.py <path> --vault "<vault>" --resume "<checkpoint>"`. It skips the members
+  already done, and the files the `language` member had already scanned, and reports the whole run
+  as one (prior results merged).
+- **n** → run as normal. A run without `--resume` always starts fresh.
+
+Every run writes its checkpoint to the vault's spool and deletes it on completion;
+`--no-checkpoint` runs without one.

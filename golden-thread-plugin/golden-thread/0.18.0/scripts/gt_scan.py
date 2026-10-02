@@ -6,6 +6,16 @@ tested on its own, and this sequences them. The moment an aggregator starts deci
 itself, the leaves stop being the truth and there is a third behaviour nobody tests.
 
   gt_scan.py <path> [--vault V] [--only language,...] [--list] [--json]
+             [--resume CHECKPOINT] [--no-checkpoint | --dry-run]
+
+CHECKPOINTS (0.18.0). A run writes a progress checkpoint before its first member and after each
+one (gt_checkpoint.py: `<vault>/Projects/golden-thread/spool/scan/...progress.json`), and
+deletes it when the run completes. `--resume <checkpoint>` skips the members already done,
+merges their recorded results with the new ones, and reports the whole run as one. The
+`language` member is checkpointed per FILE inside it, so a resume also skips the files it had
+already scanned. A run without `--resume` always starts fresh. `--no-checkpoint` (alias
+`--dry-run`: it writes nothing to the vault) runs without one. Find a resumable run with
+`gt_checkpoint.py find --tool scan --target <path>`.
 
 MEMBERS are discovered from the release, so a leaf that is not installed is REPORTED as absent
 rather than quietly skipped.
@@ -30,6 +40,7 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
 
 import gt_aggregate                                        # noqa: E402
+import gt_checkpoint                                       # noqa: E402
 
 # name -> (script, what it checks). A member is listed here only when it EXISTS; a leaf that is
 # planned but unbuilt must not appear, because a listed-but-missing member reads as coverage.
@@ -46,7 +57,7 @@ import gt_aggregate                                        # noqa: E402
 MEMBERS = {
     "language": ("gt_scan_language.py",
                  "encoding and naming, against the language definitions in effect",
-                 frozenset({"--all-files"})),
+                 frozenset({"--all-files", "--checkpoint", "--resume"})),
     "code": ("gt_scan_code.py",
              "source validation, against the lint rules in effect",
              frozenset()),
@@ -98,6 +109,10 @@ def main(argv=None):
     ap.add_argument("--json", action="store_true")
     ap.add_argument("--all-files", action="store_true")
     ap.add_argument("--timeout", type=int, default=gt_aggregate.DEFAULT_TIMEOUT_S)
+    ap.add_argument("--resume", metavar="CHECKPOINT",
+                    help="continue an interrupted run from its checkpoint")
+    ap.add_argument("--no-checkpoint", "--dry-run", dest="no_checkpoint", action="store_true",
+                    help="write no checkpoint (nothing is written to the vault)")
     args = ap.parse_args(argv)
 
     have = available()
@@ -128,9 +143,55 @@ def main(argv=None):
                 print("  note: %s does not apply to %s; that member scans its own scope"
                       % (flag, ", ".join(members)))
 
-    results = [run_member(n, MEMBERS[n][0], args.path, args.vault,
-                          [f for f in asked_flags if f in MEMBERS[n][2]],
-                          args.timeout) for n in wanted]
+    ck, prior = None, []
+    if args.resume:
+        try:
+            ck = gt_checkpoint.Checkpoint.load(args.resume, "scan")
+        except gt_checkpoint.CheckpointError as exc:
+            print("gt-scan: cannot resume: %s" % exc, file=sys.stderr)
+            return USAGE
+        if os.path.realpath(ck.data["target"]) != os.path.realpath(args.path) \
+                or ck.items != wanted:
+            print("gt-scan: cannot resume: that checkpoint is for %s with member(s) %s, not this "
+                  "run" % (ck.data["target"], ", ".join(ck.items)), file=sys.stderr)
+            return USAGE
+        prior = list(ck.results)
+        if not args.json:
+            print("resuming: %d of %d member(s) already done (%s)"
+                  % (ck.next_index, ck.total, ", ".join(ck.items[:ck.next_index]) or "none"))
+    elif not args.no_checkpoint:
+        try:
+            ck = gt_checkpoint.Checkpoint.start(
+                "scan", os.path.abspath(args.path), wanted,
+                gt_checkpoint.find_vault(args.vault),
+                args={"only": args.only, "all_files": args.all_files})
+        except OSError as exc:
+            print("gt-scan: note: no checkpoint (%s); an interruption will start over"
+                  % exc.__class__.__name__, file=sys.stderr)
+            ck = None
+
+    results = list(prior)
+    for i, n in enumerate(wanted):
+        if i < len(prior):
+            continue
+        extra = [f for f in asked_flags if f in MEMBERS[n][2]]
+        if ck is not None and "--checkpoint" in MEMBERS[n][2]:
+            leaf_ck = (str(ck.path)[:-len(gt_checkpoint.SUFFIX)] + ".%s%s"
+                       % (n, gt_checkpoint.SUFFIX))
+            extra += (["--resume", leaf_ck] if os.path.isfile(leaf_ck)
+                      else ["--checkpoint", leaf_ck])
+        r = run_member(n, MEMBERS[n][0], args.path, args.vault, extra, args.timeout)
+        if ck is not None and r.get("exit") == gt_checkpoint.ABORTED:
+            # The member was interrupted with its own checkpoint in place. Not a result:
+            # stop here so --resume continues inside that member, not after it.
+            print("gt-scan: interrupted inside member %s; resume with --resume %s"
+                  % (n, ck.path), file=sys.stderr)
+            return gt_checkpoint.ABORTED
+        results.append(r)
+        if ck is not None:
+            ck.done(i, r)
+    if ck is not None:
+        ck.finish()
     ran = [r for r in results if r["ran"]]
     failed = [r for r in results if not r["ran"]]
     found = [r for r in ran if r["status"] == "findings"]

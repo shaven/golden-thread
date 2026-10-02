@@ -828,6 +828,34 @@ def _take_over(p, sid, args, how):
     return 0
 
 
+# Batch-tool checkpoints (gt_checkpoint.py, 0.18.0) older than this are abandoned: a resume a
+# week later would be resuming against a tree that has moved on. Registration is the one moment
+# every session passes through, so the sweep lives here. Never fatal, never loud.
+CHECKPOINT_MAX_AGE_DAYS = 7
+CHECKPOINT_TOOLS = ("scan", "scan-language", "ingest")
+
+
+def _prune_checkpoints(days=CHECKPOINT_MAX_AGE_DAYS):
+    import time as _t
+    cutoff = _t.time() - days * 86400
+    gone = 0
+    for tool in CHECKPOINT_TOOLS:
+        d = VAULT / "Projects" / "golden-thread" / "spool" / tool
+        try:
+            for f in d.glob("*.progress.json"):
+                try:
+                    if f.stat().st_mtime < cutoff:
+                        f.unlink()
+                        gone += 1
+                except OSError:
+                    continue
+        except OSError:
+            continue
+    if gone:
+        print(f"  pruned {gone} batch checkpoint(s) older than {days} days")
+    return gone
+
+
 def cmd_register(args):
     sid = session_id(getattr(args, "id", None))
     if not sid:
@@ -923,6 +951,7 @@ def cmd_register(args):
     # frontmatter parses as a session with no heartbeat and no claims.
     _atomic_write(p, _render(fm, body))
     print(f"registered {sid}\n  {p.relative_to(VAULT)}")
+    _prune_checkpoints()
     if len(_candidates(sid)) > 1:
         print(f"  NOTE: {sid} now has {len(_candidates(sid))} registrations. Later\n"
               f"  commands must name this one: --entry {p.name}", file=sys.stderr)

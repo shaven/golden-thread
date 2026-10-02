@@ -227,3 +227,28 @@ Ingest complete.
 If `source.md` has any `TODO` entries, list them explicitly — these are the questions only the user can answer, and they are cheapest to close now while the material is fresh.
 
 List every stopped unit with its stop condition (contradiction, security issue, unsafe code) and the locations the scan or the check reported — never the flagged content. Those units were not ingested; re-running the ingest after the owner has dealt with them picks them up.
+
+## Resuming an interrupted ingest (0.18.0)
+
+**Before Step 0**, once the target directory is known, look for an ingest of it that was
+interrupted — in this session or any earlier one:
+```bash
+python3 <base_dir>/../../scripts/gt_checkpoint.py find --tool ingest --target "<project-dir>" --vault "<vault>"
+```
+If it prints a line, ask once: "A previous ingest of `<project-dir>` was interrupted at item N of
+M. Resume it? [y/n]"
+- **y** → Step 0's intake scan still runs (the tree may have changed since). Then, instead of the
+  Step 2 scan, run `gt_ingest.py --resume "<checkpoint>" --json`. It prints only the candidates not
+  yet migrated, with their original `index`, and lists the ones already done on stderr. Do not
+  migrate those again.
+- **n** → carry on as normal. A plain Step 2 scan always starts fresh, with a new checkpoint.
+
+**During Step 5**, a scan names its checkpoint on stderr (`checkpoint: <path> (N items)`), and
+every candidate has an `index`. Right after each candidate is queued (or dropped because its unit
+stopped, or skipped), record it, in index order:
+```bash
+python3 <base_dir>/../../scripts/gt_ingest.py --done "<checkpoint>" --index <N> --result "<vault path it went to | dropped: <stop> | skipped>"
+```
+This is what lets a session that runs out of context hand the rest to the next session. After
+the last candidate is marked, the merged list of every result is printed and the checkpoint is
+deleted. Checkpoints older than 7 days are pruned when a session registers.
