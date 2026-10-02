@@ -31,6 +31,7 @@ from __future__ import annotations
 
 import argparse
 import getpass
+import json
 import os
 import plistlib
 import subprocess
@@ -44,6 +45,10 @@ HOME = Path.home()
 AGENTS = HOME / "Library" / "LaunchAgents"
 HOOKS = HOME / ".claude" / "golden-thread" / "hooks"
 LOGS = HOME / ".claude" / "golden-thread"
+# 0.19.0: the ONE interpreter every job runs, recorded by install.sh. Before it, each job ran
+# whichever python installed it (gt-lint-weekly /usr/bin/python3, gt-daily python3.9), so a
+# macOS privacy grant given to one never covered the other.
+INTERPRETER_RECORD = LOGS / "interpreter.json"
 
 # label -> (script, default hour, default minute, weekday or None, what it does)
 JOBS = {
@@ -101,6 +106,19 @@ def run(args, timeout=180):
         return R()
 
 
+def recorded_interpreter():
+    """The interpreter install.sh recorded, or None when there is none usable."""
+    try:
+        p = json.loads(INTERPRETER_RECORD.read_text(encoding="utf-8"))["python"]
+    except Exception:
+        return None
+    return p if os.path.isfile(p) and os.access(p, os.X_OK) else None
+
+
+def interpreter():
+    return recorded_interpreter() or sys.executable or "/usr/bin/python3"
+
+
 def domain() -> str:
     return "gui/%d" % os.getuid()
 
@@ -108,7 +126,7 @@ def domain() -> str:
 def build_plist(job, vault, repos, hour, minute, weekday):
     script, _, _, _, _ = JOBS[job]
     target = HOOKS / script
-    args = [sys.executable or "/usr/bin/python3", str(target)]
+    args = [interpreter(), str(target)]
     if job == "daily":
         # gt_daily needs to be told its vault -- Core rule 2, never inferred -- and which
         # repos count as work. gt_lint_weekly reads vault-config.json itself.
@@ -178,7 +196,7 @@ def do_install(a) -> int:
         # on every tree. Better refused here than proven broken after it is scheduled.
         extra = (sum((["--repo", str(r)] for r in a.repo), []) if job == "daily"
                  else ["--path", str(a.repo[0])])
-        pre = run([sys.executable or "/usr/bin/python3", str(target), "--vault", str(vault),
+        pre = run([interpreter(), str(target), "--vault", str(vault),
                    *extra, "--check"])
         if pre.returncode != 0:
             print(pre.stdout + pre.stderr, file=sys.stderr)
@@ -189,7 +207,7 @@ def do_install(a) -> int:
     if job == "reminder":
         # Refresh the mirror from THIS terminal (which can read the vault), then the job's own
         # preflight: a mirror, at least one channel on, each enabled channel configured.
-        py = sys.executable or "/usr/bin/python3"
+        py = interpreter()
         if vault:
             mir = run([py, str(target), "mirror", "--vault", str(vault)])
             print((mir.stdout + mir.stderr).strip())
@@ -266,10 +284,39 @@ def job_status(job):
         except Exception:
             pass
         problems.append("last exit code = %s (see %s)" % (code, err))
+        cause = privacy_cause(job, err)
+        if cause:
+            problems.append(cause)
     script = JOBS[job][0]
     if not (HOOKS / script).is_file():
         problems.append("%s is missing from %s" % (script, HOOKS))
     return code, problems
+
+
+_EPERM = __import__("re").compile(
+    r"PermissionError: \[Errno 1\] Operation not permitted: '([^']+)'")
+
+
+def privacy_cause(job, err_path):
+    """A job that died with EPERM on a cloud-storage path was blocked by macOS privacy (TCC),
+    not by a bug: name the interpreter that needs access and the folder (0.19.0)."""
+    try:
+        tail = Path(err_path).read_text(encoding="utf-8", errors="replace")[-20000:]
+    except OSError:
+        return None
+    hits = [m.group(1) for m in _EPERM.finditer(tail) if "/Library/CloudStorage/" in m.group(1)]
+    if not hits:
+        return None
+    head, _, rest = hits[-1].partition("/Library/CloudStorage/")
+    folder = head + "/Library/CloudStorage/" + rest.split("/", 1)[0]
+    try:
+        with plist_path(job).open("rb") as fh:
+            python = plistlib.load(fh)["ProgramArguments"][0]
+    except Exception:
+        python = "the job's interpreter"
+    return ("macOS privacy blocked %s from %s (EPERM): give that interpreter Full Disk "
+            "Access in System Settings > Privacy & Security, or re-run install.sh so every "
+            "job uses the one recorded interpreter" % (python, folder))
 
 
 def installed_jobs():
@@ -300,6 +347,77 @@ def do_remove(a) -> int:
     return OK
 
 
+def do_record_interpreter(a) -> int:
+    p = os.path.abspath(os.path.expanduser(a.python))
+    if not (os.path.isfile(p) and os.access(p, os.X_OK)):
+        print("gt-schedule: %s is not an executable interpreter; nothing recorded" % p,
+              file=sys.stderr)
+        return USAGE
+    INTERPRETER_RECORD.parent.mkdir(parents=True, exist_ok=True)
+    tmp = INTERPRETER_RECORD.with_name(INTERPRETER_RECORD.name + ".tmp")
+    tmp.write_text(json.dumps({"python": p, "recorded": time.strftime("%Y-%m-%dT%H:%M:%S%z")})
+                   + "\n", encoding="utf-8")
+    os.replace(tmp, INTERPRETER_RECORD)
+    print("gt-schedule: every job runs %s" % p)
+    return OK
+
+
+def _is_real_home():
+    try:
+        import pwd
+        real = Path(pwd.getpwuid(os.getuid()).pw_dir).resolve()
+    except Exception:
+        return False
+    return AGENTS.resolve().is_relative_to(real) if hasattr(Path, 'is_relative_to') \
+        else str(AGENTS.resolve()).startswith(str(real) + os.sep)
+
+
+def job_interpreter(job):
+    """The interpreter an installed job's plist runs, or None."""
+    try:
+        with plist_path(job).open("rb") as fh:
+            return plistlib.load(fh)["ProgramArguments"][0]
+    except Exception:
+        return None
+
+
+def do_reconcile(a) -> int:
+    """Rewrite any installed job whose interpreter is not the recorded one; reload it."""
+    want = recorded_interpreter()
+    if not want:
+        print("gt-schedule: no recorded interpreter; jobs left as they are")
+        return OK
+    rc = OK
+    for job in installed_jobs():
+        path = plist_path(job)
+        try:
+            with path.open("rb") as fh:
+                doc = plistlib.load(fh)
+            have = doc["ProgramArguments"][0]
+        except Exception as exc:
+            print("gt-schedule: %s unreadable (%s); left alone" % (path, exc.__class__.__name__),
+                  file=sys.stderr)
+            rc = PROBLEM
+            continue
+        if have == want:
+            continue
+        doc["ProgramArguments"][0] = want
+        with path.open("wb") as fh:
+            plistlib.dump(doc, fh)
+        print("gt-schedule: %s now runs %s (was %s)" % (label_for(job), want, have))
+        # Reload only the REAL user's jobs: launchd's domain is gui/<uid> whatever HOME says,
+        # so a sandbox HOME (a test, a throwaway install) reloading would replace the
+        # developer's real job with the sandbox's plist.
+        if not a.no_reload and _is_real_home():
+            run(["launchctl", "bootout", "%s/%s" % (domain(), label_for(job))])
+            r = run(["launchctl", "bootstrap", domain(), str(path)])
+            if r.returncode != 0:
+                print("gt-schedule: reload of %s failed: %s"
+                      % (label_for(job), (r.stderr or r.stdout).strip()), file=sys.stderr)
+                rc = PROBLEM
+    return rc
+
+
 def do_list(_a) -> int:
     print("%-14s %-20s %-8s %s" % ("JOB", "SCRIPT", "DEFAULT", "WHAT"))
     for job, (script, h, m, w, what) in sorted(JOBS.items()):
@@ -313,6 +431,12 @@ def main(argv=None) -> int:
     ap = argparse.ArgumentParser(description="install and verify gt's scheduled jobs")
     sub = ap.add_subparsers(dest="cmd", required=True)
     sub.add_parser("list").set_defaults(fn=do_list)
+    ri = sub.add_parser("record-interpreter", help="the one python every job runs (install.sh)")
+    ri.add_argument("python")
+    ri.set_defaults(fn=do_record_interpreter)
+    rc = sub.add_parser("reconcile", help="rewrite jobs on another interpreter, then reload")
+    rc.add_argument("--no-reload", action="store_true", help="rewrite the plists only")
+    rc.set_defaults(fn=do_reconcile)
     for name, fn in (("install", do_install), ("check", do_check), ("remove", do_remove)):
         p = sub.add_parser(name)
         p.add_argument("job", choices=sorted(JOBS))

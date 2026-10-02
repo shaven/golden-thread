@@ -798,6 +798,9 @@ def check_schedule(rep):
         else:
             lines.append("%s: last exit %s" % (label, code if code is not None
                                                 else "(not yet run)"))
+        py = getattr(sched, "job_interpreter", lambda j: None)(job)
+        if py:
+            lines[-1] += " · runs %s" % py          # one recorded interpreter (0.19.0)
     if bad:
         rep.add("schedule", FAIL, "%d of %d installed job(s) failing: %s"
                 % (len(bad), len(jobs), ", ".join(bad)), "\n".join(lines),

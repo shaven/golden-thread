@@ -219,6 +219,36 @@ class TheReleaseIsTheInstalledOneFromAnyPath(InstalledMachine):
         self.assertFalse(got["marketplace"]["failed"], got["marketplace"]["rows"])
 
 
+def _old_lint_weekly_job(case):
+    """Before the install: a gt-lint-weekly job on another python, as on the publishing Mac."""
+    agents = case.home / "Library" / "LaunchAgents"
+    agents.mkdir(parents=True, exist_ok=True)
+    with (agents / "com.markethaven.gt-lint-weekly.plist").open("wb") as fh:
+        plistlib.dump({"Label": "com.markethaven.gt-lint-weekly",
+                       # a path no machine's install runs, so it always differs
+                       "ProgramArguments": ["/opt/gt-test-old/bin/python3",
+                                            str(case.home / ".claude/golden-thread/hooks/"
+                                                "gt_lint_weekly.py")],
+                       "StartCalendarInterval": {"Hour": 7, "Minute": 0, "Weekday": 1}}, fh)
+
+
+class InstallRecordsOneInterpreterForEveryJob(InstalledMachine):
+    """0.19.0 (request lint-weekly-uses-an-ungranted-interpreter): install.sh records the python
+    it runs under and rewrites an installed job on another one. The sandbox HOME is not the
+    real user's, so nothing may be reloaded into launchd."""
+    PRE_INSTALL = _old_lint_weekly_job
+
+    def test_the_interpreter_is_recorded_and_the_old_job_rewritten_to_it(self):
+        self.assertEqual(self.install_proc.returncode, 0, self.install_proc.stdout[-2000:])
+        rec = json.loads((self.home / ".claude/golden-thread/interpreter.json").read_text())
+        self.assertTrue(os.access(rec["python"], os.X_OK), rec)
+        plist = self.home / "Library/LaunchAgents/com.markethaven.gt-lint-weekly.plist"
+        with plist.open("rb") as fh:
+            self.assertEqual(plistlib.load(fh)["ProgramArguments"][0], rec["python"])
+        self.assertIn("now runs %s" % rec["python"], self.install_proc.stdout)
+        self.assertNotIn("reload of", self.install_proc.stdout + self.install_proc.stderr)
+
+
 class EveryCompletedRunWritesTheReceipt(InstalledMachine):
     """0.19.0 (request gate-receipt-only-written-at-session-start). The receipt was written only
     on the SessionStart hook path, so a manual run that passed left the previous version's

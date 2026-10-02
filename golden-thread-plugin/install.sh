@@ -1480,6 +1480,16 @@ if [ -d "$SRC/hooks" ]; then
   done < <(modpy onfiles "$MODJSON")
   set_modes ${GT_HOOK_FILES[@]+"${GT_HOOK_FILES[@]}"}
   echo "Installed Core-rule hooks → $GT_HOOKS"
+  # One interpreter for every scheduled job (0.19.0): record the python running this
+  # install, then rewrite any installed job on another one. A macOS privacy grant is per
+  # interpreter, so jobs on two pythons meant a grant that covered only some of them.
+  if [ -f "$GT_HOOKS/gt_schedule.py" ]; then
+    _gt_py=$(python3 -c 'import sys; print(sys.executable)' 2>/dev/null) || _gt_py=""
+    if [ -n "$_gt_py" ]; then
+      python3 -B "$GT_HOOKS/gt_schedule.py" record-interpreter "$_gt_py" || true
+      python3 -B "$GT_HOOKS/gt_schedule.py" reconcile || true
+    fi
+  fi
 
   # Files an OLDER release put in the hooks dir that this one no longer ships (0.13.0).
   # An upgrade must CONVERGE on what a fresh install of this release leaves, so legacy

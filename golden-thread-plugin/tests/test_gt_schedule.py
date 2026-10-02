@@ -160,5 +160,88 @@ class ScheduleTest(Sandbox):
         self.assertEqual(sorted(m.JOBS), sorted(m.BENIGN_EXITS))
 
 
+class OneRecordedInterpreter(Sandbox):
+    """0.19.0 (request lint-weekly-uses-an-ungranted-interpreter). Each job ran whichever python
+    installed it -- gt-lint-weekly /usr/bin/python3, gt-daily python3.9 -- so a privacy grant
+    given to one never covered the other, and lint-weekly died with EPERM every Monday."""
+
+    def setUp(self):
+        super().setUp()
+        self.m = load_module(SCHED, "gt_schedule_interp")
+        self.m.AGENTS = self.tmp / "LaunchAgents"
+        self.m.HOOKS = self.tmp / "hooks"
+        self.m.LOGS = self.tmp / "logs"
+        self.m.INTERPRETER_RECORD = self.m.LOGS / "interpreter.json"
+        for d in (self.m.AGENTS, self.m.HOOKS, self.m.LOGS):
+            d.mkdir(parents=True)
+        self.py_bin = self.tmp / "bin" / "python3.9"
+        self.py_bin.parent.mkdir()
+        self.py_bin.write_text("#!/bin/sh\n")
+        self.py_bin.chmod(0o755)
+
+    def record(self):
+        self.assertEqual(self.m.main(["record-interpreter", str(self.py_bin)]), 0)
+
+    def write_plist(self, job, interpreter):
+        doc = self.m.build_plist(job, "/tmp/v", ["/tmp/tree"], *self.m.JOBS[job][1:4])
+        doc["ProgramArguments"][0] = interpreter
+        with self.m.plist_path(job).open("wb") as fh:
+            plistlib.dump(doc, fh)
+        return doc
+
+    def args0(self, job):
+        with self.m.plist_path(job).open("rb") as fh:
+            return plistlib.load(fh)["ProgramArguments"]
+
+    def test_every_job_names_the_recorded_interpreter(self):
+        self.record()
+        for job in sorted(self.m.JOBS):
+            with self.subTest(job=job):
+                doc = self.m.build_plist(job, "/tmp/v", ["/tmp/tree"], *self.m.JOBS[job][1:4])
+                self.assertEqual(doc["ProgramArguments"][0], str(self.py_bin))
+
+    def test_a_record_that_is_not_an_executable_is_refused(self):
+        self.assertNotEqual(self.m.main(["record-interpreter", str(self.tmp / "nope")]), 0)
+        self.assertFalse(self.m.INTERPRETER_RECORD.exists())
+
+    def test_reconcile_rewrites_only_a_job_on_another_interpreter(self):
+        self.record()
+        old = self.write_plist("lint-weekly", "/usr/bin/python3")
+        self.write_plist("daily", str(self.py_bin))
+        daily_before = self.m.plist_path("daily").read_bytes()
+        self.assertEqual(self.m.main(["reconcile", "--no-reload"]), 0)
+        args = self.args0("lint-weekly")
+        self.assertEqual(args[0], str(self.py_bin))
+        self.assertEqual(args[1:], old["ProgramArguments"][1:], "only the interpreter changes")
+        self.assertEqual(self.m.plist_path("daily").read_bytes(), daily_before)
+
+    def test_reconcile_without_a_record_changes_nothing(self):
+        self.write_plist("lint-weekly", "/usr/bin/python3")
+        before = self.m.plist_path("lint-weekly").read_bytes()
+        self.assertEqual(self.m.main(["reconcile", "--no-reload"]), 0)
+        self.assertEqual(self.m.plist_path("lint-weekly").read_bytes(), before)
+
+    def test_an_eperm_under_cloudstorage_names_the_interpreter_and_the_folder(self):
+        self.write_plist("lint-weekly", "/usr/bin/python3")
+        (self.m.LOGS / "lint-weekly.err").write_text(
+            "Traceback (most recent call last):\n"
+            '  File "/x/gt_lint_weekly.py", line 108, in main\n'
+            "PermissionError: [Errno 1] Operation not permitted: '/Users/u/Library/CloudStorage/"
+            "Dropbox/Projects/Obsidian/Projects/golden-thread/lint/latest.md'\n")
+        (self.m.HOOKS / "gt_lint_weekly.py").write_text("")
+        self.m.last_exit = lambda job: ("1", None)
+        text = "\n".join(self.m.job_status("lint-weekly")[1])
+        self.assertIn("/usr/bin/python3", text)
+        self.assertIn("/Users/u/Library/CloudStorage/Dropbox", text)
+        self.assertIn("Full Disk Access", text)
+
+    def test_a_plain_failure_gets_no_privacy_diagnosis(self):
+        self.write_plist("lint-weekly", "/usr/bin/python3")
+        (self.m.LOGS / "lint-weekly.err").write_text("ValueError: something else\n")
+        (self.m.HOOKS / "gt_lint_weekly.py").write_text("")
+        self.m.last_exit = lambda job: ("1", None)
+        self.assertNotIn("Full Disk Access", "\n".join(self.m.job_status("lint-weekly")[1]))
+
+
 if __name__ == "__main__":
     unittest.main()
