@@ -1088,14 +1088,26 @@ def main(argv=None):
         print("not a vault directory: %s" % vault, file=sys.stderr)
         return 2
 
-    if args.project and ("/" in args.project or "\\" in args.project
-                         or args.project in ("..", ".")):
+    if args.project and (".." in args.project.split("/") or "\\" in args.project
+                         or args.project in (".",) or os.path.isabs(args.project)):
         # `--project` is a SLUG, not a path. Joined unvalidated it walked out of the vault
         # entirely (validation 2026-09-16), and every protection here is expressed in terms of
         # a path relative to the vault root.
         print("--project takes a slug, not a path: %r" % args.project, file=sys.stderr)
         return 2
     if args.project:
+        # The ONE shared resolver (gt_spool.resolve_project, 0.18.0): a bare sub-project slug
+        # means Projects/<parent>/<slug>; unknown or ambiguous is an error, not a guess.
+        tools = os.path.join(os.path.dirname(HERE), "templates", "tools")
+        if tools not in sys.path:
+            sys.path.insert(0, tools)
+        import gt_spool
+        try:
+            args.project = gt_spool.resolve_project(vault, args.project,
+            allow_unregistered=True)  # an existing folder, as before; never creates
+        except gt_spool.ProjectNotFound as exc:
+            print("gt_optimize: %s" % exc, file=sys.stderr)
+            return 2
         root = os.path.realpath(os.path.join(vault, "Projects", args.project))
         if not (root == os.path.realpath(vault)
                 or root.startswith(os.path.realpath(vault) + os.sep)):

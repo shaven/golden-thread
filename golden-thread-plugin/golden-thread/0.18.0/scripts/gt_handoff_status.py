@@ -331,11 +331,32 @@ def _mark_via_queue(vault: Path, rel, text: str, status: str, until, entry: str)
     return _report(results, note, rel, status, until, wq, vault)
 
 
+def _spool():
+    """The vault tools' gt_spool (templates/tools): the ONE slug -> Projects/<path>
+    resolver (0.18.0), shared with gt_adr and vault_init."""
+    tools = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+                         "templates", "tools")
+    if tools not in sys.path:
+        sys.path.insert(0, tools)
+    import gt_spool
+    return gt_spool
+
+
 def do_list(a) -> int:
     vault = Path(a.vault).expanduser()
     if not vault.is_dir():
         print("no vault at %s" % vault, file=sys.stderr)
         return 3
+    if a.project:
+        # a bare sub-project slug filters on its parent/child path (0.18.0); unknown or
+        # ambiguous is said, not shown as an empty list
+        S = _spool()
+        try:
+            a.project = S.resolve_project(vault, a.project,
+            allow_unregistered=True)  # an existing folder, as before; never creates
+        except S.ProjectNotFound as exc:
+            print("gt_handoff_status: %s" % exc, file=sys.stderr)
+            return 3
     rows = all_handoffs(vault, a.project) if a.all else waiting(vault, a.project)
     if a.json:
         print(json.dumps(rows, indent=1))

@@ -100,19 +100,34 @@ def research_entries(proj: Path):
     return [m.group(1).strip() for m in re.finditer(r"^##\s+(.+)$", text, re.M)]
 
 
+def _spool():
+    """The vault tools' gt_spool (templates/tools): the ONE slug -> path resolver."""
+    tools = str(HERE.parent / "templates" / "tools")
+    if tools not in sys.path:
+        sys.path.insert(0, tools)
+    import gt_spool
+    return gt_spool
+
+
 def project_dir(vault: Path, slug: str):
+    """-> (folder, None) or (None, why), via gt_spool.resolve_project (0.18.0): a bare
+    sub-project slug finds Projects/<parent>/<slug>, a slug two projects share names both."""
     if not slug or ".." in slug.split("/") or slug.startswith("/"):
-        return None
-    d = vault / "Projects" / slug
-    return d if (d / "README.md").is_file() else None
+        return None, "no project %r under Projects/" % slug
+    S = _spool()
+    try:
+        return vault / "Projects" / S.resolve_project(vault, slug), None
+    except S.ProjectNotFound as exc:
+        return None, str(exc)
 
 
 def do_project(a, vault: Path) -> int:
-    proj = project_dir(vault, a.slug)
+    proj, why = project_dir(vault, a.slug)
     if proj is None:
-        print("no project %r under Projects/ (sub-project as parent/child)" % a.slug,
-              file=sys.stderr)
+        print("%s (sub-project as parent/child)" % why, file=sys.stderr)
         return 3
+    # Everything below -- task IDs, handoff projects, archive-project -- keys on the path.
+    a.slug = proj.relative_to(vault / "Projects").as_posix()
     tasks, err = open_tasks(vault, a.slug)
     if err:
         print(err, file=sys.stderr)

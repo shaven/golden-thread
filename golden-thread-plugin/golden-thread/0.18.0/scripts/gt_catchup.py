@@ -190,6 +190,16 @@ def compose(slug, since, rows, research, p1, waiting):
     return text
 
 
+def _spool():
+    """The vault tools' gt_spool, shipped beside this script under templates/tools: the ONE
+    slug -> Projects/<path> resolver (0.18.0), shared with gt_adr and vault_init."""
+    tools = os.path.join(os.path.dirname(HERE), "templates", "tools")
+    if tools not in sys.path:
+        sys.path.insert(0, tools)
+    import gt_spool
+    return gt_spool
+
+
 def build(vault, slug, force, now):
     """-> (brief text or None, why) -- never raises for a readable project."""
     base = os.path.join(vault, "Projects", slug)
@@ -229,12 +239,19 @@ def main(argv=None):
     ap.add_argument("--json", action="store_true")
     ap.add_argument("--dry-run", action="store_true", help="compute it but never --mark")
     a = ap.parse_args(argv)
-    if "/" in a.project or a.project in (".", "..") or os.path.isabs(a.project):
+    if ".." in a.project.split("/") or a.project in (".",) or os.path.isabs(a.project) \
+            or "\\" in a.project:
         print("--project takes a slug, not a path: %r" % a.project, file=sys.stderr)
         return 2
     vault = os.path.abspath(os.path.expanduser(a.vault))
-    if not os.path.isdir(os.path.join(vault, "Projects", a.project)):
-        print("no project at Projects/%s" % a.project, file=sys.stderr)
+    # The shared resolver: a bare sub-project slug reads Projects/<parent>/<slug>, an
+    # unknown one is an error, an ambiguous one names both (0.18.0).
+    S = _spool()
+    try:
+        a.project = S.resolve_project(vault, a.project,
+            allow_unregistered=True)  # an existing folder, as before; never creates
+    except S.ProjectNotFound as exc:
+        print("gt_catchup: %s" % exc, file=sys.stderr)
         return 3
     now = datetime.datetime.now().astimezone()
     if a.no_brief:

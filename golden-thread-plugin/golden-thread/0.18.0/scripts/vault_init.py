@@ -501,13 +501,11 @@ def cmd_rename_project(vault: Path, old: str, new: str):
     """
     vault = vault.resolve()
     projects = vault / "Projects"
-    # never the spool: spool/decisions/<slug> shares the slug and is not the project
-    matches = [d for d in projects.rglob(old) if d.is_dir() and not _in_spool(vault, d)] \
-        if projects.exists() else []
-    if not matches:
-        record("error", vault / "Projects" / old, "project not found")
-        return
-    src_dir = matches[0]
+    # The shared resolver (0.18.0), not `rglob(old)[0]`: that took any folder of that name
+    # and silently picked one of two same-named sub-projects.
+    src_dir = _proj_dir(vault, old)
+    if src_dir is None:
+        return                                  # _proj_dir recorded why
     dst_dir = src_dir.parent / new
     if dst_dir.exists():
         record("conflict", dst_dir, "destination already exists")
@@ -842,13 +840,21 @@ def _merge_decisions_spool(vault: Path, src: Path, dst: Path, src_slug: str,
 
 
 def _proj_dir(vault: Path, slug: str):
-    projects = vault / "Projects"
-    if not projects.exists():
+    """The project folder `slug` names, via the vault tools' shared resolver
+    (gt_spool.resolve_project, 0.18.0). Until 0.18.0 this took the FIRST `rglob(slug)`
+    directory -- any folder of that name (a `memory/`, a `handoff/`), and silently one of
+    two same-named sub-projects. Records the reason and returns None when `slug` is unknown
+    or ambiguous; creates nothing."""
+    tools = str(TEMPLATES_DIR / "tools")
+    if tools not in sys.path:
+        sys.path.insert(0, tools)
+    import gt_spool
+    try:
+        return vault / "Projects" / gt_spool.resolve_project(vault, slug,
+                                                             allow_unregistered=True)
+    except gt_spool.ProjectNotFound as exc:
+        record("error", vault, f"project not found: {exc}")
         return None
-    for d in projects.rglob(slug):
-        if d.is_dir() and not _in_spool(vault, d):
-            return d
-    return None
 
 
 def _frontmatter_set(path: Path, **kv):
@@ -924,8 +930,7 @@ def cmd_merge_project(vault: Path, src_slug: str, dst_slug: str, today: str):
     vault = vault.resolve()
     src, dst = _proj_dir(vault, src_slug), _proj_dir(vault, dst_slug)
     if src is None or dst is None:
-        record("error", vault, f"project not found: {src_slug if src is None else dst_slug}")
-        return
+        return                                  # _proj_dir recorded which, and why
     if src == dst:
         record("error", src, "cannot merge a project into itself")
         return
@@ -1135,8 +1140,7 @@ def cmd_archive_project(vault: Path, slug: str, reason: str, today: str):
     vault = vault.resolve()
     proj = _proj_dir(vault, slug)
     if proj is None:
-        record("error", vault, f"project not found: {slug}")
-        return
+        return                                  # _proj_dir recorded why
 
     readme = proj / "README.md"
     _frontmatter_set(readme, stage="archived", archived=today)
@@ -1222,8 +1226,7 @@ def cmd_archive_move(vault: Path, slug: str):
     vault = vault.resolve()
     proj = _proj_dir(vault, slug)
     if proj is None:
-        record("error", vault, f"project not found: {slug}")
-        return None
+        return None                             # _proj_dir recorded why
     rel = proj.relative_to(vault / "Projects").as_posix()
     dest = vault / "Archive" / rel
     if dest.exists():

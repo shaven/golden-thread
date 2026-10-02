@@ -486,6 +486,15 @@ def do_handoffs(a) -> int:
         return 0
     if handoff_mode() == "manual":
         return 0
+    # A bare sub-project slug means its parent/child path (gt_spool.resolve_project, 0.18.0).
+    # Soft on purpose: this runs inside /gt:gt-open, which must never fail on a surface line,
+    # so a name the resolver cannot settle filters as typed (and so shows nothing), as before.
+    try:
+        sys.path.insert(0, str(HERE.parent / "templates" / "tools"))
+        import gt_spool
+        a.project = gt_spool.resolve_project(vault, a.project)
+    except Exception:
+        pass
     hl = handoff_lines(vault, a.project)
     print("\n".join(hl) if hl else "no handoff waiting in %s" % a.project)
     return 0

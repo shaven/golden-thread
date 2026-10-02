@@ -413,6 +413,16 @@ def _queue_create(vault, rel, out, text, replacing):
     return 3
 
 
+def _spool():
+    """The vault tools' gt_spool, shipped beside this script under templates/tools."""
+    tools = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+                         "templates", "tools")
+    if tools not in sys.path:
+        sys.path.insert(0, tools)
+    import gt_spool
+    return gt_spool
+
+
 def main(argv=None):
     ap = argparse.ArgumentParser(description=__doc__.split("\n")[0])
     ap.add_argument("--vault", required=True, help="the vault (never inferred)")
@@ -432,13 +442,25 @@ def main(argv=None):
 
     # A slug, not a path. `--project ../../elsewhere` and an absolute slug both wrote outside
     # the vault entirely (validation 2026-09-16).
-    if ("/" in args.project or "\\" in args.project or args.project in ("..", ".")
-            or os.path.isabs(args.project)):
+    # `parent/child` is accepted since 0.18.0 (it is what the shared resolver returns); `..`,
+    # a backslash and an absolute path still are not.
+    if ("\\" in args.project or args.project in ("..", ".") or os.path.isabs(args.project)
+            or ".." in args.project.split("/")):
         print("--project takes a slug, not a path: %r" % args.project, file=sys.stderr)
         return 2
 
     vault = os.path.abspath(os.path.expanduser(args.vault))
-    facts, err = project_facts(vault, args.project)
+    # The ONE shared resolver (gt_spool.resolve_project, 0.18.0): a bare sub-project slug
+    # finds Projects/<parent>/<slug>, an unknown slug is an error that creates nothing, and a
+    # slug two projects share names both instead of guessing.
+    S = _spool()
+    try:
+        prel = S.resolve_project(vault, args.project)
+    except S.ProjectNotFound as exc:
+        print("gt_handoff: no README.md at Projects/%s -- %s" % (args.project, exc),
+              file=sys.stderr)
+        return 3
+    facts, err = project_facts(vault, prel)
     if err:
         print(err, file=sys.stderr)
         return 3
@@ -470,7 +492,7 @@ def main(argv=None):
         print(text)
         return 0
 
-    out = args.out or os.path.join(vault, "Projects", args.project, "handoff",
+    out = args.out or os.path.join(vault, "Projects", prel, "handoff",
                                    "%s-handoff.md" % datetime.date.today().isoformat())
     real_vault = os.path.realpath(vault)
     if not args.out and not os.path.realpath(os.path.dirname(out)).startswith(real_vault):

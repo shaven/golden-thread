@@ -181,6 +181,17 @@ def global_leaks(vault):
     return out
 
 
+def _spool():
+    """The vault tools' gt_spool (templates/tools): the ONE slug -> Projects/<path>
+    resolver (0.18.0), shared with gt_adr and vault_init."""
+    tools = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+                         "templates", "tools")
+    if tools not in sys.path:
+        sys.path.insert(0, tools)
+    import gt_spool
+    return gt_spool
+
+
 def main(argv=None):
     ap = argparse.ArgumentParser(description=__doc__.split("\n")[0])
     ap.add_argument("--vault", required=True, help="the vault (never inferred)")
@@ -204,6 +215,16 @@ def main(argv=None):
     if not os.path.isdir(vault):
         print("not a vault directory: %s" % vault, file=sys.stderr)
         return 2
+    if args.project:
+        # The shared resolver (0.18.0): a bare sub-project slug means its parent/child path,
+        # which is what project_slugs() and the overlap paths are keyed on.
+        S = _spool()
+        try:
+            args.project = S.resolve_project(vault, args.project,
+            allow_unregistered=True)  # an existing folder, as before; never creates
+        except S.ProjectNotFound as exc:
+            print("gt_promote_detect: %s" % exc, file=sys.stderr)
+            return 2
     threshold = args.threshold
     if threshold is None:
         try:
