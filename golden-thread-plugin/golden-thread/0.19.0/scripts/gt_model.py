@@ -173,6 +173,26 @@ def read_intent(path):
     return None, None
 
 
+def installed_fields(path):
+    """-> (model, effort) from a SKILL.md's frontmatter, None for either that is absent."""
+    p = Path(path)
+    if p.is_dir():
+        p = p / "SKILL.md"
+    try:
+        lines = p.read_text(encoding="utf-8").splitlines()
+    except OSError:
+        return None, None
+    got = {}
+    if lines and lines[0].strip() == "---":
+        for line in lines[1:]:
+            if line.strip() == "---":
+                break
+            k, _, v = line.partition(":")
+            if k.strip() in ("model", "effort"):
+                got[k.strip()] = v.strip().strip("'\"") or None
+    return got.get("model"), got.get("effort")
+
+
 def check_paths(paths):
     """-> [problem str]. Every model_intent found must be a known value; position named."""
     out = []
@@ -243,6 +263,14 @@ def main(argv=None):
     except ValueError as exc:
         print("%s -- refused" % exc, file=sys.stderr)
         return USAGE
+    if a.cmd == "skill":
+        # 0.19.0: an INSTALLED copy may carry the model and effort the policy wrote
+        # (gt_model_policy.py). That is what Claude Code runs, so it is what gets named.
+        m, e = installed_fields(a.path)
+        if m:
+            res.update(model=m, effort=e)
+            res["line"] = ("model_intent %s -> model %s, effort %s (installed frontmatter, written "
+                           "by the model policy)" % (intent, m, e or "none (unset)"))
     _emit(res, a.json)
     return PROBLEMS if res["problems"] else OK
 

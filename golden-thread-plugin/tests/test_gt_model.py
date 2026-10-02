@@ -285,6 +285,29 @@ class EffortResolvesWithTheModel(ModelBase):
                 self.assertEqual((d["model"], d["effort"]), (model, "xhigh"))
 
 
+class TheSkillReportsWhatItsInstalledFrontmatterSays(ModelBase):
+    """0.19.0 criterion: gt-validate names the model it ran on, matching the installed
+    frontmatter. Under very-high the policy writes opus xhigh while the intent pack says
+    opus high; `gt_model.py skill` must report what Claude Code will actually run."""
+
+    def test_installed_fields_win_and_the_line_says_where_they_came_from(self):
+        d = skill(self.tmp / "root", "gt-validate", "deep")
+        f = d / "SKILL.md"
+        f.write_text(f.read_text().replace("model_intent: deep\n",
+                                           "model_intent: deep\nmodel: opus\neffort: xhigh\n"))
+        p = self.py(GT_MODEL, "skill", d, "--vault", self.vault, "--json")
+        self.assertOk(p)
+        data = json.loads(p.stdout)
+        self.assertEqual((data["model"], data["effort"]), ("opus", "xhigh"))
+        self.assertIn("installed frontmatter", data["line"])
+
+    def test_without_installed_fields_the_pack_answers(self):
+        d = skill(self.tmp / "root", "gt-validate", "deep")
+        p = self.py(GT_MODEL, "skill", d, "--vault", self.vault, "--json")
+        data = json.loads(p.stdout)
+        self.assertEqual((data["model"], data["effort"]), ("opus", "high"))
+
+
 class EveryShippedSkillDeclaresItsIntent(TheMappingPackIsTheOnlyPlace):
 
     def test_each_skill_declares_the_intent_the_table_gives_it(self):
