@@ -68,8 +68,12 @@ SLOTS = {
                   "kind": "enum:generated|vendored|template|executable|config|static"}},
     "encoding":  {"model_reachable": False, "fields": {"lang": "token",
                   "charset": "enum:utf-8", "eol": "enum:lf|crlf", "bom": "enum:never|allowed"}},
-    "naming":    {"model_reachable": False, "fields": {"lang": "token", "construct": "token",
-                  "style": "enum:snake|camel|pascal|kebab|screaming_snake"}},
+    # `exempt` (0.19.0): names a framework requires (unittest's setUp, assert*) -- each one a
+    # pattern, so it gets exactly the checks a `pattern` field gets.
+    "naming":    {"model_reachable": False, "optional": ("exempt",),
+                  "fields": {"lang": "token", "construct": "token",
+                             "style": "enum:snake|camel|pascal|kebab|screaming_snake",
+                             "exempt": "patterns"}},
     # Tier D, and the reason is the `message`: a lint finding is printed, so its text reaches
     # context and the slot cannot claim otherwise. `id` (not `rule`) names the rule, matching
     # ast-grep's vocabulary, which gt's rule format is a documented subset of -- there `rule`
@@ -189,6 +193,7 @@ DCO_RE = re.compile(r"Signed-off-by: [^<>\n]{1,60} <[^<>@\s]+@[^<>@\s]+>\Z")
 
 MAX_FILE_BYTES = 1 << 20
 MAX_PATTERN = 200
+MAX_PATTERNS = 20         # items in one `patterns` list (naming `exempt`)
 MAX_ENTRIES = 500
 MAX_TEXT = 300
 MAX_STRING = 300
@@ -441,6 +446,12 @@ def check_matcher(where, value, depth=1):
 def check_field(slot, where, kind, value):
     if kind == "matcher":
         check_matcher(where, value)
+        return
+    if kind == "patterns":
+        if not isinstance(value, list) or not value or len(value) > MAX_PATTERNS:
+            _fail("bad-type", "%s must be a list of 1-%d patterns" % (where, MAX_PATTERNS))
+        for j, v in enumerate(value):
+            check_field(slot, "%s[%d]" % (where, j), "pattern", v)
         return
     if not isinstance(value, str):
         _fail("bad-type", "%s must be a string" % where)

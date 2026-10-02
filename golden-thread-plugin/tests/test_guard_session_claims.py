@@ -433,6 +433,30 @@ class QueueFirstTest(GuardTestBase):
             with self.subTest(cmd=cmd):
                 self.assertQueueDeny(self.bash(cmd, cwd=self.vault))
 
+    def test_shell_writes_the_guard_cannot_resolve_or_that_land_elsewhere_are_allowed(self):
+        """0.19.0 (request queue-guard-bash-false-positives): the guard read redirects off the raw
+        string, so a quoted `>` was a redirect, `$VAR` was taken literally, and a `cd` earlier in
+        the command was ignored -- each one blocked a scratch-file write as vault content."""
+        s = self.tmp / "scratch"
+        for cmd in (f'S={s}; cat > $S/src.md <<\'EOF\'\nx\nEOF',
+                    'echo x > "$D/research.md"', "echo x > `pwd`/INBOX.md",
+                    'printf "a > Projects/alpha/research.md"',
+                    "echo 'see > INBOX.md for details'",
+                    f"cd {s}; cat > INBOX.md", f"cd {s} && cat > INBOX.md",
+                    f"cd {s} || exit; echo x >> Projects/alpha/research.md",
+                    f"cd {s}\necho x > INBOX.md",
+                    f"cd {s} && sed -i '' 's/a/b/' INBOX.md"):
+            with self.subTest(cmd=cmd):
+                self.assertAllow(self.bash(cmd, cwd=self.vault))
+
+    def test_a_cd_into_the_vault_is_followed(self):
+        for cmd in (f"cd {self.vault}/Projects; cat > alpha/research.md",
+                    f"cd {self.vault}/Projects && echo x >> alpha/research.md",
+                    f"cd {self.vault} && cp /tmp/a.md INBOX.md",
+                    f'cd "{self.vault}/Projects/alpha"; tee -a research.md < /tmp/x'):
+            with self.subTest(cmd=cmd):
+                self.assertQueueDeny(self.bash(cmd, cwd=self.tmp))
+
     def test_shell_reads_and_writes_elsewhere_are_allowed(self):
         t = self.vault / "Projects" / "alpha" / "research.md"
         for cmd in (f'cat "{t}"', f'grep -n x "{t}"', f'cp "{t}" /tmp/copy.md',

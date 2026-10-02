@@ -97,6 +97,19 @@ class SubmissionsTest(unittest.TestCase):
         bad["entries"] = [{"id": "aws", "pattern": "AKIA[0-9A-Z]{16}", "definition": "a key"}]
         self.assertReject(bad, "unknown-key", "prose field in a Tier A slot")
 
+    def test_naming_exempt_is_a_list_of_checked_patterns(self):
+        """0.19.0: `exempt` is optional, and every item goes through the pattern checks."""
+        base = {"lang": "python", "construct": "function", "style": "snake"}
+        self.assertReady(pack(slot="naming", name="conventions", entries=[dict(base)]))
+        self.assertReady(pack(slot="naming", name="conventions", entries=[
+            dict(base, exempt=["^setUp$", "^assert[A-Z][A-Za-z0-9]*$"])]))
+        self.assertReject(pack(slot="naming", name="conventions", entries=[
+            dict(base, exempt="^setUp$")]), "bad-type")
+        self.assertReject(pack(slot="naming", name="conventions", entries=[
+            dict(base, exempt=[])]), "bad-type")
+        self.assertReject(pack(slot="naming", name="conventions", entries=[
+            dict(base, exempt=["(a+)+$"])]), "pattern-unsafe")
+
     def test_reachable_slot_must_declare_tier_d(self):
         self.assertReject(pack(slot="vocabulary", tier="A",
                                entries=[{"term": "alpha", "definition": "A trading signal."}]),

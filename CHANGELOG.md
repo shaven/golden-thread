@@ -11,6 +11,14 @@ release's own summary line, kept short rather than reconstructed after the fact.
 
 ---
 
+## gt 0.19.0 — unreleased
+
+Batch 1 of the 2026-10-02 accepted requests: model and effort per plugin, a recall benchmark,
+prompt-relevant vault hints (off by default), supersession and expiry at read time, and five
+fixes to rough edges found installing 0.18.1. Version directories copied from 0.18.1; modules
+gt-lotr 0.1.2, gt-usage 0.1.5, gt-visualize 0.4.3 and gt-wiki 0.2.6 are patch bumps with
+`requires_gt >=0.19.0,<0.20.0`. Entries are filled in as each phase lands.
+
 ## gt 0.18.1 — 2026-10-02
 
 > **There is no published 0.18.0.** The release was cut as 0.18.0, then `install.sh` and

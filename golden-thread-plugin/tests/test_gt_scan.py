@@ -347,6 +347,75 @@ class LanguageLeafTest(ScanBase):
         d = json.loads(r.stdout)
         self.assertEqual([f for f in d["findings"] if "node_modules" in f["path"]], [])
 
+    def test_a_name_a_framework_requires_can_be_exempted(self):
+        """0.19.0: `exempt` lists names a naming rule must not flag (owner, 2026-10-02).
+
+        unittest only calls `setUp` and the `assert*` helpers by those camelCase names, so a
+        snake_case rule flagging them is noise that buries real findings -- 371 hits on gt's
+        own tree, nearly all of them this.
+        """
+        self.put_pack(pack("filetype", "ft", [{"match": "*.py", "lang": "python"}]))
+        self.put_pack(pack("construct", "c", [
+            {"lang": "python", "construct": "function",
+             "pattern": "^[ \\t]*def[ \\t]+([A-Za-z_][A-Za-z0-9_]{0,80})"}]))
+        self.put_pack(pack("naming", "n", [
+            {"lang": "python", "construct": "function", "style": "snake",
+             "exempt": ["^setUp$", "^assert[A-Z][A-Za-z0-9]*$"]}]))
+        self.put_pack(pack("encoding", "e", [
+            {"lang": "python", "charset": "utf-8", "eol": "lf", "bom": "never"}]))
+        self.write("t.py", "def setUp(self): pass\ndef assertAllowed(self): pass\n"
+                           "def BadName(): pass\ndef setUpX(): pass\n")
+        d = json.loads(self.run_leaf("--json").stdout)
+        names = sorted(re.search(r"'(\w+)'", f["message"]).group(1)
+                       for f in d["findings"] if f["path"] == "t.py")
+        self.assertEqual(names, ["BadName", "setUpX"], d)
+
+
+class ShippedPackFalsePositives(unittest.TestCase):
+    """The core packs as shipped, against the false positives found scanning gt's own tree."""
+
+    def core_entry(self, slot_file, match):
+        entries = json.loads((GT / "packs" / "core" / slot_file).read_text())["entries"]
+        return next(e for e in entries if all(e.get(k) == v for k, v in match.items()))
+
+    def test_core_python_function_naming_exempts_unittest_names(self):
+        e = self.core_entry("naming.conventions.pack.json",
+                            {"lang": "python", "construct": "function"})
+        exempt = [re.compile(x) for x in e.get("exempt", [])]
+        hit = lambda n: any(x.search(n) for x in exempt)
+        for name in ("setUp", "tearDown", "setUpClass", "tearDownClass", "setUpModule",
+                     "tearDownModule", "asyncSetUp", "asyncTearDown", "assertAllowed",
+                     "assertCurrent"):
+            self.assertTrue(hit(name), name)
+        for name in ("BadName", "setUpThing", "assert_ok_but_snake", "doThing", "do_get",
+                     "do_Post"):
+            self.assertFalse(hit(name), name)
+
+    def test_core_python_function_naming_exempts_http_server_handlers(self):
+        """http.server dispatches on `do_<METHOD>`; `do_POST` is the stdlib's name, not ours."""
+        e = self.core_entry("naming.conventions.pack.json",
+                            {"lang": "python", "construct": "function"})
+        exempt = [re.compile(x) for x in e.get("exempt", [])]
+        for name in ("do_GET", "do_POST", "do_HEAD", "do_OPTIONS"):
+            self.assertTrue(any(x.search(name) for x in exempt), name)
+
+    def test_a_leading_underscore_marks_a_private_class_not_a_bad_name(self):
+        """`class _Usage` is PascalCase plus Python's private prefix (lotr.py:64)."""
+        from _harness import load_module
+        ok = load_module(GT / "scripts" / "gt_scan_language.py", "gt_scan_language_t").STYLE_OK
+        for name in ("_Usage", "_HttpServer", "Usage"):
+            self.assertTrue(ok["pascal"].match(name), name)
+        for name in ("_usage", "__Usage", "_", "usage"):
+            self.assertFalse(ok["pascal"].match(name), name)
+
+    def test_bare_except_rule_accepts_an_underscore_exception_name(self):
+        """`except _Usage as e:` names its exception; the rule read `_` as bare (lotr.py:301)."""
+        e = self.core_entry("lint.common.pack.json", {"id": "py-bare-except"})
+        rx = next(c["not"]["regex"] for c in e["rule"]["all"] if "not" in c)
+        for named in ("except _Usage as e:", "except ValueError:", "except (A, B):"):
+            self.assertTrue(re.match(rx, named), named)
+        self.assertFalse(re.match(rx, "except:"))
+
 
 if __name__ == "__main__":
     unittest.main()

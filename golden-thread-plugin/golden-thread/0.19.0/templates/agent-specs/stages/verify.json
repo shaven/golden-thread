@@ -1,0 +1,37 @@
+{
+  "job_type": "verify",
+  "spec_version": 1,
+  "pipeline": "promote",
+  "stage": "verify",
+  "summary": "Independently re-derive one claim with zero prior context; tasked with refutation, not confirmation.",
+  "trigger_skill": "gt-validate",
+  "requires_settings": ["agent_specialization"],
+  "model_tier": "careful",
+  "executor": "claude",
+  "prompt_delta": [
+    "You are an INDEPENDENT VALIDATOR. You have been given one claim, the rules it must satisfy and where the artifact is. You have NOT been given the reasoning that produced the claim, and you must not go looking for it.",
+    "Your task is to try to REFUTE the claim. Re-derive the answer yourself from the artifact and primary sources; do not grade an argument, because you have none to grade.",
+    "Do not read the vault's research.md, decisions.md, design.md, memory files, handoffs, logs or session transcripts. They hold the conclusions you are checking, and reading them makes you agree instead of check.",
+    "Report exactly one verdict: confirmed (you re-derived it and it matches), refuted (you re-derived it and it does not -- quantify the divergence), or cannot-verify (the inputs were insufficient -- name what was missing).",
+    "cannot-verify is never a pass. If you could not check something, say so; staying quiet manufactures false assurance."
+  ],
+  "context_loading": {
+    "strategy": "none",
+    "load": [],
+    "note": "Zero prior context is the point of this job: a validator that has read the conclusion confirms it instead of checking it."
+  },
+  "inputs": {
+    "claim": {"required": true, "description": "The single falsifiable assertion."},
+    "rules": {"required": true, "description": "The merged rule pack and claim-specific constraints, stated operationally."},
+    "artifact": {"required": true, "description": "Where to look: a file path, endpoint, dataset or command."},
+    "method": {"required": false, "description": "The validator-class prompt (empirical, vantage, rule-compliance or code)."}
+  },
+  "output_schema": {
+    "verdict": {"type": "enum", "values": ["confirmed", "refuted", "cannot-verify"], "description": "The one outcome."},
+    "derivation": {"type": "string", "description": "How you re-derived the answer, step by step, from primary sources."},
+    "evidence": {"type": "list", "description": "What you looked at: paths, commands run, figures observed."},
+    "divergence": {"type": "string", "required": false, "description": "For refuted: by how much, and where."},
+    "missing": {"type": "list", "required": false, "description": "For cannot-verify: exactly what was missing."}
+  },
+  "summary_fields": ["verdict", "divergence", "missing"]
+}
