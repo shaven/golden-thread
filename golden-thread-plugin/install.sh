@@ -796,6 +796,7 @@ LIST_PLUGINS=no
 REQUIRE_CHECKSUM="${GT_REQUIRE_CHECKSUM:+yes}"; REQUIRE_CHECKSUM="${REQUIRE_CHECKSUM:-no}"
 LIST_MODULES=no
 MODULE_FLAGS=()          # "with:NAME" / "without:NAME", in the order given
+MODEL_PROFILE=""         # --model-profile average|very-high|inherit (0.19.0)
 ORIG_ARGS=("$@")         # kept for the re-run after a migration changes a module choice
 POSITIONAL=""
 while [ $# -gt 0 ]; do
@@ -813,6 +814,8 @@ while [ $# -gt 0 ]; do
     --vault)    VAULT_ARG="${2:-}"; shift 2 || true ;;
     --vault=*)  VAULT_ARG="${1#--vault=}"; shift ;;
     --no-vault) NO_VAULT=yes; shift ;;
+    --model-profile)   MODEL_PROFILE="${2:-}"; shift 2 || true ;;
+    --model-profile=*) MODEL_PROFILE="${1#--model-profile=}"; shift ;;
     --require-checksum) REQUIRE_CHECKSUM=yes; shift ;;
     -h|--help)
       cat <<'USAGE'
@@ -835,6 +838,8 @@ install.sh — install the Golden Thread Claude Code plugins (gt and every plugi
   ./install.sh --without NAME         remove module NAME and keep it off (repeatable);
                                       remembered in ~/.claude/golden-thread/install-choices.json
   ./install.sh --list-modules         print each module, its state and why, install nothing
+  ./install.sh --model-profile P      the model and effort each skill runs at: average (a new
+                                      install's default), very-high, or inherit; remembered
   ./install.sh --help                 this text
 
 A tree published by dev/sync-gt-src.sh carries SHA256SUMS at the repository root. Before
@@ -1753,6 +1758,41 @@ save(settings, d)
 print("Registered in settings.json  (backups in %s)" % BACKUPS)
 EOF
 
+
+# 5b. Model and effort per skill (0.19.0, request model-and-effort-per-plugin). The profile is,
+# in order: --model-profile this run, the recorded choice, `average` on a NEW install, a one-time
+# question on an interactive upgrade (average preselected), else `inherit` -- a scripted upgrade
+# changes nothing unasked and does not use up the question. Written into the installed copies
+# only; the release source is never edited.
+MP="$SRC/scripts/gt_model_policy.py"
+if [ -f "$MP" ]; then
+  _mp_vault=()
+  if [ -n "${VAULT_ARG:-}" ]; then _mp_vault=(--vault "$VAULT_ARG"); fi
+  _prof="$MODEL_PROFILE"
+  if [ -z "$_prof" ]; then _prof=$(python3 -B "$MP" current --home "$HOME" 2>/dev/null || true); fi
+  if [ -z "$_prof" ]; then
+    if [ -z "${GT_PREVIOUS_RELEASE:-}" ]; then
+      _prof=average
+    elif [ -t 0 ] && [ -t 1 ]; then
+      echo ""
+      echo "gt can now run each skill at a model and effort that fits it:"
+      for _p in average very-high inherit; do python3 -B "$MP" table --profile "$_p" ${_mp_vault[@]+"${_mp_vault[@]}"} | sed 's/^/  /'; done
+      printf 'Model profile [A = average / v = very-high / i = inherit (as before)]: '
+      read -r _ans </dev/tty || _ans=""
+      case "$_ans" in v|V|very-high) _prof=very-high ;; i|I|inherit) _prof=inherit ;; *) _prof=average ;; esac
+    else
+      _prof=inherit
+      echo "Model profile: inherit (an upgrade with no terminal changes nothing; choose with --model-profile)"
+      _MP_NO_RECORD=yes
+    fi
+  fi
+  if [ "${_MP_NO_RECORD:-}" != yes ]; then
+    python3 -B "$MP" choose "$_prof" --home "$HOME" >/dev/null || { echo "✗ --model-profile: $_prof is not average, very-high or inherit"; exit 1; }
+  fi
+  python3 -B "$MP" table --profile "$_prof" ${_mp_vault[@]+"${_mp_vault[@]}"} || true
+  python3 -B "$MP" apply --profile "$_prof" --home "$HOME" ${_mp_vault[@]+"${_mp_vault[@]}"} || \
+    echo "  ⚠ some skills were left at the session's model (a refused combination is named above)"
+fi
 
 # 6. Register the SessionStart / PreCompact / SessionEnd hooks.
 #

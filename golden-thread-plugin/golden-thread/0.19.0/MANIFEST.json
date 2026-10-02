@@ -260,6 +260,10 @@
    "bytes": 11193,
    "sha256": "e548f01cf68d858ab78c3f5c7897d1b6e722771d43fb757eaa1482065f3c8351"
   },
+  "scripts/gt_model_policy.py": {
+   "bytes": 12051,
+   "sha256": "e3e0fe80f8c12c408dc876ce55560f62c684d5357f70a679cc710950358a7729"
+  },
   "scripts/gt_model_prices.json": {
    "bytes": 730,
    "sha256": "60da1783f4ef7519544fa5b51755a7153656b7b0b1cf882aab5e6d765df3cd7c"
@@ -629,7 +633,7 @@
    "sha256": "05a5e61333b0ba5d6f97866735268f7f99ff354d9502b2b05e0e512a86f82a6b"
   }
  },
- "generated": "2026-10-02T11:16:46",
+ "generated": "2026-10-02T11:29:35",
  "hooks": [
   {
    "args": [

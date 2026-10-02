@@ -1,0 +1,299 @@
+#!/usr/bin/env python3
+"""gt_model_policy.py -- the model and effort each INSTALLED gt skill runs at (0.19.0).
+
+    gt_model_policy.py table   [--profile P] [--vault V]       # what a profile means, printed
+    gt_model_policy.py choose  P [--home H]                    # record the profile
+    gt_model_policy.py current [--home H]                      # the recorded profile, or nothing
+    gt_model_policy.py apply   [--profile P] [--home H] [--vault V]
+    gt_model_policy.py verify  [--home H]                      # exit 1 on a hand edit
+    gt_model_policy.py show    [--home H] [--vault V] [--json]
+
+Claude Code honours `model:` and `effort:` in a skill's frontmatter. gt writes them into the
+INSTALLED copies only -- the plugin cache and the marketplace directory -- never the release
+source, and records exactly what it wrote in ~/.claude/golden-thread/model-policy-applied.json,
+so a later edit to the same field is told apart from gt's own work (`verify`).
+
+Profiles (owner, 2026-10-02):
+  average    the intent pack (gt_model): fast haiku with no effort, balanced sonnet medium,
+             deep opus high. The shipped default for a new install.
+  very-high  opus xhigh for every skill.
+  inherit    nothing written: every skill runs on the session's model and effort, as before.
+
+Resolution for one skill, highest first: the user's per-skill override, the per-plugin override,
+the skill's model_intent through the profile, else inherit. An effort the model does not accept
+is refused, never written (gt_model.effort_problem) -- Claude Code would lower it silently.
+Exit: 0 ok, 1 a problem (refused combination, verify drift), 2 usage.
+"""
+import argparse
+import json
+import os
+import sys
+import time
+from pathlib import Path
+
+HERE = Path(__file__).resolve().parent
+sys.path.insert(0, str(HERE))
+sys.dont_write_bytecode = True
+import gt_model  # noqa: E402
+
+OK, PROBLEM, USAGE = 0, 1, 2
+MARKET = "golden-thread-plugin"
+PROFILES = ("average", "very-high", "inherit")
+VERY_HIGH = ("opus", "xhigh")
+FIELDS = ("model", "effort")
+
+
+def paths(home):
+    home = Path(home or Path.home()).expanduser()
+    return {"home": home,
+            "choices": home / ".claude" / "golden-thread" / "install-choices.json",
+            "record": home / ".claude" / "golden-thread" / "model-policy-applied.json",
+            "installed": home / ".claude" / "plugins" / "installed_plugins.json",
+            "market": home / ".claude" / "plugins" / "marketplaces" / MARKET / "plugins"}
+
+
+def _load(p, default):
+    try:
+        return json.loads(Path(p).read_text(encoding="utf-8"))
+    except Exception:
+        return default
+
+
+def _atomic(p, data):
+    p = Path(p)
+    p.parent.mkdir(parents=True, exist_ok=True)
+    tmp = p.with_name(p.name + ".tmp")
+    tmp.write_text(json.dumps(data, indent=2) + "\n", encoding="utf-8")
+    os.replace(tmp, p)
+
+
+def model_choices(P):
+    d = _load(P["choices"], {})
+    m = d.get("model") if isinstance(d, dict) else None
+    m = m if isinstance(m, dict) else {}
+    return {"profile": m.get("profile"), "plugins": m.get("plugins") or {},
+            "skills": m.get("skills") or {}}
+
+
+def installed_skills(P):
+    """-> [(plugin, skill name, path)] for every installed copy of a gt-marketplace skill."""
+    out = []
+    data = _load(P["installed"], {})
+    plugins = data.get("plugins", data) if isinstance(data, dict) else {}
+    for key, entries in (plugins.items() if isinstance(plugins, dict) else []):
+        name, _, market = key.partition("@")
+        if market != MARKET:
+            continue
+        for e in entries if isinstance(entries, list) else [entries]:
+            root = Path(str((e or {}).get("installPath") or ""))
+            for f in sorted(root.glob("skills/*/SKILL.md")):
+                out.append((name, f.parent.name, f))
+        for f in sorted((P["market"] / name).glob("skills/*/SKILL.md")):
+            out.append((name, f.parent.name, f))
+    return out
+
+
+def resolve_one(plugin, skill, path, profile, choices, vault):
+    """-> (model or None, effort or None, source). Raises ValueError on a refused effort."""
+    for scope, key in (("skill", skill), ("plugin", plugin)):
+        o = choices[scope + "s"].get(key)
+        if isinstance(o, dict) and o.get("model"):
+            bad = gt_model.effort_problem(o["model"], o.get("effort"))
+            if bad:
+                raise ValueError("%s override for %s: %s" % (scope, key, bad))
+            return o["model"], o.get("effort"), "%s override" % scope
+    if profile == "inherit":
+        return None, None, "inherit"
+    intent = gt_model.read_intent(path)[0]
+    if intent not in gt_model.INTENTS:
+        return None, None, "inherit (no model_intent)"
+    if profile == "very-high":
+        return VERY_HIGH[0], VERY_HIGH[1], "very-high profile"
+    res = gt_model.resolve(intent, vault)            # raises ValueError on a refused effort
+    if not res.get("model"):
+        return None, None, "inherit (intent unmapped)"
+    return res["model"], res.get("effort"), "intent %s (average profile)" % intent
+
+
+def rewrite(path, model, effort):
+    """Set (or remove) model:/effort: in a SKILL.md's frontmatter. -> True when it changed."""
+    text = Path(path).read_text(encoding="utf-8")
+    lines = text.split("\n")
+    if not lines or lines[0].strip() != "---":
+        return False
+    end = next((i for i in range(1, len(lines)) if lines[i].strip() == "---"), None)
+    if end is None:
+        return False
+    head = [l for l in lines[1:end] if l.split(":", 1)[0].strip() not in FIELDS]
+    if model:
+        head.append("model: %s" % model)
+        if effort:
+            head.append("effort: %s" % effort)
+    new = "\n".join([lines[0]] + head + lines[end:])
+    if new == text:
+        return False
+    Path(path).write_text(new, encoding="utf-8")
+    return True
+
+
+def current_fields(path):
+    lines = Path(path).read_text(encoding="utf-8").split("\n")
+    end = next((i for i in range(1, len(lines)) if lines[i].strip() == "---"), len(lines))
+    got = {}
+    for l in lines[1:end]:
+        k, _, v = l.partition(":")
+        if k.strip() in FIELDS:
+            got[k.strip()] = v.strip()
+    return got.get("model"), got.get("effort")
+
+
+def plan(P, profile, vault):
+    choices = model_choices(P)
+    profile = profile or choices["profile"] or "inherit"
+    rows, refused = [], []
+    for plugin, skill, path in installed_skills(P):
+        try:
+            model, effort, source = resolve_one(plugin, skill, path, profile, choices, vault)
+        except ValueError as exc:
+            refused.append("%s/%s: %s" % (plugin, skill, exc))
+            continue
+        rows.append({"plugin": plugin, "skill": skill, "path": str(path), "model": model,
+                     "effort": effort, "source": source})
+    return profile, rows, refused
+
+
+def cmd_apply(a):
+    P = paths(a.home)
+    if a.profile and a.profile not in PROFILES:
+        return _bad_profile(a.profile)
+    profile, rows, refused = plan(P, a.profile, a.vault)
+    changed = sum(rewrite(r["path"], r["model"], r["effort"]) for r in rows)
+    _atomic(P["record"], {"version": 1, "profile": profile,
+                          "applied": time.strftime("%Y-%m-%dT%H:%M:%S%z"),
+                          "files": {r["path"]: {"model": r["model"], "effort": r["effort"],
+                                                "source": r["source"]} for r in rows}})
+    print("model policy: profile %s -- %d installed skill file(s), %d changed"
+          % (profile, len(rows), changed))
+    for r in refused:
+        print("  REFUSED %s" % r, file=sys.stderr)
+    return PROBLEM if refused else OK
+
+
+def cmd_verify(a):
+    P = paths(a.home)
+    rec = _load(P["record"], None)
+    if not isinstance(rec, dict):
+        print("model policy: never applied on this machine -- nothing to verify")
+        return OK
+    drift = []
+    recorded = rec.get("files") or {}
+    for _plugin, skill, path in installed_skills(P):
+        want = recorded.get(str(path))
+        have = current_fields(path)
+        if want is None:
+            if any(have):
+                drift.append("%s: model/effort %s present but not written by the policy"
+                             % (path, have))
+            continue
+        for k, h in zip(FIELDS, have):
+            if (want.get(k) or None) != (h or None):
+                drift.append("%s (%s): %s is %r, the policy wrote %r"
+                             % (path, skill, k, h, want.get(k)))
+    for d in drift:
+        print("  DRIFT " + d)
+    print("model policy: %s" % ("%d file(s) edited since the policy wrote them" % len(drift)
+                                if drift else "every installed skill is as the policy wrote it"))
+    return PROBLEM if drift else OK
+
+
+def profile_table(profile, vault):
+    if profile == "inherit":
+        return [(i, None, None) for i in gt_model.INTENTS]
+    if profile == "very-high":
+        return [(i,) + VERY_HIGH for i in gt_model.INTENTS]
+    out = []
+    for i in gt_model.INTENTS:
+        r = gt_model.resolve(i, vault)
+        out.append((i, r.get("model"), r.get("effort")))
+    return out
+
+
+def cmd_table(a):
+    profile = a.profile or model_choices(paths(a.home))["profile"] or "average"
+    if profile not in PROFILES:
+        return _bad_profile(profile)
+    rows = profile_table(profile, a.vault)
+    print("Model profile: %s" % profile)
+    for intent, model, effort in rows:
+        print("  %-9s %s" % (intent, "session model and effort" if not model
+                             else "%s · %s" % (model, effort or "no effort setting")))
+    if any(e in ("high", "xhigh", "max") for _i, _m, e in rows):
+        print("  Note: efforts above medium use more of your Claude allowance.")
+    return OK
+
+
+def cmd_choose(a):
+    if a.profile not in PROFILES:
+        return _bad_profile(a.profile)
+    P = paths(a.home)
+    d = _load(P["choices"], {})
+    d = d if isinstance(d, dict) else {}
+    d.setdefault("version", 1)
+    d.setdefault("choices", {})      # the module-choice shape every other reader expects
+    d.setdefault("model", {})["profile"] = a.profile
+    _atomic(P["choices"], d)
+    print("model policy: profile %s recorded" % a.profile)
+    return OK
+
+
+def cmd_current(a):
+    p = model_choices(paths(a.home))["profile"]
+    if p:
+        print(p)
+    return OK
+
+
+def cmd_show(a):
+    profile, rows, refused = plan(paths(a.home), None, a.vault)
+    if a.json:
+        print(json.dumps({"profile": profile, "skills": rows, "refused": refused}, indent=2))
+        return PROBLEM if refused else OK
+    print("Model profile: %s" % profile)
+    for r in rows:
+        print("  %-14s %-22s %-8s %-8s %s" % (r["plugin"], r["skill"], r["model"] or "session",
+                                             r["effort"] or "-", r["source"]))
+    for r in refused:
+        print("  REFUSED %s" % r)
+    return PROBLEM if refused else OK
+
+
+def _bad_profile(p):
+    print("gt_model_policy: profile %r is not one of %s" % (p, ", ".join(PROFILES)),
+          file=sys.stderr)
+    return USAGE
+
+
+def main(argv=None):
+    ap = argparse.ArgumentParser(prog="gt_model_policy.py", description=__doc__.split("\n\n")[0])
+    common = argparse.ArgumentParser(add_help=False)
+    common.add_argument("--home", help="the HOME whose install is changed (default: yours)")
+    common.add_argument("--vault", help="vault whose local packs apply (Core rule 2: named)")
+    sub = ap.add_subparsers(dest="cmd", required=True)
+    for name, fn in (("apply", cmd_apply), ("table", cmd_table)):
+        p = sub.add_parser(name, parents=[common])
+        p.add_argument("--profile")
+        p.set_defaults(fn=fn)
+    p = sub.add_parser("choose", parents=[common])
+    p.add_argument("profile")
+    p.set_defaults(fn=cmd_choose)
+    for name, fn in (("current", cmd_current), ("verify", cmd_verify)):
+        sub.add_parser(name, parents=[common]).set_defaults(fn=fn)
+    p = sub.add_parser("show", parents=[common])
+    p.add_argument("--json", action="store_true")
+    p.set_defaults(fn=cmd_show)
+    a = ap.parse_args(argv)
+    return a.fn(a)
+
+
+if __name__ == "__main__":
+    sys.exit(main())

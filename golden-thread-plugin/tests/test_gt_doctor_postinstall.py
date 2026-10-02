@@ -249,6 +249,54 @@ class InstallRecordsOneInterpreterForEveryJob(InstalledMachine):
         self.assertNotIn("reload of", self.install_proc.stdout + self.install_proc.stderr)
 
 
+def _cache_skill(case, name):
+    hits = sorted((case.home / ".claude/plugins/cache").glob("*/gt/*/skills/%s/SKILL.md" % name))
+    case.assertTrue(hits, "no installed %s" % name)
+    head = hits[-1].read_text(encoding="utf-8").split("\n---", 1)[0]
+    got = dict(l.split(":", 1) for l in head.splitlines()[1:] if ":" in l)
+    return (got.get("model", "").strip() or None, got.get("effort", "").strip() or None)
+
+
+class ANewInstallRunsTheAverageProfile(InstalledMachine):
+    """0.19.0 (request model-and-effort-per-plugin): a new install defaults to `average` and
+    writes it into the installed copies; the release source stays byte-identical."""
+
+    def test_fast_balanced_and_deep_skills_carry_the_average_profile(self):
+        self.assertEqual(_cache_skill(self, "gt-list"), ("haiku", None))
+        self.assertEqual(_cache_skill(self, "gt-work"), ("sonnet", "medium"))
+        self.assertEqual(_cache_skill(self, "gt-plan"), ("opus", "high"))
+        self.assertIn("Model profile: average", self.install_proc.stdout)
+
+    def test_the_release_source_carries_no_model_or_effort(self):
+        for f in (self.repo / "golden-thread").glob("*/skills/*/SKILL.md"):
+            head = f.read_text(encoding="utf-8").split("\n---", 1)[0]
+            self.assertNotRegex(head, r"(?m)^(model|effort):", str(f))
+
+
+def _previous_gt_install(case):
+    """An earlier gt is recorded as installed, so this install is an UPGRADE."""
+    p = case.home / ".claude" / "plugins" / "installed_plugins.json"
+    p.parent.mkdir(parents=True, exist_ok=True)
+    old = case.home / ".claude/plugins/cache/golden-thread-plugin/gt/0.18.1"
+    old.mkdir(parents=True, exist_ok=True)
+    p.write_text(json.dumps({"version": 2, "plugins": {"gt@golden-thread-plugin": [
+        {"scope": "user", "installPath": str(old), "version": "0.18.1"}]}}))
+
+
+class AScriptedUpgradeKeepsInherit(InstalledMachine):
+    """An upgrade with no terminal changes nothing unasked: inherit, no fields written, and the
+    one-time question is not used up (nothing recorded)."""
+    PRE_INSTALL = _previous_gt_install
+
+    def test_no_model_or_effort_is_written_and_nothing_is_recorded(self):
+        self.assertEqual(self.install_proc.returncode, 0, self.install_proc.stdout[-2000:])
+        for name in ("gt-list", "gt-work", "gt-plan"):
+            self.assertEqual(_cache_skill(self, name), (None, None), name)
+        choices = self.home / ".claude/golden-thread/install-choices.json"
+        rec = json.loads(choices.read_text()) if choices.exists() else {}
+        self.assertNotIn("profile", rec.get("model", {}))
+
+
 class EveryCompletedRunWritesTheReceipt(InstalledMachine):
     """0.19.0 (request gate-receipt-only-written-at-session-start). The receipt was written only
     on the SessionStart hook path, so a manual run that passed left the previous version's
