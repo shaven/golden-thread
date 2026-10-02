@@ -56,6 +56,8 @@ COVERED = {
     "scripts/gt_broker.py": ("drain",),
     # 0.18.0: /gt:gt-close and /gt:gt-handle -- closes tasks, handoffs and projects
     "scripts/gt_close.py": ("project", "task", "handoff"),
+    # 0.18.0: --archive and --supersede queue writes to research.md (--demote already moved notes)
+    "scripts/gt_optimize.py": (),
 }
 
 EXEMPT = {

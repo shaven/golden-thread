@@ -218,6 +218,31 @@ After writing, check: does any finding apply beyond this project?
 
 Ask: "This looks like it applies beyond `<project-slug>`. Should I add it now, or flag for `/gt:gt-promote` later?"
 
+### Two mechanical passes after the writes land (0.18.0)
+
+Once the queue has been drained, run both. Each is read-only, prints **nothing** when it finds
+nothing (say nothing then either), and honours its setting under `--work`
+(`memory_contradiction_check`, `promotion_candidates`):
+
+```bash
+# memory notes you wrote or changed this session, against their same-topic neighbours
+python3 <base_dir>/../../scripts/gt_memory_check.py --vault "<vault>" --project <slug> --work \
+    [--changed memory/<note>.md ...]
+# promotion candidates a script can see
+python3 <base_dir>/../../scripts/gt_promote_detect.py --vault "<vault>" --project <slug> --work
+```
+
+- **Contradictions**: pass the memory notes you wrote with `--changed` (without it, the notes
+  git reports as modified are used). Show each pair it prints — both paths, the conflicting
+  sentences — and ask the question it asks: *same fact? which is current? update the older or
+  link it to the newer?* Change nothing unless the user decides, and then through the queue.
+- **Promotion candidates**: a memory note edited in 3 of the last 5 memory commits
+  (→ research.md / decisions.md), research.md sections overlapping another project's by the
+  `promotion_overlap` setting (→ Knowledge/), and global-memory notes naming a project
+  (gt-lint's `global-scope-leak` → demotion). Show each with its one-line justification and
+  destination; the user accepts, skips or defers each. Nothing is promoted without a yes —
+  accepted ones go through `/gt:gt-promote` or `gt_optimize.py --demote`.
+
 ## Log Entry
 
 Add the line with the tool — **never append to `log.md` by hand.** It is generated

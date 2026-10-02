@@ -421,6 +421,72 @@ SETTINGS = {
     # installed is a module choice (install.sh --with/--without demo, recorded in
     # ~/.claude/golden-thread/install-choices.json). A user's install_demo key in
     # vault-config.json is left alone; a later migration removes it.
+    # -- 0.18.0: memory and gt-optimize ------------------------------------------------
+    "knowledge_access_log": {
+        "default": "on",
+        "values": ["off", "on"],
+        "summary": "Log each Read of a Knowledge/ page to <vault>/usage/knowledge.jsonl (local, never committed).",
+        "detail": (
+            "on   the log_knowledge_read hook (PostToolUse on Read) appends one line per\n"
+            "     Knowledge page read: page, short session id, date  (default)\n"
+            "off  nothing is logged; gt-optimize's knowledge-unused finding then has no new\n"
+            "     evidence and reports from whatever the log already holds\n"
+            "\n"
+            "Git shows when a page was WRITTEN, never whether anyone READ it, so a page written\n"
+            "once and never consulted looked exactly like one read every week. The log lives\n"
+            "in usage/, which the hook makes git-ignored with its own usage/.gitignore."),
+    },
+    "optimize_session_days": {
+        "default": "30",
+        "values": ["7", "30", "90", "180"],
+        "summary": "Window, in days, for gt-optimize's session member (prompt-cache cost).",
+        "detail": (
+            "How far back gt_optimize_session.py reads the Claude Code transcripts when\n"
+            "classifying cache writes (cold / growth / expiry / invalid). --days overrides it\n"
+            "for one run. A longer window catches a project untouched this month whose old\n"
+            "sessions were the largest cost; a shorter one reflects current habits."),
+    },
+    "optimize_avoidable_pct": {
+        "default": "50",
+        "values": ["25", "50", "65", "75"],
+        "summary": "gt_optimize_session.py --check with no PCT: exit 3 above this avoidable share.",
+        "detail": (
+            "The avoidable share is cache writes caused by expiry (a session idled past its\n"
+            "cache lifetime) or invalidation (the cached prefix changed), as a percentage of\n"
+            "all cache writes. `--check PCT` names a threshold for one run; this is the one\n"
+            "used when PCT is left out."),
+    },
+    "memory_contradiction_check": {
+        "default": "on",
+        "values": ["off", "on"],
+        "summary": "Whether /gt:gt-work checks memory notes it wrote against their neighbours for contradictions.",
+        "detail": (
+            "on   after write-back, gt_memory_check.py compares the memory notes written or\n"
+            "     changed this session with same-topic notes in the project, and shows each\n"
+            "     pair whose sentences disagree (enabled/disabled, a different value for the\n"
+            "     same key) with a question for you. Nothing is changed  (default)\n"
+            "off  the pass is skipped"),
+    },
+    "promotion_candidates": {
+        "default": "on",
+        "values": ["off", "on"],
+        "summary": "Whether /gt:gt-work lists promotion candidates it can detect mechanically.",
+        "detail": (
+            "on   after write-back, gt_promote_detect.py lists memory notes edited in 3 of\n"
+            "     the project's last 5 memory commits (-> research.md / decisions.md),\n"
+            "     research.md sections that overlap another project's (-> Knowledge/), and\n"
+            "     global-memory notes naming a project (gt_lint's global-scope-leak,\n"
+            "     -> demotion). Nothing is promoted without your yes  (default)\n"
+            "off  the pass is skipped"),
+    },
+    "promotion_overlap": {
+        "default": "80",
+        "values": ["60", "70", "80", "90"],
+        "summary": "Token overlap (%) at which two projects' research.md sections are a Knowledge/ candidate.",
+        "detail": (
+            "Overlap is the shared distinct words of two sections over the smaller section's\n"
+            "distinct words (no stemming). Lower finds more, and more noise."),
+    },
 }
 
 

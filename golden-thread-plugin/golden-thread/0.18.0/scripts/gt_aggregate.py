@@ -69,8 +69,12 @@ def looks_like_a_crash(proc):
     return ("Traceback (most recent call last)" in stderr) and not (proc.stdout or "").strip()
 
 
-def run_member(name, cmd, timeout=DEFAULT_TIMEOUT_S):
-    """-> a result dict. `ran` is True only when the member demonstrably did its work."""
+def run_member(name, cmd, timeout=DEFAULT_TIMEOUT_S, keep_raw=False):
+    """-> a result dict. `ran` is True only when the member demonstrably did its work.
+
+    keep_raw (0.18.0, gt_optimize): also return the member's stdout UNSANITISED under "raw",
+    for a caller that parses a member's --json itself. Sanitised output is prefixed per line and
+    capped, which is right for a terminal and breaks a JSON document. Never print "raw"."""
     if cmd is None:
         return {"member": name, "ran": False, "exit": None, "status": "could-not-run",
                 "detail": "not installed", "output": ""}
@@ -89,13 +93,16 @@ def run_member(name, cmd, timeout=DEFAULT_TIMEOUT_S):
                 "detail": "crashed: %s" % (proc.stderr or "").strip().split("\n")[-1][:200],
                 "output": sanitise(proc.stderr, name)}
     ran = proc.returncode in (CLEAN, FINDINGS)
-    return {"member": name, "ran": ran, "exit": proc.returncode,
+    result = {"member": name, "ran": ran, "exit": proc.returncode,
             "status": ("clean" if proc.returncode == CLEAN else "findings") if ran
                       else "could-not-run",
             # stderr is ALWAYS kept, for members that ran too: a warning on the way to a
             # successful exit is still something the reader needs.
             "detail": (proc.stderr or "").strip()[:400],
             "output": sanitise(proc.stdout, name)}
+    if keep_raw:
+        result["raw"] = proc.stdout or ""
+    return result
 
 
 def resolve_wanted(declared, installed, only):

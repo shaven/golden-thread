@@ -79,6 +79,7 @@ NOT_REGISTERED = {
     "gt_paths.py": "a library the hooks import; it is not a hook",
     "known_events.json": "data: gt_doctor hooks-schema allowlist of Claude Code events (0.18.0)",
     "known_tools.json": "data: gt_doctor hooks-schema allowlist of Claude Code tools (0.18.0)",
+    "log_knowledge_read.py": "called by log_knowledge_read.sh, not by the harness",
 }
 
 

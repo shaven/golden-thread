@@ -1,12 +1,46 @@
 """gt_optimize.py -- find content that costs context, and move it to where it costs less.
 
 Memory files are read into every session. A duplicated fact is paid for on every turn, in every
-project, forever. This finds that waste. It never REMOVES anything -- the only thing it writes
-is a demotion, which moves a note somewhere cheaper and leaves a pointer behind.
+project, forever. This finds that waste. It never REMOVES anything -- what it writes is a
+demotion, an archive or a supersede mark, each of which moves or marks content and leaves a
+pointer behind.
 
-  gt_optimize.py --vault V [--project SLUG] [--json]        report
-  gt_optimize.py --vault V --demote <path>                  move one note down a tier
-  gt_optimize.py --vault V --demote <path> --apply          ... and actually move it
+  gt_optimize.py --vault V [--project SLUG] [--only vault,session] [--cost] [--days N] [--json]
+  gt_optimize.py --vault V --demote <path> [--to TIER] [--project SLUG] [--apply | --dry-run]
+  gt_optimize.py --vault V --archive --project SLUG --before YYYY-MM-DD [--apply | --dry-run]
+  gt_optimize.py --vault V --supersede --file REL --entry HEADING --by HEADING [--apply | --dry-run]
+  gt_optimize.py --vault V --member vault [--project SLUG] [--cost] [--unused-days N] [--json]
+
+AN AGGREGATOR OVER TWO MEMBERS (0.18.0), run through gt_aggregate like gt_scan and gt_allin:
+
+    vault     what the vault STORES that a session pays for: duplicated facts, bloated memory,
+              dead index rows, relative dates (as before), plus single-project globals,
+              never-read Knowledge pages, and the open cost of every project. Paid every
+              session, forever. It is this file, run as `--member vault`.
+    session   what a session CARRIES: prompt-cache writes classified by cause, the avoidable
+              share, context weight per session. Paid once per resume. gt_optimize_session.py.
+
+A bare run runs both and says `N of 2 member(s) ran`. A member that could not run -- no
+transcripts on this machine, a crash -- is reported as such and sets exit 3; it is never read as
+a clean result. `--only vault` is the report this tool printed before it became an aggregator,
+with the new finding kinds added to it.
+
+ARCHIVE AND SUPERSEDE (0.18.0). `research.md` is append-only and only ever grows, and a March
+finding sits above the April entry that corrected it with equal weight. Two actions, both dry
+runs unless `--apply`, both queued through gt_write_queue + gt_broker (Core rule 1), both refused
+while another live session claims the file:
+
+  --archive   moves every `## YYYY-MM-DD...` entry dated before --before out of
+              Projects/<slug>/research.md into research-archive-<YYYY>.md (by the entry's year),
+              and leaves one dated index line per moved entry under `## Archived entries`.
+              The archive is written and READ BACK first; research.md shrinks only once every
+              moved entry is verified on disk in its archive. A heading that is not a dated
+              entry is never touched. Nothing is deleted.
+  --supersede marks an entry superseded IN PLACE, with the `superseded_by:` idiom Sources/
+              already uses, as a quoted line directly under its heading. The entry stays.
+
+Summarising or rewriting memory is out of scope on purpose: a model compressing a long file
+drops the line that mattered, and nothing downstream can detect that it did.
 
 THE ACTION IS DEMOTION, NOT REMOVAL
 
@@ -53,10 +87,14 @@ The findings are still worth having, and the valuable ones were always the JUDGE
 anyway: two facts that say the same thing, a memory file that has outgrown its budget. Those
 needed a reader from the start.
 
-Exit: 0 nothing to report | 1 findings reported | 2 usage
+Exit (aggregate): 0 every member clean | 1 findings | 2 usage | 3 a member could not run
+Exit (--member vault): 0 nothing to report | 1 findings reported | 2 usage
+Exit (--archive / --supersede): 0 done or previewed | 1 refused | 2 usage | 3 a write did not land
+Exit (--demote): see gt_demote.py
 """
 
 import argparse
+import datetime
 import json
 import os
 import re
@@ -368,7 +406,208 @@ def duplicate_facts_across(vault, files_lines):
     return out
 
 
-def analyse(vault, project=None):
+# -- 0.18.0: what a project costs to open, and two vault-wide judgement findings ------------
+
+# What /gt:gt-open reads, in its order (skills/gt-open/SKILL.md, Step 3-4). memory/ notes are
+# NOT loaded -- only their index -- which is the whole point of that skill's lazy loading.
+OPEN_FILES = ("README.md", "source.md", "idea.md", "research.md", "decisions.md",
+              "design.md", "spec.md", "runbook.md", "memory/MEMORY.md")
+# Read once per session whichever project is opened (gt-open Step 2).
+OPEN_SHARED = ("Projects/CONVENTIONS.md", "Projects/PROTOCOL.md")
+# gt-open: "If it exceeds ~200 lines, do not read it whole -- read its ## headings ... plus the
+# most recent few." Costed the same way, so the number is what an open actually loads.
+RESEARCH_SKIM_LINES = 200
+RESEARCH_RECENT = 3
+CHARS_PER_TOKEN = 4             # an approximation, labelled as one wherever it is printed
+
+
+def _read_text(path):
+    try:
+        with open(path, encoding="utf-8", errors="replace") as fh:
+            return fh.read()
+    except OSError:
+        return None
+
+
+def _research_as_opened(text):
+    """-> (lines, chars, skimmed) for research.md the way gt-open reads it."""
+    lines = text.split("\n")
+    if len(lines) <= RESEARCH_SKIM_LINES:
+        return len(lines), len(text), False
+    heads = [ln for ln in lines if ln.startswith("## ")]
+    starts = [i for i, ln in enumerate(lines) if ln.startswith("## ")]
+    recent = lines[starts[-RESEARCH_RECENT]:] if len(starts) >= RESEARCH_RECENT else lines
+    seen = heads + [ln for ln in recent if not ln.startswith("## ")]
+    return len(seen), sum(len(ln) + 1 for ln in seen), True
+
+
+def project_dirs(vault):
+    """Top-level project folders (a README.md marks one). Sub-projects are opened on request
+    only, so they are not part of what opening the parent costs."""
+    root = os.path.join(vault, "Projects")
+    try:
+        names = sorted(os.listdir(root))
+    except OSError:
+        return []
+    return [n for n in names if os.path.isfile(os.path.join(root, n, "README.md"))]
+
+
+def open_cost(vault, project=None):
+    """-> what /gt:gt-open loads per project, in lines and approximate tokens."""
+    rows = []
+    for slug in ([project] if project else project_dirs(vault)):
+        base = os.path.join(vault, "Projects", slug)
+        files, lines_n, chars_n, skimmed = {}, 0, 0, False
+        for rel in OPEN_FILES:
+            text = _read_text(os.path.join(base, rel))
+            if text is None:
+                continue
+            if rel == "research.md":
+                n, c, skimmed = _research_as_opened(text)
+            else:
+                n, c = len(text.split("\n")), len(text)
+            files[rel] = n
+            lines_n += n
+            chars_n += c
+        if files:
+            rows.append({"project": slug, "lines": lines_n,
+                         "tokens_approx": chars_n // CHARS_PER_TOKEN, "files": files,
+                         "research_skimmed": skimmed})
+    shared_lines = shared_chars = 0
+    for rel in OPEN_SHARED:
+        text = _read_text(os.path.join(vault, rel))
+        if text is not None:
+            shared_lines += len(text.split("\n"))
+            shared_chars += len(text)
+    rows.sort(key=lambda r: -r["tokens_approx"])
+    return {"projects": rows,
+            "shared": {"lines": shared_lines, "tokens_approx": shared_chars // CHARS_PER_TOKEN,
+                       "files": list(OPEN_SHARED)},
+            "total_lines": sum(r["lines"] for r in rows),
+            "total_tokens_approx": sum(r["tokens_approx"] for r in rows),
+            "basis": "what /gt:gt-open reads; tokens ~ characters / %d" % CHARS_PER_TOKEN}
+
+
+def render_open_cost(cost):
+    out = ["\nOPEN COST -- what /gt:gt-open loads per project (tokens approximate)"]
+    for r in cost["projects"][:40]:
+        out.append("  %-34s %6d lines  ~%7d tokens%s" % (
+            r["project"], r["lines"], r["tokens_approx"],
+            "  (research.md skimmed: headings + newest %d)" % RESEARCH_RECENT
+            if r["research_skimmed"] else ""))
+    if len(cost["projects"]) > 40:
+        out.append("  ... and %d more" % (len(cost["projects"]) - 40))
+    out.append("  %-34s %6d lines  ~%7d tokens" % ("all projects", cost["total_lines"],
+                                                    cost["total_tokens_approx"]))
+    out.append("  %-34s %6d lines  ~%7d tokens  (once per session)" % (
+        "CONVENTIONS.md + PROTOCOL.md", cost["shared"]["lines"], cost["shared"]["tokens_approx"]))
+    return "\n".join(out)
+
+
+def _lint():
+    import gt_lint                                               # noqa: PLC0415
+    return gt_lint
+
+
+def single_project_globals(vault):
+    """JUDGEMENT: a global-memory note whose body names exactly ONE project.
+
+    The same evidence gt_lint's global-scope-leak reads (project slugs in a global-memory note,
+    honouring lint-declines.md), sharpened to the demotion case: a note naming several projects
+    may be genuinely cross-project, a note naming one is that project's memory charged to every
+    session of every other project. Whole-word matching, so `alpha` is not found in `alphabet`."""
+    gm = os.path.join(vault, "global-memory")
+    if not os.path.isdir(gm):
+        return []
+    try:
+        from pathlib import Path                                  # noqa: PLC0415
+        lint = _lint()
+        suppressed = lint.read_suppress_list(Path(vault))
+        is_suppressed = lint.is_suppressed
+    except Exception:                                            # noqa: BLE001
+        suppressed, is_suppressed = set(), (lambda *a, **k: False)
+    slugs = set()
+    for dirpath, dirnames, filenames in os.walk(os.path.join(vault, "Projects")):
+        dirnames[:] = [d for d in dirnames if d not in ("memory", ".git")]
+        if "README.md" in filenames and os.path.basename(dirpath) != "Projects":
+            slugs.add(os.path.basename(dirpath).lower())
+    out = []
+    for name in sorted(os.listdir(gm)):
+        if not name.endswith(".md") or name.upper() == "MEMORY.MD":
+            continue
+        rel = "global-memory/" + name
+        if is_suppressed(suppressed, rel, name):
+            continue
+        text = (_read_text(os.path.join(gm, name)) or "").lower()
+        hits = [s for s in sorted(slugs)
+                if re.search(r"(?<![\w-])%s(?![\w-])" % re.escape(s), text)
+                and not is_suppressed(suppressed, rel, name, s)]
+        if len(hits) == 1:
+            out.append(_finding(
+                "single-project-global", JUDGEMENT, rel, 1,
+                "names only project '%s', yet loads into every session of every project. "
+                "Demote it:  --demote %s --to project-memory --project %s"
+                % (hits[0], rel, hits[0]), detail={"project": hits[0]}))
+    return out
+
+
+USAGE_LOG = os.path.join("usage", "knowledge.jsonl")
+UNUSED_DAYS = 90
+
+
+def knowledge_reads(vault):
+    """-> ({page rel: last read date}, first logged date) or (None, None) with no log."""
+    path = os.path.join(vault, USAGE_LOG)
+    if not os.path.isfile(path):
+        return None, None
+    last, first = {}, None
+    with open(path, encoding="utf-8", errors="replace") as fh:
+        for line in fh:
+            try:
+                row = json.loads(line)
+                page, day = str(row["page"]), datetime.date.fromisoformat(str(row["date"]))
+            except (ValueError, KeyError, TypeError):
+                continue
+            if page not in last or day > last[page]:
+                last[page] = day
+            first = day if first is None or day < first else first
+    return last, first
+
+
+def knowledge_unused(vault, days=UNUSED_DAYS, today=None):
+    """JUDGEMENT: Knowledge pages with no read logged in `days` days, never-read first.
+
+    Reads come from usage/knowledge.jsonl, written by the log_knowledge_read hook (PostToolUse
+    on Read). With no log there is no evidence either way, so nothing is reported -- every page
+    would otherwise read as "never read" on the day logging was switched on. Lists candidates for
+    the owner; nothing is demoted or archived from here."""
+    last, first = knowledge_reads(vault)
+    if last is None:
+        return []
+    today = today or datetime.date.today()
+    kroot = os.path.join(vault, "Knowledge")
+    pages = []
+    for dirpath, dirnames, filenames in os.walk(kroot):
+        dirnames[:] = sorted(d for d in dirnames if not d.startswith("."))
+        for name in sorted(filenames):
+            if name.endswith(".md") and not name.startswith("_"):
+                pages.append(_rel(vault, os.path.join(dirpath, name)))
+    never, stale = [], []
+    for rel in pages:
+        when = last.get(rel)
+        if when is None:
+            never.append(_finding("knowledge-unused", JUDGEMENT, rel, 1,
+                                  "never read since the access log began (%s)" % first,
+                                  detail={"last_read": None}))
+        elif (today - when).days > days:
+            stale.append((when, _finding(
+                "knowledge-unused", JUDGEMENT, rel, 1,
+                "last read %s, %d days ago -- review whether it still earns its place"
+                % (when, (today - when).days), detail={"last_read": str(when)})))
+    return never + [f for _, f in sorted(stale, key=lambda t: t[0])]
+
+
+def analyse(vault, project=None, unused_days=UNUSED_DAYS):
     findings, files_lines = [], []
     for path in markdown_files(vault, project):
         rel = _rel(vault, path)
@@ -385,22 +624,447 @@ def analyse(vault, project=None):
         findings += oversized_global_memory(rel, lines)
         findings += relative_dates(rel, lines)
     findings += duplicate_facts_across(vault, files_lines)
+    if not project:
+        # Vault-wide by nature: a global note and a Knowledge page belong to no one project.
+        findings += single_project_globals(vault)
+        findings += knowledge_unused(vault, unused_days)
     return findings
+
+
+# ------------------------------------------------------------------ archive / supersede ----
+
+DATED = re.compile(r"^##\s+(\d{4}-\d{2}-\d{2})\b[:\s-]*(.*?)\s*$")
+ARCHIVE_SECTION = "Archived entries"
+# The write queue refuses a request over 256 KiB; archive content goes in chunks under it.
+CHUNK_BYTES = 200 * 1024
+
+
+def split_blocks(text):
+    """-> (preamble lines, [block]) where a block is {heading, lines}. Level-2 headings only,
+    outside fenced code: a `## ` inside a fence is text, not an entry."""
+    lines = text.split("\n")
+    pre, blocks, fence = [], [], False
+    for ln in lines:
+        if re.match(r"^\s*(```|~~~)", ln):
+            fence = not fence
+        if not fence and ln.startswith("## "):
+            blocks.append({"heading": ln, "lines": [ln]})
+        elif blocks:
+            blocks[-1]["lines"].append(ln)
+        else:
+            pre.append(ln)
+    return pre, blocks
+
+
+def _block_text(block):
+    lines = list(block["lines"])
+    while lines and not lines[-1].strip():
+        lines.pop()
+    return "\n".join(lines)
+
+
+def _anchor(heading_line):
+    # Obsidian heading links cannot carry these characters.
+    return re.sub(r"[\[\]|#^]", "", heading_line[3:]).strip()
+
+
+def _queue():
+    import gt_write_queue                                        # noqa: PLC0415
+    return gt_write_queue
+
+
+def _claimed(vault, rels):
+    try:
+        import gt_demote                                         # noqa: PLC0415
+    except Exception as exc:                                     # noqa: BLE001
+        return "the session registry could not be checked (%s)" % exc.__class__.__name__
+    for rel in rels:
+        why = gt_demote.claim_refusal(vault, rel)
+        if why:
+            return why
+    return None
+
+
+def _submit(vault, writes):
+    """-> (ok, message). Queue, drain at once, and accept only apply/deduplicate."""
+    from pathlib import Path                                      # noqa: PLC0415
+    wq = _queue()
+    results, note = wq.submit(Path(vault), writes)
+    bad = [r for r in results if r["decision"] not in ("apply", "deduplicate")]
+    if bad:
+        r = bad[0]
+        return False, "%s %s: %s" % (r["path"], r["decision"],
+                                     note or r.get("reason") or r.get("conflict") or "")
+    return True, None
+
+
+def plan_archive(vault, slug, before):
+    rel = "Projects/%s/research.md" % slug
+    text = _read_text(os.path.join(vault, rel))
+    if text is None:
+        return None, "no %s" % rel
+    pre, blocks = split_blocks(text)
+    moving, keep_at, existing_index = {}, None, None
+    out_blocks = []
+    for b in blocks:
+        m = DATED.match(b["heading"])
+        if b["heading"][3:].strip().lower() == ARCHIVE_SECTION.lower():
+            existing_index = b
+            keep_at = len(out_blocks) if keep_at is None else keep_at
+            continue
+        if m:
+            try:
+                day = datetime.date.fromisoformat(m.group(1))
+            except ValueError:
+                day = None                     # `## 2026-13-45` is not a date; never touched
+            if day is not None and day < before:
+                moving.setdefault(day.year, []).append((day, m.group(2), b))
+                keep_at = len(out_blocks) if keep_at is None else keep_at
+                continue
+        out_blocks.append(b)
+    return {"rel": rel, "text": text, "pre": pre, "out_blocks": out_blocks, "moving": moving,
+            "keep_at": keep_at, "existing_index": existing_index}, None
+
+
+def render_research(plan, index_lines):
+    idx = list(plan["existing_index"]["lines"]) if plan["existing_index"] else \
+        ["## " + ARCHIVE_SECTION, "",
+         "Entries moved to a dated archive by `gt_optimize.py --archive`. Nothing was deleted: "
+         "each line names where its entry now lives, unedited."]
+    while idx and not idx[-1].strip():
+        idx.pop()
+    idx += [""] + index_lines if idx[-1].startswith(("Entries", "##")) else index_lines
+    idx.append("")
+    blocks = list(plan["out_blocks"])
+    blocks.insert(plan["keep_at"] if plan["keep_at"] is not None else len(blocks),
+                  {"heading": idx[0], "lines": idx})
+    body = list(plan["pre"])
+    for b in blocks:
+        body += b["lines"]
+    return "\n".join(body).rstrip("\n") + "\n"
+
+
+def do_archive(vault, slug, before_s, apply):
+    try:
+        before = datetime.date.fromisoformat(before_s or "")
+    except ValueError:
+        print("--archive needs --before YYYY-MM-DD", file=sys.stderr)
+        return 2
+    plan, err = plan_archive(vault, slug, before)
+    if err:
+        print("nothing to archive: %s" % err, file=sys.stderr)
+        return 1
+    if not plan["moving"]:
+        print("nothing to archive: no dated entry in %s is older than %s" % (plan["rel"], before))
+        return 0
+    targets = {y: "Projects/%s/research-archive-%d.md" % (slug, y) for y in plan["moving"]}
+    why = _claimed(vault, [plan["rel"]] + sorted(targets.values()))
+    if why:
+        print("refusing to archive: %s" % why, file=sys.stderr)
+        return 1
+
+    index_lines, n = [], 0
+    for year in sorted(plan["moving"]):
+        stem = os.path.basename(targets[year])[:-3]
+        for day, title, b in plan["moving"][year]:
+            n += 1
+            index_lines.append("- %s — %s → [[%s#%s]]" % (day, title or "(untitled)", stem,
+                                                       _anchor(b["heading"])))
+    new_research = render_research(plan, index_lines)
+
+    print("%s %d entr%s dated before %s out of %s:" % (
+        "archiving" if apply else "would archive (dry run, nothing written)", n,
+        "y" if n == 1 else "ies", before, plan["rel"]))
+    for year in sorted(plan["moving"]):
+        exists = os.path.isfile(os.path.join(vault, targets[year]))
+        print("  -> %s (%s): %d entr%s" % (targets[year], "append" if exists else "new file",
+                                           len(plan["moving"][year]),
+                                           "y" if len(plan["moving"][year]) == 1 else "ies"))
+        for day, title, _b in plan["moving"][year]:
+            print("       %s  %s" % (day, title))
+    print("  %s keeps one index line per moved entry under `## %s` (%d -> %d lines)" % (
+        plan["rel"], ARCHIVE_SECTION, len(plan["text"].split("\n")),
+        len(new_research.split("\n"))))
+    if not apply:
+        print("Re-run with --apply to move them. Nothing is deleted either way.")
+        return 0
+
+    # 1. WRITE THE ARCHIVE, in chunks the queue accepts, and READ IT BACK.
+    today = datetime.date.today().isoformat()
+    for year in sorted(plan["moving"]):
+        trel = targets[year]
+        texts = [_block_text(b) for _d, _t, b in plan["moving"][year]]
+        chunks, cur = [], []
+        for t in texts:
+            if cur and len("\n\n".join(cur + [t]).encode("utf-8")) > CHUNK_BYTES:
+                chunks.append(cur)
+                cur = []
+            cur.append(t)
+        chunks.append(cur)
+        for i, chunk in enumerate(chunks):
+            body = "\n\n".join(chunk) + "\n"
+            if i == 0 and not os.path.isfile(os.path.join(vault, trel)):
+                body = ("# Research archive %d — %s\n\nEntries moved out of [[research]] by "
+                        "`gt_optimize.py --archive` on %s. Each entry is exactly as it stood; "
+                        "research.md keeps a dated line pointing at each one.\n\n%s"
+                        % (year, slug, today, body))
+                op = "create"
+            else:
+                op = "append"
+            ok, msg = _submit(vault, [{"path": trel, "op": op, "content": body,
+                                       "hint": "gt-optimize --archive: research archive"}])
+            if not ok:
+                print("archive write did not land (%s); research.md was NOT changed" % msg,
+                      file=sys.stderr)
+                return 3
+        landed = _read_text(os.path.join(vault, trel)) or ""
+        missing = [t.split("\n")[0] for t in texts if t not in landed]
+        if missing:
+            print("%s does not hold %d of the entries after writing (first: %s); research.md "
+                  "was NOT changed" % (trel, len(missing), missing[0]), file=sys.stderr)
+            return 3
+
+    # 2. ONLY NOW SHRINK research.md -- and only if nobody changed it while we worked.
+    if _read_text(os.path.join(vault, plan["rel"])) != plan["text"]:
+        print("%s changed while archiving; the archive holds copies, research.md was NOT "
+              "changed. Re-run to finish." % plan["rel"], file=sys.stderr)
+        return 3
+    ok, msg = _submit(vault, [{"path": plan["rel"], "op": "replace-file",
+                               "content": new_research,
+                               "hint": "gt-optimize --archive: research.md index"}])
+    if not ok:
+        print("research.md was not rewritten (%s); the entries are now in BOTH places, which "
+              "is visible and safe -- resolve by hand or re-run" % msg, file=sys.stderr)
+        return 3
+    print("done: %d entr%s archived; nothing deleted." % (n, "y" if n == 1 else "ies"))
+    return 0
+
+
+SUPERSEDED = re.compile(r"^>\s*superseded_by:", re.I)
+
+
+def do_supersede(vault, rel, entry, by, apply):
+    if not rel or not entry or not by:
+        print("--supersede needs --file, --entry and --by", file=sys.stderr)
+        return 2
+    rel = rel.replace(os.sep, "/").lstrip("/")
+    full = os.path.realpath(os.path.join(vault, rel))
+    if not full.startswith(os.path.realpath(vault) + os.sep) or ".." in rel.split("/"):
+        print("--file must be a path inside the vault: %r" % rel, file=sys.stderr)
+        return 2
+    text = _read_text(full)
+    if text is None:
+        print("no such file: %s" % rel, file=sys.stderr)
+        return 2
+    _pre, blocks = split_blocks(text)
+
+    def matches(name):
+        want = name.strip().lstrip("#").strip().lower()
+        return [b for b in blocks if b["heading"][3:].strip().lower() == want]
+    hit = matches(entry)
+    if len(hit) != 1:
+        print("--entry must name exactly one `## ` heading in %s; %d match %r"
+              % (rel, len(hit), entry), file=sys.stderr)
+        return 1
+    if "#" in by or "]]" in by:
+        link = by.strip().strip("[]")
+    else:
+        if len(matches(by)) != 1:
+            print("--by must name exactly one `## ` heading in %s (or `file#heading`); %d "
+                  "match %r" % (rel, len(matches(by)), by), file=sys.stderr)
+            return 1
+        link = "%s#%s" % (os.path.basename(rel)[:-3], _anchor(matches(by)[0]["heading"]))
+    block = hit[0]
+    body = block["lines"][1:]
+    first = next((ln for ln in body if ln.strip()), "")
+    if SUPERSEDED.match(first):
+        print("already marked: %s" % first.strip())
+        return 0
+    marker = "> superseded_by: [[%s]] — marked %s by `gt_optimize.py --supersede`; this entry is " \
+             "kept as it stood." % (link, datetime.date.today().isoformat())
+    why = _claimed(vault, [rel])
+    if why:
+        print("refusing to mark: %s" % why, file=sys.stderr)
+        return 1
+    print("%s in %s:\n  %s\n  %s" % ("marking" if apply else "would mark (dry run)",
+                                      rel, block["heading"], marker))
+    if not apply:
+        return 0
+    old_body = "\n".join(body).strip("\n")
+    content = marker + ("\n\n" + old_body if old_body else "")
+    ok, msg = _submit(vault, [{"path": rel, "op": "replace-section",
+                               "section": block["heading"][3:].strip(), "content": content,
+                               "hint": "gt-optimize --supersede"}])
+    if not ok:
+        print("not marked: %s" % msg, file=sys.stderr)
+        return 3
+    after = _read_text(full) or ""
+    if marker not in after or (old_body and old_body not in after):
+        print("the mark did not land as expected in %s; check it by hand" % rel, file=sys.stderr)
+        return 3
+    print("done: marked, and the entry is unchanged beneath the mark.")
+    return 0
+
+
+# ------------------------------------------------------------------------ the aggregator ----
+
+MEMBERS = {
+    "vault": ("gt_optimize.py",
+              "what the vault stores that every session pays for (report only)"),
+    "session": ("gt_optimize_session.py",
+                "prompt-cache writes by cause, from the Claude Code transcripts (report only)"),
+}
+MEMBER_ORDER = ("vault", "session")
+
+
+def vault_member(args, vault):
+    """The report this tool printed before 0.18.0, plus the new finding kinds and --cost."""
+    findings = analyse(vault, args.project, args.unused_days)
+    safe = [f for f in findings if f["class"] == SAFE]
+    judge = [f for f in findings if f["class"] == JUDGEMENT]
+    cost = open_cost(vault, args.project)
+
+    if args.json:
+        last, first = knowledge_reads(vault)
+        print(json.dumps({"version": 1, "vault": vault, "applied": False,
+                          "findings": findings, "open_cost": cost,
+                          "knowledge_log": {"present": last is not None,
+                                            "since": str(first) if first else None}},
+                         indent=2))
+        return 1 if findings else 0
+
+    print("vault: %s" % vault)
+    print("\nMECHANICAL -- decidable from the text (%d)" % len(safe))
+    for f in safe[:40]:
+        print("  %-16s %s:%d  %s" % (f["kind"], f["path"], f["line"], f["message"]))
+    if len(safe) > 40:
+        print("  ... and %d more" % (len(safe) - 40))
+    print("\nJUDGEMENT -- reported, never applied (%d)" % len(judge))
+    for f in judge[:40]:
+        print("  %-16s %s:%d  %s" % (f["kind"], f["path"], f["line"], f["message"]))
+    if len(judge) > 40:
+        print("  ... and %d more" % (len(judge) - 40))
+    if args.cost:
+        print(render_open_cost(cost))
+
+    if findings:
+        print("\nNothing has been changed: this tool only reports. Edit what you agree with.")
+    return 1 if findings else 0
+
+
+def member_cmd(name, args, vault):
+    if name == "vault":
+        cmd = [sys.executable, os.path.abspath(__file__), "--vault", vault, "--member", "vault",
+               "--unused-days", str(args.unused_days)]
+        if args.project:
+            cmd += ["--project", args.project]
+        if args.cost:
+            cmd.append("--cost")
+    else:
+        script = os.path.join(HERE, MEMBERS[name][0])
+        if not os.path.isfile(script):
+            return None
+        cmd = [sys.executable, script]
+        if args.days:
+            cmd += ["--days", str(args.days)]
+    if args.json:
+        cmd.append("--json")
+    return cmd
+
+
+def aggregate(args, vault):
+    import gt_aggregate                                          # noqa: PLC0415
+    wanted, err = gt_aggregate.resolve_wanted(MEMBERS, None, args.only)
+    if err:
+        print(err, file=sys.stderr)
+        return 2
+    wanted = [m for m in MEMBER_ORDER if m in wanted]
+    if not args.json:
+        print("running %d optimize member(s): %s -- each reports only"
+              % (len(wanted), ", ".join(wanted)))
+    results = [gt_aggregate.run_member(n, member_cmd(n, args, vault), args.timeout,
+                                       keep_raw=True) for n in wanted]
+    ran = [r for r in results if r["ran"]]
+    failed = [r for r in results if not r["ran"]]
+    found = [r for r in ran if r["status"] == "findings"]
+    code = 3 if failed else (1 if found else 0)
+
+    if args.json:
+        data = {}
+        for r in ran:
+            try:
+                data[r["member"]] = json.loads(r.get("raw") or "")
+            except ValueError:
+                data[r["member"]] = None
+        vault_data = data.get("vault") or {}
+        print(json.dumps({
+            "version": 1, "vault": vault, "applied": False,
+            "headline": "%d of %d member(s) ran; %d reported findings"
+                        % (len(ran), len(wanted), len(found)),
+            "asked": wanted, "ran": [r["member"] for r in ran],
+            "could_not_run": [{"member": r["member"], "exit": r["exit"], "detail": r["detail"]}
+                              for r in failed],
+            # The vault member's own keys, kept at the top level so a caller of the pre-0.18
+            # report (`findings`) reads the same shape.
+            "findings": vault_data.get("findings", []),
+            "open_cost": vault_data.get("open_cost"),
+            "members": data,
+        }, indent=2))
+        return code
+    for r in results:
+        if r["output"]:
+            print("\n--- %s ---" % r["member"])
+            print(r["output"])
+    print()
+    return gt_aggregate.summarise(results, wanted)
 
 
 def main(argv=None):
     ap = argparse.ArgumentParser(description=__doc__.split("\n")[0])
     ap.add_argument("--vault", required=True, help="the vault to analyse (never inferred)")
     ap.add_argument("--project", help="limit to one project slug")
+    ap.add_argument("--only", help="comma-separated members: vault, session (default: both)")
+    ap.add_argument("--member", choices=("vault",),
+                    help="run the vault member directly, as the aggregator does")
+    ap.add_argument("--cost", action="store_true",
+                    help="vault member: print what /gt:gt-open loads per project")
+    ap.add_argument("--unused-days", type=int, default=UNUSED_DAYS,
+                    help="vault member: a Knowledge page unread this long is reported "
+                         "(default %d)" % UNUSED_DAYS)
+    ap.add_argument("--days", type=int, default=None,
+                    help="session member: window in days (default: setting "
+                         "optimize_session_days)")
+    ap.add_argument("--timeout", type=int, default=300, help="per-member timeout, seconds")
     ap.add_argument("--demote", metavar="PATH",
                     help="move this note one tier cheaper (global-memory -> project memory "
                          "-> Knowledge) instead of deleting anything")
     ap.add_argument("--to", choices=("knowledge", "project-memory"),
                     help="with --demote: where to move it; default is one tier cheaper")
+    ap.add_argument("--archive", action="store_true",
+                    help="move research.md entries dated before --before into "
+                         "research-archive-<YYYY>.md, leaving an index line for each")
+    ap.add_argument("--before", metavar="YYYY-MM-DD", help="with --archive: the cutoff")
+    ap.add_argument("--supersede", action="store_true",
+                    help="mark --entry in --file superseded by --by, in place")
+    ap.add_argument("--file", metavar="REL", help="with --supersede: the vault-relative file")
+    ap.add_argument("--entry", metavar="HEADING", help="with --supersede: the superseded entry")
+    ap.add_argument("--by", metavar="HEADING", help="with --supersede: the entry that replaces it")
     ap.add_argument("--apply", action="store_true",
-                    help="with --demote: actually move it. Reporting never writes.")
+                    help="with --demote, --archive or --supersede: actually write. "
+                         "Reporting never writes.")
+    ap.add_argument("--dry-run", action="store_true",
+                    help="show what --demote, --archive or --supersede would do (the default)")
     ap.add_argument("--json", action="store_true")
     args = ap.parse_args(argv)
+
+    actions = [a for a in ("demote", "archive", "supersede") if getattr(args, a)]
+    if len(actions) > 1:
+        print("--demote, --archive and --supersede are separate actions; pick one",
+              file=sys.stderr)
+        return 2
+    if args.apply and args.dry_run:
+        print("--apply and --dry-run contradict each other", file=sys.stderr)
+        return 2
 
     if args.demote:
         # Delegated so the write-verify-remove order has ONE implementation and one set of
@@ -414,9 +1078,9 @@ def main(argv=None):
         if args.apply:
             argv2 += ["--apply"]
         return gt_demote.main(argv2)
-    if args.apply:
-        print("--apply only applies to --demote: reporting never writes. See --help.",
-              file=sys.stderr)
+    if args.apply and not actions:
+        print("--apply only applies to --demote, --archive or --supersede: reporting never "
+              "writes. See --help.", file=sys.stderr)
         return 2
 
     vault = os.path.abspath(os.path.expanduser(args.vault))
@@ -439,30 +1103,16 @@ def main(argv=None):
                   % (args.project, root), file=sys.stderr)
             return 2
 
-    findings = analyse(vault, args.project)
-    safe = [f for f in findings if f["class"] == SAFE]
-    judge = [f for f in findings if f["class"] == JUDGEMENT]
-
-    if args.json:
-        print(json.dumps({"version": 1, "vault": vault, "applied": False,
-                          "findings": findings}, indent=2))
-        return 1 if findings else 0
-
-    print("vault: %s" % vault)
-    print("\nMECHANICAL -- decidable from the text (%d)" % len(safe))
-    for f in safe[:40]:
-        print("  %-16s %s:%d  %s" % (f["kind"], f["path"], f["line"], f["message"]))
-    if len(safe) > 40:
-        print("  ... and %d more" % (len(safe) - 40))
-    print("\nJUDGEMENT -- reported, never applied (%d)" % len(judge))
-    for f in judge[:40]:
-        print("  %-16s %s:%d  %s" % (f["kind"], f["path"], f["line"], f["message"]))
-    if len(judge) > 40:
-        print("  ... and %d more" % (len(judge) - 40))
-
-    if findings:
-        print("\nNothing has been changed: this tool only reports. Edit what you agree with.")
-    return 1 if findings else 0
+    if args.archive:
+        if not args.project:
+            print("--archive needs --project SLUG", file=sys.stderr)
+            return 2
+        return do_archive(vault, args.project, args.before, args.apply)
+    if args.supersede:
+        return do_supersede(vault, args.file, args.entry, args.by, args.apply)
+    if args.member == "vault":
+        return vault_member(args, vault)
+    return aggregate(args, vault)
 
 
 if __name__ == "__main__":

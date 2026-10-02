@@ -45,6 +45,13 @@ EXPECTED = {
     "parallel_max": ("auto", None),
     # 0.18.0: gt-lint decision-candidate phrase list (free-form edits to a built-in list).
     "decision_signals": ("default", None),
+    # 0.18.0: memory and gt-optimize.
+    "knowledge_access_log": ("on", ["off", "on"]),
+    "optimize_session_days": ("30", ["7", "30", "90", "180"]),
+    "optimize_avoidable_pct": ("50", ["25", "50", "65", "75"]),
+    "memory_contradiction_check": ("on", ["off", "on"]),
+    "promotion_candidates": ("on", ["off", "on"]),
+    "promotion_overlap": ("80", ["60", "70", "80", "90"]),
 }
 # install_demo is gone since 0.14.0: the demo is a module and its install is a module
 # choice (install-choices.json), not a gt setting.

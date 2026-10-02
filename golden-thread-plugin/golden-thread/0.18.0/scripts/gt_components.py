@@ -513,6 +513,12 @@ HOOK_REGISTRATIONS = (
     # like guard_protected_paths. Switch: the `foreign_checkout_guard` setting.
     {"event": "PreToolUse", "script": "guard_foreign_checkout.sh",
      "args": [], "owner": "install.sh"},
+    # Knowledge read log (0.18.0): after a Read of <vault>/Knowledge/**.md, one JSON line to
+    # <vault>/usage/knowledge.jsonl, so gt_optimize can report pages nobody reads. A hook, not
+    # skill prose: prose logs only the reads the model remembered to log. Governed by the
+    # `knowledge_access_log` setting; fails open and silent; a 5 s budget it never needs.
+    {"event": "PostToolUse", "script": "log_knowledge_read.sh", "matcher": "Read",
+     "timeout": 5, "args": [], "owner": "install.sh"},
     # -- enforcement: registered by vault_init.py install-core-rules ---------
     {"event": "UserPromptSubmit", "script": "inject_core_rules.sh",
      "args": [], "owner": "vault_init.py install-core-rules"},
