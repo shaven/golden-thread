@@ -586,6 +586,22 @@ reads only the previous stage's packet is stateless and can go to a fresh agent.
 - **`dev/feature_requests.py --src`** descends into `golden-thread-plugin/` when it names a gt-src
   in the repository layout.
 
+### "Flakes" that were bugs
+
+Two failures were filed as load flakes during this release and were not:
+
+- **`grep -q` behind a pipe, under `pipefail`.** `install.sh`, `package.sh`, `selftest.sh` and
+  `dev/release-check.sh` matched output with `printf "$out" | grep -q PATTERN`. `grep -q` exits on
+  its first match; the writer can then die of SIGPIPE, `pipefail` makes the pipeline fail, and a
+  line that IS present reads as absent. On a real install that meant *"Vault upgrades: the check
+  could not run (unrecognised output)"* -- the vault's pending upgrade silently skipped -- and
+  `package.sh` occasionally claimed there was no gt version directory. Every such match is now a
+  here-string (`grep -q PATTERN <<<"$out"`), and `tests/test_no_sigpipe_grep_q.py` refuses the
+  pipe shape in any pipefail script of the newest releases.
+- **Backups stamped to the second.** `gt_upgrade`'s vault tarball (`vault-YYYYmmdd-HHMMSS`) and
+  its `.base.` snapshots were named to the second, so two upgrades within one second replaced the
+  earlier backup. Names now count up (`-2`, `-3`, ...) instead (`test_upgrade_backup_names.py`).
+
 ### Known, and not fixed
 
 - **The deprecated aliases are equivalent by construction, not by measurement**: each follows the
@@ -672,9 +688,6 @@ reads only the previous stage's packet is stateless and can go to a fresh agent.
 - **Script-side contradiction detection in the ingest pipeline is narrow** (same statement, a
   different figure or flipped polarity); anything subtler needs the `reconcile-<kind>` agent. A
   saved unit split is keyed by folder name unless `--repo-key` is given.
-- **Test flakes under load:** `test_package.test_a_stale_zip_is_replaced` and four
-  `test_install_vault_upgrade` units fail only under the 16-worker full run and pass in isolation
-  (load and timing, not behaviour).
 
 ### Measured, and deliberately not built
 

@@ -101,7 +101,7 @@ PY
 json_ok() { printf '%s' "$1" | python3 -c 'import json,sys
 s = sys.stdin.read().strip()
 sys.exit(0 if not s else (0 if isinstance(json.loads(s), dict) else 1))' 2>/dev/null; }
-speaks()  { printf '%s' "$1" | grep -q "\"$2\""; }
+speaks()  { grep -q "\"$2\"" <<<"$1"; }
 
 while IFS= read -r cmd; do
   [ -n "$cmd" ] || continue
@@ -124,7 +124,7 @@ while IFS= read -r cmd; do
     inject_core_rules.sh)
       # Injects CONTEXT rather than addressing the user, so it carries
       # additionalContext and correctly never carries systemMessage.
-      if speaks "$out" additionalContext && printf '%s' "$out" | grep -q 'CORE RULES'; then
+      if speaks "$out" additionalContext && grep -q 'CORE RULES' <<<"$out"; then
         ok "SessionStart $name injects the Core rules"
       else bad "SessionStart $name gave no Core rules: $out"; fi ;;
     gt_components.py|gt_workers.py|gt_version_check.py|gt_push_check.py)

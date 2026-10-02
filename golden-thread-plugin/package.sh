@@ -36,7 +36,7 @@ ZIP="golden-thread-plugin.zip"
 # Newest per plugin, sorted numerically per field (dev/plugins.py): a lexical sort puts
 # 0.9.4 above 0.10.0 and would start shipping the older release at double digits.
 PLUGINS="$(python3 dev/plugins.py list)" || true
-echo "$PLUGINS" | grep -q '^golden-thread ' \
+grep -q '^golden-thread ' <<<"$PLUGINS" \
   || { echo "✗ no installable gt version directory found"; exit 1; }
 
 STAGE="$(mktemp -d)"

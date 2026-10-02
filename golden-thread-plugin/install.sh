@@ -2179,7 +2179,7 @@ wire_enforcement_hooks() {  # $1 = vault path
   out=$(python3 "$SRC/scripts/vault_init.py" install-core-rules --vault "$vault" 2>&1) && rc=0 || rc=$?
   if [ "${rc:-1}" -eq 0 ]; then
     printf '%s' "$out" | report_core_rules
-    if printf '%s' "$out" | grep -q '"action": "updated"'; then
+    if grep -q '"action": "updated"' <<<"$out"; then
       echo "Wired enforcement hooks → ~/.claude/settings.json"
     else
       echo "Enforcement hooks already wired"
@@ -2434,18 +2434,21 @@ apply_vault_upgrades() {
   [ -f "$up" ] || { echo "Vault upgrades: check could not run (gt_upgrade.py not shipped)"; echo ""; return 0; }
 
   echo "Checking the vault for upgrades this release needs..."
+  # Matches below read here-strings, never `printf "$out" | grep -q`: under pipefail, grep -q
+  # exiting on its first match can SIGPIPE the printf, the pipeline then "fails", and a present
+  # line reads as absent -- the install intermittently reported "unrecognised output" (0.18.0).
   out=$(python3 "$up" status --vault "$vault" 2>&1) || rc=$?
   if [ "$rc" -ne 0 ]; then
     echo "⚠ Vault upgrades: the check could not run (exit $rc) — run /gt:gt-upgrade to look"
     echo ""; return 0
   fi
   attn=$(printf '%s\n' "$out" | upgrade_attention_list)
-  if printf '%s\n' "$out" | grep -q 'nothing pending'; then
+  if grep -q 'nothing pending' <<<"$out"; then
     echo "Vault upgrades: none pending"
     [ -n "$attn" ] && printf '%s\n' "$attn"
     echo ""; return 0
   fi
-  if ! printf '%s\n' "$out" | grep -q 'pending step(s):'; then
+  if ! grep -q 'pending step(s):' <<<"$out"; then
     echo "⚠ Vault upgrades: the check could not run (unrecognised output) — run /gt:gt-upgrade to look"
     echo ""; return 0
   fi
@@ -2513,9 +2516,9 @@ apply_vault_upgrades() {
   fi
   run_out=$(cat "$run_log"); rm -f "$run_log"
   backup=$(printf '%s\n' "$run_out" | sed -n 's/^backup: //p' | head -1)
-  if [ "$run_rc" -eq 1 ] && printf '%s\n' "$run_out" | grep -q 'need a person:'; then
+  if [ "$run_rc" -eq 1 ] && grep -q 'need a person:' <<<"$run_out"; then
     echo "  Left for you: the step(s) above that need a person. Run /gt:gt-upgrade to finish"
-  elif [ "$run_rc" -eq 2 ] && printf '%s\n' "$run_out" | grep -q 'REFUSED'; then
+  elif [ "$run_rc" -eq 2 ] && grep -q 'REFUSED' <<<"$run_out"; then
     echo "⚠ Vault upgrades not applied — gt_upgrade refused (see above). Run /gt:gt-upgrade"
   elif [ "$run_rc" -ne 0 ]; then
     echo "⚠ Vault upgrade stopped (exit $run_rc): $(printf '%s\n' "$run_out" | sed '/^[[:space:]]*$/d' | tail -1)"
@@ -2527,9 +2530,9 @@ apply_vault_upgrades() {
   out=$(python3 "$up" status --vault "$vault" 2>&1) || rc=$?
   if [ "$rc" -ne 0 ]; then
     echo "⚠ Vault upgrades: the follow-up check could not run (exit $rc) — run /gt:gt-upgrade to look"
-  elif printf '%s\n' "$out" | grep -q 'nothing pending'; then
+  elif grep -q 'nothing pending' <<<"$out"; then
     echo "Vault upgrades: none pending"
-  elif printf '%s\n' "$out" | grep -q 'pending step(s):'; then
+  elif grep -q 'pending step(s):' <<<"$out"; then
     echo "⚠ Vault upgrades still pending:"
     printf '%s\n' "$out" | upgrade_pending_list
     echo "  Run /gt:gt-upgrade to finish"

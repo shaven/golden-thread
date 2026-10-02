@@ -395,7 +395,7 @@ case $rc in
     # passing would claim a scan that never happened. So: SKIP, loudly, every time, and the
     # scan still runs at release on the machine that holds the terms. GT_SCRUB_OPTIONAL is
     # set only where the absence is expected -- never as a way past a real failure.
-    if [ "${GT_SCRUB_OPTIONAL:-}" = 1 ] && printf '%s' "$OUT" | grep -q 'no terms loaded'; then
+    if [ "${GT_SCRUB_OPTIONAL:-}" = 1 ] && grep -q 'no terms loaded' <<<"$OUT"; then
       skip "scrub not checkable here (no terms file; the terms are private and stay off the repo)"
     else
       echo "$OUT" | tail -5

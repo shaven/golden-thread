@@ -297,9 +297,9 @@ Then, in a Claude Code session on that machine:
 - **A bare `gt_optimize.py` still runs two members**; `execution` is opt-in (`--only execution`).
 - **Execution metrics are partial:** no token cost per workflow yet, no before/after 0.17.11
   workflow timing, `gt_bench` calibrates on a synthetic workload, no weekly execution worker.
-- **Known load flakes:** `test_package.test_a_stale_zip_is_replaced` and four
-  `test_install_vault_upgrade` units fail only under the 16-worker full run and pass in isolation.
-  Re-run them alone before treating one as a regression.
+- **Not flakes after all:** the intermittent `test_package` / `test_install_vault_upgrade`
+  failures were a SIGPIPE race in `printf | grep -q` under `pipefail` (fixed; see CHANGELOG).
+  A failure in either is now a real failure.
 - **`gt_check.py run` exit 3 is "nothing applied", not clean** — with no checker modules installed,
   every run says so.
 - **A vault whose `tools/gt_events.py` predates 0.18.0 refuses an `addon.fix` event** until

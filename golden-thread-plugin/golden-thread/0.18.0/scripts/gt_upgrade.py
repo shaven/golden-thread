@@ -472,8 +472,8 @@ def record_bases(vault, names, dry):
             continue
         if not dry:
             if held:
-                saved = (Path.home() / ".claude" / "golden-thread" / "backups" /
-                         ("%s.base.%s" % (name, datetime.datetime.now().strftime("%Y%m%d-%H%M%S"))))
+                saved = _unused(Path.home() / ".claude" / "golden-thread" / "backups",
+                                "%s.base.%s" % (name, datetime.datetime.now().strftime("%Y%m%d-%H%M%S")))
                 saved.parent.mkdir(parents=True, exist_ok=True)
                 shutil.copy2(base, saved)
                 print("record-base: the base it replaces is saved at %s" % saved)
@@ -972,9 +972,19 @@ class _Ticker:
         return time.time() - self.t0
 
 
+def _unused(folder, name, suffix=""):
+    """-> folder/name+suffix, or name-2, name-3 ... when that exists (0.18.0). The names are
+    stamped to the second, and two upgrades in one second -- an install straight after another,
+    common once the test install got faster -- silently replaced the earlier backup."""
+    out, n = folder / (name + suffix), 2
+    while out.exists():
+        out, n = folder / ("%s-%d%s" % (name, n, suffix)), n + 1
+    return out
+
+
 def _backup(vault):
     stamp = datetime.datetime.now().strftime("%Y%m%d-%H%M%S")
-    out = Path.home() / ".claude" / "golden-thread" / "backups" / ("vault-%s.tar.gz" % stamp)
+    out = _unused(Path.home() / ".claude" / "golden-thread" / "backups", "vault-%s" % stamp, ".tar.gz")
     out.parent.mkdir(parents=True, exist_ok=True)
     # The vault's own history is not the backup: this must survive a bad merge in a
     # tree that may not have been pushed anywhere.
