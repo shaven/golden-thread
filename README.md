@@ -39,6 +39,9 @@ and blocks it if the rule was broken.
 > - **Across machines and outside sessions.** `/gt:gt-sync` pulls and pushes the vault between
 >   machines (fast-forward only); reminders reach you by macOS notification, SMS or Discord through
 >   your relay, or email — each off by default, each with a test that sends a real message.
+> - **A release pipeline for every project.** `release.sh`, generated from a table of steps and
+>   gates you extend, stops at the first failure and never skips; gt measures every execution
+>   (`gt_metrics.py`) and `/gt:gt-optimize --only execution` proposes faster ways to run them.
 > - **Guards.** A commit or push in a checkout you declared as another machine's is refused, and
 >   `/gt:gt-doctor` says which repo a review command will actually look at. Run `/gt:gt-upgrade`
 >   after installing.
@@ -298,10 +301,10 @@ removing any one leaves the rest working.
 | `gt-refresh` | Checks `Sources/` for upstream changes. Supersedes with a *new* immutable file carrying `supersedes:` rather than editing the old one, so the record of what you believed and when stays intact. |
 | `gt-upgrade` | Updates the VAULT after `install.sh` updates the plugin — the step that did not exist until a 0.11.0 migration had to be run by hand across 43 projects. Migrations detect their own work, documents are three-way merged against a base the vault carries, and a step that needs a person is reported rather than guessed at. |
 | `gt-doctor` | Answers "is this install healthy?" in one command — version, component drift, hook wiring, the vault's release stamp and pending migrations, the scheduled jobs' last exits, stray workers, unpushed commits, publish drift, lint. Every answer is stated relative to the release it was checked against, because a clean report from a check pinned to the wrong version reads exactly like a healthy install. |
-| `gt-lint` | Runs 23 deterministic health checks — broken links, orphans, index gaps, scope leaks, staleness, superseded sources — plus `core-unenforced`, which catches a rule that is stored but never re-asserted, and four that file questions for you: an ADR whose expiry may have come, a page covering two topics, a decision stated in prose with no ADR, a memory note missing its entity tags. |
+| `gt-lint` | Runs 24 deterministic health checks — broken links, orphans, index gaps, scope leaks, staleness, superseded sources — plus `core-unenforced`, which catches a rule that is stored but never re-asserted, and four that file questions for you: an ADR whose expiry may have come, a page covering two topics, a decision stated in prose with no ADR, a memory note missing its entity tags — and `release-pipeline`, a project that ships code with no release pipeline declared. |
 | `gt-optimize` | Finds what you pay for on every turn and get nothing back for — a fact duplicated across memory files, a dead index row, a `global-memory/` file over budget, a Knowledge page nobody reads — and, since 0.18.0, what your sessions spend rebuilding the prompt cache after sitting idle past its lifetime. Reporting never writes; moving a note somewhere cheaper or archiving old research happens only when asked, and deletes nothing. |
 | `gt-scan` | Checks code against the language definitions this machine actually has — naming and encoding, per language, entirely from packs: a contributed language pack teaches it a new language with no code change. It reports how many checks RAN next to what they found, so a scan that could not load its definitions can never be mistaken for a clean tree. An interrupted scan resumes where it stopped, from any later session. |
-| `gt-allin` | One command for every check, built so a skipped check can never pass for a clean one: the headline is "N of M members ran", and a member that could not execute outranks a member that found something. Since 0.17.2 it also runs the credential scan, the runbook lint and — while gt-wiki is installed — the wiki lint. It does not push — an aggregator is where a partial run is easiest to mistake for a complete one, and pushing there would break the very rule about seeing tests pass that the tool exists to serve. |
+| `gt-allin` | One command for every check, built so a skipped check can never pass for a clean one: the headline is "N of M members ran", and a member that could not execute outranks a member that found something. Since 0.17.2 it also runs the credential scan, the runbook lint and — while gt-wiki is installed — the wiki lint. It does not push — an aggregator is where a partial run is easiest to mistake for a complete one, and pushing there would break the very rule about seeing tests pass that the tool exists to serve. Since 0.18.0 it also runs a project's release pipeline up to the owner gate, where one is adopted. |
 | `gt-context` | Renders what this vault's definitions SAY, for a session to read — the first consumer of the registry's model-reachable tier. Wrapped in an envelope that marks it as data rather than instruction, because a renderer can make content identifiable but cannot make it true. |
 | `gt-validation` | Writes down what a validation established about a file, including what it could NOT determine, stamped with the file's content hash. Edit the file and the recorded definition goes visibly stale — because every serious defect this project has shipped was a claim that outlived its implementation. |
 | `gt-allin-commit` | The separate, deliberate act of committing — kept apart from the sweep so a routine check is never also a write. It verifies a passing test receipt covers every staged file, refuses when a check could not run at all, and stops at the commit: a commit is reversible here, a push is fetched by other people. |
@@ -526,7 +529,7 @@ Full reference, including exit codes, in the
 ## Maintenance is code, not judgement
 
 The dangerous failure is not the fact you never captured — it is the fact you captured,
-kept, and still serve after reality moved on. `gt_lint.py` runs 23 deterministic checks
+kept, and still serve after reality moved on. `gt_lint.py` runs 24 deterministic checks
 (broken links, orphans, index gaps, scope leaks, 90-day staleness, superseded sources),
 `core-unenforced`, which catches a rule that is **stored but never re-asserted** — the
 exact failure this system exists to close — and `adr-collision`, which catches two

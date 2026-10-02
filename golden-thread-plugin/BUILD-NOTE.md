@@ -18,7 +18,7 @@
 
 | Plugin | Version | Note |
 |---|---|---|
-| gt (core) | **0.18.0** | verb-first skills, gt-close, gt-plan/gt-implement, ADR expiry and lineage, gt-brief, gt-optimize session member and archive, gt-minimize, write-back checks, catch-up brief, doctor rows, foreign-checkout guard, checker host and fix writer, model intent, gt-sync, reminders, resumable scans and ingests |
+| gt (core) | **0.18.0** | verb-first skills, gt-close, gt-plan/gt-implement, ADR expiry and lineage, gt-brief, gt-optimize session member and archive, gt-minimize, write-back checks, catch-up brief, doctor rows, foreign-checkout guard, checker host and fix writer, model intent, gt-sync, reminders, resumable scans and ingests, release pipelines, execution metrics and the fast test loop, staged ingest/promote |
 | gt-wiki | **0.2.5** | `review-due` ages a page from the newer of `last_reviewed` and `updated` |
 | gt-flow | **0.18.0** | redacted hashes at least 6 hex characters; draws the new `addon.fix` event |
 | gt-demo, gt-farm, gt-report-card, gt-watch | **0.18.0** | they move with gt |
@@ -29,7 +29,7 @@
 Skills **28 → 36**: `gt-handle`, `gt-list`, `gt-close`, `gt-plan`, `gt-implement`, `gt-brief`,
 `gt-minimize`, `gt-sync`. Nothing removed: `gt-task`, `gt-handoff`, `gt-task-list`, `gt-handoff-list`,
 `gt-task-handle`, `gt-handoff-handle` stay as deprecated aliases through 0.18.x. gt_lint checks
-**19 → 23**. Settings: eighteen new (33 in all). Hook registrations **14 → 16** (both new ones `install.sh`-owned).
+**19 → 24**. Settings: twenty-two new (37 in all). Doctor checks: 16. Hook registrations **14 → 16** (both new ones `install.sh`-owned).
 
 ## 2. What changed, and why
 
@@ -75,6 +75,16 @@ The short version:
 - **Every slug-taking tool** resolves sub-projects through `gt_spool.resolve_project`;
   `gt_memory_check.py` with an unknown slug now exits 2 (was a silent 0).
 - **Hook allowlists** checked against Claude Code's hooks and tools docs: 33 events, 48 tools.
+- **Release pipeline:** `gt_pipeline.py` (`release-pipeline.tsv` + generated `release.sh`),
+  README flag `release_pipeline:`, lint check `release-pipeline`, gt-upgrade migration
+  `release-pipeline-flag`, gt-allin `pipeline` member.
+- **Fast build loop and measurement:** `gt_recipe.py` (and `dev/copygt.sh` now generated from
+  `dev/copygt.recipe`); `tests/run.sh --affected` scoped receipts on feature branches
+  (`scoped_receipts`); cached test install; `gt_load.py` load-aware workers; `prun.py --hosts` and
+  the `runners` setting; `gt_bench.py`; `gt_metrics.py` (`execution_metrics`); gt-optimize's opt-in
+  `execution` member; doctor `execution` row; `test_tmpdir`.
+- **Staged ingest and promote:** `gt_ingest_pipeline.py`, stage × kind agent specs; gt-work is the
+  session kind; the skeptic stays decided by `skeptic_pass` alone.
 - **Repository tooling:** `dev/remote-test.sh` (the suite on a remote Linux runner),
   `copygt.sh`, `dev/feature_requests.py --src` descends into `golden-thread-plugin/`.
 
@@ -202,6 +212,10 @@ Then, in a Claude Code session on that machine:
    `hooks-schema`. `guard_foreign_checkout.sh` and `log_knowledge_read.sh` show `unwired` until
    `install.sh` has run.
 3. **Declare any foreign checkout** on this machine (see §5).
+3c. **Optional: measure this machine's parallel profile** — `python3 <scripts>/gt_bench.py --dry-run`
+    to see it, then without `--dry-run` to write it (about 3 minutes; it never touches other
+    processes). `/gt:gt-doctor`'s `execution` row says whether the profile is measured, and warns
+    if the shell runs under Rosetta.
 3a. **Reminders, if wanted on this machine** (all channels are off until you do this):
     1. `python3 ~/.claude/golden-thread/hooks/gt_reminder.py setup macos|relay|email` — read the
        channel's setup.
@@ -249,6 +263,13 @@ Then, in a Claude Code session on that machine:
   when the aliases are removed.
 - **`commit_checks` and `addon_fixes apply`** are off / propose by default and no checkers ship;
   turning them on means nothing until a checker module is installed.
+- **The five 0.17.10 agent spec files** (`templates/agent-specs/ingest-code`, `ingest-docs`,
+  `ingest-tool`, `validate`, `skeptic`) are still shipped and ignored by the loader. Delete them, or
+  keep them for the alias release.
+- **`gt_secrets.py` flags `scripts/gt_metrics.py:451`** (a `tokens=` keyword argument) on the Mac —
+  a false positive that blocks a local full-run receipt until you baseline it. Not reshaped.
+- **Should gt's own repo adopt a release pipeline?** It would put `release.sh` and
+  `release-pipeline.tsv` at the repo root; `dev/publish.sh` remains the release sequence for now.
 - **When to release:** the owner says when. Then push straight to main, with no PR.
 
 ## 6. What will be misread if nobody says it
@@ -269,6 +290,13 @@ Then, in a Claude Code session on that machine:
   quoted strings and heredocs (e.g. `<YYYY>.md` in a Python heredoc) and can deny a harmless
   command as a vault write. Write such text with the Write tool to a file outside the vault, or put
   the script in a file and run it.
+- **gt-lint's `release-pipeline` finds every project without the key** until `/gt:gt-upgrade` runs
+  its `release-pipeline-flag` migration, which records `planned`.
+- **A scoped receipt is not a release receipt.** `tests/run.sh --affected` lets a feature-branch
+  commit through; the default branch, `release-check` and `publish` still need a full-suite run.
+- **A bare `gt_optimize.py` still runs two members**; `execution` is opt-in (`--only execution`).
+- **Execution metrics are partial:** no token cost per workflow yet, no before/after 0.17.11
+  workflow timing, `gt_bench` calibrates on a synthetic workload, no weekly execution worker.
 - **Known load flakes:** `test_package.test_a_stale_zip_is_replaced` and four
   `test_install_vault_upgrade` units fail only under the 16-worker full run and pass in isolation.
   Re-run them alone before treating one as a regression.

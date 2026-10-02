@@ -447,7 +447,7 @@ read refuses too, because "could not check" is not "clear".</p>
 </tr>
 <tr>
 <td><code>/gt:gt-lint</code></td>
-<td>Audit the vault for structural problems: gt_lint runs 23 checks covering broken wikilinks, orphaned pages, missing index entries, unlisted memory files, Knowledge pages citing superseded sources, stale pages, and <code>core-unenforced</code> — a Core rule that is stored but wired to no hook. Since 0.18.0 four file questions to the review queue: <code>adr-expires</code>, <code>bundled-concept</code>, <code>decision-candidate</code> (phrases: setting <code>decision_signals</code>), <code>memory-entity-orphan</code>.</td>
+<td>Audit the vault for structural problems: gt_lint runs 24 checks covering broken wikilinks, orphaned pages, missing index entries, unlisted memory files, Knowledge pages citing superseded sources, stale pages, and <code>core-unenforced</code> — a Core rule that is stored but wired to no hook. Since 0.18.0 four file questions to the review queue: <code>adr-expires</code>, <code>bundled-concept</code>, <code>decision-candidate</code> (phrases: setting <code>decision_signals</code>), <code>memory-entity-orphan</code>; and <code>release-pipeline</code> checks each project's <code>release_pipeline:</code> flag against its code.</td>
 </tr>
 <tr>
 <td><code>/gt:gt-optimize</code></td>
@@ -479,7 +479,7 @@ read refuses too, because "could not check" is not "clear".</p>
 </tr>
 <tr>
 <td><code>/gt:gt-settings</code></td>
-<td>View and change what Golden Thread does on its own. gt's own settings are <code>component_updates</code>, <code>version_check</code>, <code>orphan_check</code>, <code>push_check</code>, <code>surface</code>, <code>daily_comms_content</code>, <code>release_announce</code>, <code>agent_specialization</code>, <code>skeptic_pass</code>, <code>handoff_surface</code>, <code>task_surface</code>, <code>test_gate</code>, <code>parallel_work</code>, <code>parallel_max</code>, <code>protected_paths</code>, and new in 0.18.0 <code>brief_absence_days</code>, <code>foreign_checkout_guard</code>, <code>decision_signals</code>, <code>knowledge_access_log</code>, <code>optimize_session_days</code>, <code>optimize_avoidable_pct</code>, <code>memory_contradiction_check</code>, <code>promotion_candidates</code>, <code>promotion_overlap</code>, <code>review_stamp</code>, <code>sync_check</code>, <code>reminder_days</code>, <code>reminder_macos</code>, <code>reminder_relay</code>, <code>reminder_email</code>, <code>commit_checks</code>, <code>addon_fixes</code> and <code>addon_fix_size_limit</code>; each installed module registers its own from <code>module.json</code> and they are listed under the module's name (<code>report_card</code>, <code>closeout_check</code>, <code>usage_meter</code>, <code>usage_alert</code>, <code>visualize_publish</code>, <code>visualize_publish_visibility</code>, <code>watch</code>). Every automatic behaviour is registered here and every one can be switched off.</td>
+<td>View and change what Golden Thread does on its own. gt's own settings are <code>component_updates</code>, <code>version_check</code>, <code>orphan_check</code>, <code>push_check</code>, <code>surface</code>, <code>daily_comms_content</code>, <code>release_announce</code>, <code>agent_specialization</code>, <code>skeptic_pass</code>, <code>handoff_surface</code>, <code>task_surface</code>, <code>test_gate</code>, <code>parallel_work</code>, <code>parallel_max</code>, <code>protected_paths</code>, and new in 0.18.0 <code>brief_absence_days</code>, <code>foreign_checkout_guard</code>, <code>decision_signals</code>, <code>knowledge_access_log</code>, <code>optimize_session_days</code>, <code>optimize_avoidable_pct</code>, <code>memory_contradiction_check</code>, <code>promotion_candidates</code>, <code>promotion_overlap</code>, <code>review_stamp</code>, <code>sync_check</code>, <code>reminder_days</code>, <code>reminder_macos</code>, <code>reminder_relay</code>, <code>reminder_email</code>, <code>commit_checks</code>, <code>addon_fixes</code>, <code>addon_fix_size_limit</code>, <code>execution_metrics</code>, <code>scoped_receipts</code>, <code>test_tmpdir</code> and <code>runners</code>; each installed module registers its own from <code>module.json</code> and they are listed under the module's name (<code>report_card</code>, <code>closeout_check</code>, <code>usage_meter</code>, <code>usage_alert</code>, <code>visualize_publish</code>, <code>visualize_publish_visibility</code>, <code>watch</code>). Every automatic behaviour is registered here and every one can be switched off.</td>
 </tr>
 </tbody>
 </table>
@@ -876,6 +876,38 @@ different facts and only one is reassuring.</p>
 <tr>
 <td><code>gt_review_stamp.py --vault V PAGE … [--date D] [--dry-run] [--json]</code></td>
 <td>Queue <code>last_reviewed</code> on Knowledge pages gt-query and gt-open read (<code>review_stamp</code>); gt-wiki 0.2.5's <code>review-due</code> ages from it.</td>
+</tr>
+<tr>
+<td><code>gt_pipeline.py init · list · check · add · set · remove · render · run · flag</code> (<code>--repo R</code>)</td>
+<td>A project's release pipeline: <code>release-pipeline.tsv</code> (steps and gates as data) and a generated <code>release.sh</code> that stops at the first failure and says what ran. Defaults <code>@tests @allin @branch @install @owner-gate @push @sync</code>; a default gate is removed only with <code>--reason</code>. <code>flag</code> sets README <code>release_pipeline:</code>.</td>
+</tr>
+<tr>
+<td><code>gt_recipe.py render · check · show</code></td>
+<td>Recipe (<code>*.tsv</code> steps table or <code>*.recipe</code>) → generated <code>.sh</code> through one tested template; <code>check</code> fails on a hand edit.</td>
+</tr>
+<tr>
+<td><code>gt_metrics.py record · time · report · peers · mark · verify</code></td>
+<td>One row per execution, per project and machine (<code>execution_metrics</code>); rolling baselines, regressions with what changed, cross-project peers, before/after of an applied change.</td>
+</tr>
+<tr>
+<td><code>gt_optimize_exec.py</code> = <code>gt_optimize.py --only execution</code> (alias <code>--execution</code>)</td>
+<td>gt-optimize's opt-in third member: execution findings ranked by measured cost; <code>--apply ID</code> after a yes.</td>
+</tr>
+<tr>
+<td><code>gt_bench.py [--hosts] [--dry-run]</code> · <code>health</code></td>
+<td>Measure <code>parallel_profile</code> (the throughput knee) instead of 2× cores; <code>health</code> = doctor's <code>execution</code> row (measured or default, Rosetta, TMPDIR in a synced folder).</td>
+</tr>
+<tr>
+<td><code>gt_load.py [--cap N] [--json]</code></td>
+<td>What a parallel run would start with now: the ceiling scaled by load and memory pressure.</td>
+</tr>
+<tr>
+<td><code>gt_ingest_pipeline.py stages · survey · packet · fan-in · reconcile · draft · promote-scan · promote-plan · status</code></td>
+<td>The deterministic stages of ingest (intake-scan → survey → extract → classify → reconcile → draft) and promote (verify → generalize → place → owner); stops only on a contradiction, a security issue or unsafe code; no command applies a promotion plan.</td>
+</tr>
+<tr>
+<td><code>tests/run.sh --affected</code> · <code>prun.py --hosts a,b</code></td>
+<td>A scoped run and receipt (accepted on feature branches, <code>scoped_receipts</code>); units split across the <code>runners</code>.</td>
 </tr>
 </tbody>
 </table>

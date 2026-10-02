@@ -23,9 +23,10 @@ session), **install health and guards** (the doctor names the repo a command wil
 hook entries against Claude Code's events, and a guard refuses commits in another machine's
 checkout), **checks that modules contribute** (a validation host, and fixes only gt writes),
 **model intent, not model name**, **across machines and outside sessions** (`gt-sync`, reminders
-by notification, SMS/Discord or email), and **batches that resume** after an interruption.
-Skills: 28 → 36. gt_lint checks: 19 → 23. Settings: eighteen new, every one listed under its
-theme. Hook registrations: two new (one `PreToolUse` guard, one `PostToolUse` read log).
+by notification, SMS/Discord or email), **batches that resume** after an interruption, a
+**release pipeline for every project**, a **faster build loop with measured execution**, and
+**ingest and promote as staged pipelines**. Skills: 28 → 36. gt_lint checks: 19 → 24. Settings:
+twenty-two new, every one listed under its theme. Hook registrations: two new (one `PreToolUse` guard, one `PostToolUse` read log).
 
 Module versions: gt-demo, gt-farm, gt-flow, gt-report-card and gt-watch 0.18.0 (they move with
 gt); gt-wiki 0.2.5; gt-visualize 0.4.2; gt-usage 0.1.4; gt-lotr 0.1.1 — each bumped so its
@@ -459,6 +460,115 @@ days old are pruned at every session registration.
 **Why.** The triage made cross-session resume the requirement — a checkpoint only one session can
 read misses the case that motivated the request.
 
+### A release pipeline for every project
+
+**What.** New `gt_pipeline.py` gives any code repository a **release pipeline**:
+`release-pipeline.tsv` in the code root (one TAB-separated row per step — id, `step` or `gate`, a
+one-line guarantee, the command, what it runs after, required or optional, `default` or `user`) and
+a `release.sh` **generated** from it by `gt_recipe.py`; `check` fails while the two disagree. The
+default steps: `@tests` (suite plus receipt), `@allin`, `@branch` (never the default branch),
+`@install` (install plus post-install validation — it **fails** in a repo with an `install.sh` until
+its real command is declared, because a gate that cannot run is not a pass), `@owner-gate` (stops
+until `--go`), `@push`, `@sync` (not applicable until a downstream copy is declared). A step exiting
+99 is SKIP-not-applicable, never a pass. `release.sh` stops at the first failed required step and
+always says how many steps ran and which. `add` inserts a user gate at a stated position; `check`
+refuses a cycle, an `after` naming no step and a command that does not exist; removing a default
+gate needs `--reason`, recorded in the steps file. `init` adopts a pipeline in an existing repo
+without overwriting anything (a foreign `release.sh` stays; the generated script becomes
+`release-pipeline.sh`).
+
+Projects declare it in README frontmatter, `release_pipeline: yes | no | planned`;
+`vault_init.py create-project --release-pipeline yes --project-dir <code root>` scaffolds it and
+records it in `source.md`, and `/gt:gt-create` asks whether the project ships code. New gt_lint
+check **`release-pipeline`** (19 → 24 with the four above): a project with code marked `no`, a `yes`
+with no `release.sh`, or a bad value. The gt-upgrade migration `release-pipeline-flag` records
+`planned` on every README that lacks the key, through the write queue. `/gt:gt-allin` gains a
+`pipeline` member — only in a repo that adopted one — running `release.sh --until owner-gate`, and
+`/gt:gt-allin-commit` refuses on a failed pre-commit step even with `--allow-findings`.
+
+**Why.** Every miss in the 0.17.11 release was a step that lived only in someone's head: a module
+left off the release branch, post-install validation added only when asked, `copygt.sh` forgotten,
+six scripts committed without the executable bit. gt's own `dev/publish.sh` showed the model that
+works — steps as data, run in order, stop at the first failure, no skip — and no other project had
+it.
+
+### A faster build loop, and measured execution
+
+**What.**
+
+- **Recipes, not hand-written scripts.** `gt_recipe.py` renders a finished `.sh` from a short
+  recipe through one tested template — dependency order, ok/FAIL/SKIP per step, stop at the first
+  required failure, the count of what ran, `--until`/`--from`/`--list`/`--dry-run`. A steps table
+  (`*.tsv`) renders a report-mode runner (`release.sh`); a script recipe renders a plain script.
+  `check` catches a hand edit. `dev/copygt.sh` (~1,050 hand-written lines) is now generated from
+  `dev/copygt.recipe`, with identical behaviour.
+- **Scoped test receipts.** `tests/run.sh --affected` runs only the test modules that name the
+  files changed on the branch (an unmapped code change, or a harness or installer change, selects
+  the full suite) and records a **scoped** receipt naming those files. The commit guard accepts it
+  on a branch that is not the default branch (setting **`scoped_receipts`**, `on`); the default
+  branch and every release gate still need a full-suite receipt. `dev/remote-test.sh --affected`
+  does the same on the runner.
+- **A cached test install** — the harness builds an installed machine once per run and copies it
+  into each test's sandbox; a test proves the copy equals a fresh install.
+- **Load-aware workers.** `gt_load.py` sizes a parallel run from the machine's load, memory
+  pressure and other parallel runs, not only its core count; `prun.py` shrinks its pool when units
+  run more than twice their recorded time and starts the heaviest units first.
+- **Remote runners.** `dev/remote-test.sh` takes its host from `--host`, `$GT_REMOTE_TEST_HOST`, or
+  the first of the **`runners`** setting (empty by default). `prun.py --hosts a,b[,local]` splits
+  units across several runners by measured capacity; an unreachable runner is SKIPPED and its units
+  go to the others — a unit no host reported is a failure, never a pass.
+- **`gt_bench.py`** measures the parallel profile instead of guessing it: a bounded calibration
+  (180 s by default) at several widths, taking the knee — the smallest width reaching 90% of the
+  best throughput — and writing `parallel_profile` with `source: measured`. install.sh had written
+  `io_max = 2 × cores`, never measured. `--hosts` calibrates each runner.
+- **`gt_metrics.py`** records one row per execution — tests, every release-pipeline step,
+  `remote-test`, `/gt:gt-allin` — per project, per machine, per month
+  (`<vault>/Projects/<slug>/metrics/`), with arguments hashed and never stored and credential-shaped
+  strings stored only as hashes. Each process has a rolling baseline (median and p90 of its last 20
+  passing runs); a newest run above max(p90, 1.25 × median) is a **regression**, reported with what
+  changed since. `peers` compares like processes across projects; `mark` and `verify` record an
+  applied optimisation and whether it paid. Setting **`execution_metrics`** (`on`).
+- **gt-optimize's opt-in `execution` member** (`gt_optimize_exec.py`, run by
+  `gt_optimize.py --only execution` or the `--execution` alias; a bare run stays vault + session)
+  ranks serial bottlenecks, redundant full-suite runs, slow steps and units, regressions, much
+  cheaper peers, unmeasured defaults and hand-written step scripts a recipe could generate — by
+  measured cost, with the expected saving. `--apply ID`, after a yes, makes one finding's change and
+  marks it for `verify`.
+- **`/gt:gt-doctor`** gains an `execution` row: the profile measured or default and its age, a shell
+  translated by Rosetta, test temp files in a synced folder. Setting **`test_tmpdir`** (`off`;
+  `noindex`) moves the test runner's temp files out of watched folders.
+
+**Why.** The 0.17.11 release ran the ~2,400-test suite about eight times in one day, including for
+single-tool changes; a local run at load ~50 dropped the owner's keystrokes; and every "it would be
+faster if" was a guess. Owner, 2026-10-01: *"It is about all processes inside of how a dev works …
+capture metrics on different executions across the board."* Measured: the full suite on an 8-core
+runner, 2,582 tests in 217.6 s; the cached install took one test module from 45.2 s to 30.8 s
+serially. A first load-aware formula started one worker at load 6.6 on 8 cores and took the suite
+1,195 s; the shipped formula scales by 1/overload² only above one runnable process per core.
+
+### Ingest and promote as staged pipelines
+
+**What.** 0.17.10 gave every agent job one spec per kind of material, and each did a whole ingest
+in one job, so nothing could be handed off or run side by side. Ingest is now **intake-scan →
+survey → extract → classify → reconcile → draft**, and promote is **scan → verify → generalize →
+place → owner approves**. The kind (code, docs, tool, session, wiki) is a parameter: one spec per
+stage in `templates/agent-specs/stages/`, one small delta per kind in `kinds/`, which can add prompt
+lines and fields but never change the executor, the intake-scan requirement or the context
+strategy. The new `gt_ingest_pipeline.py` runs every step that is not an agent: `survey` (intake scan
+and a split into units, one per top-level folder; `--deeper`, `--unit-depth`, saved with
+`--record`), `packet` (exactly one result packet per unit, so parallel extracts never collide),
+`fan-in`, `reconcile` (dedupe, and compare with facts already in gt — a contradiction **stops** the
+run and that finding is never written), `draft` (through the write queue, no approval prompt),
+`promote-scan`, `promote-plan` (ends at `awaiting-owner`; **no command applies a plan**), `status`.
+Ingest stops for the owner only on a contradiction, a security issue or unsafe code, and a stop
+names the kind and the place, never the content. **`/gt:gt-work` is now the session kind** of the
+same pipeline: scan, segment, extract, reconcile, draft. `agent_specialization` still gates the
+agent stages; the skeptic is now the `reconcile-session` stage and is still decided by
+`skeptic_pass` alone. The five 0.17.10 spec names stay as aliases for one release.
+
+**Why.** The owner asked for small jobs that can be handed off and run side by side; a stage that
+reads only the previous stage's packet is stateless and can go to a fresh agent.
+
 ### Repository tooling (not installed)
 
 - **`dev/remote-test.sh`** runs the full suite on a Linux VM over ssh and records the receipt on the
@@ -544,6 +654,24 @@ read misses the case that motivated the request.
   collision ~1 in 42,000, from ~1 in 1,024 at 4).
 - **`gt_task.py list` and the rollup see two project levels only**; a third-level sub-project's
   tasks are not listed.
+- **The five 0.17.10 agent spec files remain** in `templates/agent-specs/` (`ingest-code`,
+  `ingest-docs`, `ingest-tool`, `validate`, `skeptic`). The loader ignores them; deleting them is
+  the owner's decision.
+- **`gt_secrets.py` on the Mac flags `scripts/gt_metrics.py:451`** (a `tokens=` keyword argument) as
+  an assigned credential — a false positive that blocks a local full-run receipt until the owner
+  baselines it. Not reshaped to dodge the scanner.
+- **Execution metrics are partial.** Token cost per workflow is recordable (`--tokens`) but nothing
+  feeds it; no before/after timing of the whole 0.17.11 workflow was re-run; `gt_bench` calibrates on
+  a synthetic workload only, not your own test command; there is no weekly execution worker
+  (`--only execution` is on demand); nothing prunes old metrics months.
+- **gt's own repository has not adopted a release pipeline** (`dev/publish.sh` remains its release
+  sequence). A `yes` project's `release.sh` is found through the absolute path in `source.md`, so a
+  vault synced to another machine may report it missing there.
+- **The cached test install is used only by `test_gt_doctor_postinstall`**; tests whose subject is
+  the install cannot use it. Rosetta is detected, not fixed. `prun.py --hosts` records no receipt.
+- **Script-side contradiction detection in the ingest pipeline is narrow** (same statement, a
+  different figure or flipped polarity); anything subtler needs the `reconcile-<kind>` agent. A
+  saved unit split is keyed by folder name unless `--repo-key` is given.
 - **Test flakes under load:** `test_package.test_a_stale_zip_is_replaced` and four
   `test_install_vault_upgrade` units fail only under the 16-worker full run and pass in isolation
   (load and timing, not behaviour).

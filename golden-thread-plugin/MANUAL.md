@@ -1320,6 +1320,57 @@ Prefer keeping filenames. If you must repoint, match the *whole* link —
 `[[name]]` and `[[name|alias]]` — never a substring, or `[[foo]]` will corrupt
 `[[foo_bar]]`. Never repoint links inside `Sources/`.
 
+#### Ingest as a staged pipeline (0.18.0)
+
+An ingest runs as six stages, each reading only the previous stage's packet in
+`<vault>/Projects/golden-thread/spool/pipeline/<run>/` — never a session's memory — so each stage is
+stateless and can go to a fresh agent, and per-unit stages run side by side:
+
+| Stage | Runs as | Parallel |
+|---|---|---|
+| intake-scan | `gt_ingest_pipeline.py survey` (`gt_intake_scan.py`) | per unit |
+| survey | the same command; units = top-level folders | one |
+| extract | agent, spec `extract-<kind>` | per unit |
+| classify | agent, spec `classify-<kind>` (optional) | per batch |
+| reconcile | `gt_ingest_pipeline.py reconcile` + a `reconcile-<kind>` agent | one |
+| draft | `gt_ingest_pipeline.py draft`, through the write broker | per target file |
+
+The kind — `code`, `docs`, `tool`, `session`, `wiki` — is a parameter: one spec per stage in
+`templates/agent-specs/stages/`, a small delta per kind in `kinds/` that may add prompt lines and
+fields but never change the executor, the intake-scan requirement or the context strategy.
+`agent_specialization` decides whether the agent stages go to specialist agents. **It stops for you
+in three cases only:** a direct contradiction with a fact already in gt (found at reconcile), a
+security issue (a credential, injected instructions, a unit the scan could not read), or unsafe
+source code. A stop names the kind of problem and where, never the content; `draft` refuses while
+it stands, and `--owner-continue` drafts everything else — the stopped findings are still never
+written. With no stop the ingest finishes with no prompt at all.
+
+**Units.** Each top-level folder is one unit and root files are the unit `.`. Split a monorepo with
+`--deeper packages` or `--unit-depth 2`; `--record --why "<reason>"` saves the split in
+`<vault>/Projects/golden-thread/ingest-units.json` (in the vault on purpose: a config file inside
+the ingested repo would be untrusted material).
+
+**Promote runs the same way** when there are several candidates: `promote-scan`, then one agent per
+candidate for **verify** (zero-context; refuted or unverifiable candidates are dropped),
+**generalize** and **place**, then `promote-plan`, which ends at `awaiting-owner`. No command
+applies a plan: promotions stay yours. **`/gt:gt-work` is the session kind**: its drafted write-back
+is scanned for credentials and injected text, split into segments, extracted, reconciled with the
+same stop rules — the skeptic is now the `reconcile-session` stage, still decided by `skeptic_pass`
+alone — and drafted through the broker. The 0.17.10 spec names stay as aliases for one release.
+
+```bash
+python3 $SCRIPTS/gt_ingest_pipeline.py stages
+python3 $SCRIPTS/gt_ingest_pipeline.py survey <path> --kind K [--project P] [--run R] [--unit-depth N] [--deeper DIR] [--record --why W]
+python3 $SCRIPTS/gt_ingest_pipeline.py packet <run> --stage S --unit U --result-file F [--replace]
+python3 $SCRIPTS/gt_ingest_pipeline.py fan-in <run> --stage extract|classify
+python3 $SCRIPTS/gt_ingest_pipeline.py reconcile <run> [--facts-out F]
+python3 $SCRIPTS/gt_ingest_pipeline.py draft <run> [--owner-continue] [--no-drain]
+python3 $SCRIPTS/gt_ingest_pipeline.py promote-scan --candidates-file F | promote-plan <run> | status <run>
+```
+
+Every subcommand takes `--vault`, `--dry-run` and `--json`. Exit `0` ok · `1` a stop for the owner
+(or refused) · `2` usage · `3` incomplete — a missing unit is never a pass.
+
 ### `/gt:gt-review`
 
 Empties `INBOX.md`: reads every unchecked line (and daily notes, if configured),
@@ -2131,11 +2182,12 @@ a timestamp — and the newest receipt for a file wins *by recorded time*, not b
 | `bundled-concept` | *(review queue, 0.18.0)* A Knowledge page with four or more `## ` headings of which at most two share a keyword with its title or tags: "covers multiple topics; consider splitting". Never proposes the split. `category: decision` and `_`-prefixed pages are exempt |
 | `decision-candidate` | *(review queue, 0.18.0)* A decision stated in prose — "we chose", "by design", "deliberately" … — in a project's `design.md` or `research.md`, with the line, the phrase and a proposed `gt_adr.py allocate` command. Nothing writes an ADR. Phrases: setting `decision_signals` |
 | `memory-entity-orphan` | *(review queue, 0.18.0)* A name that appears three or more times in a memory note's body and is not in its `entities:` list |
+| `release-pipeline` | *(0.18.0)* A project with code (a topology) marked `release_pipeline: no`, one marked `yes` with no `release.sh`, or a value other than `yes`/`no`/`planned`. A README without the key reads as `planned` — see [Release pipeline](#release-pipeline-gt_pipelinepy) |
 | `runbook-duplicate` | A line duplicated across two or more projects' `runbook.md` — `--runbooks` only, and the detection step of `/gt:gt-runbook-lint` |
 
-gt_lint emits twenty-three checks, and every one of them runs on an ordinary pass,
+gt_lint emits twenty-four checks, and every one of them runs on an ordinary pass,
 each wired to a function the run actually calls. `runbook-duplicate` is not one of the
-twenty-three:
+twenty-four:
 it is a separate read-only mode, `gt_lint.py --runbooks`, which runs nothing else and reports
 under its own record shape — the detection step of `/gt:gt-runbook-lint`. Fewer than two
 runbooks prints "nothing to compare" and exits 0. `core-unenforced` is the critical one — it is the machine-checkable form of "rule
@@ -2187,7 +2239,7 @@ clean report from a check pinned to the wrong release reads exactly like a healt
 that is how 0.9.4 sat uninstalled on 2026-08-30 beside a component check reporting clean
 against 0.6.0. Say the version, then the findings.
 
-Fifteen checks, each answering a different question:
+Sixteen checks, each answering a different question:
 
 | Check | Question |
 |---|---|
@@ -2206,6 +2258,7 @@ Fifteen checks, each answering a different question:
 | `checkers` | how many validation checkers are installed, and is any missing a tool it needs? (0.18.0; see [`gt_check.py`](#gt_checkpy-checkers-a-module-contributes)) |
 | `repo-target` | which git repo does this working directory resolve to, and is it the vault? (0.18.0) Always a **note** (`i`) |
 | `hooks-schema` | does every `settings.json` hook entry name an event Claude Code fires and, on a tool event, a tool it has? (0.18.0) |
+| `execution` | is the parallel profile measured or a default, and how old? Is the shell translated by Rosetta? Is TMPDIR inside a synced folder? (0.18.0; `gt_bench.py health`) |
 
 **`repo-target` (0.18.0).** gt makes the vault the working directory, and the vault is a git repo,
 so every repo-scoped command that is not gt's — `/security-review`, `/code-review`, a test runner,
@@ -2479,7 +2532,7 @@ is registered here and can be switched off.
 | `parallel_work` | `off` · `on` | `on` | Whether divisible work runs in parallel at all; `off` also stops the Core rule being injected |
 | `parallel_max` | `auto` · a positive integer | `auto` | Ceiling on concurrent workers. `auto` = as many as the machine allows |
 | `skeptic_pass` | `off` · `on` | `off` | On its own (since 0.18.0), makes `/gt:gt-work` spawn a zero-context skeptic over the research entries about to land. It does not turn on specialist ingest or validation |
-| `agent_specialization` | `off` · `on` | `off` | Hands `/gt:gt-ingest` and `/gt:gt-validate` work to job-typed specialist agents. Since 0.18.0 it does not affect the gt-work skeptic |
+| `agent_specialization` | `off` · `on` | `off` | Hands the agent stages of ingest, promote and gt-work (stage × kind specs, 0.18.0) and `/gt:gt-validate` to specialist agents. Since 0.18.0 it does not affect the gt-work skeptic |
 | `brief_absence_days` | `off` · `3` · `7` · `14` · `30` | `7` | Days away from a project (on this machine) before `/gt:gt-open` leads with the generated catch-up brief; `off` = only on `--brief` (0.18.0). A value outside the list reads as `7` |
 | `foreign_checkout_guard` | `off` · `on` | `on` | Deny `git commit`/`git push` inside a checkout you declared as another machine's (0.18.0). Inert while nothing is declared. See [Foreign checkouts](#foreign-checkouts-a-commit-in-another-machines-checkout) |
 | `decision_signals` | `default` · `off` · `;`-separated `+phrase`/`-phrase` edits | `default` | The phrases gt-lint's `decision-candidate` check looks for in `design.md` and `research.md` (0.18.0) |
@@ -2498,6 +2551,10 @@ is registered here and can be switched off.
 | `commit_checks` | `off` · `on` | `off` | Refuse a commit whose staged content no passing `gt_check.py` run covers (0.18.0) |
 | `addon_fixes` | `off` · `propose` · `apply` | `propose` | What happens to a checker's fix proposals; only first-party checkers auto-apply (0.18.0) |
 | `addon_fix_size_limit` | `1k` · `4k` · `16k` · `64k` · `256k` | `16k` | Most bytes one fix may add or remove (0.18.0) |
+| `execution_metrics` | `off` · `on` | `on` | Record one row per execution of tests, release-pipeline steps and gt skills (`gt_metrics.py`); `off` records nothing anywhere (0.18.0) |
+| `scoped_receipts` | `off` · `on` | `on` | On a feature branch, a commit may rely on a scoped receipt from `tests/run.sh --affected`; the default branch and release gates always need a full-suite receipt (0.18.0) |
+| `test_tmpdir` | `off` · `noindex` | `off` | Where the test runner puts throwaway files; `noindex` = `~/Library/Caches/gt-tests.noindex` on macOS, `$XDG_CACHE_HOME/gt-tests` elsewhere (0.18.0) |
+| `runners` | empty · comma-separated ssh aliases | empty | Remote hosts that may run tests and calibration: `dev/remote-test.sh`, `prun.py --hosts`, `gt_bench.py --hosts` (0.18.0) |
 
 **Settings that come from modules.** Since 0.15.0 a module declares its own settings in
 its `module.json` — `key`, `default`, `values`, `summary`, and an optional long `detail`
@@ -2593,6 +2650,28 @@ gt_settings.py detect-machine --write    # measure and store it
 
 Setting a number above what the machine can use is refused at the point you set it, and
 a number above core count is accepted with a note that it only helps I/O-bound work.
+
+**Measuring it instead (0.18.0): `gt_bench.py`.** The install's 2× cores for I/O was never
+measured, and on the machine that prompted this the cores were not the limit at all — load 28 on 16
+cores from the scanner, the indexer and the sync daemon before a test ran. `gt_bench.py` runs a
+short, bounded calibration (180 s by default): a synthetic I/O workload (file churn plus a
+subprocess per unit) and a CPU workload at several widths, the median of several runs each, and
+takes the **knee** — the smallest width reaching 90% of the best throughput — as `io_max` /
+`cpu_max`. It writes `parallel_profile` with `source: measured` and both curves, reports load before
+and during and names the busiest other processes (never touching them). install.sh keeps a measured
+profile while the core count and host name are unchanged.
+
+```bash
+python3 $SCRIPTS/gt_bench.py [--dry-run] [--json] [--widths 1,2,4,8] [--units N] [--repeat R] [--budget S] \
+    [--location DIR] [--hosts [a,b]]
+python3 $SCRIPTS/gt_bench.py health [--json]     # the rows gt-doctor's `execution` check shows
+```
+
+`--location DIR` compares I/O there with the temp dir; `--hosts` (the `runners` setting, or a list)
+calibrates each ssh runner, sending only this script on stdin. Exit `0` measured · `1` nothing
+measurable within the budget · `2` usage. The workload is always synthetic — not your own test
+command. `gt_load.py [--cap N] [--json]` shows what a parallel runner would start with right now, and
+why: the ceiling scaled down by load, memory pressure and other parallel runs.
 
 **The budget as a number.** Any script, in any project, can ask what the settings allow
 instead of inventing a worker count:
@@ -2870,6 +2949,100 @@ Each gate exists because the step it covers was once left to memory and went wro
 went out with a stale file after its tests had been run before the last edits, which is why the
 receipt is tied to file times rather than to anyone's word.
 
+### Release pipeline: `gt_pipeline.py`
+
+*New in 0.18.0.* A project that ships code gets a **release pipeline**: the steps a release must
+pass, in order, as data in `release-pipeline.tsv` in the code root (id, `step` or `gate`, a one-line
+guarantee, the command, what it runs after, required or optional, `default` or `user`), and a
+`release.sh` **generated** from it. It stops at the first failed required step and always ends with
+how many steps ran and which; a step exiting 99 is SKIP-not-applicable, never a pass. Every miss in
+gt's own 0.17.11 release was a step that lived in someone's head — this is gt's `dev/publish.sh`
+model, steps as data and no skip, for every project.
+
+| Default step | Guarantees |
+|---|---|
+| `@tests` | the suite passes and records a receipt |
+| `@allin` | `/gt:gt-allin` ran clean |
+| `@branch` | not on the default branch |
+| `@install` | install plus post-install validation — **fails** in a repo with an `install.sh` until its real command is declared (`set install --cmd …`): a gate that cannot run is not a pass |
+| `@owner-gate` | stops until `--go`: after the owner says go, `release.sh --from owner-gate --go` |
+| `@push` | the push |
+| `@sync` | a downstream copy — not applicable until one is declared |
+
+```bash
+python3 $SCRIPTS/gt_pipeline.py init   --repo R [--project SLUG] [--dry-run]   # adopt it; never overwrites
+python3 $SCRIPTS/gt_pipeline.py list   --repo R
+python3 $SCRIPTS/gt_pipeline.py check  --repo R            # cycles, missing commands, release.sh current
+python3 $SCRIPTS/gt_pipeline.py add    <id> --repo R --cmd CMD [--kind gate] [--after ID] [--guarantee T] [--optional]
+python3 $SCRIPTS/gt_pipeline.py set    <id> --repo R --cmd CMD
+python3 $SCRIPTS/gt_pipeline.py remove <id> --repo R --reason TEXT   # a default gate needs a reason, recorded
+python3 $SCRIPTS/gt_pipeline.py render --repo R
+python3 $SCRIPTS/gt_pipeline.py run    --repo R [--until ID] [--from ID] [--go]
+python3 $SCRIPTS/gt_pipeline.py flag   --vault V (--project SLUG --value yes|no|planned | --all-missing) [--dry-run]
+./release.sh [--list] [--dry-run] [--until ID] [--from ID] [--go]
+```
+
+`init` in a repo that already has its own `release.sh` leaves it alone and names the generated one
+`release-pipeline.sh`. A project says whether it has one in its README frontmatter,
+`release_pipeline: yes | no | planned`; `/gt:gt-create` asks whether a project ships code and
+offers it (`vault_init.py create-project --release-pipeline yes --project-dir <code root>` scaffolds
+it and records the path in `source.md`). gt-lint's `release-pipeline` check flags a project with
+code marked `no`, or `yes` with no `release.sh`; `/gt:gt-upgrade` records `planned` where the key is
+missing. `/gt:gt-allin` runs a `pipeline` member in a repo that adopted one (`release.sh --until
+owner-gate`), and `/gt:gt-allin-commit` refuses on a failed pre-commit step even with
+`--allow-findings`. Exit `0` every required step passed or did not apply · `1` stopped at a failure.
+
+**Recipes: `gt_recipe.py`.** `release.sh` is not written by hand: `gt_recipe.py` renders it from the
+steps table through one tested template (dependency order, ok/FAIL/SKIP per step, stop at the first
+required failure, the count of what ran, `--until`/`--from`/`--list`/`--dry-run`). A script recipe
+(`*.recipe`) renders a plain script whose step bodies are code — gt's own `dev/copygt.sh` is
+generated from `dev/copygt.recipe`. `check` fails on a hand edit.
+
+```bash
+python3 $SCRIPTS/gt_recipe.py render <recipe> [--out FILE] [--dry-run]
+python3 $SCRIPTS/gt_recipe.py check  <recipe> --out FILE
+python3 $SCRIPTS/gt_recipe.py show   <recipe> [--json]
+```
+
+### Execution metrics: `gt_metrics.py`
+
+*New in 0.18.0.* Every "it would be faster if" was a guess. `gt_metrics.py` records one row per
+execution — project, process, kind, start, duration, exit, units, parallelism, reruns, tokens where
+known, machine, commit, a hash of the execution settings, scope. Arguments are hashed and never
+stored, and a string shaped like a credential is stored only as its hash. Rows live per project in
+`<vault>/Projects/<slug>/metrics/<machine>-<YYYY-MM>.jsonl` (one file per machine per month, so
+synced machines never append to one file), or under `~/.claude/golden-thread/metrics/` for a project
+the vault does not have. Already instrumented: every release-pipeline step and the whole pipeline,
+`tests/prun.py`, `dev/remote-test.sh` and `/gt:gt-allin`; `time -- <cmd>` wraps anything else.
+Setting `execution_metrics` (`on`).
+
+```bash
+python3 $SCRIPTS/gt_metrics.py record --process ID --duration S --exit N [--project P] [--units N] [--parallel N] [--tokens N] [--scope full|scoped]
+python3 $SCRIPTS/gt_metrics.py time   --process ID [--project P] -- <command ...>
+python3 $SCRIPTS/gt_metrics.py report [--project P] [--json]     # exit 1 on a regression
+python3 $SCRIPTS/gt_metrics.py peers  [--kind K] [--json]
+python3 $SCRIPTS/gt_metrics.py mark   --process ID --change TEXT [--rollback CMD]
+python3 $SCRIPTS/gt_metrics.py verify --process ID [--project P] [--json]   # exit 1: the change did not pay
+```
+
+Process ids are `<kind>:<name>` (`tests`, `release`, `build`, `deploy`, `skill`, `agent`, …); the
+kind is what makes processes comparable across projects. Each process has a rolling baseline — the
+median and p90 of its last 20 passing runs — and a newest run above max(p90, 1.25 × median) is a
+**regression**, reported with what changed since (commit, settings, scope, parallelism, machine).
+`peers` compares like processes across projects per unit and says what the cheaper one does
+differently. `mark` records an applied optimisation with its rollback; `verify` says whether it beat
+the baseline.
+
+**The `execution` member of gt-optimize** — `gt_optimize.py --vault V --only execution [--project P]
+[--repo R]`, or the alias `--execution` (also `gt_optimize_exec.py`). It is **opt-in**: a bare
+`gt_optimize.py` still runs `vault` and `session`. It reads the metrics, the runner's per-unit
+timings and the profile, and reports — ranked by measured cost, with the expected saving — serial
+bottlenecks, the full suite run several times a day where a scoped run would do, slow pipeline steps
+and test units, install-heavy units, regressions, much cheaper peers, defaults never revisited and
+hand-written step scripts a recipe could generate. gt's own findings are labelled
+`gt-development`. `--apply ID`, after your yes, makes one finding's change and marks it for
+`verify`. Exit `0` nothing found · `1` findings · `2` usage.
+
 ### Foreign checkouts: a commit in another machine's checkout
 
 *New in 0.18.0.* A checkout in a shared folder can belong to another machine — it pushes from
@@ -3117,6 +3290,35 @@ commit gate to re-check. Each apply, refusal, rollback and undo is one `addon.fi
 live in `<vault>/Projects/golden-thread/ext-proposals/`, originals in
 `~/.claude/golden-thread/proposals/backups/`. Exit `0` applied · `1` refused, did-not-fix or nothing
 to do · `2` usage.
+
+### The fast test loop (0.18.0)
+
+The 0.17.11 release ran the whole ~2,400-test suite about eight times in one day, including for
+single-tool changes, and a local run at load ~50 dropped keystrokes. Four changes:
+
+```bash
+tests/run.sh --affected          # only what the branch's changes need; a pass = a SCOPED receipt
+tests/prun.py --print-affected   # show the mapping, run nothing
+tests/prun.py --hosts a,b        # split units across runners (empty value = the `runners` setting; `local` = here)
+GT_TEST_LOAD_AWARE=0             # size the pool from the settings only
+GT_TEST_NO_INSTALL_CACHE=1       # measure the uncached install cost
+GT_TEST_TMPDIR=<dir>             # test temp files go there for this run
+```
+
+- **Scoped receipts.** `--affected` runs the test modules that name the files changed on the branch
+  (committed, staged, unstaged, untracked); an unmapped code change or a harness or installer change
+  selects the full suite. A feature-branch commit may rely on that scoped receipt (setting
+  `scoped_receipts`); the default branch and every release gate need a full-suite receipt, once per
+  release.
+- **A cached install.** The harness builds an installed machine once per run and copies it into each
+  test's sandbox; a test proves the copy equals a fresh install.
+- **Load-aware workers.** The runner starts from the settings' ceiling scaled down by load, memory
+  pressure and other parallel runs (`gt_load.py`), shrinks its pool when units run more than twice
+  their recorded time, and starts the heaviest units first.
+- **Temp files out of watched folders.** `test_tmpdir noindex` keeps them away from Spotlight and sync.
+
+A unit no runner reported under `--hosts` is a failure, never a pass, and a `--hosts` run records no
+receipt; the full suite on one runner is `dev/remote-test.sh` (see `dev/README.md`).
 
 ### `gt_code_review.py` — the framework, not the opinions
 
@@ -3799,6 +4001,13 @@ duplicated across projects' runbooks — the detection step of `/gt:gt-runbook-l
 | `gt_checkpoint.py find · show · prune` | resumable scans and ingests | |
 | `gt_link_suggest.py suggest · apply` | link suggestions after a Knowledge write | `1` a write refused |
 | `gt_review_stamp.py --vault V PAGE … [--date D]` | queue `last_reviewed` on Knowledge pages | `1` refused |
+| `gt_pipeline.py init · list · check · add · set · remove · render · run · flag` | a project's release pipeline ([Release pipeline](#release-pipeline-gt_pipelinepy)) | `1` stopped at a failure |
+| `gt_recipe.py render · check · show` | recipe → generated script; `check` catches a hand edit | |
+| `gt_metrics.py record · time · report · peers · mark · verify` | execution rows and baselines ([Execution metrics](#execution-metrics-gt_metricspy)) | `1` regression, or a change that did not pay |
+| `gt_optimize_exec.py` (= `gt_optimize.py --only execution`) | the opt-in execution member of gt-optimize | `1` findings |
+| `gt_bench.py [--hosts] · health` | measure the parallel profile | `1` nothing measurable |
+| `gt_load.py [--cap N] [--json]` | what a parallel run would start with now, and why | |
+| `gt_ingest_pipeline.py stages · survey · packet · fan-in · reconcile · draft · promote-scan · promote-plan · status` | the deterministic stages of ingest and promote | `1` a stop · `3` incomplete |
 | `~/.claude/golden-thread/hooks/guard_foreign_checkout.py list` · `add PATH [--label L] [--route R] [--dry-run]` · `remove PATH [--dry-run]` | declare checkouts another machine owns ([Foreign checkouts](#foreign-checkouts-a-commit-in-another-machines-checkout)) | |
 
 ---
