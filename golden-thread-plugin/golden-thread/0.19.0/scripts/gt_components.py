@@ -445,6 +445,7 @@ HOOK_DIR_SCRIPTS = ("gt_paths.py", "gt_components.py",
                     # exist (audit, 2026-09-28). dev/check_wiring_coverage.py now fails a JOBS
                     # script missing from this tuple, which is how both shipped unnoticed.
                     "gt_schedule.py",      # also imported by gt_doctor's `schedule` check
+                    "gt_keyword_recall.py",  # vault_hints.py matches with it (0.19.0)
                     "gt_daily.py",         # job `daily` (stdlib only)
                     "gt_sweep.py",         # job `sweep`; its members and their imports follow
                     "gt_secrets.py", "gt_scan_code.py", "gt_check_report.py",
@@ -529,6 +530,11 @@ HOOK_REGISTRATIONS = (
     # `knowledge_access_log` setting; fails open and silent; a 5 s budget it never needs.
     {"event": "PostToolUse", "script": "log_knowledge_read.sh", "matcher": "Read",
      "timeout": 5, "args": [], "owner": "install.sh"},
+    # Prompt-relevant vault hints (0.19.0): up to three index.md titles that share words with
+    # the prompt, never a page body. OFF by default (`vault_hints` setting) -- registered always,
+    # silent and instant when off; a 3 s budget it never needs (its own is 0.8 s).
+    {"event": "UserPromptSubmit", "script": "vault_hints.py", "timeout": 3, "args": [],
+     "owner": "install.sh"},
     # -- enforcement: registered by vault_init.py install-core-rules ---------
     {"event": "UserPromptSubmit", "script": "inject_core_rules.sh",
      "args": [], "owner": "vault_init.py install-core-rules"},

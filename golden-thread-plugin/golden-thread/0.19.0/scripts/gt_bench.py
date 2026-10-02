@@ -5,6 +5,8 @@ of guessing it.
     gt_bench.py [--dry-run] [--json] [--widths 1,2,4,8] [--units N] [--repeat R] [--budget S]
                 [--location DIR] [--hosts [a,b]]
     gt_bench.py health [--json]          the execution rows gt_doctor.py reports
+    gt_bench.py recall --fixture DIR [--retriever keyword|FILE.py ...] [--json]
+                                         recall@1/3/10 of vault lookup (0.19.0)
 
 WHY (owner, 2026-09-28): "Create a test suite for optimal performance and then maybe we add that
 to golden-thread so you can get different setups for execution of tasks with golden-thread to
@@ -52,6 +54,7 @@ import shutil
 import statistics
 import subprocess
 import sys
+from pathlib import Path
 import tempfile
 import time
 
@@ -280,8 +283,117 @@ def health():
 
 # -------------------------------------------------------------------- CLI ----
 
+# ---- recall (0.19.0, request recall-benchmark) ---------------------------------------------
+#
+# Does vault lookup find the right page? A fixture (vault/ + questions.json) is asked every
+# question; each retriever's ranked pages are scored recall@1/3/10, with the files it read and an
+# approximate token count (characters / 4 -- labelled approximate, not measured). A retriever is
+# `keyword` (gt_keyword_recall, the gt-query path) or a .py file defining
+# retrieve(question, vault, k) -> [paths] or {"results": [...], "read": [...]}. One that cannot
+# load or raises is COULD-NOT-RUN with a nonzero exit, never a zero score.
+RECALL_LOG = Path.home() / ".claude" / "golden-thread" / "bench-recall.jsonl"
+
+
+def _load_retriever(spec):
+    import importlib.util
+    if spec == "keyword":
+        sys.path.insert(0, str(Path(__file__).resolve().parent))
+        import gt_keyword_recall
+        return "keyword", gt_keyword_recall.retrieve
+    p = Path(spec)
+    mod_spec = importlib.util.spec_from_file_location("gt_bench_retriever_%s" % p.stem, str(p))
+    if mod_spec is None or not p.is_file():
+        raise FileNotFoundError("no retriever at %s" % p)
+    mod = importlib.util.module_from_spec(mod_spec)
+    mod_spec.loader.exec_module(mod)
+    return p.stem, mod.retrieve
+
+
+def run_recall(spec, vault, questions):
+    import time as _t
+    row = {"name": Path(spec).stem if spec != "keyword" else "keyword", "status": "ran"}
+    try:
+        row["name"], fn = _load_retriever(spec)
+        t0, per = _t.monotonic(), []
+        for q in questions:
+            s0 = _t.monotonic()
+            out = fn(q["question"], vault, 10)
+            results = out.get("results", []) if isinstance(out, dict) else list(out or [])
+            read = out.get("read", results[:3]) if isinstance(out, dict) else results[:3]
+            rank = results.index(q["expected"]) + 1 if q["expected"] in results else None
+            chars = 0
+            for rel in read:
+                try:
+                    chars += (Path(vault) / rel).stat().st_size
+                except OSError:
+                    pass
+            per.append({"id": q["id"], "level": q.get("level"), "expected": q["expected"],
+                        "found_rank": rank, "files_read": len(read),
+                        "approx_tokens": chars // 4, "ms": round((_t.monotonic() - s0) * 1000, 1)})
+    except Exception as exc:                                     # noqa: BLE001
+        row.update(status="could-not-run", error="%s: %s" % (exc.__class__.__name__, exc))
+        for k in ("recall@1", "recall@3", "recall@10"):
+            row[k] = None
+        return row
+    n = len(per) or 1
+    for k in (1, 3, 10):
+        row["recall@%d" % k] = round(sum(1 for x in per if x["found_rank"] and x["found_rank"] <= k)
+                                     / n, 3)
+    row.update(questions=per, files_read=sum(x["files_read"] for x in per),
+               approx_tokens=sum(x["approx_tokens"] for x in per),
+               wall_s=round(_t.monotonic() - t0, 2))
+    return row
+
+
+def recall_main(argv):
+    # A real subparser, so `gt_bench.py recall --help` lists these flags (and the docstring-flag
+    # gate can see the verb); the calibration CLI above stays as it was.
+    root = argparse.ArgumentParser(prog="gt_bench.py")
+    ap = root.add_subparsers(dest="cmd").add_parser(
+        "recall", description="recall@k of vault lookup on a fixture")
+    ap.add_argument("--fixture", required=True, help="a directory holding vault/ and questions.json")
+    ap.add_argument("--retriever", action="append",
+                    help="`keyword` (default) or a .py defining retrieve(); repeat to compare")
+    ap.add_argument("--json", action="store_true")
+    a = root.parse_args(["recall"] + list(argv))
+    fx = Path(a.fixture)
+    try:
+        questions = json.loads((fx / "questions.json").read_text(encoding="utf-8"))["questions"]
+    except Exception as exc:
+        print("gt_bench recall: cannot read %s/questions.json (%s)" % (fx, exc), file=sys.stderr)
+        return 2
+    rows = [run_recall(s, fx / "vault", questions) for s in (a.retriever or ["keyword"])]
+    record = {"at": _now(), "fixture": str(fx), "questions": len(questions),
+              "retrievers": rows}
+    try:
+        RECALL_LOG.parent.mkdir(parents=True, exist_ok=True)
+        with RECALL_LOG.open("a", encoding="utf-8") as fh:
+            fh.write(json.dumps({"at": record["at"], "fixture": record["fixture"],
+                                 "retrievers": [{k: v for k, v in r.items() if k != "questions"}
+                                                for r in rows]}) + "\n")
+    except OSError:
+        pass
+    if a.json:
+        print(json.dumps(record, indent=2))
+    else:
+        print("recall on %s (%d questions; tokens approximate, chars/4)" % (fx, len(questions)))
+        print("  %-20s %-14s %8s %8s %9s %10s %11s" % ("retriever", "status", "recall@1",
+                                                       "recall@3", "recall@10", "files read",
+                                                       "~tokens"))
+        for r in rows:
+            if r["status"] != "ran":
+                print("  %-20s %-14s %s" % (r["name"], "COULD-NOT-RUN", r.get("error", "")))
+                continue
+            print("  %-20s %-14s %8.3f %8.3f %9.3f %10d %11d" % (
+                r["name"], "ran", r["recall@1"], r["recall@3"], r["recall@10"],
+                r["files_read"], r["approx_tokens"]))
+    return 1 if any(r["status"] != "ran" for r in rows) else 0
+
+
 def main(argv=None):
     argv = sys.argv[1:] if argv is None else list(argv)
+    if argv[:1] == ["recall"]:
+        return recall_main(argv[1:])
     if argv[:1] == ["health"]:
         rows = health()
         if "--json" in argv:

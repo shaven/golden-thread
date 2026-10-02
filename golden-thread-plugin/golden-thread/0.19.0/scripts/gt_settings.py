@@ -59,6 +59,20 @@ import sys
 CONFIG = os.path.expanduser("~/.claude/vault-config.json")
 
 SETTINGS = {
+    "vault_hints": {
+        "default": "off",
+        "values": ["off", "on"],
+        "summary": "Name up to three vault pages relevant to each prompt (titles only).",
+        "detail": (
+            "off     nothing is added  (default)\n"
+            "on      a UserPromptSubmit hook matches the prompt against index.md and adds at\n"
+            "        most three '- <title> — <path>' lines\n"
+            "\n"
+            "It reads one file, index.md, and never a page body; the session decides whether\n"
+            "to open anything. Nothing is added below the match threshold, without a vault,\n"
+            "or past its 0.8 s budget. A per-turn cost when on, which is why it ships off\n"
+            "(request 2026-10-02-prompt-relevant-vault-hints, 0.19.0)."),
+    },
     "component_updates": {
         "default": "report",
         "values": ["off", "report", "confirm", "auto"],

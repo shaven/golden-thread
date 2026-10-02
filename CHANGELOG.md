@@ -19,6 +19,14 @@ fixes to rough edges found installing 0.18.1. Version directories copied from 0.
 gt-lotr 0.1.2, gt-usage 0.1.5, gt-visualize 0.4.3 and gt-wiki 0.2.6 are patch bumps with
 `requires_gt >=0.19.0,<0.20.0`. Entries are filled in as each phase lands.
 
+- **Recall benchmark.** `gt_bench.py recall --fixture DIR [--retriever keyword|FILE.py ...]`
+  reports recall@1/3/10, files read and approximate tokens per question; a retriever that cannot
+  load or raises is could-not-run, never zero. Baseline, keyword retriever (`gt_keyword_recall`,
+  the gt-query path) on the synthetic 36-question fixture `tests/fixtures/recall-bench`:
+  **recall@1 0.972, recall@3 1.000, recall@10 1.000**, 123 files read, ~9,919 tokens
+  (2026-10-02, self-verified). Optimistic by construction — the fixture's questions and pages
+  were written together — so it compares retrievers; it does not predict a real vault.
+
 ## gt 0.18.1 — 2026-10-02
 
 > **There is no published 0.18.0.** The release was cut as 0.18.0, then `install.sh` and

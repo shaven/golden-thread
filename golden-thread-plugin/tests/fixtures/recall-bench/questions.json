@@ -1,0 +1,221 @@
+{
+  "version": 1,
+  "questions": [
+    {
+      "id": "q01",
+      "question": "how many weekly backup snapshots do we keep",
+      "expected": "Knowledge/Backup Rotation.md",
+      "level": "knowledge"
+    },
+    {
+      "id": "q02",
+      "question": "when are restores tested",
+      "expected": "Knowledge/Backup Rotation.md",
+      "level": "knowledge"
+    },
+    {
+      "id": "q03",
+      "question": "what time does the snapshot pruner run",
+      "expected": "Knowledge/Backup Rotation.md",
+      "level": "knowledge"
+    },
+    {
+      "id": "q04",
+      "question": "what is the internal dns zone called",
+      "expected": "Knowledge/DNS Zones.md",
+      "level": "knowledge"
+    },
+    {
+      "id": "q05",
+      "question": "what TTL do failover records use",
+      "expected": "Knowledge/DNS Zones.md",
+      "level": "knowledge"
+    },
+    {
+      "id": "q06",
+      "question": "how do I evict a poisoned build cache entry",
+      "expected": "Knowledge/Build Cache.md",
+      "level": "knowledge"
+    },
+    {
+      "id": "q07",
+      "question": "why did a compiler upgrade make every build slow",
+      "expected": "Knowledge/Build Cache.md",
+      "level": "knowledge"
+    },
+    {
+      "id": "q08",
+      "question": "can we deploy to production on a friday",
+      "expected": "Knowledge/Deploy Windows.md",
+      "level": "knowledge"
+    },
+    {
+      "id": "q09",
+      "question": "what does an emergency deploy outside the window need",
+      "expected": "Knowledge/Deploy Windows.md",
+      "level": "knowledge"
+    },
+    {
+      "id": "q10",
+      "question": "how long are audit logs kept",
+      "expected": "Knowledge/Log Retention.md",
+      "level": "knowledge"
+    },
+    {
+      "id": "q11",
+      "question": "how long can debug logging stay on in production",
+      "expected": "Knowledge/Log Retention.md",
+      "level": "knowledge"
+    },
+    {
+      "id": "q12",
+      "question": "when does the certificate expiry alarm fire",
+      "expected": "Knowledge/TLS Certificates.md",
+      "level": "knowledge"
+    },
+    {
+      "id": "q13",
+      "question": "do we use wildcard certificates",
+      "expected": "Knowledge/TLS Certificates.md",
+      "level": "knowledge"
+    },
+    {
+      "id": "q14",
+      "question": "what happens to a job that keeps failing",
+      "expected": "Knowledge/Queue Workers.md",
+      "level": "knowledge"
+    },
+    {
+      "id": "q15",
+      "question": "how many queue consumer replicas at most",
+      "expected": "Knowledge/Queue Workers.md",
+      "level": "knowledge"
+    },
+    {
+      "id": "q16",
+      "question": "when does a feature flag show up in the cleanup report",
+      "expected": "Knowledge/Feature Flags.md",
+      "level": "knowledge"
+    },
+    {
+      "id": "q17",
+      "question": "does the client see feature flag rules",
+      "expected": "Knowledge/Feature Flags.md",
+      "level": "knowledge"
+    },
+    {
+      "id": "q18",
+      "question": "how fast is the new alpha search index on a cold query",
+      "expected": "Projects/alpha/research.md",
+      "level": "project"
+    },
+    {
+      "id": "q19",
+      "question": "why are product codes indexed verbatim",
+      "expected": "Projects/alpha/research.md",
+      "level": "project"
+    },
+    {
+      "id": "q20",
+      "question": "why did alpha reject sharding by tenant",
+      "expected": "Projects/alpha/decisions.md",
+      "level": "project"
+    },
+    {
+      "id": "q21",
+      "question": "does the alpha index rebuild incrementally",
+      "expected": "Projects/alpha/decisions.md",
+      "level": "project"
+    },
+    {
+      "id": "q22",
+      "question": "where is the tenant filter applied in alpha search",
+      "expected": "Projects/alpha/design.md",
+      "level": "project"
+    },
+    {
+      "id": "q23",
+      "question": "which alpha results are re-ranked by recency",
+      "expected": "Projects/alpha/design.md",
+      "level": "project"
+    },
+    {
+      "id": "q24",
+      "question": "which rounding mode does beta billing use",
+      "expected": "Projects/beta/research.md",
+      "level": "project"
+    },
+    {
+      "id": "q25",
+      "question": "why are large invoices split in two",
+      "expected": "Projects/beta/research.md",
+      "level": "project"
+    },
+    {
+      "id": "q26",
+      "question": "how is money stored in beta billing",
+      "expected": "Projects/beta/decisions.md",
+      "level": "project"
+    },
+    {
+      "id": "q27",
+      "question": "what makes the billing run idempotent",
+      "expected": "Projects/beta/decisions.md",
+      "level": "project"
+    },
+    {
+      "id": "q28",
+      "question": "how often does the gamma phone sync",
+      "expected": "Projects/gamma/design.md",
+      "level": "project"
+    },
+    {
+      "id": "q29",
+      "question": "how are gamma sync conflicts resolved for notes",
+      "expected": "Projects/gamma/design.md",
+      "level": "project"
+    },
+    {
+      "id": "q30",
+      "question": "how many technicians are using gamma",
+      "expected": "Projects/gamma/README.md",
+      "level": "project"
+    },
+    {
+      "id": "q31",
+      "question": "do offline maps fit the gamma download budget",
+      "expected": "Projects/gamma/README.md",
+      "level": "project"
+    },
+    {
+      "id": "q32",
+      "question": "what hours does the owner work",
+      "expected": "global-memory/working-hours.md",
+      "level": "global-memory"
+    },
+    {
+      "id": "q33",
+      "question": "may we make production changes during market hours",
+      "expected": "global-memory/working-hours.md",
+      "level": "global-memory"
+    },
+    {
+      "id": "q34",
+      "question": "how many spaces of indentation",
+      "expected": "global-memory/editor.md",
+      "level": "global-memory"
+    },
+    {
+      "id": "q35",
+      "question": "what are hosts named after",
+      "expected": "global-memory/naming.md",
+      "level": "global-memory"
+    },
+    {
+      "id": "q36",
+      "question": "what is the branch naming scheme",
+      "expected": "global-memory/naming.md",
+      "level": "global-memory"
+    }
+  ]
+}

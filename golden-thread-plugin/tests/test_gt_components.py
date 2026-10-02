@@ -19,7 +19,9 @@ from _harness import Sandbox, SCRIPTS, load_module, ENFORCEMENT_HOOKS, GT
 
 TOOL = SCRIPTS / "gt_components.py"
 
-HOOK_FILES = ENFORCEMENT_HOOKS + ("alpha.sh",)
+# vault_hints.py (0.19.0) is an install.sh-owned hook FILE in hooks/ that the wiring check
+# resolves by path, so the fixture installs it like the enforcement hooks.
+HOOK_FILES = ENFORCEMENT_HOOKS + ("alpha.sh", "vault_hints.py")
 # Counts come from the declaration, never from a literal: 0.12.0 added an eleventh
 # hook and every literal 10 in this file failed a test that was not about it.
 _REGS = load_module(SCRIPTS / "gt_components.py", "gt_components_counts").HOOK_REGISTRATIONS

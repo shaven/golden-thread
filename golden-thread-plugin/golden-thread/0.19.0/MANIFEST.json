@@ -64,6 +64,10 @@
    "bytes": 8839,
    "sha256": "4497e3ed45d41b4fccdf498ff0672717995cb6d117a690ba9a9ef2b97dcf6bc1"
   },
+  "hooks/vault_hints.py": {
+   "bytes": 3469,
+   "sha256": "59b1f4ff8653ff11d5f7004b0ef00ef7dbda851e09707ec8933ce2027b4af08f"
+  },
   "packs/community/README.md": {
    "bytes": 667,
    "sha256": "a61ffc189d1789105bf12891496668954da795fe427fb4994527a0475f95d211"
@@ -141,8 +145,8 @@
    "sha256": "9ec97e9cb9f25715747f457fed8c6b411b5b61d2fc47d0758732d09a66a52882"
   },
   "scripts/gt_bench.py": {
-   "bytes": 16674,
-   "sha256": "453960677bf13c05bc6ff9c307e002a12d8f78d52c471d5034b3fa4f442baeba"
+   "bytes": 22433,
+   "sha256": "85b5249ee4609a41f45449ab0ebd5cb4901632d14758c3f6511af226089c8a5e"
   },
   "scripts/gt_brief.py": {
    "bytes": 8931,
@@ -177,8 +181,8 @@
    "sha256": "a48cd97a138d3a12cdf4433a8e85c66297f9edeafa2a2d1239c9cc10cbb23ce5"
   },
   "scripts/gt_components.py": {
-   "bytes": 93935,
-   "sha256": "4bf689833f8273270fdb6cf78d0eb15ca48f42d5b95f9fa3f2dd10990d3de43b"
+   "bytes": 94414,
+   "sha256": "bf0b516deaf701747f17a4f72f7da14e1c0a08c9a703b6aa292178174aa8b066"
   },
   "scripts/gt_context.py": {
    "bytes": 10260,
@@ -223,6 +227,10 @@
   "scripts/gt_intake_scan.py": {
    "bytes": 25953,
    "sha256": "a68f97de784646404f0390d3c67264500c02494ae448fc101f6053d128ef75a7"
+  },
+  "scripts/gt_keyword_recall.py": {
+   "bytes": 3834,
+   "sha256": "7b0cbb9a19b516792407df332c8d19d5bad5c564d0f0358efc08d73155dc45ef"
   },
   "scripts/gt_link_suggest.py": {
    "bytes": 14932,
@@ -333,8 +341,8 @@
    "sha256": "d2fbf97b57eb729ad399672a77c63745aac4e88140f39c7b989ac122bcbfe3b7"
   },
   "scripts/gt_settings.py": {
-   "bytes": 65577,
-   "sha256": "5933b144947091e3da21d818c7fb0047f4075efc3603e07c22f5558aa3c06c10"
+   "bytes": 66361,
+   "sha256": "414f834ebb7147d7eb061c1eeb9e29433e50d71cde3c9e1fa199e418e4ddda94"
   },
   "scripts/gt_staged.py": {
    "bytes": 3529,
@@ -633,7 +641,7 @@
    "sha256": "05a5e61333b0ba5d6f97866735268f7f99ff354d9502b2b05e0e512a86f82a6b"
   }
  },
- "generated": "2026-10-02T11:47:13",
+ "generated": "2026-10-02T12:06:33",
  "hooks": [
   {
    "args": [
@@ -716,6 +724,12 @@
    "event": "PostToolUse",
    "owner": "install.sh",
    "script": "log_knowledge_read.sh"
+  },
+  {
+   "args": [],
+   "event": "UserPromptSubmit",
+   "owner": "install.sh",
+   "script": "vault_hints.py"
   },
   {
    "args": [],

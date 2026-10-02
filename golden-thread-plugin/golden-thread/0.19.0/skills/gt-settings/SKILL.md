@@ -110,6 +110,12 @@ reports hygiene from the session just done; `full` adds vault features that are
 available and unused. It fires on `PreCompact` so it is written while there is
 still context to write it in.
 
+**`vault_hints`** (0.19.0, default `off`) — when `on`, a UserPromptSubmit hook matches each
+prompt against `index.md` and adds at most three `- <title> — <path>` lines naming pages that
+may already hold the answer. It reads one file and never a page body; nothing is added below
+the match threshold or past its 0.8 s budget. Off by default because it costs a little on every
+turn. Turn on with `python3 <base_dir>/../../scripts/gt_settings.py set vault_hints on`.
+
 **`model_profile`** (0.19.0) — the model and effort each skill runs at, written into the
 installed copy of every SKILL.md (never the release source). `average` (a new install's
 default): fast skills haiku with no effort setting, balanced sonnet · medium, deep opus · high.
