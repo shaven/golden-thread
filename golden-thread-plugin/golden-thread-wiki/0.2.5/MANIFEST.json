@@ -5,8 +5,8 @@
    "sha256": "554bc0eaaa73f1d0e49259ad926c7a913c6b14072e64ac26db2cf3832ab2afc4"
   },
   "scripts/wiki_lint.py": {
-   "bytes": 12361,
-   "sha256": "e218a0bcd77f344c79375e86996201932a52615cbf8c3352b8eaf050e883fd59"
+   "bytes": 13339,
+   "sha256": "cc1dbd8b63cefd07d5482a3609c56ad347de7894b54877ce61ab53532c87ee49"
   },
   "scripts/wiki_log.py": {
    "bytes": 14264,
@@ -25,6 +25,6 @@
    "sha256": "b69a18d40ce8cdf112106cb345f399ff36c0f061836c5cd76a61bf4249c83f70"
   }
  },
- "generated": "2026-10-01T20:07:35",
+ "generated": "2026-10-01T20:31:09",
  "version": "0.2.5"
 }

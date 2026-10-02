@@ -37,6 +37,14 @@ EXPECTED = {
     "skeptic_pass": ("off", ["off", "on"]),
     "handoff_surface": ("any", ["any", "project", "manual"]),
     "task_surface": ("on", ["off", "on"]),
+    # 0.18.0 (group g5): review stamps, vault sync behind-check, reminder channels -- every
+    # push channel off by default (owner, 2026-10-01).
+    "review_stamp": ("on", ["off", "on"]),
+    "sync_check": ("off", ["off", "cached", "fetch"]),
+    "reminder_days": ("7", ["1", "3", "7", "14", "30"]),
+    "reminder_macos": ("off", ["off", "on"]),
+    "reminder_relay": ("off", ["off", "sms", "discord"]),
+    "reminder_email": ("off", ["off", "on"]),
     # values None == free-form; `validate` carries the shape instead of a closed list.
     "parallel_max": ("auto", None),
 }
