@@ -11,51 +11,382 @@ release's own summary line, kept short rather than reconstructed after the fact.
 
 ---
 
-## Unreleased — repository tooling (no gt version change)
+## gt 0.18.0 — 2026-10-01
 
-### remote-test.sh: the full suite off the laptop
+A release built from the accepted feature-request queue rather than from one incident. Its themes:
+**one verb per action** (create, open, list, handle, close), a **coding loop** with a plan gate,
+**decisions you can trace** (ADR expiry, supersession lineage, a repo CLAUDE.md drafted from the
+vault), **subtraction** (gt-optimize measures what sessions and the vault cost, and can archive;
+gt-minimize prunes a heavy session), **write-back that checks itself** (contradictions, promotion
+candidates, a research digest), **returning after time away** (a catch-up brief, what changed this
+session), and **install health and guards** (the doctor names the repo a command will hit, checks
+hook entries against Claude Code's events, and a guard refuses commits in another machine's
+checkout). Skills: 28 → 35. gt_lint checks: 19 → 23. Settings: nine new, every one listed under
+its theme. Hook registrations: two new (one `PreToolUse` guard, one `PostToolUse` read log).
 
-`dev/remote-test.sh` runs the full suite on a Linux VM (claudebox on mesxi6, 8 vCPU) and records
-the receipt on the Mac only when the tree that passed is still the tree on disk. Measured
-2026-10-01: **2,487 tests in 214 s on claudebox, against 892 s on the Mac**, where the run drove the
-load average to 50–96 and dropped keystrokes. Your Mac's load stayed under 9 during the remote run.
-Three tests were made portable for it:
-- the ast-grep tier no longer mistakes Linux's `sg` (switch group) for ast-grep;
-- the LOTR consent test injects its dialog with `confirm: dialog`;
-- the runner uses `umask 022`.
+Module versions: gt-demo, gt-farm, gt-flow, gt-report-card and gt-watch 0.18.0 (they move with
+gt); gt-wiki 0.2.5; gt-visualize 0.4.2; gt-usage 0.1.4; gt-lotr 0.1.1 — each bumped so its
+`requires_gt` admits 0.18.
 
-### copygt.sh: gt-src to a validated, committed install in one command
+Owner decisions this release rests on (2026-10-01): the **verb-first vocabulary is accepted**;
+**gt-learn is folded into gt-work** rather than shipped as a third capture skill; **gt-minimize
+prunes and writes no in-flight note** (carrying work forward is the handoff's job); **gt-close
+archives a project in place**, and relocates it to `Archive/` only with `--move`.
 
-**What.** gt-src now carries two tools at its root, `copygt.sh` and `validate-install.py`, written by
-`dev/sync-gt-src.sh` at every publish and covered by `SHA256SUMS`. On the receiving machine,
-`./copygt.sh --dest <repo>` runs five steps and stops at the first failure:
+### One verb per action: create, open, list, handle, close
 
-1. It verifies gt-src against `SHA256SUMS` and `SOURCE.json`. A mismatch exits 3 with nothing
-   written.
-2. It mirrors gt-src onto the repository exactly. It adds, updates and **deletes** every tracked
-   file gt-src no longer carries; `.git` and untracked files are untouched.
-3. It runs `install.sh`.
-4. It validates the install and writes a report:
-   - **PRESENT**, **MISSING**, **WORKED** and **FAILED** sections. A check that could not run is
-     FAILED, never a pass.
-   - A closing `clean: N/N`, counted against what the tree declared.
-   - The validation reuses the release's own `gt_doctor.py post-install` gate rather than a
-     second suite.
-5. It commits, **only** when the report is clean. It never pushes: pushing is a separate step,
-   done only from the publishing machine.
+**What.** gt's skills used two naming schemes at once: verbs (`gt-open`, `gt-create`, `gt-work`)
+and artifact-typed compounds (`gt-task`, `gt-handoff`, `gt-task-list`, `gt-handoff-list`,
+`gt-task-handle`, `gt-handoff-handle`). The verb is now the skill and the artifact its argument:
 
-`--dry-run` lists every add, change and delete and writes nothing.
+| verb | project | task | handoff |
+|---|---|---|---|
+| `gt-create` | `project <slug>` (a bare slug still works) | `task <text>` | `handoff` |
+| `gt-open` | `<slug>` (unchanged) | `task <id>` — one task's full detail | `handoff [id]` — one handoff and only the task lines citing it |
+| `gt-list` | — | `tasks [filter]` | `handoffs` |
+| `gt-handle` | — | `task [filter]` | `handoff` |
+| `gt-close` | `project <slug>` | `task <id>` | `handoff [id]` |
 
-**Also.** gt-src no longer carries `*.code-workspace`, `BUILD-NOTE.md`, either `CLAUDE.md`, the
-plugin's `dev/` or `SUBMISSIONS.md`, so the first `copygt.sh` run removes them from the receiving
-repository. The tests that read `dev/` are marked `@needs_dev` and skip, with the reason, where
-`dev/` is absent.
+Bare `/gt:gt-list` summarises both lists; bare `/gt:gt-handle` asks which to work through when both
+have something waiting. Handling a task gains a fifth decision, **move** to another project
+(`gt_task.py move ID --to SLUG --reason R`), beside done, drop, defer and keep. `gt_surface.py`'s
+session-start lines now name the new verbs.
 
-**Why.** The other machine copied gt-src by hand, and a hand copy only adds. On 2026-10-01 the
-owner had to delete `Golden Thread.code-workspace` from the GitHub repository by hand. It had been
-removed here the day before (`ff0c140`). Every release also ended with "install, then hope",
-with no account of what landed (owner, 2026-10-01: *"What gets checked in is just the code and
-what gets installed with install.sh"*).
+**`gt-close` is new.** `gt_close.py project <slug>` lists every open task (the project's and its
+sub-projects', deferred ones included — a deferral comes back), every open or deferred handoff and
+the research entries worth offering for graduation, and **exits 1 while anything is undecided**:
+the close stops there. Each task is closed, dropped, moved, or kept shelved at `p:: 7`
+(`gt_task.py shelve`, new); each handoff has its items settled and is closed. The skill then offers
+graduation one finding at a time through `/gt:gt-promote`, and `--archive` runs
+`vault_init.py archive-project`: `stage: archived`, an *Archived* banner, the `Projects/README.md`
+row marked — **archived in place**, nothing moves, every link resolves. `--move`, only on request,
+then relocates the folder to `Archive/<slug>/` and re-points `Projects/<slug>/` path references
+through the write queue, refusing while a live session claims a file in the project.
+`gt_close.py task <id>` is `gt_task.py done` plus the rollup; `gt_close.py handoff <file>` refuses
+while a task citing the handoff is open, then marks it `handled`. `gt-handle`'s per-item close
+calls the same two commands.
+
+**Deprecated, still working through 0.18.x:** `gt-task`, `gt-handoff`, `gt-task-list`,
+`gt-handoff-list`, `gt-task-handle`, `gt-handoff-handle`. Each prints
+`Note: <old> is deprecated. Use /gt:gt-<verb> <artifact> instead.` and then follows the new skill's
+section, where its procedure moved unchanged. Their trigger phrases moved to the new verbs (two
+skills may not share a trigger), so plain-language requests already reach the new names. They are
+removed in the release after 0.18.x.
+
+**Why.** Someone who wants to "handle" something had to remember which compound applied, and the
+list grew by one skill per artifact per action. One skill per verb keeps the count flat as
+artifacts are added. `gt-close` exists because projects, tasks and handoffs each had a "done" state
+and no guided path to it: done work lingered in the rollup and findings were stranded in finished
+projects. The request asked for "move to `Archive/` and mark complete"; the owner chose archive in
+place, because a moved folder breaks every path link into it, with `--move` for when that is
+wanted anyway.
+
+### A coding loop: `gt-plan` and `gt-implement`; learning folded into `gt-work`
+
+**What.** Two skills, no new scripts.
+
+- **`/gt:gt-plan <task>`** restates the requirement and waits for "that's right"; reads the
+  project's `design.md`, `spec.md`, the relevant ADRs and the code it will touch, citing each;
+  lists risks and unknowns marked verified or unverified; and writes a numbered, phased plan (goal,
+  test first, change, done-when) to `<repo>/.claude/gt-plan-current.md` at `status: draft`. It
+  ends with one question, "Approve this plan?", and writes no code. Only an explicit yes sets
+  `status: approved`; editing an approved plan returns it to draft.
+- **`/gt:gt-implement`** refuses without an approved plan, naming the file. Then, per phase:
+  the failing test first, then the code, then the refactor, then docs if a documented interface
+  changed; `gt_allin.py --only tests,scan`, naming the tests that ran; **any failure, or any
+  member that could not run, stops the run**. It asks before each next phase and commits only
+  through `gt_allin_commit.py` (dry run first, then "Commit this?"). It never pushes.
+- **`/gt:gt-work` gains a *Learn* step** (owner decision: no separate gt-learn): patterns applied
+  more than once, decisions not yet written down, reusable techniques — anything not already
+  captured is offered one at a time and routed to an ADR, a runbook step, a memory note or
+  `/gt:gt-promote`, always through the queue.
+
+**Why.** gt covered knowledge capture and the project lifecycle but not the coding loop itself,
+which people ran through a separate review plugin. These reuse gt's own checks and commit gate
+rather than carrying a second copy. A third capture skill beside gt-work would have split where
+findings go.
+
+### Decisions you can trace
+
+**ADRs can say when they stop being true.** `gt_adr.py allocate --expires-when "<condition>"` and
+`--expires YYYY-MM-DD` write `- **Expires when**:` / `- **Expires**:` field lines. New gt_lint
+check **`adr-expires`** files, in the review queue and with the condition text, every ADR
+declaring a condition (at any age: only a person can tell whether "until the SDK upgrade" has
+happened) and every ADR whose date has passed. An ADR another ADR supersedes is not listed — the
+replacement answers the question. gt-work now asks, when it writes an ADR, whether the decision
+has a known expiry condition. *Why:* "SQLite until 10k requests a day" is exactly what an ADR
+records, and without the field it reads as permanent after the condition has passed.
+
+**"How did we decide X?" has an answer.** `allocate --supersedes N` (repeatable; refuses a number
+the project has no ADR for) writes `- **Supersedes**: ADR-N`. Read-only
+`gt_adr.py lineage <project> "<topic>"` finds every ADR mentioning the topic, follows its
+supersession chain both ways, and prints it oldest first — number, date, title, "Superseded by
+ADR-M because …", the live one marked `— current` with its rejected alternatives.
+`/gt:gt-query --lineage <topic>` (or "what is the history of decisions about X?") runs it. gt-work
+asks whether a new ADR replaces an earlier one. *Why:* `decisions.md` is append-only, so a topic
+accumulates chains (ADR-1 → ADR-4 → ADR-9) that nothing could navigate. A chain is only as good as
+its `Supersedes` fields: ADRs that superseded others in prose only appear as one-entry chains.
+
+**A sub-project's ADRs land in the sub-project.** `gt_adr.py` joined `Projects/` with the slug it
+was given, so `allocate`/`merge` for a sub-project made a new top-level `Projects/<slug>/
+decisions.md` (a folder with no README), reported "updated", and left the sub-project's own
+`decisions.md` an empty stub — and a second merge said "unchanged", so the mistake was silent and
+self-consistent. Every subcommand now resolves the name through one shared resolver
+(`gt_spool.resolve_project`): a bare sub-project slug resolves to `Projects/<parent>/<slug>/`; an
+unknown name, or one two sub-projects share, is refused (exit 2) naming them. **Existing vaults
+need no migration step:** the first `allocate`/`merge` for an affected sub-project moves the stray
+spool slots into the right spool (exit 3 if one ADR number would be held twice); the stray
+top-level `decisions.md` is named on stderr and left for you to delete.
+
+**A sub-project's CLAUDE.md points at its real folder.** The template rendered `Projects/<slug>/`,
+which for a sub-project does not exist; it now uses the path create-project made. `--parent`
+resolves through the same resolver, so `--parent <a sub-project's slug>` nests under it. Existing
+CLAUDE.md files are never rewritten: fix an old sub-project's "Deeper context" line by hand.
+
+**`/gt:gt-brief` drafts a repo's CLAUDE.md from the vault.** PROTOCOL's "graduating a fact out to
+a repo" defined the outward path and no tool did the mechanical part. `gt_brief.py --vault V <slug>
+[--repo PATH]` prints a proposed section — the project in one paragraph, **Constraints** (every ADR
+neither superseded nor carrying an expiry), **Where it runs** (from `source.md`), **What not to do**
+(current ADRs' rejected alternatives), and the optional "Deeper context" trailer — with ADR
+numbers, wikilinks and vault-folder lines stripped, because the reader has no vault. It writes
+nothing; the skill reviews the draft with you (would a teammate need this? is it stable?) and, on
+a yes, places it at `Projects/<path>/CLAUDE.md` through the queue. `runbook.md` is deliberately not
+read: its facts still graduate by hand. The name stays `gt-brief` — "brief the repo" is already a
+verb.
+
+### Review-queue lint checks, and memory by what it is about
+
+Three new gt_lint checks file **questions for the owner** into `review-queue.md`, not defects
+(with `adr-expires` above, 19 → 23 checks):
+
+- **`bundled-concept`** — a Knowledge page with four or more `## ` headings of which at most two
+  share a keyword with its title or tags: "this page covers multiple topics; consider splitting".
+  It never proposes the split. `category: decision` and `_`-prefixed pages are exempt. Exactly two
+  sharing **fires** — the request's own example has two on-topic headings and must fire
+  (`BUNDLED_COHERENT_AT = 3`).
+- **`decision-candidate`** — "we chose", "by design", "deliberately" and the like in a project's
+  `design.md` or `research.md`, filed with the line, the phrase and a proposed
+  `gt_adr.py allocate` command. Nothing writes an ADR. New setting **`decision_signals`**
+  (`default`; `off`, or `;`-separated `+phrase`/`-phrase` edits to the built-in list). New
+  per-line suppression: `suppress: <path>:#<hash>` (survives the line moving) or `<path>:L<n>`.
+- **`memory-entity-orphan`** — a name that appears three or more times in a memory note's body and
+  is not in its `entities:` list.
+
+**Memory can be looked up by what it is about.** A memory note may declare `entities: [...]` in
+frontmatter (the template now shows `entities: []`). Read-only `gt_entities.py lookup <name>
+--project <slug>` returns only the notes that declare it, each with its index description and full
+text; `list` shows every declared entity. `/gt:gt-query --entity <name>` (or "what do we know about
+X?") runs it, and gt-work asks which entities a new note covers. gt never writes entity tags
+itself. *Why:* memory is filed by when it was written, so "what do we know about the auth service?"
+meant opening every file.
+
+The PROTOCOL template gains *ADR fields and memory entities*; `/gt:gt-upgrade` merges it.
+
+### Subtraction: what the vault and a session cost, and how to cut it
+
+**gt-optimize is an aggregator with two members.** It asked only what the vault **stores** that
+every session pays for; nothing asked what a **session carries**, which was the larger number:
+over 180 days of one machine's transcripts, 98.6% of input came from cache, yet about 65% of
+cache-write spend was avoidable, mostly sessions idled past the cache TTL and rebuilt in full.
+`gt_optimize.py` now runs `vault` (the old report) and **`session`** (new
+`gt_optimize_session.py`) through the same aggregator as gt-scan and gt-allin and always says
+`N of 2 member(s) ran`. The session member splits every cache write into `cold`, `growth`,
+`expiry` (the gap outlived the TTL that prefix was written at) and `invalid` (the cached prefix
+changed); only the last two are avoidable. It prices them as list-price **equivalents**, not a
+bill. New settings **`optimize_session_days`** (30) and **`optimize_avoidable_pct`** (50).
+**Behaviour change:** a bare `gt_optimize.py` exits 3 on a machine with no transcripts, so
+`gt_allin` runs it as `--only vault`.
+
+**gt-optimize can subtract** (the memory-optimisation request, rescoped by the owner into
+gt-optimize rather than a new command):
+
+- **`--cost`** — what `/gt:gt-open` actually loads per project, in lines and approximate tokens.
+- **`single-project-global`** — a `global-memory/` note whose body names exactly one project
+  (whole-word): that project's memory charged to every other.
+- **`--archive --project S --before YYYY-MM-DD [--apply]`** — moves dated `research.md` entries
+  older than the cutoff to `research-archive-<YYYY>.md`, leaving one dated index line per entry.
+  Archive written first, read back, and only then is `research.md` rewritten — a failure leaves the
+  entry in both places, never in neither.
+- **`--supersede --file F --entry H --by H [--apply]`** — marks an entry superseded in place;
+  the entry stays.
+
+Reporting never writes; both actions preview unless `--apply`, go through the write queue, and
+delete nothing.
+
+**Knowledge pages are logged when read.** Git shows when a page was written, never whether anyone
+read it. A new hook, `log_knowledge_read.sh` (`PostToolUse`, matcher `Read`, installed by
+`install.sh`), appends one line per Read of a `Knowledge/` page to `<vault>/usage/knowledge.jsonl`
+(page, 8-character session id, date), which a `usage/.gitignore` keeps out of git. The vault member
+gains **`knowledge-unused`**: pages not read in `--unused-days` (90), report-only. With no log yet
+it reports nothing, or every page would read "never read" on day one. Setting
+**`knowledge_access_log`** (`on`). It is a hook, not skill prose, because prose logs only the reads
+a model remembers to log.
+
+**`/gt:gt-minimize` prunes a session, then tells you to cut while the cache is warm.** A resumed
+session past its cache TTL rebuilds its whole prefix (the median resume rewrote 432.7K tokens;
+fresh sessions start near 44.5K), and `/compact` silently drops what the vault exists to keep.
+`gt_minimize.py` (read-only) measures this session's billed context, an estimated breakdown
+labelled as one, and the minutes of cache warmth left; the skill triages what is worth keeping
+(to `Knowledge/` via gt-promote, or `INBOX.md`), lets the rest go, and says "/compact or /clear
+now". **It writes no in-flight note** (owner decision): anything mid-flight goes to
+`/gt:gt-create handoff` first.
+
+### Write-back that checks itself
+
+- **Contradicting memory notes are flagged.** `gt_memory_check.py`, run by `/gt:gt-work` after
+  write-back, compares only the notes written or changed this session with their close
+  neighbours, by keyword rules (the same `key:` with different values; the same subject with
+  opposite polarity). Each pair is shown with both sentences and "same fact? which is current?".
+  Nothing is modified. Setting **`memory_contradiction_check`** (`on`).
+- **Promotion candidates are listed.** `gt_promote_detect.py`, also run by gt-work: a memory note
+  changed in 3 of the last 5 commits to its project's `memory/`; `research.md` sections in two
+  projects whose words overlap by **`promotion_overlap`** (80%) of the smaller; and gt-lint's
+  `global-scope-leak`, with the demote command. Nothing is promoted without a yes. Setting
+  **`promotion_candidates`** (`on`).
+- **`research-digest.md`** — `gt_digest.py write`, on every gt-work, rewrites a one-line-per-entry
+  summary of the newest 20 `research.md` sections plus up to 5 marked `[pinned]` in their heading,
+  through the queue, and indexes it in the project's `MEMORY.md` once. It records the hash of the
+  `research.md` it was built from; `/gt:gt-open` reads it in place of the headings only when
+  `gt_digest.py check` says it is current. `research.md` itself is never touched.
+- **The skeptic pass no longer needs agent specialization.** In 0.17.11 the gt-work skeptic ran
+  only with `skeptic_pass` **and** `agent_specialization` on, so turning the skeptic on also handed
+  ingest and validation to specialist agents — a separate decision with its own cost.
+  `skeptic_pass` alone now governs it; a 0.17.x vault override that still lists both is honoured
+  without restoring the coupling.
+
+*Why:* each of these was a step gt-work asked a person to remember at the end of a session, which
+is the step that gets skipped.
+
+### Returning after time away
+
+- **A catch-up brief.** `/gt:gt-open` runs `gt_catchup.py` before it reads anything: when you have
+  not opened the project on this machine for **`brief_absence_days`** (7), or asked with
+  `--brief`, it leads with one paragraph of at most 150 words, labelled as generated — the commits
+  to the project since you last opened it, the newest research entry, the oldest open `p:: 1` and
+  every open `waiting:: user` task. Built from git and structured fields, never a summary of
+  prose; the full reading sequence still follows. `--no-brief` skips it. *Why:* after two weeks
+  away the reading order answers "what is the state", not "what happened".
+- **What changed this session, in the handoff.** `gt_session.py register` records the vault's
+  commit as `start_commit:`, and `gt_handoff.py` adds `## What Changed This Session`: new memory
+  notes with descriptions, research headings appended, new ADRs, `design.md` files touched, and
+  Knowledge pages created or updated, from `git diff <start>..HEAD`, labelled `self-verified`.
+  `--since-commit` overrides; `--dry-run` is new. The handoff procedure itself now lives in
+  `/gt:gt-create handoff`.
+- **The pre-compaction state write is visible to you.** `gt_state.py` printed to stdout, which
+  for a hook reaches only the model — the failure the SessionStart checks had until 0.9.6. As a
+  hook it now writes a `systemMessage`: one line when the threshold write happens, one when it
+  fails and why, and at `PreCompact` always one line. A below-threshold turn shows nothing.
+- **A new session no longer reports another session's context figure.** The usage ledger is
+  shared by every session on the machine, and `gt_state` took its newest reading whoever wrote it
+  — which is why, on 2026-09-29, a fresh session's first prompt said `context 88% — already
+  written`. It now filters by the session id; a session with no reading of its own is "cannot
+  tell". `--session ID` for runs by hand.
+
+### Install health and guards
+
+- **`/gt:gt-doctor` says which repo a repo-scoped command will hit.** gt makes the vault the
+  working directory, and the vault is a git repo, so `/security-review`, `/code-review`, a test
+  runner — anything that says "the current branch" — resolves to the vault and finds a plausible
+  answer there. On 2026-09-25 `/security-review` collected a 624 KB vault diff for a 174-line code
+  change, without an error. New row **`repo-target`**: the working directory, the repo it
+  resolves to, and whether that is the vault. It is a new **note** mark (`i`): never a finding,
+  never raises the exit code, because cwd == vault is the normal configuration. `/gt:gt-open`
+  says the same once in its summary.
+- **`/gt:gt-doctor` checks hook entries against Claude Code's events and tools.** `wiring` could
+  not see an entry that is present, correctly pointed, and never fires because its event or
+  matcher names something Claude Code does not have. New row **`hooks-schema`** reads every
+  `settings.json` hook entry (gt's and anyone's) and warns on `hooks-unknown-event`,
+  `hooks-unknown-tool` (a plain tool name on a tool event; patterns are not judged) and
+  `hooks-missing-file` (a command pointing into gt's hooks dir at a file that is not there). The
+  allowlists ship as `hooks/known_events.json` and `hooks/known_tools.json`.
+- **A commit or push inside another machine's checkout is refused.** On 2026-09-11 a session asked
+  to "push everything" committed a release into a checkout a second machine owns, then — when the
+  push failed for want of a credential never meant to be there — began rewriting the remote URL.
+  The rule had been written down three times; prose cannot fire at the moment of the mistake. New
+  `PreToolUse` guard **`guard_foreign_checkout.sh`** (installed by `install.sh`) denies
+  `git commit`/`git push` inside a checkout you have **declared** foreign in
+  `~/.claude/vault-config.json` (`foreign_checkouts`, or `guard_foreign_checkout.py add <path>
+  --label L --route R`), naming the owner and the supported route. Never inferred from a path,
+  remote or hostname; with nothing declared it denies nothing; it fails open on anything it cannot
+  analyse. One visible exception: `GT_FOREIGN_CHECKOUT=allow git push …`. Setting
+  **`foreign_checkout_guard`** (`on`).
+
+### Repository tooling (not installed)
+
+- **`dev/remote-test.sh`** runs the full suite on a Linux VM over ssh and records the receipt on the
+  Mac only when the tree that passed is still the tree on disk. Measured 2026-10-01: **2,487 tests
+  in 214 s remotely, against 892 s on the Mac**, where the run drove the load average to 50–96 and
+  dropped keystrokes. Three tests were made portable for it (the ast-grep tier no longer mistakes
+  Linux's `sg` for ast-grep; the LOTR consent test injects its dialog; the runner uses
+  `umask 022`).
+- **`dev/copygt.sh`** takes gt-src to a validated, committed install on the receiving machine in
+  one command: verify against `SHA256SUMS`, mirror exactly (deleting what gt-src no longer
+  carries), `install.sh`, validate (`validate-install.py`, which reuses `gt_doctor.py
+  post-install`), and commit only when the report is clean. It never pushes. gt-src no longer
+  carries `*.code-workspace`, `BUILD-NOTE.md`, either `CLAUDE.md`, `dev/` or `SUBMISSIONS.md`.
+  *Why:* a hand copy only adds, so a file removed here lived on there.
+- **`dev/feature_requests.py --src`** descends into `golden-thread-plugin/` when it names a gt-src
+  in the repository layout.
+
+### Known, and not fixed
+
+- **The deprecated aliases are equivalent by construction, not by measurement**: each follows the
+  new skill's section, and a test asserts every command the 0.17.11 skill ran appears verbatim
+  there; no model was run on both. `gt_settings.py`'s `handoff_surface` help and parts of
+  gt-open, gt-work and gt-minimize still name the old skills; the aliases make them work.
+- **A handoff close is recorded as event kind `retire`** with a note beginning `handoff.close`,
+  not a new kind: event schema v1 refuses unknown kinds and gt-flow maps each kind to a family.
+- **After `gt-close --move`** the project's decisions spool stays at `spool/decisions/<slug>`; a
+  future project reusing the slug continues its numbering. gt-lint and `gt_tasks` do not look
+  under `Archive/`, by intent. The folder move itself is a rename guarded by a claim check; only
+  the reference rewrites go through the queue.
+- **No script enforces the plan gate.** `gt-implement`'s refusal is skill text checking
+  `status: approved`; `.claude/gt-plan-current.md` is not added to `.gitignore`.
+- **Other tools still join `Projects/<slug>` directly** (`gt_task.py`, `gt_handoff.py`,
+  `gt_demote.py`), so a bare sub-project slug fails there; `gt_spool.resolve_project` is the
+  helper to switch them to. gt-lint does not flag the stray README-less folder the ADR bug left,
+  nor a pre-0.18 sub-project CLAUDE.md with the wrong path.
+- **What changed this session counts committed changes only**, vault-wide: another session's
+  commits in the same window appear too, and sessions registered before 0.18.0 have no
+  `start_commit` (pass `--since-commit`).
+- **The catch-up brief's "absence" is per machine.** A `brief_absence_days` value outside its list
+  falls back to 7.
+- **`gt_state`'s first turn in a session is usually "cannot tell"**: the usage ledger records about
+  once a minute, so there is no reading of this session's own yet. That is the correct answer.
+- **The hook-event allowlist was written from knowledge of Claude Code's events, not checked
+  against the live docs**: an event newer than the list shows as `hooks-unknown-event` until added.
+  Review both JSON files each release.
+- **The foreign-checkout guard sees literal `git commit`/`git push` only** — a push run through a
+  script or alias is not seen, and an unquoted `$(...)` fails open by design.
+- **Contradiction and promotion detection are keyword rules**: a paraphrased contradiction is
+  missed; `global-scope-leak` matches a slug as a substring (`alpha` hits `alphabet`).
+- **The Knowledge read log records `trigger: "read"` only** (the hook cannot see which skill caused
+  the Read); reads by shell or by a subagent outside the hook are not logged; the log is local.
+- **`--archive` cannot rewrite a remaining `research.md` over 256 KiB** in one queue request; pick
+  an earlier cutoff (the refusal says why; nothing is lost).
+- **`gt_minimize`'s breakdown is chars/4**, an estimate, labelled so; only the billed context is
+  measured. It cannot run `/compact` itself.
+- **Pinning a research finding** means adding `[pinned]` to its existing `##` heading — a narrow
+  exception to "append-only" that PROTOCOL does not yet word.
+
+### Measured, and deliberately not built
+
+- **`bundled-concept` on the owner's vault: 38 pages fire** (read-only run, 2026-10-01). Many are
+  narrative pages whose headings are structural; expect to suppress a share on first sight.
+- **`decision-candidate` on the owner's vault: 114 findings** — 92 "deliberately", 21 "by design",
+  1 "this is intentional". `gt_settings.py set decision_signals "-deliberately"` cuts it to 22. The
+  request's list was kept as specified.
+- **`memory-entity-orphan` without an adoption gate produced 129 findings**, one per memory note,
+  on a vault where no note declares `entities:` yet. So ALLCAPS and identifier-shaped names count
+  only in a project where some note already declares the field; until then the check reports 0.
+- **The session member's duplicate rows:** one API request is written as several transcript rows;
+  keyed on timestamp the prototype inflated turns 2.2x and reported invalidation at 50.7% instead of
+  3.4%. It dedups on request id + message id.
+- **Not built:** gt-minimize's in-flight tier, its PreCompact capture hook and a size-watch prompt
+  (owner decision; gt-usage's status line already says when cutting is cheap); a gt-learn skill
+  (folded into gt-work); gt-optimize's allowance-window thresholds (gt-usage ships them); a new
+  cross-project duplicate detector (gt-optimize's `duplicate-fact` and the promotion detector cover
+  it); the request's per-task "closed on time" note in gt-close; a `handoff.close` event kind.
 
 ---
 

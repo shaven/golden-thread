@@ -1,22 +1,16 @@
-# Build note — gt 0.17.11
+# Build note — gt 0.18.0
 
 **Read this first if you are the person taking this tree into the other repository.**
 
-> **This file no longer travels in gt-src** (owner ruling, 2026-10-01). gt-src now carries only the
-> code, what `install.sh` installs, and its own tools (`copygt.sh`, `validate-install.py`,
-> `SHA256SUMS`, `SOURCE.json`). `BUILD-NOTE.md`, both `CLAUDE.md`, `SUBMISSIONS.md`, the plugin's
-> `dev/` and editor `*.code-workspace` files stay on the publishing machine. On the receiving
-> machine, the report `copygt.sh` writes replaces this note; its content reaches you from the owner.
-> `SOURCE.json`, at the root of gt-src, names the exact commit the tree was cut from.
+> **This file does not travel in gt-src** (owner ruling, 2026-10-01). gt-src carries only the code,
+> what `install.sh` installs, and its own tools (`copygt.sh`, `validate-install.py`, `SHA256SUMS`,
+> `SOURCE.json`). On the receiving machine the report `copygt.sh` writes replaces this note; its
+> content reaches you from the owner. `SOURCE.json`, at the root of gt-src, names the exact commit
+> the tree was cut from.
 
-> **gt-src changed shape in 0.17.3 — read this before copying.** It now mirrors the GitHub
-> repository's layout: the repo root (`README.md`, `CHANGELOG.md`, `LICENSE`, `CLAUDE.md`,
-> `SUBMISSIONS.md`, `docs/`, `.github/`) with the plugin under `golden-thread-plugin/` —
-> exactly where GitHub holds each file, minus release directories older than the previous one.
-> Until 0.17.2 gt-src was the plugin folder alone, so a copy step written for that shape will put
-> files one level too high. **Copy gt-src as a whole onto the repository root.** The CHANGELOG
-> now travels too, so this note no longer has to stand in for it.
-
+> **Not released yet.** 0.18.0 is being built on `feat/0.18.0` from the accepted feature-request
+> queue. Nothing is pushed, tagged or synced to gt-src until the owner says release; then it goes
+> straight to main.
 
 ---
 
@@ -24,97 +18,52 @@
 
 | Plugin | Version | Note |
 |---|---|---|
-| gt (core) | **0.17.11** | Core rule 1 revised; queue ops; scripts routed through the queue; gt_daily headings fix |
-| gt-wiki | **0.2.4** | skills write through the queue; `wiki_log.py` uses `gt_log.py` and the queue in a gt vault |
-| gt-farm, gt-watch, gt-demo | **0.17.11** | skills write through the queue; demo act 4 and demo ADR numbering fixed |
-| gt-flow, gt-report-card | **0.17.11** | version bump only (they move with gt) |
-| gt-visualize | **0.4.1** | wording only |
-| gt-usage | 0.1.3 | unchanged |
-| **gt-lotr** | **0.1.0** | **new optional module, off by default**: LOTR (also called gt MCP), one gateway to rule them all |
+| gt (core) | **0.18.0** | verb-first skills, gt-close, gt-plan/gt-implement, ADR expiry and lineage, gt-brief, gt-optimize session member and archive, gt-minimize, write-back checks, catch-up brief, doctor rows, foreign-checkout guard |
+| gt-wiki | **0.2.5** | `requires_gt` admits 0.18 |
+| gt-demo, gt-farm, gt-flow, gt-report-card, gt-watch | **0.18.0** | they move with gt |
+| gt-visualize | **0.4.2** | `requires_gt` admits 0.18 |
+| gt-usage | **0.1.4** | `requires_gt` admits 0.18 |
+| gt-lotr | **0.1.1** | `requires_gt` admits 0.18; still off by default |
 
-**LOTR (`gt-lotr` 0.1.0)** is a fixed four-tool MCP surface (`find`, `call_read`, `call_write`,
-`call_consent`) in front of any number of downstream connections (GitHub, Jira, Microsoft Graph
-and other REST APIs). It has a registry of who talks to whom, as whom, and from which machine.
-
-- **Install:** `./install.sh --with lotr`. Nothing changes until then.
-- **Runtime:** stdlib-only Python 3.9 or later, so the same code runs on a Mac and on a Linux hub.
-- **Commands:** `lotr` (the same CLI is also called `mcp`), `lotrd` (the daemon) and `lotr_mcp.py`
-  (the stdio shim).
-- **Placement** is per zone: `local` (one box, e.g. a work machine) or `hub` with enrolled
-  `client` machines; hybrid is not built yet.
-- **Local security:**
-  - private files;
-  - a kernel peer-uid check on the socket;
-  - TLS required beyond loopback;
-  - local callers under an allow list and a tier ceiling;
-  - consent-tier operations confirmed in a dialog raised by the daemon itself.
-- **Credentials** are references (keychain, store, file), never values.
-- **On the work machine:** connections there use that machine's own keychain. Employer hostnames
-  stay in that machine's local registry, never in the vault.
-- **Design and decisions:** vault `Projects/golden-thread/mcp-gateway/`, ADR-1..6.
+Skills **28 → 35**: `gt-handle`, `gt-list`, `gt-close`, `gt-plan`, `gt-implement`, `gt-brief`,
+`gt-minimize`. Nothing removed: `gt-task`, `gt-handoff`, `gt-task-list`, `gt-handoff-list`,
+`gt-task-handle`, `gt-handoff-handle` stay as deprecated aliases through 0.18.x. gt_lint checks
+**19 → 23**. Settings: nine new. Hook registrations **14 → 16** (both new ones `install.sh`-owned).
 
 ## 2. What changed, and why
 
-**Core rule 1 is now "queue first"** (owner, 2026-10-01: *"the agents write to the queues rather
-than directly to the files"*). The rule id is unchanged (`core_concurrent_session_claim`); its
-meaning has changed:
+The full account, one section per theme with the why, is `../CHANGELOG.md` (it travels in gt-src).
+The short version:
 
-> Write vault content only through the write queue (`gt_write_queue.py`), then apply it with
-> `gt_broker.py drain`; never edit a vault file directly, and never write one another live session
-> has claimed.
-
-- **The guard enforces it** (`guard_session_claims`).
-  - **Denied:** a direct Write/Edit to any vault `.md`, claimed or not, outside `Sources/`,
-    `core-rules/`, `.obsidian/`, `.git/`, `.gt/` and gt's own `spool/`, `sessions/` and `tools/`.
-  - **Also denied:** the visible shell writes: `>`, `>>`, `tee`, `sed -i`, and `cp`/`mv` into the
-    vault.
-  - **Not visible to it:** a script that opens a file itself. The rule says so.
-- **Queue ops**: `append`, `replace-section`, `create`, plus two new ones:
-  - `set-property`: one top-level frontmatter key;
-  - `replace-file`: the whole file, guarded by the hash of what was read.
-
-  The broker escalates instead of overwriting when a target changed after the request was
-  queued. It also escalates when a target was moved or deleted since; it never recreates a file
-  at its old path.
-- **Every `design.md` and `global-memory/` write goes to the owner for review.** This is the
-  owner's choice.
-- **Skills:** gt-work and 15 other core skills, plus the module skills, now queue their writes and
-  drain once.
-- **Scripts now route their vault writes through the queue:** `gt_daily`, `gt_task`,
-  `gt_lint_weekly`, `gt_handoff`, `gt_handoff_status` and `wiki_log`.
-- **Hooks dir:** `gt_write_queue.py`, `gt_broker.py` and `gt_demote.py` are now installed into
-  the hooks dir, so the nightly jobs and the vault's `gt_task.py` can reach them.
-- **`gt_broker.py audit [--since H]`**: lists vault `.md` files changed in the window that the
-  broker did not write. It is a report, not an alarm.
-- **gt_daily** puts each fact under the daily note's own headings (commit `22fb651`), and now
-  writes through the queue.
-- **Repository:** editor workspace files are untracked and `*.code-workspace` is ignored. The root
-  `.gitignore` gains editor, cache, venv, log, conflict-copy and key-file patterns.
-
-## 2a. Release gate: run BEFORE the build is cut
-
-Owner, 2026-10-01 07:19. This gate is not optional.
-
-`gt_daily` now writes the daily note through the write queue (one `replace-file` per run).
-**These three tests must pass UNCHANGED against 0.17.11**, byte-identical to their text in commit
-`22fb651`. If any of them had to be edited to pass, the replace-never-append contract broke:
-**stop and tell the owner; do not ship.**
-
-1. `test_gt_daily.ItWritesOnlyItsOwnBlock.test_a_second_run_replaces_the_block_rather_than_adding_one`
-2. `test_gt_daily.FactsGoUnderTheirHeadings.test_the_owners_lines_in_a_section_survive_a_rerun`
-3. `test_gt_daily.FactsGoUnderTheirHeadings.test_a_note_with_the_old_bottom_block_is_migrated`
-
-```bash
-cd golden-thread-plugin/tests && python3 -m unittest test_gt_daily     # every test passes
-git diff 22fb651 -- golden-thread-plugin/tests/test_gt_daily.py      # the three bodies unchanged
-```
-
-Last checked 2026-10-01 07:20 on `feat/queue-first-writes`: all three bodies byte-identical to
-`22fb651`, and the whole `test_gt_daily` suite passes (`self-verified`). Re-run it at the cut.
+- **One verb per action** (owner accepted 2026-10-01): `gt-create`, `gt-open`, `gt-list`,
+  `gt-handle`, `gt-close`, each taking `project` / `task` / `handoff`. `gt-close project` refuses
+  until every open task and handoff is decided, offers graduation, then **archives in place**
+  (`stage: archived`); `--move` relocates to `Archive/<slug>/` only on request. New vault-tool
+  verbs `gt_task.py shelve` and `move`.
+- **Coding loop:** `gt-plan` (plan file `.claude/gt-plan-current.md`, waits for approval) and
+  `gt-implement` (test-first phases, stops on red, commits only on yes). **gt-learn is folded into
+  gt-work** as a *Learn* step (owner decision).
+- **Decisions:** ADR fields `Supersedes`, `Expires when`, `Expires`; `gt_adr.py lineage`;
+  `/gt:gt-query --lineage` and `--entity`; sub-project slugs resolve to their folder in `gt_adr`
+  and `create-project --parent`; `gt-brief` drafts a repo `CLAUDE.md`.
+- **Lint:** `adr-expires`, `bundled-concept`, `decision-candidate`, `memory-entity-orphan` — all
+  review-queue questions.
+- **Subtraction:** `gt-optimize` is an aggregator (`vault` + `session` members), with `--cost`,
+  `--archive`, `--supersede`, `single-project-global`, `knowledge-unused`; a new
+  `log_knowledge_read.sh` hook logs Knowledge reads to `<vault>/usage/`. `gt-minimize` prunes and
+  writes **no in-flight note** (owner decision).
+- **gt-work checks itself:** contradictions, promotion candidates, `research-digest.md`; the
+  skeptic pass no longer needs `agent_specialization`.
+- **Returning:** `gt_catchup.py` brief in gt-open; *What Changed This Session* in the handoff;
+  `gt_state` speaks to the user via `systemMessage` and reads only its own session's ledger rows.
+- **Install health and guards:** doctor rows `repo-target` (a note, `i`) and `hooks-schema`;
+  `guard_foreign_checkout.sh` denies commit/push in a declared foreign checkout.
+- **Repository tooling:** `dev/remote-test.sh` (the suite on a remote Linux runner),
+  `copygt.sh`, `dev/feature_requests.py --src` descends into `golden-thread-plugin/`.
 
 ## 3. What to run on the receiving machine
 
-**One command, from gt-src** (new 2026-10-01; repository tooling, no gt version change):
+**One command, from gt-src:**
 
 ```bash
 cd <gt-src>
@@ -132,8 +81,8 @@ It does, in order, and stops at the first failure:
    - It refuses a repo with uncommitted changes to tracked files.
    - It never writes `copygt.sh`, `validate-install.py`, `SHA256SUMS`, `SOURCE.json` or the report
      into the repo.
-   - **First run:** it deletes the five files that no longer ship (`*.code-workspace`,
-     `BUILD-NOTE.md`, both `CLAUDE.md`, `dev/`, `SUBMISSIONS.md`) from the repo.
+   - **First run after 0.17.11:** it deletes the five files that no longer ship
+     (`*.code-workspace`, `BUILD-NOTE.md`, both `CLAUDE.md`, `dev/`, `SUBMISSIONS.md`).
    - **It also deletes release directories older than the previous one**, because gt-src carries
      only the newest two of each plugin. The dry run lists them, and git history keeps them.
    - The applied gt-src commit is recorded in `~/.claude/golden-thread/copygt/applied.json`.
@@ -157,15 +106,13 @@ It does, in order, and stops at the first failure:
 Options: `--vault V`, `--report FILE` (never inside the repo).
 Exit codes: 0 done, 2 refused, 3 checksum, 4 not clean, 5 commit failed. (`--no-push` is still accepted and changes nothing.)
 
-**The tree_sha256 to compare is the one `sync-gt-src.sh` printed at the latest sync.** The 0.17.11
-publish printed `6209dca0de65aeb65adec0250f0c94e841825ba82e9c8f001fe1eebf6bca12fd`. The re-sync
-that ships `copygt.sh` changes it: the tree gains `copygt.sh` and `validate-install.py` and loses
-the five excluded files. So compare against whatever the publishing machine printed most
-recently, not against a number written here. `copygt.sh` prints the value it verified.
+**The tree_sha256 to compare is the one `sync-gt-src.sh` printed at the 0.18.0 sync** — not a
+number written here, since this note is written before the cut. `copygt.sh` prints the value it
+verified.
 
 **The same Dropbox-synced vault?** If the receiving machine opens the same vault as the publishing
-Mac, that vault is already upgraded to 0.17.11 here, `PROTOCOL.md` is already merged, and the
-merge base is recorded. `/gt:gt-upgrade` there should report nothing pending. **Never redo the
+Mac, that vault will already have been upgraded to 0.18.0 here, `PROTOCOL.md` merged, and the merge
+base recorded. `/gt:gt-upgrade` there should report nothing pending. **Never redo the
 merge.**
 
 **Settings are per machine.** `release_announce=post`, `skeptic_pass=on` and
@@ -222,90 +169,74 @@ bash install.sh --require-checksum   # verifies every file, then installs NEWEST
 python3 ~/.claude/golden-thread/hooks/gt_doctor.py post-install --vault <vault>
 ```
 
-It proves an installed machine is correct for 0.17.11.
-- **Output:** a PASS/FAIL/WARN/INFO/PENDING table with the elapsed time, about 1 s. It exits 1 on
-  any FAIL. A row that cannot run is a FAIL, never a PASS.
-- **Placement rows:**
-  - the installed version and ON modules;
-  - component drift;
-  - hook and Core-rule wiring;
-  - rule 1 queue-first, both in the vault and as injected;
-  - the four queue scripts in the hooks dir, byte-identical to the release;
-  - the guard denying a vault write;
-  - queue health (WARN when requests wait);
-  - vault migrations;
-  - lotr;
-  - the daily launchd job.
-- **Smoke rows:** the installed copies run against throwaway vaults, in parallel, each step with a
-  hard timeout:
-  - a queue round trip;
-  - broker escalation of a stale `replace-file`;
-  - the guard;
-  - all 10 injected rules;
-  - the lotr daemon plus the MCP `tools/list`;
-  - a `gt_daily` dry run.
-- **When it runs on its own:**
-  - `install.sh` runs it at the end. Rows that need `/gt:gt-upgrade` show PENDING; a real FAIL
-    exits **9**.
-  - The first SessionStart after a version change runs it once more and shows the result.
-- **Read-only:** the real vault and `settings.json` are never written.
+It proves an installed machine is correct for the release: a PASS/FAIL/WARN/INFO/PENDING table,
+exit 1 on any FAIL, a row that cannot run is a FAIL. `install.sh` runs it at the end (a real FAIL
+exits **9**; rows needing `/gt:gt-upgrade` show PENDING), and the first SessionStart after a
+version change runs it once more. It never writes the real vault or `settings.json`.
 
 Then, in a Claude Code session on that machine:
 
 0. Read the post-install table `install.sh` printed: every row PASS, or PENDING with its fix.
-1. **`/gt:gt-upgrade`** refreshes the vault's `core-rules/` (rule 1's new text) and merges the
-   PROTOCOL.md "Concurrent sessions" change.
-2. **Confirm the new rule is live:**
-   `echo '{}' | ~/.claude/golden-thread/hooks/inject_core_rules.sh`. Rule 1 must read "Write vault
-   content only through the write queue…".
-3. **Confirm the queue is reachable from the hooks dir:**
-   `ls ~/.claude/golden-thread/hooks/gt_write_queue.py ~/.claude/golden-thread/hooks/gt_broker.py`.
-   Without them the 22:00 daily-note job exits 3 with "write queue is not installed".
-4. **Run the gate again:** `python3 ~/.claude/golden-thread/hooks/gt_doctor.py post-install --vault <vault>`. Every row must be PASS (or INFO).
-5. **Apply anything waiting:** `python3 ~/.claude/golden-thread/hooks/gt_broker.py drain --vault <vault>`,
-   then `… status --vault <vault>`. It should say the queue is empty.
+1. **`/gt:gt-upgrade`** — merges the PROTOCOL.md section *ADR fields and memory entities* and the
+   gt-brief paragraph under *Graduating a fact out to a repo*, and refreshes the vault tools
+   (`gt_adr.py`, `gt_session.py`, `gt_spool.py`, `gt_task.py` changed). Until it runs, `gt_task.py
+   move`/`shelve`, `gt_adr.py lineage` and `start_commit` do not exist in the vault.
+2. **`/gt:gt-doctor`** — expect two new rows: `repo-target` (an `i` note, normal) and
+   `hooks-schema`. `guard_foreign_checkout.sh` and `log_knowledge_read.sh` show `unwired` until
+   `install.sh` has run.
+3. **Declare any foreign checkout** on this machine (see §5).
+4. **Run the gate again** and drain anything waiting:
+   `python3 ~/.claude/golden-thread/hooks/gt_broker.py drain --vault <vault>`.
 
 ## 4. How to work from now on (both machines)
 
-- **Never edit a vault Markdown file directly** in a Claude Code session. Queue it:
-  ```bash
-  python3 ~/.claude/golden-thread/hooks/gt_write_queue.py --vault <vault> --path <rel .md> \
-      --op append|replace-section|create|set-property|replace-file [--section "<heading>"] \
-      --content-file <file> --session <id>
-  python3 ~/.claude/golden-thread/hooks/gt_broker.py drain --vault <vault>
-  ```
-  The skills already do this. If the guard denies a write, its message gives the exact command.
-- **`log.md`, `decisions.md` and `TASKS.md` keep their own tools:** `gt_log.py add`,
-  `gt_adr.py allocate`/`merge` and `gt_tasks.py`.
-- **Held means waiting, not failed.** A write to a file another live session claims stays queued.
-  The next drain applies it; session start shows "WRITE QUEUE: N waiting".
-- **Escalated means the owner decides.** It becomes a `#conflict` task, with every version kept in
-  `spool/broker/conflicts/`.
-- **Your own edits in Obsidian are unaffected.** No hook sees them, and the broker never overwrites
-  them: a queued write to a file you changed is escalated.
+- **Use the verbs.** `/gt:gt-create task …`, `/gt:gt-list tasks mine`, `/gt:gt-handle handoff`,
+  `/gt:gt-close project <slug>`. The old names print a one-line notice and still work through
+  0.18.x; they are removed in the release after.
+- **Before stepping away from a long session:** `/gt:gt-minimize`, then `/compact` while warm.
+- **Coding work:** `/gt:gt-plan`, approve, `/gt:gt-implement`. Nothing is committed without a yes,
+  nothing is pushed.
+- **Vault writes are queue-first, as in 0.17.11** — unchanged: queue it, then `gt_broker.py drain`.
 
 ## 5. What needs a decision
 
-- **Two machines, one Dropbox-synced queue.**
-  - The broker's lock is a file in the vault, and Dropbox does not make it atomic across machines.
-  - Two machines draining in the same few seconds could in principle both apply one request.
-  - **Recommendation:** treat this Mac as the machine that drains, the same rule as "only this Mac
-    commits" for the vault. A drain on the other machine is safe while this Mac is idle.
-  - Not yet measured.
+- **Declare foreign checkouts.** The guard is inert until a checkout is declared. On each machine,
+  declare the checkouts the *other* machine owns:
+  `python3 ~/.claude/golden-thread/hooks/guard_foreign_checkout.py add <path> --label "<owner>"
+  --route "<the supported route>"`.
+- **First-run lint volume.** On the owner's vault (read-only, 2026-10-01) `decision-candidate`
+  found 114 (92 of them "deliberately") and `bundled-concept` 38 pages. Decide whether to keep the
+  request's phrase list or `gt_settings.py set decision_signals "-deliberately"` (→ 22), and
+  suppress narrative pages as they come up.
+- **Pinning research findings.** gt-work allows adding `[pinned]` to an existing `##` heading in
+  `research.md` — a narrow exception to append-only that PROTOCOL/CONVENTIONS do not yet word.
+- **Stale references to the old skill names** remain in shipped text: `gt_settings.py`'s
+  `handoff_surface` help (`/gt:gt-handoff-handle`), gt-open and gt-work in a few lines, and
+  gt-minimize (`/gt:gt-handoff`, four places). The aliases make them work; whether to sweep them
+  before release or with the alias removal is the owner's call.
+- **`hooks/known_events.json` / `known_tools.json`** were written from knowledge of Claude Code's
+  hook events (reference 2026-10), not checked against the live docs. Review them before release.
 - **When to release:** the owner says when. Then push straight to main, with no PR.
 
 ## 6. What will be misread if nobody says it
 
-- **A known guard false positive in 0.17.11, fixed in the next build.** The guard's Bash branch
-  does not expand `$VARIABLES` in a redirect target. It also matches `>` inside quoted strings.
-  So a harmless command can be denied as a vault write. **Workaround:** use literal paths. Write
-  any text containing `>` with the Write tool to a file outside the vault, then queue it.
-
-- **The same rule id now means something different.** An old vault copy of
-  `core_concurrent_session_claim.md` still says "claim, then write" until `/gt:gt-upgrade` runs.
-- **`until: none`** in a handoff's frontmatter means "no deferral". The queue cannot delete a
-  frontmatter key.
-- **The only remaining direct vault write by a script** is the broker's own `#conflict` task. It is
-  written while the broker holds the drain lock.
-- **Deleting or moving a file is not a queue op.** `gt_demote.py`, and demoting a Core rule out of
-  `core-rules/`, still do it directly.
+- **`repo-target` is never a problem.** It is an `i` row on every run where the working directory is
+  the vault — that is gt's normal configuration. It exists so a code review is pointed at the
+  right repo, not to be fixed.
+- **A bare `gt_optimize.py` exits 3 on a machine with no Claude transcripts** (a CI runner): the
+  session member could not run, and the aggregator says so rather than reporting clean.
+  `gt_allin` runs it as `--only vault`.
+- **`knowledge-unused` says nothing at first.** With no read log yet it reports nothing, by
+  design; findings start appearing as reads accumulate.
+- **`memory-entity-orphan` reports 0 until a project adopts `entities:`** — the adoption gate, not a
+  broken check.
+- **The first prompt of a session usually shows no `gt-state` line**: there is no usage reading of
+  this session's own yet, so it "cannot tell". That is correct, not a regression.
+- **The guard's Bash false positive is still there.** `guard_session_claims` matches `>` inside
+  quoted strings and heredocs (e.g. `<YYYY>.md` in a Python heredoc) and can deny a harmless
+  command as a vault write. Write such text with the Write tool to a file outside the vault, or put
+  the script in a file and run it.
+- **`test_package.test_a_stale_zip_is_replaced` can fail under parallel load.** A known flake; re-run
+  it alone before treating it as a regression.
+- **Run the suite on the remote runner, not the Mac** (`GT_TEST_VERSION=0.18.0 bash
+  dev/remote-test.sh -j 2 …`). A local full run drove the Mac's load to 50–96.

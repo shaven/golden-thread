@@ -115,11 +115,11 @@
 <h1 id="golden-thread-plugin-documentation">Golden Thread Plugin — Documentation</h1>
 <blockquote>
 <p><strong>Reader:</strong> quick lookup, and the printed PDF
-<strong>Claims last checked against the code:</strong> 2026-09-17 — see <em>The documents, and what belongs in each</em> in <a href="../CLAUDE.md"><code>CLAUDE.md</code></a>.</p>
+<strong>Claims last checked against the code:</strong> 2026-10-01 (gt 0.18.0) — see <em>The documents, and what belongs in each</em> in <a href="../CLAUDE.md"><code>CLAUDE.md</code></a>.</p>
 </blockquote>
-<h2 id="version-gt-01711-gt-wiki-024-gt-usage-013-gt-visualize-041-gt-lotr-010-gt-demo-gt-watch-gt-report-card-gt-farm-gt-flow-01711">Version gt 0.17.11 / gt-wiki 0.2.4 / gt-usage 0.1.3 / gt-visualize 0.4.1 / gt-lotr 0.1.0 / gt-demo, gt-watch, gt-report-card, gt-farm, gt-flow 0.17.11</h2>
+<h2 id="version-gt-0180-gt-wiki-025-gt-usage-014-gt-visualize-042-gt-lotr-011-gt-demo-gt-watch-gt-report-card-gt-farm-gt-flow-0180">Version gt 0.18.0 / gt-wiki 0.2.5 / gt-usage 0.1.4 / gt-visualize 0.4.2 / gt-lotr 0.1.1 / gt-demo, gt-watch, gt-report-card, gt-farm, gt-flow 0.18.0</h2>
 <hr />
-<p>Golden Thread turns an Obsidian vault into the single source of truth for all AI memory across every project and every session. The tiered rule model introduced in v0.6.0 now carries <strong>ten hook-backed Core rules</strong> enforced at three points in the turn, 0.9.12 added <code>gt-route</code> for the middle of a session, and 0.9.13 makes the session-start component check verify that the hooks are <strong>wired</strong>, not merely installed, 0.11.0 makes <code>log.md</code> and <code>decisions.md</code> generated files so concurrent sessions cannot overwrite one another, 0.12.3 stops a vault tool running against a vault it was never told to touch, 0.12.4 makes parallel execution the default for divisible work in every project, 0.12.5 stops code being committed before its tests have been seen to pass, 0.13.0 makes an upgrade from any older release end where a fresh install would, 0.14.0 splits optional parts into modules you can decline, and 0.15.0 makes six of them — gt-wiki 0.2.1 (an LLM-powered knowledge base with immutable sources and interlinked pages), gt-demo (the guided tour), gt-watch (upstream repos), gt-report-card (the session report card), gt-farm (work packets for an external AI) and the new gt-flow, which draws the vault's event stream as a timeline of knowledge climbing the ladder. 0.16.0 gave contributed <strong>packs</strong> — plain JSON data, reviewed and merged, never third-party code — somewhere to come from and something to read them, shipping <code>gt-scan</code>, <code>gt-optimize</code>, <code>gt-handoff</code>, <code>gt-allin</code> and <code>gt-allin-commit</code>; 0.16.1 added <code>gt-context</code> (the first consumer of the registry's model-reachable tier) and <code>gt-validation</code> (a verification receipt that goes stale when the file it describes changes); and 0.16.2 re-asserts the Core rules after a compaction as well as on every prompt, lets a module hook declare a <code>timeout</code>, and refuses a copyleft licence by its current SPDX spelling; 0.16.3 makes <code>install.sh</code> refuse when MANIFEST.json is tracked but missing rather than regenerating one, and stops <code>gt_tasks.py</code> overwriting TASKS.md in silence. 0.17.2 adds <code>gt_surface.py</code>, a <code>SessionStart</code> hook that finally reads what earlier sessions wrote for the next one — a live MUST DO block from <code>deadlines.md</code>, every handoff not yet handled, a count of urgent tasks waiting on you, pre-compaction state — adds five skills that create, list and handle tasks and handoffs (<code>gt-task</code>, <code>gt-task-list</code>, <code>gt-task-handle</code>, <code>gt-handoff-list</code>, <code>gt-handoff-handle</code>), and keys session claims on a machine id rather than a hostname.</p>
+<p>Golden Thread turns an Obsidian vault into the single source of truth for all AI memory across every project and every session. The tiered rule model introduced in v0.6.0 now carries <strong>ten hook-backed Core rules</strong> enforced at three points in the turn, 0.9.12 added <code>gt-route</code> for the middle of a session, and 0.9.13 makes the session-start component check verify that the hooks are <strong>wired</strong>, not merely installed, 0.11.0 makes <code>log.md</code> and <code>decisions.md</code> generated files so concurrent sessions cannot overwrite one another, 0.12.3 stops a vault tool running against a vault it was never told to touch, 0.12.4 makes parallel execution the default for divisible work in every project, 0.12.5 stops code being committed before its tests have been seen to pass, 0.13.0 makes an upgrade from any older release end where a fresh install would, 0.14.0 splits optional parts into modules you can decline, and 0.15.0 makes six of them — gt-wiki 0.2.1 (an LLM-powered knowledge base with immutable sources and interlinked pages), gt-demo (the guided tour), gt-watch (upstream repos), gt-report-card (the session report card), gt-farm (work packets for an external AI) and the new gt-flow, which draws the vault's event stream as a timeline of knowledge climbing the ladder. 0.16.0 gave contributed <strong>packs</strong> — plain JSON data, reviewed and merged, never third-party code — somewhere to come from and something to read them, shipping <code>gt-scan</code>, <code>gt-optimize</code>, <code>gt-handoff</code>, <code>gt-allin</code> and <code>gt-allin-commit</code>; 0.16.1 added <code>gt-context</code> (the first consumer of the registry's model-reachable tier) and <code>gt-validation</code> (a verification receipt that goes stale when the file it describes changes); and 0.16.2 re-asserts the Core rules after a compaction as well as on every prompt, lets a module hook declare a <code>timeout</code>, and refuses a copyleft licence by its current SPDX spelling; 0.16.3 makes <code>install.sh</code> refuse when MANIFEST.json is tracked but missing rather than regenerating one, and stops <code>gt_tasks.py</code> overwriting TASKS.md in silence. 0.17.2 adds <code>gt_surface.py</code>, a <code>SessionStart</code> hook that finally reads what earlier sessions wrote for the next one — a live MUST DO block from <code>deadlines.md</code>, every handoff not yet handled, a count of urgent tasks waiting on you, pre-compaction state — adds five skills that create, list and handle tasks and handoffs (<code>gt-task</code>, <code>gt-task-list</code>, <code>gt-task-handle</code>, <code>gt-handoff-list</code>, <code>gt-handoff-handle</code>), and keys session claims on a machine id rather than a hostname. 0.17.11 made Core rule 1 queue-first. 0.18.0 makes the skills one verb per action — <code>gt-create</code>, <code>gt-open</code>, <code>gt-list</code>, <code>gt-handle</code> and the new <code>gt-close</code>, each taking the artifact as its argument, with the six old task and handoff names kept as deprecated aliases for 0.18.x — and adds <code>gt-plan</code> and <code>gt-implement</code> for the coding loop, <code>gt-brief</code> to draft a repo's <code>CLAUDE.md</code> from the vault, and <code>gt-minimize</code> to prune a session before cutting it.</p>
 <hr />
 <h2 id="what-it-does">What It Does</h2>
 <p>Instead of scattered <code>.claude/memory/</code> files and CLAUDE.md snippets that live and die per session, Golden Thread gives every fact a permanent home in a structured vault. Knowledge flows up a hierarchy from session notes into the vault, and the right facts are always in scope when you need them.</p>
@@ -259,7 +259,7 @@ the rule says so. It fails open on any parse failure.</p>
 <p>The canonical rule definitions live in <code>Projects/golden-thread/core-rules/</code> inside the vault. Editing a rule file there changes what the hook injects — the rule text is never duplicated into the script.</p>
 <p><strong>The canary:</strong> <code>core_timestamp_every_message.md</code> is designated Core/Validated not because a missing timestamp causes real harm, but because it is trivially observable at the top of every reply. When the timestamp disappears, enforcement has broken.</p>
 <hr />
-<h2 id="gt-skills-28">gt Skills (28)</h2>
+<h2 id="gt-skills-35">gt Skills (35)</h2>
 <h3 id="setup">Setup</h3>
 <table>
 <thead>
@@ -275,7 +275,7 @@ the rule says so. It fails open on any parse failure.</p>
 </tr>
 <tr>
 <td><code>/gt:gt-create</code></td>
-<td>Scaffold a new project folder with the standard structure. Captures your brain dump into <code>idea.md</code>. Supports sub-projects, tags, and runbook creation.</td>
+<td>The create verb (0.18.0): <code>project &lt;slug&gt;</code> (or a bare slug) scaffolds a project folder with the standard structure and captures your brain dump into <code>idea.md</code> — sub-projects, tags, runbook; <code>task &lt;text&gt;</code> adds a task line through <code>gt_task.py add</code>; <code>handoff</code> writes a handoff through <code>gt_handoff.py</code>.</td>
 </tr>
 </tbody>
 </table>
@@ -290,7 +290,7 @@ the rule says so. It fails open on any parse failure.</p>
 <tbody>
 <tr>
 <td><code>/gt:gt-open</code></td>
-<td>Load a project at session start. Reads the core project docs in order — <code>source.md</code> first, so you know which host serves which role before touching code, then idea → research → decisions → design — and <em>indexes</em> the memory files rather than loading them. Since 0.17.2 it also names the project's waiting handoffs (<code>gt_surface.py handoffs --project</code>) without reading them. Summarizes state and asks where to pick up.</td>
+<td>Load a project at session start. Reads the core project docs in order — <code>source.md</code> first, so you know which host serves which role before touching code, then idea → research → decisions → design — and <em>indexes</em> the memory files rather than loading them. Names the project's waiting handoffs (<code>gt_surface.py handoffs --project</code>) without reading them. Since 0.18.0: a catch-up brief after <code>brief_absence_days</code> away (<code>gt_catchup.py</code>; <code>--brief</code>, <code>--no-brief</code>), <code>research-digest.md</code> in place of research headings when current (<code>gt_digest.py check</code>), a line on which repo a repo-scoped command will hit, and <code>handoff [id]</code> / <code>task &lt;id&gt;</code> to open one of those read-only.</td>
 </tr>
 <tr>
 <td><code>/gt:gt-route</code></td>
@@ -298,7 +298,7 @@ the rule says so. It fails open on any parse failure.</p>
 </tr>
 <tr>
 <td><code>/gt:gt-work</code></td>
-<td>Write back session findings. Appends to <code>research.md</code>, adds ADRs to <code>decisions.md</code>, refines <code>design.md</code>, creates <code>spec.md</code> when design is complete, and flags content for PROTOCOL.md. Offers a handoff for what did not reach a file; since 0.17.2 the next session is shown it at start, and each task it raises names the handoff's filename — the join that closes the handoff when the last task is checked off.</td>
+<td>Write back session findings. Appends to <code>research.md</code>, adds ADRs to <code>decisions.md</code>, refines <code>design.md</code>, creates <code>spec.md</code> when design is complete, and flags content for PROTOCOL.md. Offers a handoff for what did not reach a file; each task it raises names the handoff's filename. Since 0.18.0: asks about ADR <code>--supersedes</code> / <code>--expires-when</code> and memory <code>entities:</code>; regenerates <code>research-digest.md</code> (<code>gt_digest.py write</code>); runs <code>gt_memory_check.py</code> (contradictions) and <code>gt_promote_detect.py</code> (promotion candidates); a <em>Learn</em> step offers reusable patterns; the skeptic pass needs only <code>skeptic_pass</code>.</td>
 </tr>
 <tr>
 <td><code>/gt:gt-ingest</code></td>
@@ -307,6 +307,68 @@ the rule says so. It fails open on any parse failure.</p>
 <tr>
 <td><code>/gt:gt-review</code></td>
 <td>Empty the inbox: sweep <code>INBOX.md</code> — plus Obsidian daily notes if you keep them — for captured-but-unfiled thoughts and route each one into a tracked project.</td>
+</tr>
+</tbody>
+</table>
+<h3 id="coding-work-0180">Coding Work (0.18.0)</h3>
+<table>
+<thead>
+<tr>
+<th>Command</th>
+<th>What it does</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>/gt:gt-plan</code></td>
+<td>Restate the requirement and confirm it, read the design/spec/ADRs and code it touches, list risks verified or unverified, write a phased test-first plan to <code>&lt;repo&gt;/.claude/gt-plan-current.md</code> (<code>status: draft</code>), and stop at "Approve this plan?". No code.</td>
+</tr>
+<tr>
+<td><code>/gt:gt-implement</code></td>
+<td>Refuse without an approved plan; then per phase: failing test, code, refactor, <code>gt_allin.py --only tests,scan</code> naming the tests that ran; stop on any failure or any check that could not run; commit only via <code>gt_allin_commit.py</code> on your yes; never push.</td>
+</tr>
+<tr>
+<td><code>/gt:gt-minimize</code></td>
+<td>Prune a heavy session before cutting: <code>gt_minimize.py</code> measures billed context and cache warmth; keep what matters (Knowledge/INBOX through the queue), drop the rest, then "/compact or /clear now". No in-flight note — that is <code>/gt:gt-create handoff</code>.</td>
+</tr>
+</tbody>
+</table>
+<h3 id="tasks-and-handoffs-0180-one-verb-per-action">Tasks and Handoffs (0.18.0: one verb per action)</h3>
+<table>
+<thead>
+<tr>
+<th>Command</th>
+<th>What it does</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>/gt:gt-create task &lt;text&gt;</code></td>
+<td>One well-formed line in the project README's <code>## Tasks</code> via the vault tool <code>gt_task.py add</code>, with <code>[p::] [waiting::] [since::]</code> filled in and an optional <code>[ref:: …]</code> to a <code>[[page]]</code> or vault path that must resolve. <code>--inbox</code> for unfiled. Refuses a README another live session has claimed.</td>
+</tr>
+<tr>
+<td><code>/gt:gt-create handoff</code></td>
+<td>Write the next session a handoff it can trust: facts from the project and repository, each labelled with source and verification state, plus <em>What Changed This Session</em> (<code>git diff &lt;start_commit&gt;..HEAD</code>). The design narrative is left for the session that did the work.</td>
+</tr>
+<tr>
+<td><code>/gt:gt-open task &lt;id&gt;</code> · <code>handoff [id]</code></td>
+<td>Read-only: one task's full detail, or one handoff and only the task lines citing it.</td>
+</tr>
+<tr>
+<td><code>/gt:gt-list</code></td>
+<td>Read-only. <code>tasks [filter]</code> — <code>&lt;slug&gt;</code>/<code>inbox</code>, <code>p1</code> <code>p2</code> <code>p3</code>, <code>mine</code>, <code>overdue</code>, <code>stale</code>, <code>deferred</code>, <code>ref:&lt;text&gt;</code>; each line carries an ID, <code>slug:LINE:HASH</code>. <code>handoffs</code> — open or deferral ended, one line each, <code>--all</code> for every state. Bare: a summary of both.</td>
+</tr>
+<tr>
+<td><code>/gt:gt-handle</code></td>
+<td>One at a time. <code>task [filter]</code>: close (<code>gt_close.py task</code>), drop (reason), defer (future date), move (<code>gt_task.py move --to</code>), or keep; an ID whose line changed is refused. <code>handoff</code>: settle each item, then close as <code>handled</code> (<code>gt_close.py handoff</code>) or defer to a date. Bare: asks which.</td>
+</tr>
+<tr>
+<td><code>/gt:gt-close</code></td>
+<td><code>project &lt;slug&gt;</code>: every open task and handoff decided (close / drop / move / keep shelved at <code>p:: 7</code>; <code>gt_close.py project</code> exits 1 until then), graduation offered through gt-promote, then archived in place (<code>stage: archived</code>); <code>--move</code> relocates to <code>Archive/&lt;slug&gt;/</code>. <code>task &lt;id&gt;</code>; <code>handoff [id]</code> (refused while a citing task is open).</td>
+</tr>
+<tr>
+<td><code>/gt:gt-task</code> · <code>/gt:gt-handoff</code> · <code>/gt:gt-task-list</code> · <code>/gt:gt-handoff-list</code> · <code>/gt:gt-task-handle</code> · <code>/gt:gt-handoff-handle</code></td>
+<td>Deprecated aliases through 0.18.x, each naming its replacement: <code>gt-create task</code>, <code>gt-create handoff</code>, <code>gt-list tasks</code>, <code>gt-list handoffs</code>, <code>gt-handle task</code>, <code>gt-handle handoff</code>.</td>
 </tr>
 </tbody>
 </table>
@@ -321,11 +383,15 @@ the rule says so. It fails open on any parse failure.</p>
 <tbody>
 <tr>
 <td><code>/gt:gt-query</code></td>
-<td>Look something up — reads <code>index.md</code> first, follows wikilinks, falls back to grep. The vault is always checked before the web.</td>
+<td>Look something up — reads <code>index.md</code> first, follows wikilinks, falls back to grep. The vault is always checked before the web. <code>--lineage &lt;topic&gt;</code>: the supersession chain of ADRs about it (<code>gt_adr.py lineage</code>, 0.18.0). <code>--entity &lt;name&gt;</code>: only the memory notes declaring it (<code>gt_entities.py</code>, 0.18.0).</td>
 </tr>
 <tr>
 <td><code>/gt:gt-promote</code></td>
 <td>Graduate a fact up the hierarchy: project memory → project files → Knowledge wiki page → global-memory. Also handles new project scaffolding and retiring stale content.</td>
+</tr>
+<tr>
+<td><code>/gt:gt-brief</code></td>
+<td>Draft a self-contained <code>CLAUDE.md</code> section for a project's code repo — the project, constraints from current ADRs, where it runs, what not to do — printed, never written (<code>gt_brief.py --vault V &lt;slug&gt; [--repo PATH]</code>, 0.18.0). The skill places it through the queue on your yes.</td>
 </tr>
 <tr>
 <td><code>/gt:gt-refresh</code></td>
@@ -373,15 +439,15 @@ read refuses too, because "could not check" is not "clear".</p>
 </tr>
 <tr>
 <td><code>/gt:gt-doctor</code></td>
-<td>One report for the whole install: plugin version, component drift, hook wiring, the vault's release stamp and pending migrations (asked of <code>gt_upgrade</code> itself since 0.17.2), the last exit of every installed scheduled job (<code>schedule</code>, 0.17.2), stray workers, unpushed commits, publish-destination drift and a lint summary. Exit 2 means a check <em>could not run</em>, which is deliberately distinct from clean.</td>
+<td>One report for the whole install: plugin version, component drift, hook wiring, the vault's release stamp and pending migrations (asked of <code>gt_upgrade</code> itself since 0.17.2), the last exit of every installed scheduled job (<code>schedule</code>, 0.17.2), stray workers, unpushed commits, publish-destination drift, a lint summary, and since 0.18.0 <code>repo-target</code> (which repo a repo-scoped command resolves to — a note, <code>i</code>, never a finding) and <code>hooks-schema</code> (<code>settings.json</code> hook entries naming an unknown event or tool, or a missing gt hook file). Exit 2 means a check <em>could not run</em>, which is deliberately distinct from clean.</td>
 </tr>
 <tr>
 <td><code>/gt:gt-lint</code></td>
-<td>Audit the vault for structural problems: 19 checks covering broken wikilinks, orphaned pages, missing index entries, unlisted memory files, Knowledge pages citing superseded sources, stale pages, and <code>core-unenforced</code> — a Core rule that is stored but wired to no hook.</td>
+<td>Audit the vault for structural problems: gt_lint runs 23 checks covering broken wikilinks, orphaned pages, missing index entries, unlisted memory files, Knowledge pages citing superseded sources, stale pages, and <code>core-unenforced</code> — a Core rule that is stored but wired to no hook. Since 0.18.0 four file questions to the review queue: <code>adr-expires</code>, <code>bundled-concept</code>, <code>decision-candidate</code> (phrases: setting <code>decision_signals</code>), <code>memory-entity-orphan</code>.</td>
 </tr>
 <tr>
 <td><code>/gt:gt-optimize</code></td>
-<td>Find vault content that costs context and earns nothing back: a fact duplicated across memory files, an index row pointing at a file that is gone, a <code>global-memory/</code> file over budget, a relative date in a file that will be read months later. Splits findings into SAFE (applied with <code>--apply</code>) and JUDGEMENT (reported only — deleting knowledge is not reversible by reading a diff). Never writes <code>core-rules/</code>, and needs a flag for <code>global-memory/</code>.</td>
+<td>Two members (0.18.0). <code>vault</code>: a fact duplicated across memory files, a dead index row, a <code>global-memory/</code> file over budget or naming one project (<code>single-project-global</code>), a relative date, a Knowledge page unread for 90 days (<code>knowledge-unused</code>, from the <code>log_knowledge_read.sh</code> read log), and <code>--cost</code> per project. <code>session</code> (<code>gt_optimize_session.py</code>): prompt-cache writes by cause — cold, growth, expiry, invalid — with list-price equivalents. Reporting never writes; <code>--demote</code>, <code>--archive --project S --before D</code> and <code>--supersede</code> write only with <code>--apply</code>, through the queue, and delete nothing. Exit 3 when a member could not run.</td>
 </tr>
 <tr>
 <td><code>/gt:gt-scan</code></td>
@@ -404,36 +470,12 @@ read refuses too, because "could not check" is not "clear".</p>
 <td>Commit, but only once the checks pass and a passing test receipt covers every staged file. Refuses on <code>main</code>/<code>master</code> without a flag, refuses when a check <em>could not run</em> (an unknown is not a finding anyone can accept), and never pushes — a commit is reversible with <code>git reset</code>, a push is fetched by other people. It checks the receipt itself because <code>guard_test_before_commit</code> is a PreToolUse hook and cannot see a script running git.</td>
 </tr>
 <tr>
-<td><code>/gt:gt-handoff</code></td>
-<td>Write the next session a handoff it can trust: the facts gathered from the project and the repository, each labelled with its source and whether it was actually verified. The design narrative is deliberately left for the session that did the work — a script that invents it produces a document that reads finished and is not.</td>
-</tr>
-<tr>
-<td><code>/gt:gt-task</code></td>
-<td>Create a task the way a developer drops a TODO into code: one well-formed line in the project README's <code>## Tasks</code> via the vault tool <code>gt_task.py add</code>, with <code>[p::] [waiting::] [since::]</code> filled in and an optional <code>[ref:: …]</code> to a <code>[[page]]</code> or vault path that must resolve. <code>--inbox</code> for unfiled. Refuses a README another live session has claimed.</td>
-</tr>
-<tr>
-<td><code>/gt:gt-task-list</code></td>
-<td>Open tasks, filtered — <code>&lt;slug&gt;</code>/<code>inbox</code>, <code>p1</code> <code>p2</code> <code>p3</code>, <code>mine</code>, <code>overdue</code>, <code>stale</code> (p1 open &gt;7 days), <code>deferred</code>, <code>ref:&lt;text&gt;</code> — without loading any project. Read-only. Each line carries an ID, <code>slug:LINE:HASH</code>.</td>
-</tr>
-<tr>
-<td><code>/gt:gt-task-handle</code></td>
-<td>Work through a filtered set one task at a time: <code>done</code>, <code>drop</code> (reason required), <code>defer</code> (future <code>--until</code> date and reason required; hidden from lists, TASKS.md ranking and escalation until then), or keep. Nothing is deleted; an ID whose line changed is refused.</td>
-</tr>
-<tr>
-<td><code>/gt:gt-handoff-list</code></td>
-<td>Read-only list of the handoffs still waiting — open, or whose deferral date has come — one line each (path, project, age, open items), across every project or one; <code>--all</code> shows every state. Never reads a handoff's body.</td>
-</tr>
-<tr>
-<td><code>/gt:gt-handoff-handle</code></td>
-<td>Deal with one waiting handoff: pick it, load only it and the task lines citing it, settle each item (done / keep as a task / drop with a reason), then mark it <code>handled</code> or <code>deferred</code> to a date. There is no deferral without a date.</td>
-</tr>
-<tr>
 <td><code>/gt:gt-runbook-lint</code></td>
 <td>Scan all project <code>runbook.md</code> files for content that has drifted into multiple runbooks. Routes duplicated content to the right shared layer via <code>gt-promote</code>.</td>
 </tr>
 <tr>
 <td><code>/gt:gt-settings</code></td>
-<td>View and change what Golden Thread does on its own. gt's own settings are <code>component_updates</code>, <code>version_check</code>, <code>orphan_check</code>, <code>push_check</code>, <code>surface</code>, <code>handoff_surface</code>, <code>task_surface</code>, <code>test_gate</code>, <code>parallel_work</code>, <code>parallel_max</code> and <code>protected_paths</code>; each installed module registers its own from <code>module.json</code> and they are listed under the module's name (<code>report_card</code>, <code>closeout_check</code>, <code>watch</code>). Every automatic behaviour is registered here and every one can be switched off.</td>
+<td>View and change what Golden Thread does on its own. gt's own settings are <code>component_updates</code>, <code>version_check</code>, <code>orphan_check</code>, <code>push_check</code>, <code>surface</code>, <code>daily_comms_content</code>, <code>release_announce</code>, <code>agent_specialization</code>, <code>skeptic_pass</code>, <code>handoff_surface</code>, <code>task_surface</code>, <code>test_gate</code>, <code>parallel_work</code>, <code>parallel_max</code>, <code>protected_paths</code>, and new in 0.18.0 <code>brief_absence_days</code>, <code>foreign_checkout_guard</code>, <code>decision_signals</code>, <code>knowledge_access_log</code>, <code>optimize_session_days</code>, <code>optimize_avoidable_pct</code>, <code>memory_contradiction_check</code>, <code>promotion_candidates</code> and <code>promotion_overlap</code>; each installed module registers its own from <code>module.json</code> and they are listed under the module's name (<code>report_card</code>, <code>closeout_check</code>, <code>usage_meter</code>, <code>usage_alert</code>, <code>visualize_publish</code>, <code>visualize_publish_visibility</code>, <code>watch</code>). Every automatic behaviour is registered here and every one can be switched off.</td>
 </tr>
 </tbody>
 </table>
@@ -721,8 +763,8 @@ different facts and only one is reassuring.</p>
 <td>Writes the day's FACTS into <code>Daily Notes/&lt;date&gt;.md</code>: tasks closed, commits per repo, event counts, wiki item counts, an active span per project. Terse by design — it does not explain, summarise or interpret, because a generated block that editorialised would encode a reading of the day that is not the owner's. Each fact goes under its heading in a marked block, replaced whole each run (<code>## Did</code>: new projects, tasks closed, commits; <code>## Decided</code>: ADRs added; <code>## Open at end of day</code>: tasks added and due), counts in a footer block; the owner's own lines stay above the blocks, and it never touches <code>## Noticed</code>, the unfiled capture surface <code>gt-review</code> sweeps. Git is primary and events are enrichment: on 2026-09-27 the event log held 5 events on a day with 10 commits across three work streams.</td>
 </tr>
 <tr>
-<td><code>gt_state.py check [--margin N] [--write]</code> · <code>write [--reason R]</code> · <code>show</code> · <code>hook</code></td>
-<td>Writes session state BEFORE the context runs out. <strong>The signal is <code>ctx_pct</code>, never <code>rate_limits</code></strong>: a real reading was <code>{"five_hour": 5, "seven_day": 10, "ctx_pct": 91}</code>, so triggering on the allowance meter would have fired at the wrong moment and looked correct doing it. Fires once per crossing, at a margin (default 5) below the <code>usage_alert</code> flag point. PreCompact is the <strong>backstop, not the primary</strong> — it fires when compaction has already started — and the write says which it was. Never fatal, never blocking; a missing usage ledger reads as "cannot tell", never "plenty of room".</td>
+<td><code>gt_state.py check [--margin N] [--write] [--json] [--session ID]</code> · <code>write [--reason R] [--session ID]</code> · <code>show</code> · <code>hook</code></td>
+<td>Writes session state BEFORE the context runs out. <strong>The signal is <code>ctx_pct</code>, never <code>rate_limits</code></strong>. Since 0.18.0 a hook run tells <strong>you</strong> through <code>systemMessage</code> — a line when the threshold write happens or fails, and always one at <code>PreCompact</code> — and reads only this session's own ledger rows (by <code>session_id</code>), so a new session no longer reports the previous one's context figure.</td>
 </tr>
 <tr>
 <td><code>gt_surface.py check [--vault V] [--dry-run] [--json]</code> · <code>must-do [--vault V]</code> · <code>handoffs --project SLUG [--vault V]</code></td>
@@ -735,6 +777,69 @@ different facts and only one is reassuring.</p>
 <tr>
 <td><code>gt_handoff_status.py list --vault V [--project SLUG] [--all] [--json]</code> · <code>mark FILE --vault V --status handled\|open\|deferred [--until YYYY-MM-DD] [--reason TEXT] [--dry-run]</code></td>
 <td>A handoff's state (0.17.2): <code>open</code> keeps surfacing; <code>deferred</code> needs a future <code>--until</code> and is open again on that date ("later, some time" is <code>handled</code> with a reason); <code>handled</code> is marked, or follows once every task citing the handoff's filename is checked off; <code>history</code> is a pre-0.17.2 handoff with no status, over a week old, no open citing task. <code>gt_handoff.py</code> now writes <code>status: open</code> in frontmatter. <code>mark</code> appends to the handoff's status log. Never loads a body.</td>
+</tr>
+</tbody>
+</table>
+<h3 id="added-in-0180">Added in 0.18.0</h3>
+<table>
+<thead>
+<tr>
+<th>Command</th>
+<th>What it does</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>gt_close.py project SLUG --vault V [--archive [--reason R] [--move]] [--json] [--dry-run]</code> · <code>task ID --vault V [--reason R]</code> · <code>handoff FILE --vault V --reason R</code></td>
+<td>The tool behind <code>/gt:gt-close</code>. <code>project</code> exits 1 while any task or handoff is undecided; <code>--archive</code> runs <code>vault_init.py archive-project</code> (in place); <code>--move</code> relocates to <code>Archive/&lt;slug&gt;/</code> through the queue. <code>handoff</code> refuses while a citing task is open. Also new: <code>gt_task.py shelve ID --reason R</code> (<code>p:: 7</code>) and <code>gt_task.py move ID --to SLUG --reason R</code>.</td>
+</tr>
+<tr>
+<td><code>&lt;vault&gt;/…/tools/gt_adr.py allocate &lt;project&gt; --title T [--supersedes N] [--expires-when C] [--expires D]</code> · <code>lineage &lt;project&gt; "&lt;topic&gt;"</code></td>
+<td>ADR supersession and expiry fields; the supersession chain of ADRs mentioning a topic (read-only). A bare sub-project slug resolves to its folder (<code>gt_spool.resolve_project</code>); unknown or ambiguous is exit 2.</td>
+</tr>
+<tr>
+<td><code>gt_entities.py --vault V lookup NAME --project S</code> · <code>list --project S</code></td>
+<td>Memory notes by their declared <code>entities:</code> (read-only).</td>
+</tr>
+<tr>
+<td><code>gt_brief.py --vault V SLUG [--repo PATH] [--dry-run]</code></td>
+<td>Draft a repo <code>CLAUDE.md</code> section to stdout; writes nothing.</td>
+</tr>
+<tr>
+<td><code>gt_catchup.py --vault V --project S [--brief \| --no-brief] [--mark] [--json] [--dry-run]</code></td>
+<td>The catch-up paragraph <code>/gt:gt-open</code> leads with after time away (setting <code>brief_absence_days</code>).</td>
+</tr>
+<tr>
+<td><code>gt_digest.py write --vault V --project S [--dry-run] [--json]</code> · <code>check …</code></td>
+<td><code>research-digest.md</code>: newest 20 entries plus <code>[pinned]</code>, one line each, through the queue; <code>check</code> exits 1 when missing or stale.</td>
+</tr>
+<tr>
+<td><code>gt_memory_check.py --vault V --project S [--changed NOTE …] [--work] [--json]</code></td>
+<td>Contradictions between this session's memory notes and their neighbours (read-only; setting <code>memory_contradiction_check</code>).</td>
+</tr>
+<tr>
+<td><code>gt_promote_detect.py --vault V [--project S] [--threshold PCT] [--work] [--json]</code></td>
+<td>Promotion candidates: churned memory notes, cross-project research overlap, global scope leaks (read-only; settings <code>promotion_candidates</code>, <code>promotion_overlap</code>).</td>
+</tr>
+<tr>
+<td><code>gt_optimize_session.py [--days N] [--brief] [--check [PCT]] [--json]</code></td>
+<td>gt-optimize's <code>session</code> member: prompt-cache writes by cause, avoidable share, list-price equivalents (settings <code>optimize_session_days</code>, <code>optimize_avoidable_pct</code>).</td>
+</tr>
+<tr>
+<td><code>gt_minimize.py [--session ID \| --transcript F \| --latest] [--json]</code></td>
+<td>This session's billed context, estimated breakdown and cache warmth (read-only).</td>
+</tr>
+<tr>
+<td><code>gt_handoff.py … [--session ID] [--since-commit SHA] [--dry-run]</code></td>
+<td>Adds <code>## What Changed This Session</code>, measured from the <code>start_commit</code> <code>gt_session.py register</code> records.</td>
+</tr>
+<tr>
+<td><code>guard_foreign_checkout.py list</code> · <code>add PATH [--label L] [--route R] [--dry-run]</code> · <code>remove PATH [--dry-run]</code> (hooks dir)</td>
+<td>Declare a checkout another machine owns; the <code>PreToolUse</code> guard <code>guard_foreign_checkout.sh</code> then denies <code>git commit</code>/<code>git push</code> inside it (setting <code>foreign_checkout_guard</code>).</td>
+</tr>
+<tr>
+<td><code>log_knowledge_read.sh</code> (hook, <code>PostToolUse</code> matcher <code>Read</code>)</td>
+<td>Appends one line per Read of a Knowledge page to <code>&lt;vault&gt;/usage/knowledge.jsonl</code> (git-ignored; setting <code>knowledge_access_log</code>).</td>
 </tr>
 </tbody>
 </table>
