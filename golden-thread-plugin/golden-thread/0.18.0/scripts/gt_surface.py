@@ -456,7 +456,25 @@ def do_check(a, as_hook: bool) -> int:
     if updates and not a.dry_run:
         seen.update(updates)
         save_seen(seen)
+    if vault is not None and not a.dry_run:
+        refresh_reminder_mirror(vault)
     return 0
+
+
+def refresh_reminder_mirror(vault: Path) -> None:
+    """0.18.0: the reminder tool's scheduled job cannot read a vault under CloudStorage (macOS
+    TCC refuses launchd jobs), so every session start -- which can -- copies deadlines.md to
+    ~/.claude/golden-thread/reminder/deadlines.json. Only when a push channel is on or a mirror
+    already exists, so an install that never asked for reminders gets no new file. Outside the
+    vault; never fatal."""
+    try:
+        if str(HERE) not in sys.path:
+            sys.path.insert(0, str(HERE))
+        import gt_reminder                                        # noqa: PLC0415
+        if gt_reminder.enabled_channels() or gt_reminder.mirror_path().is_file():
+            gt_reminder.refresh_mirror(vault)
+    except Exception:
+        pass
 
 
 def do_handoffs(a) -> int:

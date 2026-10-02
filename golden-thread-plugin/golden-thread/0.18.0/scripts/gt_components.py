@@ -444,8 +444,9 @@ HOOK_DIR_SCRIPTS = ("gt_paths.py", "gt_components.py",
                     "gt_secrets.py", "gt_scan_code.py", "gt_check_report.py",
                     "gt_registry.py", "gt_staged.py",
                     # 0.18.0: gt_push_check imports gt_sync for the opt-in behind-check
-                    # (sync_check).
-                    "gt_sync.py")
+                    # (sync_check); gt_reminder is the `reminder` job's script, and
+                    # gt_surface refreshes its deadlines mirror at session start.
+                    "gt_sync.py", "gt_reminder.py")
 
 
 # Every hook entry the plugin expects to find in ~/.claude/settings.json.

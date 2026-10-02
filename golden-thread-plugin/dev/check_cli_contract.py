@@ -54,6 +54,16 @@ COVERED = {
     # 0.17.10: queued vault writes -- submitting writes the queue, draining writes the vault
     "scripts/gt_write_queue.py": (),
     "scripts/gt_broker.py": ("drain",),
+    # 0.18.0 (group g5): review stamps and link suggestions queue vault writes; checkpoints
+    # land in the vault spool; gt_sync moves the vault's git state; the reminder imports
+    # into deadlines.md and mirrors it out.
+    "scripts/gt_review_stamp.py": (),
+    "scripts/gt_link_suggest.py": ("suggest", "apply"),
+    "scripts/gt_checkpoint.py": ("prune",),
+    "scripts/gt_scan.py": (),
+    "scripts/gt_ingest.py": (),
+    "scripts/gt_sync.py": ("status", "pull", "push", "behind"),
+    "scripts/gt_reminder.py": ("mirror", "import-tsv"),
 }
 
 EXEMPT = {
