@@ -12,6 +12,17 @@ guard reads receipts.
     gt_test_receipt.py check --repo . [--files a b c]   # exit 0 if one covers these
     gt_test_receipt.py run --repo . [--dry-run]   # discover the repo's test command, run it,
                                                   # record the receipt (0 pass | 1 fail | 3 none)
+    gt_test_receipt.py record --repo . --what "tests/run.sh --affected" --ok \
+        --scope scoped --files-from affected.json    # a SCOPED receipt (0.18.0), see below
+    gt_test_receipt.py check --repo . --files a b --allow-scoped   # what the commit guard asks
+                                                                   # on a feature branch
+
+SCOPED RECEIPTS (0.18.0). `tests/run.sh --affected` runs only the tests mapped to the changed
+files and records a receipt that names those files. Such a receipt covers ONLY the files it
+names, and only when the caller asks with `allow_scoped` -- which the commit guard does on a
+branch that is not the default branch (setting `scoped_receipts`, default on). `check` without
+`--allow-scoped` -- the release gates' question -- still needs a FULL-suite receipt, exactly as
+before: a scoped row is invisible to `latest()` unless asked for.
 
 `run` exists so `/gt:gt-allin` can run the tests too (owner, 2026-09-28: "add all the other
 checks into allin"). It does not decide HOW a repo is tested: it asks the commit guard's own
@@ -72,11 +83,15 @@ def read():
         return []
 
 
-def record(repo, what, ok, tests=0, elapsed=0.0):
+def record(repo, what, ok, tests=0, elapsed=0.0, scope=None, files=None):
     root = repo_root(repo)
     entry = {"repo": root, "what": what, "ok": bool(ok), "tests": int(tests or 0),
              "elapsed": round(float(elapsed or 0.0), 1), "at": time.time(),
              "at_human": time.strftime("%Y-%m-%d %H:%M:%S %Z"), "head": head(root)}
+    if scope == "scoped":
+        entry["scope"] = "scoped"
+        entry["files"] = sorted({os.path.relpath(os.path.join(root, f), root)
+                                 for f in (files or [])})
     os.makedirs(os.path.dirname(LEDGER), exist_ok=True)
     rows = read()
     rows.append(entry)
@@ -89,13 +104,41 @@ def record(repo, what, ok, tests=0, elapsed=0.0):
     return entry
 
 
-def latest(repo, ok_only=True):
+def latest(repo, ok_only=True, scoped=False):
+    """The newest FULL receipt (a scoped one only when `scoped=True` is asked for)."""
     root = repo_root(repo)
-    rows = [r for r in read() if r.get("repo") == root and (r.get("ok") or not ok_only)]
+    rows = [r for r in read() if r.get("repo") == root and (r.get("ok") or not ok_only)
+            and (scoped or r.get("scope") != "scoped")]
     return max(rows, key=lambda r: r.get("at", 0)) if rows else None
 
 
-def covers(repo, files):
+def covers_scoped(repo, files):
+    """-> (ok, receipt, stale_file). Each file must be covered by the newest FULL receipt or by
+    a passing SCOPED receipt that names it -- whichever is newer -- and be older than it."""
+    root = repo_root(repo) or repo
+    full = latest(repo, ok_only=True)
+    scoped = [r for r in read() if r.get("repo") == root and r.get("ok")
+              and r.get("scope") == "scoped"]
+    used = None
+    for f in files:
+        full_path = f if os.path.isabs(f) else os.path.join(root, f)
+        rel = os.path.relpath(full_path, root)
+        cands = [r for r in scoped if rel in (r.get("files") or [])]
+        if full:
+            cands.append(full)
+        if not cands:
+            return False, None, f
+        best = max(cands, key=lambda r: r.get("at", 0))
+        try:
+            if os.path.getmtime(full_path) > best.get("at", 0):
+                return False, best, f
+        except OSError:
+            return False, best, f
+        used = best if used is None or best.get("at", 0) > used.get("at", 0) else used
+    return (True, used, None) if used else (False, None, None)
+
+
+def covers(repo, files, allow_scoped=False):
     """-> (ok, receipt_or_None, stale_file_or_None).
 
     A passing receipt covers the change only if nothing in `files` has been touched
@@ -119,6 +162,8 @@ def covers(repo, files):
        A path that cannot be checked is an UNKNOWN, and this codebase's rule is that an
        unknown is not a pass. It is now reported as the reason, and the caller refuses.
     """
+    if allow_scoped:
+        return covers_scoped(repo, files)
     r = latest(repo, ok_only=True)
     if not r:
         return False, None, None
@@ -192,6 +237,10 @@ def main():
     rec.add_argument("--what", required=True)
     rec.add_argument("--tests", type=int, default=0)
     rec.add_argument("--elapsed", type=float, default=0.0)
+    rec.add_argument("--scope", choices=("full", "scoped"), default="full")
+    rec.add_argument("--files-from", help="with --scope scoped: the files it covers -- a JSON "
+                                          "file with a `files` list (prun.py --affected), or "
+                                          "one path per line")
     g = rec.add_mutually_exclusive_group(required=True)
     g.add_argument("--ok", action="store_true")
     g.add_argument("--failed", action="store_true")
@@ -200,6 +249,8 @@ def main():
     chk = sub.add_parser("check")
     chk.add_argument("--repo", default=".")
     chk.add_argument("--files", nargs="*", default=[])
+    chk.add_argument("--allow-scoped", action="store_true",
+                     help="accept a scoped receipt for the files it names (feature branches)")
     rn = sub.add_parser("run", help="discover the repo's test command, run it, record it")
     rn.add_argument("--repo", default=".")
     rn.add_argument("--dry-run", action="store_true")
@@ -208,7 +259,20 @@ def main():
     if a.cmd == "run":
         return run(a.repo, a.dry_run)
     if a.cmd == "record":
-        e = record(a.repo, a.what, ok=a.ok, tests=a.tests, elapsed=a.elapsed)
+        files = None
+        if a.scope == "scoped":
+            if not a.files_from:
+                print("--scope scoped needs --files-from: a scoped receipt covers only the "
+                      "files it names", file=sys.stderr)
+                return 2
+            with open(a.files_from) as fh:
+                raw = fh.read()
+            try:
+                files = json.loads(raw).get("files") or []
+            except (ValueError, AttributeError):
+                files = [l.strip() for l in raw.splitlines() if l.strip()]
+        e = record(a.repo, a.what, ok=a.ok, tests=a.tests, elapsed=a.elapsed,
+                   scope=a.scope, files=files)
         print("recorded %s: %s%s in %s" % ("PASS" if e["ok"] else "FAIL", e["what"],
                                            " (%d tests)" % e["tests"] if e["tests"] else "",
                                            e["repo"]))
@@ -217,7 +281,7 @@ def main():
         r = latest(a.repo, ok_only=False)
         print(json.dumps(r, indent=2) if r else "no receipt for this repo")
         return 0 if r else 1
-    ok, r, stale = covers(a.repo, a.files)
+    ok, r, stale = covers(a.repo, a.files, allow_scoped=a.allow_scoped)
     if ok:
         print("covered by %s at %s" % (r["what"], r["at_human"]))
         return 0

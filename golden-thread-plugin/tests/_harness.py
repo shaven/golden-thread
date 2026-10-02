@@ -254,3 +254,112 @@ class Sandbox(unittest.TestCase):
             self.run_cmd(["git", "-C", path, "add", "-A"])
             self.run_cmd(["git", "-C", path, "commit", "-q", "--allow-empty", "-m", "init"])
         return path
+
+
+# ---- the cached install (0.18.0) ---------------------------------------------------------
+#
+# A full install into a throwaway HOME is the slowest thing this suite does, and most classes
+# that need "an installed machine" build the SAME one. cached_sandbox() builds it once per run
+# and copies it into each test's tmp, rewriting the one path that differs (the sandbox root) in
+# every text file. prun.py points GT_TEST_INSTALL_CACHE at a directory it removes at the end of
+# the run, and the units of one run share it across processes under a file lock; with no
+# GT_TEST_INSTALL_CACHE the cache lives for this process only. A class whose install depends on
+# something it did first (a PRE_INSTALL hook) must not use it -- the key names only the build.
+# tests/test_cached_install.py pins that the copy is equivalent to a fresh install: the same
+# files, the same hook registrations, and the release gate passes on it.
+
+_PROCESS_CACHE = None
+
+
+def _cache_root():
+    global _PROCESS_CACHE
+    env = os.environ.get("GT_TEST_INSTALL_CACHE")
+    if env:
+        Path(env).mkdir(parents=True, exist_ok=True)
+        return Path(env)
+    if _PROCESS_CACHE is None:
+        import atexit
+        _PROCESS_CACHE = Path(tempfile.mkdtemp(prefix="gt-install-cache-"))
+        atexit.register(shutil.rmtree, str(_PROCESS_CACHE), True)
+    return _PROCESS_CACHE
+
+
+def source_fingerprint(*dirs):
+    """Cheap identity of the sources an install reads: every file's path, size and mtime."""
+    import hashlib
+    h = hashlib.sha256()
+    for d in [REPO / "install.sh", *dirs]:
+        d = Path(d)
+        if d.is_file():
+            st = d.stat()
+            h.update(("%s %d %d\n" % (d, st.st_size, st.st_mtime_ns)).encode())
+            continue
+        for root, subdirs, files in os.walk(str(d)):
+            subdirs[:] = sorted(x for x in subdirs if x != "__pycache__")
+            for f in sorted(files):
+                p = os.path.join(root, f)
+                try:
+                    st = os.stat(p)
+                except OSError:
+                    continue
+                h.update(("%s %d %d\n" % (p, st.st_size, st.st_mtime_ns)).encode())
+    return h.hexdigest()[:16]
+
+
+def _rewrite_paths(root: Path, old: str, new: str):
+    """Replace the cached sandbox's root path with this one in every UTF-8 text file."""
+    olds = {old, os.path.realpath(old)}
+    for dirpath, dirs, files in os.walk(str(root)):
+        for f in files:
+            p = os.path.join(dirpath, f)
+            if os.path.islink(p):
+                continue
+            try:
+                with open(p, "rb") as fh:
+                    data = fh.read()
+                text = data.decode("utf-8")
+            except (OSError, UnicodeDecodeError):
+                continue
+            if not any(o in text for o in olds):
+                continue
+            for o in sorted(olds, key=len, reverse=True):
+                text = text.replace(o, new)
+            st = os.stat(p)
+            with open(p, "w", encoding="utf-8", newline="") as fh:
+                fh.write(text)
+            os.utime(p, ns=(st.st_atime_ns, st.st_mtime_ns))
+
+
+def cached_sandbox(case, key, build):
+    """Make case.tmp hold what `build(case)` would build there; build it at most once per run.
+
+    `build(case)` must build ONLY under case.tmp and return a JSON-serialisable dict (e.g. the
+    install's returncode/stdout/stderr). Returns (that dict, "built" | "cached")."""
+    import fcntl
+    import hashlib
+    if os.environ.get("GT_TEST_NO_INSTALL_CACHE") == "1":     # measure the uncached cost
+        return build(case), "built"
+    root = _cache_root()
+    slot = root / hashlib.sha256(key.encode()).hexdigest()[:20]
+    lock = open(str(slot) + ".lock", "w")
+    try:
+        fcntl.flock(lock, fcntl.LOCK_EX)
+        meta = slot / "meta.json"
+        if meta.is_file():
+            m = json.loads(meta.read_text(encoding="utf-8"))
+            shutil.copytree(str(slot / "tmp"), str(case.tmp), symlinks=True, dirs_exist_ok=True)
+            _rewrite_paths(case.tmp, m["tmp"], str(case.tmp))
+            raw = json.dumps(m["result"])
+            for o in sorted({m["tmp"], os.path.realpath(m["tmp"])}, key=len, reverse=True):
+                raw = raw.replace(json.dumps(o)[1:-1], json.dumps(str(case.tmp))[1:-1])
+            return json.loads(raw), "cached"
+        result = build(case)
+        tmp_copy = slot / "tmp"
+        if tmp_copy.exists():
+            shutil.rmtree(str(tmp_copy))
+        shutil.copytree(str(case.tmp), str(tmp_copy), symlinks=True)
+        meta.write_text(json.dumps({"tmp": str(case.tmp), "result": result}), encoding="utf-8")
+        return result, "built"
+    finally:
+        fcntl.flock(lock, fcntl.LOCK_UN)
+        lock.close()

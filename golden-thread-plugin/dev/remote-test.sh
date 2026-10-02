@@ -1,9 +1,14 @@
 #!/usr/bin/env bash
 # remote-test.sh — run the full test suite on a remote Linux runner instead of this machine.
 #
-#   dev/remote-test.sh [--host claudebox] [-j N] [--keep] [selector ...]
+#   dev/remote-test.sh [--host H] [-j N] [--keep] [--affected] [selector ...]
 #
 #   Selectors (test modules or units) run a subset; only a FULL run records a receipt.
+#   --affected (0.18.0): the tests mapped to this branch's changes (tests/prun.py --affected,
+#   computed HERE, where the git history is) run on the runner; a pass records a SCOPED receipt
+#   here, which the commit guard accepts on a feature branch only.
+#   The runner: --host, else $GT_REMOTE_TEST_HOST, else the first of the gt setting `runners`,
+#   else claudebox.
 #
 # Why: a full local run turns every throwaway install into file churn that fseventsd, the sync
 # agents, Spotlight and the virus scanner all react to. On 2026-10-01 that drove this Mac's load to
@@ -22,10 +27,11 @@
 # Prints the wall time of each step. Exit: 0 passed and receipt recorded · 1 tests failed ·
 # 2 usage/ssh/ship failed · 3 passed, but the local tree changed during the run (no receipt).
 set -uo pipefail
-HOST=claudebox; JOBS=""; KEEP=no
+HOST=""; JOBS=""; KEEP=no; AFFECTED=no
 while [ $# -gt 0 ]; do
   case "$1" in
     --host) HOST="$2"; shift 2 ;;
+    --affected) AFFECTED=yes; shift ;;
     -j|--jobs) JOBS="$2"; shift 2 ;;
     --keep) KEEP=yes; shift ;;
     --) shift; break ;;
@@ -36,6 +42,25 @@ while [ $# -gt 0 ]; do
 done
 PLUGIN="$(cd "$(dirname "$0")/.." && pwd -P)"
 ROOT="$(git -C "$PLUGIN" rev-parse --show-toplevel)" || { echo "not in a git repo"; exit 2; }
+if [ -z "$HOST" ]; then HOST="${GT_REMOTE_TEST_HOST:-}"; fi
+if [ -z "$HOST" ]; then
+  HOST=$(python3 -c 'import json,os
+try: print((json.load(open(os.path.expanduser("~/.claude/vault-config.json"))).get("runners") or "").split(",")[0].strip())
+except Exception: pass' 2>/dev/null)
+fi
+[ -n "$HOST" ] || HOST=claudebox
+AFF_JSON=""
+if [ "$AFFECTED" = yes ]; then
+  AFF_JSON="$(mktemp -t gt-affected).json"
+  ( cd "$PLUGIN/tests" && python3 prun.py --print-affected ) > "$AFF_JSON" || { echo "FAILED: --affected mapping"; exit 2; }
+  SEL=$(python3 -c 'import json,sys
+d = json.load(open(sys.argv[1]))
+print("" if d["full"] else " ".join(d["modules"]) or "-")' "$AFF_JSON")
+  if [ "$SEL" = "-" ]; then echo "--affected: no code changed; nothing to run"; exit 0; fi
+  echo "--affected: ${SEL:-the FULL suite (an unmapped change)}"
+  # shellcheck disable=SC2086
+  set -- $SEL
+fi
 REL="${PLUGIN#$ROOT/}"
 now() { python3 -c 'import time; print(time.time())'; }
 secs() { python3 -c "import sys; print(f'{float(sys.argv[2])-float(sys.argv[1]):.1f}s')" "$1" "$2"; }
@@ -65,7 +90,7 @@ ssh -o BatchMode=yes -o ConnectTimeout=10 "$HOST" true || { echo "FAILED: cannot
 RUNID="gt-$(date +%Y%m%d-%H%M%S)-$$"
 T1=$(now)
 ( cd "$ROOT" && git ls-files -co --exclude-standard -z \
-    | COPYFILE_DISABLE=1 tar --null -T - -czf - 2>/dev/null ) \
+    | COPYFILE_DISABLE=1 tar --no-xattrs --null -T - -czf - 2>/dev/null ) \
   | ssh -o BatchMode=yes "$HOST" "mkdir -p ~/gt-remote/$RUNID && tar -xzf - -C ~/gt-remote/$RUNID" \
   || { echo "FAILED: ship"; exit 2; }
 T2=$(now); echo "   shipped in $(secs "$T1" "$T2")"
@@ -80,11 +105,31 @@ T3=$(now)
 COUNT=$(sed -n 's/^Ran \([0-9][0-9]*\) tests.*/\1/p' "$LOG" | tail -1)
 echo ""
 echo "== timing: ship $(secs "$T1" "$T2") · run $(secs "$T2" "$T3") · total $(secs "$T0" "$T3")"
+# One execution row HERE (gt_metrics.py): the runner's own HOME is thrown away with the run.
+GM=$(ls -d "$PLUGIN"/golden-thread/*/scripts/gt_metrics.py 2>/dev/null | sort -V | tail -1)
+if [ -n "$GM" ]; then
+  python3 "$GM" record --repo "$ROOT" --project "${GT_METRICS_PROJECT:-golden-thread}" \
+    --process "tests:remote" --duration "$(python3 -c "print(float('$T3')-float('$T2'))")" \
+    --exit "$RC" --trait remote $( [ "$AFFECTED" = yes ] && echo "--scope scoped" ) \
+    $( [ $# -gt 0 ] && [ "$AFFECTED" = no ] && echo "--trait subset" ) >/dev/null 2>&1 || true
+fi
 if [ "$RC" -ne 0 ]; then
   echo "TESTS FAILED on $HOST (exit $RC). Log: $LOG"; exit 1
 fi
 
 echo "== 4. receipt"
+if [ "$AFFECTED" = yes ]; then
+  if [ "$(fingerprint)" != "$FP" ]; then
+    echo "PASSED on $HOST, but the local tree changed during the run — no receipt. Run again."; exit 3
+  fi
+  for d in "$PLUGIN"/golden-thread/*/scripts; do
+    [ -f "$d/gt_test_receipt.py" ] || continue
+    python3 "$d/gt_test_receipt.py" record --repo "$ROOT" --what "remote:tests/run.sh --affected@$HOST" \
+      --tests "${COUNT:-0}" --ok --scope scoped --files-from "$AFF_JSON" >/dev/null \
+      && { echo "scoped receipt recorded: ${COUNT:-?} tests passed on $HOST (feature branches only)"; exit 0; }
+  done
+  echo "PASSED on $HOST, but no gt_test_receipt.py was found to record the receipt"; exit 2
+fi
 if [ $# -gt 0 ]; then echo "PASSED on $HOST (subset: $*). A subset never records a receipt."; exit 0; fi
 if [ "$(fingerprint)" != "$FP" ]; then
   echo "PASSED on $HOST, but the local tree changed during the run — no receipt. Run again."; exit 3
