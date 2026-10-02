@@ -134,5 +134,83 @@ class TheRecordTellsAHandEditFromThePolicy(PolicyBase):
         self.assertNotIn("allowance", p.stdout.lower())
 
 
+class Overrides(PolicyBase):
+    """6d: per-skill > per-plugin > intent > inherit; `set` re-applies with no reinstall; a
+    refused effort is refused at set time; choices survive a profile change (a reinstall)."""
+
+    def test_a_skill_override_beats_a_plugin_override_which_beats_the_intent(self):
+        self.assertOk(self.policy("choose", "average"))
+        self.assertOk(self.policy("set", "--plugin", "gt", "--model", "sonnet", "--effort", "low"))
+        self.assertOk(self.policy("set", "--skill", "gt-plan", "--model", "opus",
+                                  "--effort", "max"))
+        self.assertEqual(self.got(self.cache, "gt-list"), ("sonnet", "low"))
+        self.assertEqual(self.got(self.cache, "gt-plan"), ("opus", "max"))
+
+    def test_set_refuses_an_effort_the_model_does_not_accept_and_records_nothing(self):
+        p = self.policy("set", "--skill", "gt-list", "--model", "haiku", "--effort", "low")
+        self.assertEqual(p.returncode, 2, p.stdout + p.stderr)
+        self.assertIn("no effort levels", p.stdout + p.stderr)
+        choices = self.home / ".claude/golden-thread/install-choices.json"
+        rec = json.loads(choices.read_text()) if choices.exists() else {}
+        self.assertNotIn("gt-list", rec.get("model", {}).get("skills", {}))
+
+    def test_overrides_survive_a_new_profile(self):
+        self.assertOk(self.policy("set", "--skill", "gt-work", "--model", "haiku"))
+        self.assertOk(self.policy("choose", "very-high"))
+        self.assertOk(self.policy("apply"))
+        self.assertEqual(self.got(self.cache, "gt-work"), ("haiku", None))
+        self.assertEqual(self.got(self.cache, "gt-list"), ("opus", "xhigh"))
+
+    def test_clear_returns_the_skill_to_its_intent(self):
+        self.assertOk(self.policy("choose", "average"))
+        self.assertOk(self.policy("set", "--skill", "gt-list", "--model", "opus"))
+        self.assertOk(self.policy("clear", "--skill", "gt-list"))
+        self.assertEqual(self.got(self.cache, "gt-list"), ("haiku", None))
+
+    def test_show_names_the_effective_pair_and_where_it_came_from(self):
+        self.assertOk(self.policy("choose", "average"))
+        self.assertOk(self.policy("set", "--skill", "gt-plan", "--model", "sonnet",
+                                  "--effort", "high"))
+        d = json.loads(self.policy("show", "--json").stdout)
+        rows = {(r["plugin"], r["skill"]): r for r in d["skills"]}
+        self.assertEqual((rows[("gt", "gt-plan")]["model"], rows[("gt", "gt-plan")]["source"]),
+                         ("sonnet", "skill override"))
+        self.assertIn("intent", rows[("gt", "gt-work")]["source"])
+
+    def test_gt_settings_show_lists_the_model_profile(self):
+        self.assertOk(self.policy("choose", "very-high"))
+        p = self.py(SCRIPTS / "gt_settings.py", "show")
+        self.assertIn("model_profile", p.stdout)
+        self.assertIn("very-high", p.stdout)
+
+
+class DoctorRow(PolicyBase):
+    """6e: the doctor names the active profile, and a hand edit to a field the policy wrote is
+    drift (WARN, with the fix) while the policy's own fields are not."""
+
+    def doctor(self):
+        p = self.py(SCRIPTS / "gt_doctor.py", "--only", "model-policy", "--json")
+        self.assertNotIn("Traceback", p.stdout + p.stderr)
+        rows = json.loads(p.stdout)["checks"]
+        return next(r for r in rows if r["check"] == "model-policy")
+
+    def test_clean_after_apply_and_names_the_profile(self):
+        self.assertOk(self.policy("choose", "average"))
+        self.assertOk(self.policy("apply"))
+        r = self.doctor()
+        self.assertEqual(r["state"], "ok", r)
+        self.assertIn("average", r["summary"])
+
+    def test_a_hand_edit_is_a_warning_with_the_fix(self):
+        self.assertOk(self.policy("choose", "average"))
+        self.assertOk(self.policy("apply"))
+        f = self.cache / "skills" / "gt-plan" / "SKILL.md"
+        f.write_text(f.read_text().replace("model: opus", "model: haiku"))
+        r = self.doctor()
+        self.assertEqual(r["state"], "warn", r)
+        self.assertIn("gt-plan", r["detail"])
+        self.assertIn("gt_model_policy.py apply", r["fix"])
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -66,6 +66,7 @@ and it is not "clean" either.
 | `wiring` | is every hook the release declares actually in `settings.json`? |
 | `core-rules` | does each Core rule that claims a mechanism actually have THAT mechanism wired? |
 | `modules` | which modules are on or off and why, does each admit this gt release, and is every **on** module's plugin both registered in `installed_plugins.json` and enabled in `settings.json`? (read-only) |
+| `model-policy` | which model profile is active, and does every installed skill still carry exactly the `model:`/`effort:` the policy wrote? A hand edit is a WARN with the fix (0.19.0) |
 | `vault` | is the vault reachable, and are `log.md`/`decisions.md` migrated? |
 | `workers` | are background processes running that nobody declared? |
 | `push` | do this machine's commits exist anywhere else? |

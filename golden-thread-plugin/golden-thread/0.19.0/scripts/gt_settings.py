@@ -1068,6 +1068,20 @@ def show():
         print("  %-20s %s" % ("", "what `parallel_max: auto` resolves to on this machine; "
                                   "measured at install, re-measured on upgrade"))
         print()
+    # The model profile lives with the install choices (install-choices.json), not here: one
+    # source of truth, read for display (0.19.0, request model-and-effort-per-plugin).
+    try:
+        with open(os.path.expanduser("~/.claude/golden-thread/install-choices.json")) as fh:
+            mc = (json.load(fh).get("model") or {})
+    except Exception:
+        mc = {}
+    n_over = len(mc.get("skills") or {}) + len(mc.get("plugins") or {})
+    print("  %-20s %s%s" % ("model_profile", mc.get("profile") or "inherit",
+                            "" if mc.get("profile") else "   (none recorded)"))
+    print("  %-20s %s" % ("", "the model and effort each skill runs at; %d override(s)" % n_over))
+    print("  %-20s %s" % ("", "options: average | very-high | inherit   per skill: "
+                              "gt_model_policy.py show / set / clear"))
+    print()
     print("change with:  python3 gt_settings.py set <name> <value>")
     print("explain with: python3 gt_settings.py explain <name>")
     return 0

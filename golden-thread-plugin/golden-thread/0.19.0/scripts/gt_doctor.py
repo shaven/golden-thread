@@ -602,6 +602,40 @@ def _read_json(path):
         return {}
 
 
+def check_model_policy(rep, vdir):
+    """The active model profile, and whether every installed skill still carries exactly what
+    the policy wrote (0.19.0). A hand edit to a field the policy wrote is drift; the policy's
+    own fields are not -- the release source never has them, so this is the only check."""
+    cands = [HERE / "gt_model_policy.py"]
+    if vdir:
+        cands.append(Path(vdir) / "scripts" / "gt_model_policy.py")
+    script = next((c for c in cands if c.is_file()), None)
+    if script is None:
+        rep.add("model-policy", SKIPPED, "gt_model_policy.py (0.19.0+) is not part of this release")
+        return
+    import subprocess
+    def run(*args):
+        p = subprocess.run([sys.executable, "-B", str(script)] + list(args),
+                           capture_output=True, text=True, timeout=60)
+        return p.returncode, (p.stdout or "") + (p.stderr or "")
+    try:
+        _rc, prof = run("current")
+        rc, out = run("verify")
+    except Exception as exc:
+        rep.add("model-policy", UNKNOWN, "could not run gt_model_policy.py (%s)"
+                % exc.__class__.__name__)
+        return
+    prof = prof.strip() or "inherit (none recorded)"
+    drift = [l.strip()[len("DRIFT "):] for l in out.splitlines() if l.strip().startswith("DRIFT ")]
+    if rc == 0:
+        rep.add("model-policy", OK, "profile %s; every installed skill as the policy wrote it" % prof)
+    else:
+        rep.add("model-policy", WARN, "profile %s; %d installed skill field(s) edited by hand"
+                % (prof, len(drift)), "\n".join(drift),
+                fix="python3 %s apply   (or keep the edit as an override: ... set --skill S --model M)"
+                    % script)
+
+
 def check_modules(rep, root, vdir):
     """Each module: on/off and why, version, requires_gt, and -- when on -- whether its
     plugin is registered in installed_plugins.json and enabled in settings.json.
@@ -2045,7 +2079,7 @@ def check_checkers(rep, root, vdir):
                 "\n".join(c["key"] for c in found))
 
 
-CHECKS = ("version", "components", "wiring", "core-rules", "modules", "vault",
+CHECKS = ("version", "components", "wiring", "core-rules", "modules", "model-policy", "vault",
           "schedule", "workers", "push", "gt-src", "lint", "astgrep", "checkers")
 CHECKS += ("repo-target",)      # 0.18.1: which repo would a repo-scoped command answer for?
 CHECKS += ("hooks-schema",)     # 0.18.1: settings.json hooks against Claude Code's events
@@ -2123,6 +2157,8 @@ def main(argv=None):
         check_core_rules(rep, vault)
     if "modules" in wanted:
         check_modules(rep, root, vdir)
+    if "model-policy" in wanted:
+        check_model_policy(rep, vdir)
     if "vault" in wanted:
         check_vault(rep, vault, vdir)
     if "schedule" in wanted:

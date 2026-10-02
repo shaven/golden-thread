@@ -110,6 +110,27 @@ reports hygiene from the session just done; `full` adds vault features that are
 available and unused. It fires on `PreCompact` so it is written while there is
 still context to write it in.
 
+**`model_profile`** (0.19.0) — the model and effort each skill runs at, written into the
+installed copy of every SKILL.md (never the release source). `average` (a new install's
+default): fast skills haiku with no effort setting, balanced sonnet · medium, deep opus · high.
+`very-high`: opus · xhigh everywhere. `inherit`: nothing written, every skill runs on the
+session's model and effort. It lives with the install choices
+(`~/.claude/golden-thread/install-choices.json`), so `show` displays it but `set` here does
+not change it — use the policy tool, which re-applies at once, no reinstall:
+
+```bash
+python3 <base_dir>/../../scripts/gt_model_policy.py show              # every skill: model, effort, why
+python3 <base_dir>/../../scripts/gt_model_policy.py choose very-high  # then: ... apply
+python3 <base_dir>/../../scripts/gt_model_policy.py set --skill gt-plan --model opus --effort max
+python3 <base_dir>/../../scripts/gt_model_policy.py set --plugin gt-wiki --model sonnet --effort low
+python3 <base_dir>/../../scripts/gt_model_policy.py clear --skill gt-plan
+```
+
+Precedence: per-skill override, then per-plugin override, then the skill's `model_intent`
+through the profile, then inherit. An effort the model does not accept is refused when set,
+naming the allowed values (Haiku has none) — never lowered quietly. Choices survive a
+reinstall. Hooks have no model or effort in Claude Code, so they are not covered.
+
 ## Adding a setting later
 
 Append one entry to `SETTINGS` in `gt_settings.py` with `default`, `values`,

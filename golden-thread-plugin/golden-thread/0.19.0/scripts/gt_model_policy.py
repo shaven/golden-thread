@@ -6,6 +6,8 @@
     gt_model_policy.py current [--home H]                      # the recorded profile, or nothing
     gt_model_policy.py apply   [--profile P] [--home H] [--vault V]
     gt_model_policy.py verify  [--home H]                      # exit 1 on a hand edit
+    gt_model_policy.py set     (--skill S | --plugin P) --model M [--effort E] [--home H]
+    gt_model_policy.py clear   (--skill S | --plugin P) [--home H]
     gt_model_policy.py show    [--home H] [--vault V] [--json]
 
 Claude Code honours `model:` and `effort:` in a skill's frontmatter. gt writes them into the
@@ -253,6 +255,38 @@ def cmd_current(a):
     return OK
 
 
+def _edit_override(a, value):
+    P = paths(a.home)
+    d = _load(P["choices"], {})
+    d = d if isinstance(d, dict) else {}
+    d.setdefault("version", 1)
+    d.setdefault("choices", {})
+    scope, key = ("skills", a.skill) if a.skill else ("plugins", a.plugin)
+    bucket = d.setdefault("model", {}).setdefault(scope, {})
+    if value is None:
+        bucket.pop(key, None)
+    else:
+        bucket[key] = value
+    _atomic(P["choices"], d)
+    # Re-applied at once: a choice that waits for the next install is a choice nobody sees.
+    return cmd_apply(argparse.Namespace(home=a.home, vault=a.vault, profile=None))
+
+
+def cmd_set(a):
+    bad = gt_model.effort_problem(a.model, a.effort)
+    if bad:
+        print("gt_model_policy: refused -- %s" % bad, file=sys.stderr)
+        return USAGE
+    v = {"model": a.model}
+    if a.effort:
+        v["effort"] = a.effort
+    return _edit_override(a, v)
+
+
+def cmd_clear(a):
+    return _edit_override(a, None)
+
+
 def cmd_show(a):
     profile, rows, refused = plan(paths(a.home), None, a.vault)
     if a.json:
@@ -288,6 +322,15 @@ def main(argv=None):
     p.set_defaults(fn=cmd_choose)
     for name, fn in (("current", cmd_current), ("verify", cmd_verify)):
         sub.add_parser(name, parents=[common]).set_defaults(fn=fn)
+    for name, fn in (("set", cmd_set), ("clear", cmd_clear)):
+        p = sub.add_parser(name, parents=[common])
+        who = p.add_mutually_exclusive_group(required=True)
+        who.add_argument("--skill")
+        who.add_argument("--plugin")
+        if name == "set":
+            p.add_argument("--model", required=True)
+            p.add_argument("--effort")
+        p.set_defaults(fn=fn)
     p = sub.add_parser("show", parents=[common])
     p.add_argument("--json", action="store_true")
     p.set_defaults(fn=cmd_show)
