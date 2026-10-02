@@ -97,6 +97,7 @@ After loading, briefly tell the user:
 - What the next action is (from the status board)
 - Any blockers or open questions noted in the docs
 - **What's available but not loaded** — how many memory files exist and roughly what they cover, so the user knows the depth is there to ask for
+- **Which repo a repo-scoped command will answer for** — once per session, one line, when the working directory is the vault and the vault is a git repo: say that repo-scoped commands such as `/security-review` and `/code-review` (and any test runner or "current branch" tool) will target the **vault**, not the code under discussion, so a code review must be pointed at the code repo explicitly — or run `gt_code_review.py plan <repo>`, which takes the root as an argument. This is orientation, not a warning. `gt_doctor.py --only repo-target` shows the resolved paths.
 
 Then ask: "Where do you want to pick up?"
 

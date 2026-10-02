@@ -36,6 +36,14 @@
    "bytes": 7621,
    "sha256": "88040501c0de5bfec1bca67cce0b6ca985736f69acc735dbcb436aafb653c287"
   },
+  "hooks/known_events.json": {
+   "bytes": 821,
+   "sha256": "449d71019791d66e7568c7fcf8dcbb8e8c72a8a9aec7d3062bc0a8d825e70548"
+  },
+  "hooks/known_tools.json": {
+   "bytes": 841,
+   "sha256": "231f843aba5cdd2664983789d8115febfab73c825cef89f8b3d221ec3a9948a4"
+  },
   "hooks/validate_response.sh": {
    "bytes": 8839,
    "sha256": "4497e3ed45d41b4fccdf498ff0672717995cb6d117a690ba9a9ef2b97dcf6bc1"
@@ -93,8 +101,8 @@
    "sha256": "bb6166ea36382647f4bb65f3cf28ce956945f80f3122dd2ff3a2dd6322c7841b"
   },
   "scripts/gt_agent_spec.py": {
-   "bytes": 43250,
-   "sha256": "1934857261ad0c3b2238f51433cfd37be2c514ec1a5d7ef4db88e5acfd477c58"
+   "bytes": 44241,
+   "sha256": "9da4fcb01a6a5d17ed0e1a96faa3e68bfeb4ffaee2618b30f4a3a8e8154977a9"
   },
   "scripts/gt_aggregate.py": {
    "bytes": 6160,
@@ -137,8 +145,8 @@
    "sha256": "1c51fb189fb6c80165484e3e760eddcbdc09d518997e77bf8c8ee0d0633f8d6b"
   },
   "scripts/gt_doctor.py": {
-   "bytes": 89820,
-   "sha256": "88460b3eb71d82add7bf14b45fff56a678c149445a0fac084de986a441cdd7b1"
+   "bytes": 98237,
+   "sha256": "dd81daa085083f48a359e030036cd1a73a92bef650cdfcd69c1bb5b824bff7da"
   },
   "scripts/gt_handoff.py": {
    "bytes": 16693,
@@ -205,16 +213,16 @@
    "sha256": "d2fbf97b57eb729ad399672a77c63745aac4e88140f39c7b989ac122bcbfe3b7"
   },
   "scripts/gt_settings.py": {
-   "bytes": 45000,
-   "sha256": "c4211b814acc71347e7cdeba41f54c4ef97e8e5380c53b116d1a880405d714e3"
+   "bytes": 45253,
+   "sha256": "82bcf21deec8b98848fcd8923765a2571d046edfe19f0e47ce00368065f68777"
   },
   "scripts/gt_staged.py": {
    "bytes": 3529,
    "sha256": "b2a0c8e76fbe6ddc0ac86dbc4f9354b61db390952009fdb106246aafbcd03e32"
   },
   "scripts/gt_state.py": {
-   "bytes": 11897,
-   "sha256": "b0db1c50b3f396e79c678e0f91d42b61ea848a90d2bd93c49b3a8cfbe780fd28"
+   "bytes": 17448,
+   "sha256": "43f15a694153360d3576c7f4875987a6fd026ddad8d147d31c0c340167e93c0b"
   },
   "scripts/gt_surface.py": {
    "bytes": 22450,
@@ -297,8 +305,8 @@
    "sha256": "96cd0a3e3a0d663a7f8de5f0ce95413ed21ae5407fea3f1e249d32b9ade0332e"
   },
   "templates/agent-specs/skeptic.json": {
-   "bytes": 1947,
-   "sha256": "43bea7ff4cdebca9a1fda24b679ba78c8fad5035ceba42998211c4d8cebfae94"
+   "bytes": 1923,
+   "sha256": "2291c3079c959f03030e476fe6bd68b1b59394370d45ecba995aaba489bfb83b"
   },
   "templates/agent-specs/validate.json": {
    "bytes": 2629,
@@ -441,7 +449,7 @@
    "sha256": "05a5e61333b0ba5d6f97866735268f7f99ff354d9502b2b05e0e512a86f82a6b"
   }
  },
- "generated": "2026-10-01T20:07:35",
+ "generated": "2026-10-01T20:31:52",
  "hooks": [
   {
    "args": [

@@ -76,6 +76,8 @@ NOT_REGISTERED = {
     "guard_test_before_commit.py": "called by guard_test_before_commit.sh, not by the harness",
     "guard_protected_paths.py": "called by guard_protected_paths.sh, not by the harness",
     "gt_paths.py": "a library the hooks import; it is not a hook",
+    "known_events.json": "data: gt_doctor hooks-schema allowlist of Claude Code events (0.18.0)",
+    "known_tools.json": "data: gt_doctor hooks-schema allowlist of Claude Code tools (0.18.0)",
 }
 
 

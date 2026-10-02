@@ -90,6 +90,11 @@ So this states the version every other answer is relative to, at the top, always
   gt-src      does the publish destination still match what was published?
               (only where one is configured: $GT_SRC or `gt_src` in vault-config.json)
   lint        what does the vault linter say, in one line?
+  repo-target which git repo does THIS working directory resolve to, and is it the vault?
+              Always a `note` (i) row, never ok and never a finding (0.18.0)
+  hooks-schema does every settings.json hook entry name an event Claude Code fires and,
+              for tool events, a tool it knows? (allowlists hooks/known_events.json and
+              hooks/known_tools.json; also any entry pointing at a missing gt hook file)
 
 A check that cannot run says so and exits 2. "Could not check" is never "clean" --
 that distinction is the whole reason this file exists.
@@ -114,6 +119,11 @@ OK, WARN, FAIL, UNKNOWN, SKIPPED = "ok", "warn", "fail", "unknown", "skipped"
 # (e.g. no publish destination). It never raises the exit code; it is not "clean" either,
 # which is why it prints its own mark rather than "ok".
 MARK = {OK: "ok   ", WARN: "WARN ", FAIL: "FAIL ", UNKNOWN: "?    ", SKIPPED: "-    "}
+# NOTE (0.18.0) is orientation: a fact the operator needs to have been told, that is neither
+# healthy nor broken -- e.g. "repo-scoped commands here review the vault". It never raises the
+# exit code and never prints "ok", so it cannot be read as a clean result either.
+NOTE = "note"
+MARK[NOTE] = "i    "
 
 
 class Report:
@@ -1790,9 +1800,159 @@ def post_install_main(a):
                                               if s in counts), elapsed))
     return 1 if gate.failed else 0
 
+# --- repo-target (0.18.0) -------------------------------------------------------------------
+#
+# gt makes the vault the working directory, and the vault is a git repo. So every repo-scoped
+# tool that is not gt's -- Claude Code's /security-review and /code-review, a test runner, a CI
+# helper -- resolves "the current branch" to the VAULT and finds a plausible, non-empty answer
+# there. On 2026-09-25 /security-review collected a 624 KB diff of vault markdown for a 174-line
+# code change and reported `On branch main`. Nothing errored. This row makes "which repo would
+# that answer for?" a question already answered. It is a NOTE in every outcome: cwd == vault is
+# the normal, correct gt configuration, and an alarm on it would train people to ignore it.
+def _same_path(a, b):
+    try:
+        return os.path.samefile(a, b)       # symlinks and case-insensitive volumes both bite
+    except OSError:
+        return os.path.normcase(os.path.realpath(a)) == os.path.normcase(os.path.realpath(b))
+
+
+def check_repo_target(rep, vault, cwd=None):
+    cwd = os.path.realpath(cwd or os.getcwd())
+    rc, out = run(["git", "-C", cwd, "rev-parse", "--show-toplevel"], timeout=30)
+    if rc is None:
+        rep.add("repo-target", UNKNOWN, "could not ask git which repo %s is in" % cwd,
+                out.strip()[-300:])
+        return
+    vtxt = str(vault) if vault else "none configured"
+    if rc != 0:
+        rep.add("repo-target", NOTE,
+                "working directory %s is NOT inside any git repo: repo-scoped commands "
+                "(/security-review, /code-review) have no repo to review here" % cwd,
+                "cwd:   %s\nrepo:  none\nvault: %s" % (cwd, vtxt))
+        return
+    top = os.path.realpath(out.strip().splitlines()[-1]) if out.strip() else cwd
+    detail = "cwd:   %s\nrepo:  %s\nvault: %s" % (cwd, top, vtxt)
+    if vault and _same_path(top, str(vault)):
+        rep.add("repo-target", NOTE,
+                "working directory resolves to the VAULT's git repo (%s): repo-scoped commands "
+                "such as /security-review and /code-review will review the vault here, not "
+                "your code -- point them at the code repo explicitly, or use "
+                "gt_code_review.py plan <repo>, which takes the root as an argument" % top,
+                detail)
+        return
+    rep.add("repo-target", NOTE,
+            "working directory resolves to git repo %s, which is NOT the vault (%s): "
+            "repo-scoped commands review %s" % (top, vtxt, top), detail)
+
+
+# --- hooks-schema (0.18.0) ------------------------------------------------------------------
+#
+# `wiring` asks whether every hook the release declares is in settings.json. It cannot see an
+# entry that is present, correctly pointed, and NEVER FIRES because the event or tool it names
+# is one Claude Code does not have (renamed, removed, or a typo). That entry is reported
+# "installed" -- the 2026-08-30 shape: the check ran correctly against the wrong question.
+# The allowlists are conservative and updated per release; an unknown name prompts review,
+# it is not proof of breakage, so findings are WARN and nothing is removed.
+SCHEMA_FILES = ("known_events.json", "known_tools.json")
+
+
+def _schema_file(name):
+    for d in (HERE, HERE.parent / "hooks", INSTALLED_HOOKS):
+        if (d / name).is_file():
+            return d / name
+    return None
+
+
+def _hook_paths(cmd):
+    """Paths in a hook command that point into the gt hooks dir."""
+    home = str(Path.home())
+    hooks = os.path.realpath(str(INSTALLED_HOOKS))
+    out = []
+    try:
+        toks = shlex.split(cmd)
+    except ValueError:
+        toks = cmd.split()
+    for t in toks:
+        t = t.replace("$HOME", home).replace("${HOME}", home)
+        t = os.path.expanduser(t)
+        if t.startswith(str(INSTALLED_HOOKS)) or t.startswith(hooks):
+            out.append(t)
+    return out
+
+
+def check_hooks_schema(rep, settings=None):
+    settings = Path(settings or SETTINGS)
+    files = {n: _schema_file(n) for n in SCHEMA_FILES}
+    if not all(files.values()):
+        rep.add("hooks-schema", UNKNOWN, "the hook allowlist(s) are missing: %s"
+                % ", ".join(n for n, f in files.items() if not f),
+                fix="re-run install.sh: they ship in the release's hooks/")
+        return
+    try:
+        ev = json.loads(files["known_events.json"].read_text(encoding="utf-8"))
+        tl = json.loads(files["known_tools.json"].read_text(encoding="utf-8"))
+        events, tool_events = set(ev["events"]), set(ev["tool_events"])
+        tools = set(tl["tools"])
+        if not events or not tools:
+            raise ValueError("empty allowlist")
+    except Exception as exc:
+        rep.add("hooks-schema", UNKNOWN, "the hook allowlists are unreadable (%s)"
+                % exc.__class__.__name__)
+        return
+    if not settings.is_file():
+        rep.add("hooks-schema", UNKNOWN, "no %s to check" % settings)
+        return
+    try:
+        data = json.loads(settings.read_text(encoding="utf-8"))
+        hooks = data.get("hooks") or {}
+        if not isinstance(hooks, dict):
+            raise ValueError("hooks is not an object")
+    except Exception as exc:
+        rep.add("hooks-schema", UNKNOWN, "settings.json is unreadable (%s)"
+                % exc.__class__.__name__)
+        return
+    findings, n = [], 0
+    for event, blocks in sorted(hooks.items()):
+        if event not in events:
+            findings.append("hooks-unknown-event %s -- Claude Code fires no such event, so its "
+                            "hooks never run" % event)
+        for b in blocks if isinstance(blocks, list) else []:
+            if not isinstance(b, dict):
+                continue
+            m = b.get("matcher")
+            if event in tool_events and isinstance(m, str):
+                for t in (x.strip() for x in m.split("|")):
+                    # Only plain names are judged: "*", "", mcp__ names and regex patterns
+                    # cannot be checked against a list and are left alone.
+                    if not t or t == "*" or t.startswith("mcp__") or not t.isidentifier():
+                        continue
+                    if t not in tools:
+                        findings.append("hooks-unknown-tool %s matcher %r -- no known tool is "
+                                        "called %s" % (event, m, t))
+            for h in b.get("hooks") or []:
+                if not (isinstance(h, dict) and h.get("command")):
+                    continue
+                n += 1
+                for path in _hook_paths(str(h["command"])):
+                    if not os.path.exists(path):
+                        findings.append("hooks-missing-file %s -> %s" % (event, path))
+    ref = ev.get("claude_code_reference", "?")
+    if findings:
+        rep.add("hooks-schema", WARN,
+                "%d hook entr%s Claude Code may never fire (allowlist as of %s)"
+                % (len(findings), "y" if len(findings) == 1 else "ies", ref),
+                "\n".join(findings),
+                fix="review ~/.claude/settings.json; if Claude Code added the name, it belongs "
+                    "in hooks/known_events.json or known_tools.json for the next release")
+        return
+    rep.add("hooks-schema", OK, "%d hook command(s) on %d event(s) name events and tools "
+            "Claude Code fires (allowlist as of %s)" % (n, len(hooks), ref))
+
 
 CHECKS = ("version", "components", "wiring", "core-rules", "modules", "vault",
           "schedule", "workers", "push", "gt-src", "lint", "astgrep")
+CHECKS += ("repo-target",)      # 0.18.0: which repo would a repo-scoped command answer for?
+CHECKS += ("hooks-schema",)     # 0.18.0: settings.json hooks against Claude Code's events
 
 
 def main(argv=None):
@@ -1856,6 +2016,10 @@ def main(argv=None):
         check_lint(rep, vault)
     if "astgrep" in wanted:
         check_astgrep(rep)
+    if "repo-target" in wanted:
+        check_repo_target(rep, vault)
+    if "hooks-schema" in wanted:
+        check_hooks_schema(rep)
 
     if a.fix:
         fix_wiring(rep, vdir, vault)
