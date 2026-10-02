@@ -78,6 +78,12 @@ compared against live settings at check time, and it is also the list `install.s
 registers FROM -- one declaration read by both, so the installer and the checker
 cannot disagree about what "wired" means.
 """
+import sys as _sys
+import os as _os
+# gt-src is a published tree that must keep matching its SHA256SUMS, and this script is
+# run from it or handed it: write no bytecode, here or in any child (0.19.0).
+_sys.dont_write_bytecode = True
+_os.environ["PYTHONDONTWRITEBYTECODE"] = "1"
 import hashlib
 import json
 import os
@@ -1157,7 +1163,7 @@ def hook_commands(version_dir, plugin_root=None, home=None):
         # Shell scripts execute directly; .py files are run through python3 so the
         # entry does not depend on the file keeping its +x bit through a sync.
         parts = ([target] if reg["script"].endswith(".sh")
-                 else ["python3", target]) + argv
+                 else ["python3", "-B", target]) + argv
         # Quote every part: the plugin source lives under a path containing a space
         # ("Golden Thread"), and an unquoted argument split on it so the checker was
         # handed "Golden" and reported a bogus no-manifest drift on every start.

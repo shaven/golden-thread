@@ -553,7 +553,7 @@ class RealModulesOff(RealModulesBase):
         hooks = self.claude(home) / "golden-thread" / "hooks"
         self.assertTrue((hooks / "gt_watch.py").is_file())
         self.assertEqual([c for e, c in self.commands(home) if "gt_watch.py" in c],
-                         ["python3 %s --hook" % (hooks / "gt_watch.py")])
+                         ["python3 -B %s --hook" % (hooks / "gt_watch.py")])
         # the real tool writes the tagged line, from the installed copy as the skill says
         self.crontab.write_text("0 5 * * * /usr/bin/true # users-own\n")
         cron = self.run_cmd(["python3", hooks / "gt_watch.py", "install-cron", "--every", "1h"],

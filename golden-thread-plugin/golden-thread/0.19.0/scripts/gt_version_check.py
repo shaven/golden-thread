@@ -41,6 +41,12 @@ source tree, that is reported as `ahead` and never treated as an error. It means
 release was installed from somewhere else, or the source tree has not synced --
 and the right response is to capture it, not to "fix" it by downgrading.
 """
+import sys as _sys
+import os as _os
+# gt-src is a published tree that must keep matching its SHA256SUMS, and this script is
+# run from it or handed it: write no bytecode, here or in any child (0.19.0).
+_sys.dont_write_bytecode = True
+_os.environ["PYTHONDONTWRITEBYTECODE"] = "1"
 import json
 import os
 import re

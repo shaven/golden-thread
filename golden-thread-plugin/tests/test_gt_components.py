@@ -153,12 +153,13 @@ class HookRegistrations(ComponentsBase):
         self.assertEqual(len(regs), N_HOOKS)
         by = {(r["event"], r["script"]): r for r in regs}
         argv = shlex.split(by[("SessionStart", "gt_components.py")]["command"])
-        self.assertEqual(argv, ["python3", str(self.installed / "gt_components.py"),
+        # `-B` (0.19.0): these hooks are handed gt-src and must not write bytecode into it
+        self.assertEqual(argv, ["python3", "-B", str(self.installed / "gt_components.py"),
                                 "check", str(self.vdir), "--hook"])
         argv = shlex.split(by[("SessionStart", "gt_version_check.py")]["command"])
-        self.assertEqual(argv[2:], ["check", str(self.root), "--hook"])
+        self.assertEqual(argv[3:], ["check", str(self.root), "--hook"])
         argv = shlex.split(by[("SessionStart", "gt_push_check.py")]["command"])
-        self.assertEqual(argv, ["python3", str(self.installed / "gt_push_check.py"),
+        self.assertEqual(argv, ["python3", "-B", str(self.installed / "gt_push_check.py"),
                                 "check", "--hook"])
         self.assertFalse([r for r in regs if r["script"] in MOVED_TO_MODULES],
                          "gt itself registers a hook a module owns since 0.15.0")
@@ -671,8 +672,8 @@ class ModuleHooks(ModuleBase):
         self.assertEqual((r["event"], r["script"], r["owner"], r["module"]),
                          ("SessionStart", "zed_report.py", "install.sh", "zed"))
         argv = shlex.split(r["command"])
-        self.assertEqual(argv[:2], ["python3", str(self.installed / "zed_report.py")])
-        self.assertEqual(argv[2:], ["check", str(self.zed), "--hook"],
+        self.assertEqual(argv[:3], ["python3", "-B", str(self.installed / "zed_report.py")])
+        self.assertEqual(argv[3:], ["check", str(self.zed), "--hook"],
                          "{src} in a module hook is the module's own version dir")
         self.assertFalse(any("module" in x for x in regs[:N_HOOKS]))
 
@@ -806,8 +807,10 @@ class ExistingInstallEntriesBelongToTheModule(ModuleBase):
         self.full_setup()
         for vd, n in ((self.mover, "gt_moved.py"), (self.zed, "zed_report.py")):
             shutil.copy2(vd / "scripts" / n, self.installed / n)
-        # what an older gt wrote: exactly the command the module resolves to
-        old_cmd = "python3 %s --hook" % shlex.quote(str(self.installed / "gt_moved.py"))
+        # what an older gt wrote: exactly the command the module resolves to (with the `-B`
+        # every python hook carries since 0.19.0; wiring is matched by script, so an entry
+        # written without it still reads as wired)
+        old_cmd = "python3 -B %s --hook" % shlex.quote(str(self.installed / "gt_moved.py"))
         mine = [r for r in self.registrations() if r.get("module") == "mover"]
         self.assertEqual([r["command"] for r in mine], [old_cmd])
         out = self.check()

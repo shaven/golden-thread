@@ -102,6 +102,12 @@ So this states the version every other answer is relative to, at the top, always
 A check that cannot run says so and exits 2. "Could not check" is never "clean" --
 that distinction is the whole reason this file exists.
 """
+import sys as _sys
+import os as _os
+# gt-src is a published tree that must keep matching its SHA256SUMS, and this script is
+# run from it or handed it: write no bytecode, here or in any child (0.19.0).
+_sys.dont_write_bytecode = True
+_os.environ["PYTHONDONTWRITEBYTECODE"] = "1"
 import argparse
 import json
 import os
