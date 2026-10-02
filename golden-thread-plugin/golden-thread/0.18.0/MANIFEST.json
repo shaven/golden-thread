@@ -45,12 +45,12 @@
    "sha256": "88040501c0de5bfec1bca67cce0b6ca985736f69acc735dbcb436aafb653c287"
   },
   "hooks/known_events.json": {
-   "bytes": 821,
-   "sha256": "449d71019791d66e7568c7fcf8dcbb8e8c72a8a9aec7d3062bc0a8d825e70548"
+   "bytes": 1234,
+   "sha256": "f425b6e05835ba094f92c938b8b9dc24c4fe9ae07d1326a54f7c9b1c02795253"
   },
   "hooks/known_tools.json": {
-   "bytes": 841,
-   "sha256": "231f843aba5cdd2664983789d8115febfab73c825cef89f8b3d221ec3a9948a4"
+   "bytes": 1319,
+   "sha256": "bc4353e16c526b5606d76a3d743ce875866522de215f02d7bb877a0893990d03"
   },
   "hooks/log_knowledge_read.py": {
    "bytes": 3551,
@@ -541,7 +541,7 @@
    "sha256": "05a5e61333b0ba5d6f97866735268f7f99ff354d9502b2b05e0e512a86f82a6b"
   }
  },
- "generated": "2026-10-01T21:14:15",
+ "generated": "2026-10-01T21:14:58",
  "hooks": [
   {
    "args": [
