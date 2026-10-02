@@ -40,7 +40,8 @@ Two guards ARE registered, and the line is not "core versus not". `test_gate` go
 core_test_before_commit because a gate that fires where it cannot be satisfied is a
 gate people switch off for everything, so it is better switched off knowingly, per
 repo, than bypassed wholesale; `protected_paths` governs guard_protected_paths.sh,
-which is tied to no Core rule.
+which is tied to no Core rule. (0.18.0 adds a third: `foreign_checkout_guard` governs
+guard_foreign_checkout.sh, also tied to no Core rule.)
 
 ## Adding a setting
 
@@ -333,6 +334,26 @@ SETTINGS = {
             "when a remote end is rate-limited. `1` is not the same as parallel_work=off:\n"
             "one worker still runs through the parallel path, so it does not tell you\n"
             "whether the parallel path is what broke a test. Use `off` for that."),
+    },
+    "foreign_checkout_guard": {
+        "default": "on",
+        "values": ["off", "on"],
+        "summary": "Deny git commit/push inside a checkout you declared as another machine's.",
+        "detail": (
+            "on   a `git commit` or `git push` whose directory is inside a path listed in\n"
+            "     `foreign_checkouts` in ~/.claude/vault-config.json is denied, naming the\n"
+            "     checkout and the supported route. Read-only git and file writes are\n"
+            "     untouched. With nothing declared it denies nothing.  (default)\n"
+            "off  no check\n"
+            "\n"
+            "Ownership is DECLARED, never guessed from a path, remote or credential:\n"
+            "  python3 ~/.claude/golden-thread/hooks/guard_foreign_checkout.py add <path> \\\n"
+            "      [--label 'the build machine'] [--route 'run copygt.sh there']\n"
+            "  ... list | remove <path>\n"
+            "One-off exception, visible in the transcript: GT_FOREIGN_CHECKOUT=allow git push\n"
+            "\n"
+            "Why: 2026-09-11 a session committed a release into another machine's checkout\n"
+            "and started rewriting its remote URL to get the push through (0.18.0)."),
     },
     "protected_paths": {
         "default": "ask",

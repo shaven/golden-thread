@@ -507,6 +507,12 @@ HOOK_REGISTRATIONS = (
     # owns it rather than install-core-rules (0.12.9).
     {"event": "PreToolUse", "script": "guard_protected_paths.sh",
      "args": [], "owner": "install.sh"},
+    # Foreign checkouts (0.18.0): deny `git commit` / `git push` inside a checkout the user
+    # DECLARED as another machine's (`foreign_checkouts` in vault-config.json). Inert with
+    # nothing declared; not tied to a Core rule and needs no vault, so install.sh owns it,
+    # like guard_protected_paths. Switch: the `foreign_checkout_guard` setting.
+    {"event": "PreToolUse", "script": "guard_foreign_checkout.sh",
+     "args": [], "owner": "install.sh"},
     # -- enforcement: registered by vault_init.py install-core-rules ---------
     {"event": "UserPromptSubmit", "script": "inject_core_rules.sh",
      "args": [], "owner": "vault_init.py install-core-rules"},

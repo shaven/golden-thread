@@ -37,6 +37,8 @@ EXPECTED = {
     "skeptic_pass": ("off", ["off", "on"]),
     "handoff_surface": ("any", ["any", "project", "manual"]),
     "task_surface": ("on", ["off", "on"]),
+    # 0.18.0: guard_foreign_checkout (inert until a checkout is declared).
+    "foreign_checkout_guard": ("on", ["off", "on"]),
     # values None == free-form; `validate` carries the shape instead of a closed list.
     "parallel_max": ("auto", None),
 }

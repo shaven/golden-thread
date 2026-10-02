@@ -1,5 +1,13 @@
 {
  "files": {
+  "hooks/guard_foreign_checkout.py": {
+   "bytes": 15256,
+   "sha256": "57c2076d076938aec89e5ffd6a5966e62c3d1f48a5a704253b493f694cd7f257"
+  },
+  "hooks/guard_foreign_checkout.sh": {
+   "bytes": 1002,
+   "sha256": "692b3640bdcce270a41af7ca05badbbba5b2ea165297a2a662a669ade4f0812a"
+  },
   "hooks/guard_protected_paths.py": {
    "bytes": 12522,
    "sha256": "0550fb33c314817259ab3583d1760b5809b3df657d1ca92998056ffd63b11353"
@@ -129,8 +137,8 @@
    "sha256": "b7419f33249edab6cd4dd4c60852bc1d9c162defad2030b8c23b91e7c044788c"
   },
   "scripts/gt_components.py": {
-   "bytes": 88256,
-   "sha256": "6d6d117d7bd1b0d2536ad0d19dede4647aeedfb63619a1cec456dfb1c8dd7136"
+   "bytes": 88718,
+   "sha256": "3f88aee946b7be6efde17e861a6149f9ed43234bec09c27fb66cfe20e3c1d1c1"
   },
   "scripts/gt_context.py": {
    "bytes": 10260,
@@ -213,8 +221,8 @@
    "sha256": "d2fbf97b57eb729ad399672a77c63745aac4e88140f39c7b989ac122bcbfe3b7"
   },
   "scripts/gt_settings.py": {
-   "bytes": 45253,
-   "sha256": "82bcf21deec8b98848fcd8923765a2571d046edfe19f0e47ce00368065f68777"
+   "bytes": 46589,
+   "sha256": "b25f4e4c46a45ea2a0830ac1d60da167f3e47f6b3c383c0a97729773f5d61a72"
   },
   "scripts/gt_staged.py": {
    "bytes": 3529,
@@ -449,7 +457,7 @@
    "sha256": "05a5e61333b0ba5d6f97866735268f7f99ff354d9502b2b05e0e512a86f82a6b"
   }
  },
- "generated": "2026-10-01T20:31:52",
+ "generated": "2026-10-01T20:37:43",
  "hooks": [
   {
    "args": [
@@ -520,6 +528,12 @@
    "event": "PreToolUse",
    "owner": "install.sh",
    "script": "guard_protected_paths.sh"
+  },
+  {
+   "args": [],
+   "event": "PreToolUse",
+   "owner": "install.sh",
+   "script": "guard_foreign_checkout.sh"
   },
   {
    "args": [],
