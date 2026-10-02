@@ -36,7 +36,7 @@ $CLAUDE_SESSION_ID) finds <projects-dir>/*/<id>.jsonl; --latest takes the newest
 says so. With none of those it refuses rather than guess which session "this" is.
 
 NO IN-FLIGHT NOTE. An earlier design also wrote Projects/<slug>/inflight/<session>.md. The owner
-ruled (2026-10-01) that carry-forward is /gt:gt-handoff's job; this measures and the skill prunes.
+ruled (2026-10-01) that carry-forward is /gt:gt-create handoff's job; this measures and the skill prunes.
 
 Output names a session by 8 characters at most and prints no absolute path.
 

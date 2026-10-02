@@ -230,12 +230,12 @@ SETTINGS = {
         "detail": (
             "any      every session start, whatever project is opened  (default)\n"
             "project  only when /gt:gt-open opens the handoff's own project\n"
-            "manual   only when you run /gt:gt-handoff-handle\n"
+            "manual   only when you run /gt:gt-handle handoff\n"
             "\n"
             "A handoff keeps being shown until it is handled (marked, or every task citing\n"
             "it closed) or deferred to a date. It is shown as one line -- path, project, age,\n"
             "open items -- never its body, so being told costs no project context; handling\n"
-            "it is /gt:gt-handoff-handle. `project` needs /gt:gt-open: a session that never\n"
+            "it is /gt:gt-handle handoff. `project` needs /gt:gt-open: a session that never\n"
             "opens the project never sees it, which is why `any` is the default (owner,\n"
             "2026-09-28)."),
     },

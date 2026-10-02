@@ -282,7 +282,7 @@ raised and never answered. Those live only in this conversation, and this conver
 about to end.
 
 `gt_handoff.py` exists for exactly that and is reached by one caller — the user typing
-`/gt:gt-handoff`. Which means it is offered at the moment a person happens to think of it,
+`/gt:gt-create handoff`. Which means it is offered at the moment a person happens to think of it,
 rather than the moment it is needed.
 
 **So state the list, then ask.** As you write the sections above, keep the items you
@@ -341,7 +341,7 @@ needed a person, which is why they did not reach a file.
 **The next session is told, without anyone asking** (since 0.17.2). `gt_handoff.py` writes
 `status: open`, and an open handoff is shown — one line, never its body — at every session start
 or when its project is opened (setting `handoff_surface`) until it is handled or deferred to a
-date through `/gt:gt-handoff-handle`. It also counts as handled once every task citing it is
+date through `/gt:gt-handle handoff`. It also counts as handled once every task citing it is
 checked off, so **the task must name the handoff's filename** — that is how the two are joined.
 
 **Never write one on the user's behalf after a no.** They have just told you these items

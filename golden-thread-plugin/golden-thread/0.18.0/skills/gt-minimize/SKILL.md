@@ -18,7 +18,7 @@ order, quickly, because the cache is a clock.
 
 - **Not a handoff.** It writes no in-flight note. If something must carry forward to the next
   session — a half-done change, an open decision, the next command — that is
-  `/gt:gt-handoff`'s job, and this skill sends you there (owner decision, 2026-10-01).
+  `/gt:gt-create handoff`'s job, and this skill sends you there (owner decision, 2026-10-01).
 - **Not a report on the past.** `/gt:gt-optimize --only session` measures cache waste across
   sessions over weeks. This is about the one session you are in, now.
 - **Not a decision-maker.** A script cannot tell a load-bearing fact from a tool result that
@@ -58,7 +58,7 @@ its job.
 | a platform / tool / infrastructure fact that would help outside this project | `Knowledge/` — through `/gt:gt-promote` (or the wiki-ingest path for something new) |
 | a project finding or decision | the project's `research.md` / ADR — through `/gt:gt-work` |
 | a thought that belongs to another project, not yet worked | one checkbox line in `INBOX.md` (below) |
-| work in flight, an open question, the next command | **`/gt:gt-handoff`** — not here |
+| work in flight, an open question, the next command | **`/gt:gt-create handoff`** — not here |
 | everything else | dropped — say so, so the user can object |
 
 Present the list as **keep → destination** and **drop**, and ask the user to confirm or move
@@ -85,7 +85,7 @@ escalated.
 Tell the user, in this order:
 
 1. what was kept and where it went, and what was dropped;
-2. if anything is in flight: "run `/gt:gt-handoff` first" — and stop until they have;
+2. if anything is in flight: "run `/gt:gt-create handoff` first" — and stop until they have;
 3. **"Run `/compact` (keeps a summary) or `/clear` (starts clean) now — the cache is warm for
    about N more minutes, so cutting now is cheap."** If it had already expired, say that the
    saving this time is the next session's size, not the rebuild.
@@ -96,7 +96,7 @@ You cannot run `/compact` or `/clear` yourself; they are the user's commands.
 
 - **Measure first, every time.** The size and cache state are what make the advice true; never
   say "cutting now is cheap" without the measurement that shows the cache is warm.
-- **Never write an in-flight note.** Carry-forward is `/gt:gt-handoff`.
+- **Never write an in-flight note.** Carry-forward is `/gt:gt-create handoff`.
 - **Never promote without the user's yes**, and never drop something the user wanted kept. The
   triage list is a proposal.
 - **Estimates are labelled as estimates.** The only measured number is the billed context.

@@ -2,7 +2,7 @@
 
 Request 2026-09-23-gt-minimize-capture-and-cut, as rescoped by the owner (2026-10-01):
 gt-minimize PRUNES -- measure, triage (keepers to Knowledge/INBOX), drop the rest, tell the user
-to cut while the cache is warm. It writes NO in-flight note; carry-forward is gt-handoff's.
+to cut while the cache is warm. It writes NO in-flight note; carry-forward is gt-create handoff's.
 
 Contract:
   * The reported context is the billed size from the last usage row (input + cache read +
@@ -150,7 +150,7 @@ class MinimizeTest(Sandbox):
     def test_the_skill_prunes_and_points_carry_forward_at_handoff(self):
         skill = (GT / "skills" / "gt-minimize" / "SKILL.md").read_text(encoding="utf-8")
         self.assertIn("gt_minimize.py", skill)
-        self.assertIn("/gt:gt-handoff", skill)
+        self.assertIn("/gt:gt-create handoff", skill)
         self.assertIn("Never write an in-flight note", skill)
         self.assertIn("INBOX.md", skill)
         self.assertIn("gt_write_queue.py", skill)
