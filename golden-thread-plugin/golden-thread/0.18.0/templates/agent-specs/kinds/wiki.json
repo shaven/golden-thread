@@ -1,0 +1,17 @@
+{
+  "kind": "wiki",
+  "spec_version": 1,
+  "summary": "External material for the wiki: captured immutably into Sources/ first, placed like a promotion, then drafted.",
+  "prompt_delta": ["The material is EXTERNAL reference material bound for the wiki. It was captured, unedited, into the vault's Sources/ before any stage ran; cite that Sources/ file, never the original URL alone."],
+  "stages": {
+    "extract": {
+      "prompt_delta": ["Keep the source's own claims apart from your reading of them: a claim the source makes is verified only as 'the source says so'; mark anything you checked elsewhere as such."],
+      "inputs": {
+        "source": {"required": false, "description": "The vault-relative Sources/ file this material was captured to."}
+      }
+    },
+    "draft": {
+      "prompt_delta": ["A Knowledge page cites its Sources/ file in `sources:` frontmatter and stays at status seed. The session still holds gt-wiki-ingest's discuss step with the owner before the page is queued."]
+    }
+  }
+}
