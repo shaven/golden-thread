@@ -1,57 +1,21 @@
 ---
 name: gt-task-handle
-description: "Work through open tasks one at a time — close, drop with a reason, defer to a date, or keep — with a filter to choose which (a project, p1, mine, overdue, stale, ref). The way to clear a backlog. Use when the user says: /gt-task-handle, handle my tasks, work through the tasks, clear the backlog, triage tasks, get rid of old tasks."
+description: "Deprecated alias, removed after 0.18.x — use /gt:gt-handle task. Kept working for one release: it does exactly what /gt:gt-handle task does (work through open tasks)."
 ---
 
-# Golden Thread — Handle Tasks
+# gt-task-handle (deprecated alias)
 
-Tool: `<vault>/Projects/golden-thread/tools/gt_task.py`. Vault from `$GT_VAULT` or
-`~/.claude/vault-config.json`. Pass `--vault` on every call (Core rule 2).
+**First, print this one line to the user, verbatim:**
 
-## Step 1 — Choose the set
+> Note: gt-task-handle is deprecated. Use /gt:gt-handle task instead.
 
-Map the user's parameter to filters exactly as `/gt:gt-task-list` does (`<slug>`, `p1`, `mine`,
-`overdue`, `stale`, `deferred`, `ref:<text>`), then:
+Then do exactly what `/gt:gt-handle task` does: read `<base_dir>/../gt-handle/SKILL.md` — `<base_dir>` is the
+path in this skill's `Base directory for this skill:` header. Take the vault location and the
+tool paths from the top of that file, then follow its
+**`## Tasks`** section, with whatever the user passed to this command as that section's
+argument. That section is this command's procedure, moved there unchanged in 0.18.0
+(verb-first vocabulary: one verb per action, the artifact as its argument), so the result is the
+same. Skip that file's sections for the other artifacts.
 
-```bash
-python3 <tool> list --vault "<vault>" <filters>
-```
-
-Say how many there are. With no parameter and a long list, propose a first cut (`stale`,
-`overdue`, or one project) rather than starting at the top of everything.
-
-## Step 2 — One task at a time
-
-Show the task line. **Load context only if deciding needs it**: the file its `ref::` points at, or
-one named file — never a full `/gt:gt-open`. Then ask the user for ONE of:
-
-| decision | command |
-|---|---|
-| **done** | `python3 <tool> done <ID> --vault "<vault>" --reason "<what settled it>"` |
-| **drop** | `python3 <tool> drop <ID> --vault "<vault>" --reason "<why it no longer matters>"` |
-| **defer** | `python3 <tool> defer <ID> --vault "<vault>" --until YYYY-MM-DD --reason "<why then>"` |
-| **keep** | nothing — move on |
-
-- Nothing is deleted: done and drop check the box and record the reason on the line. Drop needs a
-  reason; that is what makes clearing a backlog safe.
-- A deferral needs a future date and hides the task — from lists, the TASKS.md ranking and
-  escalation — until then. "Later, some time" is a drop, said as one.
-- If the tool says the ID changed (someone edited the file), list again and use the new ID; never
-  edit the README by hand to get around it.
-- If a decision belongs in `decisions.md` or `research.md`, record it there too — a task line is not
-  where a decision lives. That write goes through `/gt:gt-work` (an ADR through `gt_adr.py`, a
-  research entry through the write queue), never a direct edit: the PreToolUse guard denies a
-  Write/Edit to vault content (Core rule 1).
-
-Register the session and claim each README before its first write (Core rule 1); the tool refuses
-if another live session holds it. The tool is the write path for task lines — it re-checks the
-line's hash itself, so it does not go through the queue.
-
-## Step 3 — Stop cleanly
-
-When the set is done or the user stops: one line with the counts (closed, dropped, deferred, kept),
-then regenerate the rollup so "what's next" is current:
-
-```bash
-python3 <vault>/Projects/golden-thread/tools/gt_tasks.py --vault "<vault>"
-```
+This alias has no trigger phrases of its own — they moved to `gt-handle` — and it is removed in the
+release after 0.18.x.

@@ -44,7 +44,7 @@ WHAT IT SHOWS, and how often:
                                                      any      every session start (default)
                                                      project  only when /gt:gt-open opens it
                                                               (`handoffs --project`)
-                                                     manual   only /gt:gt-handoff-handle
+                                                     manual   only /gt:gt-handle handoff
                                                    The body is never loaded: showing a handoff
                                                    must not cost the context of handling it.
   write queue every session while non-empty     -- a count of gt_write_queue.py requests
@@ -314,7 +314,7 @@ def handoff_lines(vault: Path, project: str | None = None) -> list[str]:
     if not hs:
         return []
     mod = _status_mod()
-    out = ["HANDOFF%s WAITING%s -- handle with /gt:gt-handoff-handle:"
+    out = ["HANDOFF%s WAITING%s -- handle with /gt:gt-handle handoff:"
            % ("S" if len(hs) > 1 else "", (" in " + project) if project else "")]
     out += ["  - " + mod.line(r) for r in hs]
     return out
@@ -345,7 +345,7 @@ def task_line(vault: Path) -> list[str]:
     if not d or not d.get("p1_waiting_on_user"):
         return []
     return ["TASKS: %d p:: 1 waiting on you (%d overdue, %d open over a week) -- "
-            "/gt:gt-task-list mine p1, /gt:gt-task-handle to work through them"
+            "/gt:gt-list tasks mine p1, /gt:gt-handle task to work through them"
             % (d["p1_waiting_on_user"], d.get("overdue", 0), d.get("stale", 0))]
 
 
@@ -407,7 +407,7 @@ def build(vault: Path | None, source: str, seen: dict):
                 ctx.append("A previous session left the handoff(s) above because it could not "
                            "capture everything. Do NOT read them now unless the user is working "
                            "in that project or asks; tell the user they are waiting and that "
-                           "/gt:gt-handoff-handle deals with them.")
+                           "/gt:gt-handle handoff deals with them.")
         lines += task_line(vault)
         lines += queue_line(vault)
     st =new_state_files(seen)
@@ -461,7 +461,7 @@ def do_check(a, as_hook: bool) -> int:
 
 def do_handoffs(a) -> int:
     """For /gt:gt-open: this project's waiting handoffs, in `any` and `project` modes. `manual`
-    means the owner asked to see them only through /gt:gt-handoff-handle, so this is silent."""
+    means the owner asked to see them only through /gt:gt-handle handoff, so this is silent."""
     vault = find_vault(a.vault)
     if vault is None:
         print("gt-surface: no vault found; pass --vault", file=sys.stderr)

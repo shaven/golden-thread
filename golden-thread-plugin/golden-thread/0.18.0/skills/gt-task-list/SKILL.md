@@ -1,31 +1,21 @@
 ---
 name: gt-task-list
-description: "Show open tasks, filtered — by project, priority, mine, overdue, stale, deferred or ref — without loading any project's context. Read-only. Use when the user says: /gt-task-list, list tasks, show my tasks, what tasks are open, what's overdue, show p1 tasks."
+description: "Deprecated alias, removed after 0.18.x — use /gt:gt-list tasks. Kept working for one release: it does exactly what /gt:gt-list tasks does (show open tasks, filtered (read-only))."
 ---
 
-# Golden Thread — List Tasks
+# gt-task-list (deprecated alias)
 
-Read-only. Nothing is changed and no project is opened.
+**First, print this one line to the user, verbatim:**
 
-```bash
-python3 <vault>/Projects/golden-thread/tools/gt_task.py list --vault "<vault>" [FILTER ...]
-```
+> Note: gt-task-list is deprecated. Use /gt:gt-list tasks instead.
 
-Turn what the user asked into filters (a task must match all of them):
+Then do exactly what `/gt:gt-list tasks` does: read `<base_dir>/../gt-list/SKILL.md` — `<base_dir>` is the
+path in this skill's `Base directory for this skill:` header. Take the vault location and the
+tool paths from the top of that file, then follow its
+**`## Tasks`** section, with whatever the user passed to this command as that section's
+argument. That section is this command's procedure, moved there unchanged in 0.18.0
+(verb-first vocabulary: one verb per action, the artifact as its argument), so the result is the
+same. Skip that file's sections for the other artifacts.
 
-| user says | filter |
-|---|---|
-| a project name | `<slug>` (sub-project `parent/child`), or `inbox` |
-| urgent / p1, normal / p2, someday / p3 | `p1` `p2` `p3` |
-| mine, waiting on me | `mine` |
-| overdue, late | `overdue` |
-| stale, sitting too long | `stale` (p1 open over 7 days) |
-| deferred, snoozed | `deferred` (hidden otherwise) |
-| about a page or source | `ref:<text>` |
-
-No filter lists every open task, most urgent first — which can be long; if it is over ~40 lines,
-say how many and offer a narrower filter rather than dumping them all. Shelved tasks (`p:: 7`+)
-never show unless a `p7`-style filter asks.
-
-Show the lines as printed. Each starts with an ID (`slug:LINE:HASH`) that
-`/gt:gt-task-handle` accepts. End with the count and the handle command.
+This alias has no trigger phrases of its own — they moved to `gt-list` — and it is removed in the
+release after 0.18.x.

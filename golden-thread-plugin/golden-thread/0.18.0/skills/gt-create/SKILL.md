@@ -1,17 +1,36 @@
 ---
 name: gt-create
-description: "Scaffold a new project in the vault with the standard structure. Use when the user says: new project, create a project, start a project called X, add project X, make a sub-project under Y. Gathers name, title, tags, and options, then runs the bundled script and fills in the brain dump."
+description: "Create a project, a task or a handoff — the create verb, with the artifact as its argument. Project: scaffold the standard structure and fill the brain dump. Task: one well-formed line, like a developer's TODO, optionally tied to a vault page, wiki page or source. Handoff: the facts for the next session, labelled by source and verification state, plus the design narrative in this session's words. Use when the user says: new project, create a project, start a project called X, add project X, make a sub-project under Y, add a task, make a task for, remind me to, todo:, track this as a task, write a handoff, hand this off to the next session."
 ---
 
 # Golden Thread Create
 
-Scaffold a new project. The structure is created by script so every project starts identical; capturing the idea is the conversation's job.
+One verb for making things. The artifact is the first argument:
+
+| invoked as | creates |
+|---|---|
+| `/gt:gt-create project <slug>` (or `/gt:gt-create <slug>`) | a project — section **Project** |
+| `/gt:gt-create task <text>` | a task line — section **Task** |
+| `/gt:gt-create handoff [<slug>]` | a handoff document — section **Handoff** |
+
+Dispatch is keyword matching on the first word: `project`, `task`/`todo`, `handoff`. Any other
+first word is a project slug (the behaviour before 0.18.0, unchanged). No argument → infer from
+what the user said ("remind me to …" is a task, "hand this off" is a handoff, "new project" is a
+project); if it is still unclear, ask which.
+
+Since 0.18.0 this replaces `gt-task` and `gt-handoff`. Those still work for one release as
+deprecated aliases that follow the **Task** and **Handoff** sections here unchanged.
 
 ## Vault location
 
-Use `$GT_VAULT` if it is set (a session pinned to one vault, such as the demo); otherwise read `~/.claude/vault-config.json` for `vault_path`. If missing → tell the user to run `/gt:gt-init` first.
+Use `$GT_VAULT` if it is set (a session pinned to one vault, such as the demo); otherwise read `~/.claude/vault-config.json` for `vault_path`. If missing → tell the user to run `/gt:gt-init` first. Pass it explicitly on every command (Core rule 2).
 
-## Steps
+## Project
+
+Scaffold a new project. The structure is created by script so every project starts identical; capturing the idea is the conversation's job.
+
+
+### Project steps
 
 **Step 1 — Gather inputs**
 
@@ -83,13 +102,16 @@ The scratch file holds:
 ```markdown
 Created: <today>
 
+
 ## The Idea
 
 <everything the user said, as completely as possible>
 
+
 ## Open Questions
 
 <any unknowns or next-steps mentioned>
+
 
 ## Related
 
@@ -132,7 +154,8 @@ Next: Run /gt:gt-open <slug> at the start of future sessions.
 If you have existing notes to import, run /gt:gt-ingest.
 ```
 
-## Rules
+
+### Project rules
 
 - Scaffolding always goes through the script — never create the structure by hand
 - If the script exits with a conflict (folder exists), stop and ask the user — never overwrite
@@ -143,3 +166,145 @@ If you have existing notes to import, run /gt:gt-ingest.
 - Never copy the fleet's host table into a project's `source.md` — link it. Copies drift, which is the whole reason the fleet is defined once
 - **Never create a category folder under `Projects/`.** Grouping is expressed by the `domain` property, not by nesting — `gt-lint`'s `memory-unlisted` check would silently stop reporting. The only valid second level is a real sub-project via `--parent`
 - Record credential *locations* in `source.md`, never credential values
+
+## Task
+
+The user gives the task in their own words; this writes it through a tool so the line is always
+well-formed (`[p::] [waiting::] [since::]`) and ranks in `TASKS.md` exactly like a hand-written
+one. Tasks live in the project README's `## Tasks` — one store, nothing new.
+
+Vault: `$GT_VAULT` if set, else `vault_path` from `~/.claude/vault-config.json`.
+Tool: `<vault>/Projects/golden-thread/tools/gt_task.py`.
+
+### Decide, don't ask, where you can
+
+- **Project** — the one this session is working in. None open, or the user names none → ask once,
+  offering `--inbox` (unfiled; `/gt:gt-review` routes it later).
+- **Priority** — `--p 2` unless the user says urgent (`1`) or someday (`3`). Never `p:: 0`: it
+  does not exist for tasks.
+- **Waiting** — `user` unless the task is plainly work for the assistant (`agent`) or someone else
+  (`external`).
+- **Ref** — when the user ties it to something: `--ref "[[Wiki Page]]"`, or a vault path
+  (`Sources/2026-09-28 …md`, `Projects/x/design.md`). The tool refuses a ref that resolves to
+  nothing; if it does, tell the user what it looked for.
+- **Due** — only if the user gave a date.
+
+### Run it (task)
+
+```bash
+python3 <vault>/Projects/golden-thread/tools/gt_task.py add "<the task, one line>" \
+  --vault "<vault>" --project <slug> [--ref "<ref>"] [--p N] [--waiting W] [--due YYYY-MM-DD]
+```
+
+Register the session and claim the README first (Core rule 1); the tool also refuses if another
+live session holds it. Echo the line it wrote and its ID. Nothing else — do not start the task.
+
+## Handoff
+
+The session that *designs* something is rarely the session that *builds* it. This writes down
+what the next one needs, and marks what it must not assume.
+
+### Why the script only does half
+
+`gt_handoff.py` gathers **facts**: the project's stated goal, open tasks, recent decisions, the
+observed state of the code repository. Each one carries where it came from and a verification
+label, per Core rule 10.
+
+It deliberately does **not** write the design narrative. A script that invents "what we decided
+and why" produces a document that *reads* finished and is not — and the next session inherits
+false confidence rather than no confidence. That section is yours.
+
+### Handoff steps
+
+**Step 1 — Locate the vault**
+
+`$GT_VAULT`, else `~/.claude/vault-config.json`. Named explicitly on the command line, never
+inferred (Core rule 2).
+
+**Step 2 — Gather the facts**
+
+```bash
+python3 <base_dir>/../../scripts/gt_handoff.py \
+    --vault "<vault>" --project <slug> [--repo <code-path>]
+```
+
+Writes `Projects/<slug>/handoff/<date>-handoff.md`. Use `--json` to read the facts without
+writing a file.
+
+**Step 3 — Write the design section yourself**
+
+Replace the placeholder under `## The design, in the author's words` with what only this
+session knows:
+
+- **What was decided**, and what was rejected — rejected options are the ones the next session
+  will otherwise re-propose and re-discover the hard way.
+- **What is built vs. designed.** Be blunt. "Designed, not written" and "written, not tested"
+  are different states and the next session cannot tell them apart from a file listing.
+- **What to do first**, and what would make it wrong.
+- **What is uncertain.** An open question written down is worth more than a confident guess.
+
+**Step 4 — Answer the checklist at the top**
+
+The script writes questions it cannot answer: whether the tests pass, whether the decisions were
+overtaken later in the session, whether anything agreed verbally never reached a file. Answer
+them in the document (under `## What the next session must not assume`), or say plainly that they
+are unanswered.
+
+**How Steps 3 and 4 reach the file (Core rule 1).** The handoff is vault content, so you never
+edit it directly — the PreToolUse guard denies a Write/Edit to it. The script created the file;
+you change it only through the write queue. Write each new section body to a scratch file and
+queue a `replace-section` for it:
+
+```bash
+python3 <base_dir>/../../scripts/gt_write_queue.py --vault "<vault>" \
+    --path Projects/<slug>/handoff/<date>-handoff.md --op replace-section \
+    --section "The design, in the author's words" --content-file <scratch file> \
+    --session <session id> --hint "handoff design narrative"
+```
+
+and likewise with `--section "What the next session must not assume"` for the answered
+checklist. Each body replaces the **whole** section, so it must carry everything you keep — for
+the design section, that includes the `Repository:` line the script put under it. Drain once,
+after Step 6's README link is queued too (below).
+
+**Step 5 — Verification labels are not decoration**
+
+If the handoff says the tests pass, say **who ran them, when, and which ones**. "The tests pass"
+with no attribution becomes folklore the moment it is written down in something formal-looking.
+Anything you did not personally observe this session is `unverified`.
+
+**Step 6 — Record**
+
+Log in `log.md` with `work` through its own tool —
+`python3 "<vault>/Projects/golden-thread/tools/gt_log.py" --vault "<vault>" add "<date time tz> [work] <slug> — handoff written"`
+— and link the handoff from the project's `README.md` so the next session finds it without being
+told it exists. The link is a queued `append` (one line in a scratch file; add
+`--section "<heading>"` if the README has a section that lists handoffs, otherwise it goes at the
+end of the file):
+
+```bash
+python3 <base_dir>/../../scripts/gt_write_queue.py --vault "<vault>" \
+    --path Projects/<slug>/README.md --op append --content-file <scratch file> \
+    --session <session id> --hint "link the handoff"
+```
+
+Then drain once, for all of this skill's writes:
+
+```bash
+python3 <base_dir>/../../scripts/gt_broker.py drain --vault "<vault>"
+```
+
+Report it in one line: `N applied, N held, N escalated`. **Held** means another live session
+claims that file — the request waits and the next drain applies it; never work around a hold.
+**Escalated** means the broker could not decide (for a `replace-section`, the section changed
+since you queued it) and made the owner a task pointing at the conflict file — say so. Until the
+design section is applied, the handoff still reads as incomplete; say that too.
+
+### Handoff rules
+
+- **Never let the script's output stand alone.** A handoff with the placeholder still in it is
+  incomplete, and the next session should say so rather than infer the design from a file list.
+- **Never claim verification you do not have.** This document is exactly where an unverified
+  claim gets promoted to settled fact.
+- **Write down what was rejected.** It is the most expensive thing to rediscover.
+- A handoff is not a status report. It exists to let someone else continue, not to summarise.

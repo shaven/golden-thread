@@ -7,6 +7,10 @@ description: "Load a project from the vault at the start of a session. Use when 
 
 Load a project and build full context before proceeding.
 
+**First word `handoff` or `task`?** Then this is not a project open — go to
+*Opening a handoff or a task* at the end of this file and skip the steps below. Any other
+argument is a project (unchanged).
+
 ## Vault location
 
 Use `$GT_VAULT` if it is set (a session pinned to one vault, such as the demo); otherwise read `~/.claude/vault-config.json` for `vault_path`. If missing → tell the user to run `/gt:gt-init` first.
@@ -107,3 +111,42 @@ Then ask: "Where do you want to pick up?"
 - **Don't re-read files already in context** from this session
 - **For large projects** with many sub-projects, read only the top-level README first and ask which sub-project to dive into
 - If `idea.md` is missing, the project is uninitialized — offer to run `/gt:gt-create` to scaffold it properly
+
+## Opening a handoff or a task (0.18.0)
+
+`gt-open` is the open verb for every artifact, not only projects (verb-first vocabulary,
+0.18.0). Dispatch on the first word only; no fuzzy matching.
+
+| invoked as | opens |
+|---|---|
+| `/gt:gt-open <slug>` | a project — the steps above, unchanged |
+| `/gt:gt-open handoff` | menu of the waiting handoffs, then the chosen one |
+| `/gt:gt-open handoff <id>` | that handoff: a path, a filename, or a unique part of one |
+| `/gt:gt-open task <id>` | that task's full detail (`slug:LINE:HASH`, as `/gt:gt-list tasks` prints it) |
+
+**A handoff.** List without reading any body:
+
+```bash
+python3 ~/.claude/golden-thread/hooks/gt_handoff_status.py list --vault "<vault>" --all
+```
+
+With no `<id>`, show the waiting ones as a numbered menu and wait for a choice. With an `<id>`,
+match it against the listed paths; several matches → the same menu, filtered; none → say so.
+Then read **that one** handoff in full, plus the `## Tasks` lines of its project's `README.md`
+that cite its filename — nothing else (no project docs; that is `/gt:gt-open <slug>`). Summarise:
+its status (and deferral date), what it says to do first, what it says must not be assumed, and
+its open items. Offer `/gt:gt-handle handoff` to work through it. Read-only.
+
+**A task.** Find it:
+
+```bash
+python3 <vault>/Projects/golden-thread/tools/gt_task.py list --vault "<vault>" <slug> --json
+```
+
+(`<slug>` is the part of the ID before the first `:`; add `deferred` and run again if it is not
+there.) No row with that ID → the README changed since the ID was taken: say so and show the
+project's current list. Otherwise show the full line and every field (`p`, `waiting`, `since`,
+`due`, `defer`, `ref`), its age, and — only if it has a `ref::` — read that one file and say
+what it holds. If the line cites a handoff, name it. Then offer the four ways on:
+`/gt:gt-close task <id>`, `/gt:gt-handle task`, `/gt:gt-open <slug>` for the whole project, or
+just start the work. Read-only.
