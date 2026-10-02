@@ -734,6 +734,35 @@ def run_core_rules_root(vault, dry):
                                    " (with .gt-removed)" if moved_removed else "", noted)
 
 
+def pending_release_pipeline_flag(vault):
+    """0.18.0: every project README carries release_pipeline (yes|no|planned)."""
+    sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+    import gt_pipeline
+    todo = gt_pipeline.projects_missing_flag(str(vault))
+    return ("%d project README(s) without release_pipeline: %s"
+            % (len(todo), ", ".join(todo[:6]) + (" …" if len(todo) > 6 else ""))) if todo else ""
+
+
+def run_release_pipeline_flag(vault, dry):
+    """Queues `release_pipeline: planned` for each (through the write queue) and drains it."""
+    sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+    import gt_pipeline
+    todo = gt_pipeline.projects_missing_flag(str(vault))
+    if dry:
+        return "would record release_pipeline: planned on %d project(s)" % len(todo)
+    import contextlib
+    import io
+    buf = io.StringIO()
+    with contextlib.redirect_stdout(buf):
+        rc = gt_pipeline.cmd_flag(str(vault), all_missing=True)
+    left = gt_pipeline.projects_missing_flag(str(vault))
+    note = "recorded release_pipeline: planned on %d project(s)" % (len(todo) - len(left))
+    if rc != 0 or left:
+        note += "; %d still without it (held or refused by the write queue): %s" % (
+            len(left), ", ".join(left[:6]))
+    return note
+
+
 MIGRATIONS = (
     ("0.11.0", "log-spool", "log.md becomes generated from per-session spool files",
      pending_log_spool, run_log_spool),
@@ -754,6 +783,9 @@ MIGRATIONS = (
     # old rule-1 imperative while the release's guard enforced the queue-first one.
     ("0.17.11", "core-rules-refresh", "Core-rule files an earlier release shipped take this release's text",
      pending_core_rules_refresh, run_core_rules_refresh),
+    # 0.18.0: the release-pipeline flag; existing projects get `planned` until adopted.
+    ("0.18.0", "release-pipeline-flag", "every project README carries release_pipeline",
+     pending_release_pipeline_flag, run_release_pipeline_flag),
 )
 
 

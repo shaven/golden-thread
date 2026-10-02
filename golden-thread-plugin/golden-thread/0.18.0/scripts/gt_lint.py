@@ -39,6 +39,9 @@ Checks:
   secrets-gate-unwired  .githooks/pre-commit exists but core.hooksPath does not reach
                        it, so the credential gate is shipped and never runs
   project-missing      A link points at a project folder that no longer exists
+  release-pipeline     A project with code (a topology) marked release_pipeline: no, one
+                       marked yes whose release.sh (recorded in source.md) is missing, or a
+                       value other than yes|no|planned (0.18.0). No key reads as `planned`.
 
 Suppression: reads <vault>/lint-declines.md — lines starting with "suppress:". One rule,
 used by every check (see is_suppressed):
@@ -686,6 +689,64 @@ def check_frontmatter(vault: Path, findings: list, suppressed: set):
                 "message": f"{proj.name} has no domain set",
                 "proposed_fix": "Set domain: to a value from the CONVENTIONS.md taxonomy",
             })
+
+
+CODE_TOPOLOGIES = ("local", "remote", "bastion-jump", "bastion-direct")
+
+
+def check_release_pipeline(vault: Path, findings: list, suppressed: set):
+    """release_pipeline: yes | no | planned on every project README (0.18.0).
+
+    A project with code and no release pipeline is how steps came to live only in someone's
+    head (gt 0.17.11: LOTR left off the branch, post-install validation added only when asked,
+    copygt.sh forgotten). A `yes` whose release.sh is gone is a pipeline that will not run. A
+    README with no key is read as `planned` -- existing projects are not flagged for predating
+    the flag; `gt_pipeline.py flag --all-missing` records it."""
+    projects_dir = vault / "Projects"
+    if not projects_dir.exists():
+        return
+    for readme in sorted(projects_dir.rglob("README.md")):
+        proj = readme.parent
+        if proj == projects_dir or not (proj / "idea.md").exists():
+            continue
+        rel = str(readme.relative_to(vault))
+        if is_suppressed(suppressed, rel, readme.name):
+            continue
+        fm = parse_frontmatter_map(readme.read_text(encoding="utf-8", errors="replace"))
+        val = fm.get("release_pipeline", "").strip().lower()
+        if not val:
+            continue
+        topo = fm.get("topology", "").strip().lower()
+        fix_no = ("Adopt one: gt_pipeline.py init --repo <code root>, then set "
+                  "release_pipeline: yes (or planned until then)")
+        if val not in ("yes", "no", "planned"):
+            findings.append({"check": "release-pipeline", "path": rel,
+                             "message": f"{proj.name} has release_pipeline: {val} "
+                                        "(expected yes, no or planned)",
+                             "proposed_fix": "Set release_pipeline: to yes, no or planned"})
+        elif val == "no" and topo in CODE_TOPOLOGIES:
+            findings.append({"check": "release-pipeline", "path": rel,
+                             "message": f"{proj.name} has code (topology: {topo}) but "
+                                        "release_pipeline: no",
+                             "proposed_fix": fix_no})
+        elif val == "yes":
+            src = proj / "source.md"
+            text = src.read_text(encoding="utf-8", errors="replace") if src.exists() else ""
+            m = re.search(r"^\*\*Release pipeline:\*\*\s*(\S+)", text, re.M)
+            target = m.group(1) if m else ""
+            if not target.endswith(".sh"):
+                findings.append({"check": "release-pipeline", "path": rel,
+                                 "message": f"{proj.name} says release_pipeline: yes but "
+                                            "source.md records no release.sh",
+                                 "proposed_fix": "Record it in source.md as **Release "
+                                                 "pipeline:** <code root>/release.sh"})
+            elif os.path.isabs(os.path.expanduser(target)) and \
+                    not os.path.exists(os.path.expanduser(target)):
+                findings.append({"check": "release-pipeline", "path": rel,
+                                 "message": f"{proj.name} says release_pipeline: yes but "
+                                            f"{target} does not exist",
+                                 "proposed_fix": "gt_pipeline.py init --repo <code root> "
+                                                 "(never overwrites)"})
 
 
 def parse_frontmatter_map(text: str) -> dict:
@@ -1410,6 +1471,7 @@ def main():
     check_secrets_gate_wired(vault, findings, suppressed)
     check_adr_collision(vault, findings, suppressed)
     check_generated_hand_edited(vault, findings, suppressed)
+    check_release_pipeline(vault, findings, suppressed)
 
     if args.queue:
         for note in write_queue(vault, findings, args.queue):

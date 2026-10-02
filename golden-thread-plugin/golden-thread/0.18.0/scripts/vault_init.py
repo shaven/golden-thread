@@ -1264,7 +1264,8 @@ def seed_vault_workspace(vault: Path, seeded: bool = True):
                 pass
     ensure_file(vault / "Projects" / "golden-thread" / "README.md",
                 "---\ntype: project\nslug: golden-thread\ndomain: infrastructure\nstage: active\n"
-                "pp: 3\ntopology: local\ntags: [infrastructure, memory, tooling]\n---\n\n"
+                "pp: 3\ntopology: local\nrelease_pipeline: planned\n"
+                "tags: [infrastructure, memory, tooling]\n---\n\n"
                 "# Golden Thread\n\n> The memory system itself: its Core rules, tools, sessions "
                 "and pending edits live under this folder.\n\n## Tasks\n\n"
                 "<!-- Format: - [ ] text [p:: 1|2|3|7+] [waiting:: user|agent|external|parked] "
@@ -1477,7 +1478,7 @@ Platform wiki:
 def cmd_create_project(vault: Path, slug: str, title: str = None, tags: list = None,
                        parent: str = None, runbook: bool = False, project_dir=None,
                        topology: str = None, repo_url: str = None, fleet: str = None,
-                       domain: str = None):
+                       domain: str = None, release_pipeline: str = None):
     vault = vault.resolve()
     display_title = title or slug
     tags = tags or []
@@ -1521,11 +1522,30 @@ def cmd_create_project(vault: Path, slug: str, title: str = None, tags: list = N
         fleet_str = "[[INFRASTRUCTURE]]"
     else:
         fleet_str = "n/a"
+    # release_pipeline (0.18.0): yes | no | planned. A project with code defaults to `planned`
+    # here -- /gt:gt-create asks, and passes `yes` for a project that ships code. `yes` with a
+    # --project-dir scaffolds release.sh + release-pipeline.tsv there (gt_pipeline.py init,
+    # which never overwrites); source.md records where the pipeline lives.
+    if release_pipeline is None:
+        release_pipeline = "planned" if topology != "TODO" else "no"
+    rp_line = {"no": "none (release_pipeline: no)",
+               "planned": "planned -- adopt it with gt_pipeline.py init --repo <code root>"}.get(
+        release_pipeline, "TODO -- run gt_pipeline.py init --repo <code root>")
+    if release_pipeline == "yes" and project_dir:
+        code_root = Path(project_dir).resolve()
+        rp_line = "%s (steps: %s)" % (code_root / "release.sh",
+                                      code_root / "release-pipeline.tsv")
+        if not DRY_RUN:
+            _scaffold_release_pipeline(code_root, slug)
+        else:
+            record("would-create", code_root / "release-pipeline.tsv",
+                   "release pipeline (gt_pipeline.py init)")
     seed_template("source.md", proj / "source.md", {
         "TITLE": display_title,
         "TOPOLOGY": topology,
         "REPO_URL": repo_url or "TODO",
         "FLEET": fleet_str,
+        "RELEASE_PIPELINE": rp_line,
     })
 
     tags_str = ", ".join(tags) if tags else ""
@@ -1543,6 +1563,7 @@ def cmd_create_project(vault: Path, slug: str, title: str = None, tags: list = N
         f"domain: {domain or 'TODO'}\n"
         "stage: idea\n"
         f"topology: {topology}\n"
+        f"release_pipeline: {release_pipeline}\n"
         f"tags: [{', '.join(fm_tags)}]\n"
         + (f"parent: {parent}\n" if parent else "")
         + "---\n\n"
@@ -1613,6 +1634,23 @@ Platform wiki:
 """
         update_claude_md(proj_claude, proj_section)
     return proj if readme_is_new else None
+
+
+def _scaffold_release_pipeline(code_root: Path, slug: str):
+    """gt_pipeline.py init in the project's code root: idempotent, never overwrites."""
+    try:
+        sys.path.insert(0, str(Path(__file__).resolve().parent))
+        import gt_pipeline
+        code_root.mkdir(parents=True, exist_ok=True)
+        import contextlib
+        import io
+        with contextlib.redirect_stdout(io.StringIO()):   # stdout is this tool's JSON
+            rc = gt_pipeline.cmd_init(gt_pipeline.repo_root(str(code_root)), slug)
+        record("created" if rc == 0 else "error", code_root / "release-pipeline.tsv",
+               "release pipeline (gt_pipeline.py init)" + ("" if rc == 0 else ", exit %d" % rc))
+    except Exception as exc:                            # never fail the project for it
+        record("error", code_root / "release-pipeline.tsv",
+               "release pipeline not scaffolded: %s" % exc)
 
 
 def cmd_connect(vault: Path):
@@ -1693,6 +1731,10 @@ def main():
     p_proj.add_argument("--repo-url", default=None, help="Git remote URL for this project")
     p_proj.add_argument("--domain", default=None,
                         help="Top-level grouping for the project (see CONVENTIONS.md taxonomy)")
+    p_proj.add_argument("--release-pipeline", choices=("yes", "no", "planned"), default=None,
+                        help="does the project have a release pipeline (release.sh)? yes "
+                             "scaffolds it in --project-dir; default: planned for a project "
+                             "with a topology, no otherwise")
     p_proj.add_argument("--fleet", default=None,
                         help="Page name of the shared fleet definition (default: INFRASTRUCTURE "
                              "for bastion topologies)")
@@ -1738,7 +1780,8 @@ def main():
         tags = [t.strip() for t in args.tags.split(",")] if args.tags else []
         made = cmd_create_project(args.vault, args.name, args.title, tags, args.parent,
                                   args.runbook, args.project_dir, args.topology,
-                                  args.repo_url, args.fleet, args.domain)
+                                  args.repo_url, args.fleet, args.domain,
+                                  args.release_pipeline)
         if made is not None:
             rel = _rel_project(args.vault, made)
             _emit_event(args.vault.resolve(), "create", "Projects/" + rel,

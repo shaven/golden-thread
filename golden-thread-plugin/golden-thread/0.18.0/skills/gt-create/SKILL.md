@@ -143,3 +143,38 @@ If you have existing notes to import, run /gt:gt-ingest.
 - Never copy the fleet's host table into a project's `source.md` — link it. Copies drift, which is the whole reason the fleet is defined once
 - **Never create a category folder under `Projects/`.** Grouping is expressed by the `domain` property, not by nesting — `gt-lint`'s `memory-unlisted` check would silently stop reporting. The only valid second level is a real sub-project via `--parent`
 - Record credential *locations* in `source.md`, never credential values
+
+## Release pipeline (project path, after Step 3) — 0.18.0
+
+Every project carries `release_pipeline: yes | no | planned` in its README frontmatter, a property
+like `stage` and `topology`. Ask once, while gathering inputs: **"Does this project ship code —
+something that gets tested, installed, pushed or deployed?"**
+
+| Answer | Pass |
+|---|---|
+| Yes, and the code lives at `<path>` | `--release-pipeline yes --project-dir "<path>"` |
+| Yes, but no code folder yet | `--release-pipeline planned` |
+| No — notes, research, a plan | `--release-pipeline no` |
+
+Without the flag the script records `planned` for a project with a topology and `no` otherwise.
+
+`yes` with `--project-dir` scaffolds the project's **release pipeline** in that code root — the
+steps as data in `release-pipeline.tsv` and a generated `release.sh` — through `gt_pipeline.py
+init`, which never overwrites anything (a `release.sh` gt did not write is left alone and the
+pipeline's script is generated under another name, which `gt_pipeline.py list` shows). `source.md` records where it lives
+(`**Release pipeline:**`). The default steps are gt's own release gates: tests with a receipt,
+`/gt:gt-allin`, a branch (never the default branch), install + post-install validation, an
+**owner gate**, push, downstream sync.
+
+Tell the user, in the summary, how to extend it as the project proceeds:
+
+```bash
+python3 <base_dir>/../../scripts/gt_pipeline.py list  --repo "<code root>"
+python3 <base_dir>/../../scripts/gt_pipeline.py add copy --repo "<code root>" --kind gate \
+  --cmd "<your copy command> --dest <dir>" --after sync          # a user gate, at a stated position
+python3 <base_dir>/../../scripts/gt_pipeline.py check --repo "<code root>"
+```
+
+Removing a default gate needs `--reason`, which is recorded in the steps file. `/gt:gt-lint`
+flags a project with code marked `release_pipeline: no`, and a `yes` whose `release.sh` is
+missing. An existing repo adopts the pipeline the same way: `gt_pipeline.py init --repo <path>`.

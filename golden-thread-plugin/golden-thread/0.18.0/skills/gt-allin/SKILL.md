@@ -23,6 +23,7 @@ runs and is tested on its own.
 | `wiki` | wiki pages: links, orphans, stale and unsourced — **only while the gt-wiki module is installed** |
 | `tests` | the repo's own test suite, found the way the commit guard finds it; a pass records the receipt `/gt:gt-allin-commit` needs (needs `--repo`) |
 | `validations` | files changed since their recorded validation (`gt_validation.py list`) (needs `--repo`) |
+| `pipeline` | **only for a repo with a release pipeline** (`release-pipeline.tsv`, 0.18.0): runs `release.sh --until owner-gate` and reports which steps ran, passed, failed or were not applicable; its own `@tests` / `@allin` steps report "covered" by this run |
 
 ## The two rules that matter
 
@@ -77,3 +78,11 @@ All-in tells you the state; it does not change it. Fix findings with the owning 
 - **Never pass `--apply`** to a member from here.
 - If the user asks all-in to "fix everything", do the checks first and bring back the list. The
   fixes are separate, deliberate acts.
+
+## The project's release pipeline (0.18.0)
+
+When the repo has adopted a release pipeline (`gt_pipeline.py init`), the `pipeline` member runs
+every step before the owner gate — the same steps a release runs, in the same order, stopping at
+the first failure. A session asked to "release" runs `release.sh` (or `gt_pipeline.py run`)
+rather than improvising steps; past the owner gate only with the owner's explicit go-ahead
+(`release.sh --from owner-gate --go`).
