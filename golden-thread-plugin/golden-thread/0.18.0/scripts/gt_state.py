@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
 """gt_state.py -- write the session's state BEFORE the context runs out, not as it does.
 
-    gt_state.py check   [--margin N] [--write] [--json]   # crossed? and write if so
-    gt_state.py write   [--reason R] [--repo P]           # write the state file now
-    gt_state.py show                                      # the newest state file
-    gt_state.py hook    [--repo P]                        # PreCompact/SessionEnd: the backstop
+    gt_state.py check   [--margin N] [--write] [--json] [--session ID]  # crossed? write if so
+    gt_state.py write   [--reason R] [--repo P] [--session ID]          # write the state file now
+    gt_state.py show                                                    # the newest state file
+    gt_state.py hook    [--repo P] [--session ID]                       # PreCompact: the backstop
 
 (This block read `write [--reason R] [--force]` until 2026-09-28. `--force` never existed and
 `check --write` -- the flag the hook actually passes -- was never shown. A docstring is not
@@ -31,6 +31,28 @@ with plausible values. So this reads `ctx_pct` and nothing else; a test asserts 
 PRECOMPACT IS THE BACKSTOP, NOT THE PRIMARY. It fires when compaction is already starting, so
 the write competes with the thing it exists to survive. The threshold fires while there is still
 room to write properly. Both run; `hook` says which one it is.
+
+WHAT THE USER SEES (0.18.0). A hook's plain stdout reaches the MODEL only, never the terminal --
+the failure fixed for the SessionStart checks in 0.9.6. So when this runs as a hook (Claude Code
+pipes it a JSON payload naming `hook_event_name`), it speaks to the user through `systemMessage`:
+
+    UserPromptSubmit, state written       one systemMessage line: the file and the percentage
+    UserPromptSubmit, write failed        one systemMessage line saying it failed, and why
+    UserPromptSubmit, below threshold     NO systemMessage -- a line every turn trains the user
+                                          to ignore it; the model still gets its one line
+    PreCompact                            ALWAYS a systemMessage: wrote (where), or did not
+                                          and why
+
+Run by hand (no payload) it prints plain text, as before.
+
+ONE SESSION'S FIGURE, NEVER ANOTHER'S (0.18.0). The usage ledger is SHARED by every session on
+the machine, and until 0.18.0 `newest_reading()` took the newest `ctx_pct` in it whoever wrote
+it -- so a fresh session's first prompt could report `context 88% -- already written`, the
+previous session's figure (observed 2026-09-29). The hook payload's `session_id` (or
+`--session`) now filters the ledger to this session's rows (the ledger keeps the id's first 8
+characters); a session with no reading of its own yet is "cannot tell", never someone else's
+number. With no session known at all -- a manual run -- the newest reading is used and labelled
+with the session it came from.
 
 NEVER FATAL, NEVER BLOCKING. Every failure path exits 0 with a note. A state write that broke a
 turn would be worse than the gap it closes.
@@ -73,12 +95,21 @@ def alert_mode() -> str:
         return DEFAULT_MODE
 
 
-def newest_reading():
+def _short(session) -> str:
+    """The ledger records the first 8 characters of a session id (gt_usage)."""
+    return str(session or "")[:8]
+
+
+def newest_reading(session=None):
     """-> (ctx_pct, session, why_not).
 
     A missing, unreadable or empty ledger is "CANNOT TELL", never "plenty of room". The usage
     module may not be installed; silence from a source that was never there must not read as a
     measurement saying everything is fine.
+
+    With `session`, only that session's rows count. The ledger is shared by every session on the
+    machine, and the newest row overall is often another session's -- which is how a fresh
+    session once reported a predecessor's 88%.
     """
     if not USAGE_LEDGER.is_file():
         return None, None, "no usage ledger at %s (is the usage module installed?)" % USAGE_LEDGER
@@ -92,6 +123,7 @@ def newest_reading():
             tail = fh.read().decode("utf-8", "replace")
     except OSError as exc:
         return None, None, "could not read the usage ledger (%s)" % exc.__class__.__name__
+    want = _short(session)
     newest = None
     for line in tail.splitlines():
         line = line.strip()
@@ -101,14 +133,49 @@ def newest_reading():
             d = json.loads(line)
         except ValueError:
             continue
-        if isinstance(d, dict) and d.get("ctx_pct") is not None:
-            newest = d
+        if not (isinstance(d, dict) and d.get("ctx_pct") is not None):
+            continue
+        if want and _short(d.get("session")) != want:
+            continue
+        newest = d
     if not newest:
+        if want:
+            return None, want, "the ledger carries no context reading for this session yet"
         return None, None, "the ledger carries no context reading yet"
     try:
-        return float(newest["ctx_pct"]), newest.get("session"), None
+        return float(newest["ctx_pct"]), newest.get("session") or want or None, None
     except (TypeError, ValueError):
         return None, None, "the newest context reading is not a number"
+
+
+def hook_payload() -> dict:
+    """The hook's JSON payload on stdin, read without blocking; {} when run by hand."""
+    try:
+        import select                                             # noqa: PLC0415
+        if sys.stdin is None or sys.stdin.isatty():
+            return {}
+        r, _, _ = select.select([sys.stdin], [], [], 0.3)
+        if not r:
+            return {}
+        d = json.loads(sys.stdin.read() or "{}")
+        return d if isinstance(d, dict) else {}
+    except Exception:
+        return {}
+
+
+def emit(user, model, event):
+    """Hook output: `user` (or None) goes to the terminal as systemMessage, `model` to context.
+
+    PreCompact has no additionalContext field, so there only systemMessage is sent.
+    """
+    out = {}
+    if user:
+        out["systemMessage"] = user
+    if model and event == "UserPromptSubmit":
+        out["hookSpecificOutput"] = {"hookEventName": event, "additionalContext": model}
+    if out:
+        json.dump(out, sys.stdout, ensure_ascii=False)
+        sys.stdout.write("\n")
 
 
 def threshold(margin: float) -> float:
@@ -185,8 +252,8 @@ def prune():
         pass
 
 
-def do_write(a) -> int:
-    ctx, session, why = newest_reading()
+def write_state(a, ctx, why):
+    """-> (path, None) on a write, (None, reason) on a failure. Never raises."""
     repo = Path(a.repo).resolve() if a.repo else None
     if repo is None:
         try:
@@ -201,39 +268,70 @@ def do_write(a) -> int:
         stamp = datetime.datetime.now().strftime("%Y-%m-%dT%H%M%S")
         out = STATE_DIR / ("state-%s.md" % stamp)
         out.write_text(render(state, ctx, why, a.reason or "threshold"), encoding="utf-8")
-        if session:
-            marker_path(session).write_text("%s\n" % (ctx if ctx is not None else "?"),
-                                            encoding="utf-8")
+        if a.marker_session:
+            marker_path(a.marker_session).write_text(
+                "%s\n" % (ctx if ctx is not None else "?"), encoding="utf-8")
         prune()
-        print("gt-state: wrote %s" % out)
+        return out, None
     except OSError as exc:
         # Never fatal: a state write that breaks a turn is worse than the gap it closes.
-        print("gt-state: could not write state (%s)" % exc.__class__.__name__, file=sys.stderr)
+        return None, "%s on %s" % (exc.__class__.__name__, STATE_DIR)
+
+
+def _session_from(a, payload):
+    return getattr(a, "session", None) or payload.get("session_id") or None
+
+
+def do_write(a, payload=None) -> int:
+    payload = hook_payload() if payload is None else payload
+    ctx, session, why = newest_reading(_session_from(a, payload))
+    a.marker_session = session if ctx is not None else None
+    out, err = write_state(a, ctx, why)
+    if out:
+        print("gt-state: wrote %s" % out)
+    else:
+        print("gt-state: could not write state (%s)" % err, file=sys.stderr)
     return 0
 
 
 def do_check(a) -> int:
-    ctx, session, why = newest_reading()
+    payload = hook_payload()
+    event = payload.get("hook_event_name") or ""
+    as_hook = bool(event)
+    ctx, session, why = newest_reading(_session_from(a, payload))
     limit = threshold(a.margin)
     if ctx is None:
         # "Cannot tell" is said out loud and is NOT a pass. It exits 0 because this must never
-        # block a turn, but it never claims there is room.
+        # block a turn, but it never claims there is room. Not a systemMessage: with no usage
+        # module it would be every turn, which is how a user learns to ignore the channel.
         print("gt-state: cannot tell — %s" % why, file=sys.stderr)
         if a.json:
-            print(json.dumps({"ctx_pct": None, "threshold": limit, "due": None, "why": why}))
+            print(json.dumps({"ctx_pct": None, "threshold": limit, "due": None, "why": why,
+                              "session": session}))
         return 0
     due = ctx >= limit and not already_written(session)
+    line = ("gt-state: context %.0f%%, threshold %.0f%% (%s) — %s"
+            % (ctx, limit, alert_mode(),
+               "DUE" if due else ("already written" if ctx >= limit else "not yet")))
     if a.json:
         print(json.dumps({"ctx_pct": ctx, "threshold": limit, "due": due,
                           "session": session, "mode": alert_mode()}))
-    else:
-        print("gt-state: context %.0f%%, threshold %.0f%% (%s) — %s"
-              % (ctx, limit, alert_mode(),
-                 "DUE" if due else ("already written" if ctx >= limit else "not yet")))
+    elif not (as_hook and due and a.write):
+        print(line)
     if due and a.write:
         a.reason = "context %.0f%% crossed the %.0f%% threshold" % (ctx, limit)
         a.repo = getattr(a, "repo", None)
-        return do_write(a)
+        a.marker_session = session
+        out, err = write_state(a, ctx, why)
+        if out:
+            msg = "gt-state: context %.0f%% — session state written to %s" % (ctx, out)
+        else:
+            msg = ("gt-state: context %.0f%% — session state could NOT be written (%s)"
+                   % (ctx, err))
+        if as_hook and not a.json:
+            emit(msg, line + "\n" + msg, event)
+        else:
+            print(msg, file=sys.stdout if out else sys.stderr)
     return 0
 
 
@@ -241,11 +339,26 @@ def do_hook(a) -> int:
     """PreCompact / SessionEnd: the BACKSTOP, and it says so.
 
     Runs regardless of the threshold, because by here the context is being compacted anyway.
-    It identifies itself so nobody reads a backstop write as the early one having worked.
+    It identifies itself so nobody reads a backstop write as the early one having worked. As a
+    hook it ALWAYS tells the user what happened -- wrote, or did not and why.
     """
+    payload = hook_payload()
+    event = payload.get("hook_event_name") or ""
     a.reason = "PreCompact/SessionEnd backstop — the threshold write is the primary"
     a.repo = getattr(a, "repo", None)
-    return do_write(a)
+    ctx, session, why = newest_reading(_session_from(a, payload))
+    a.marker_session = session if ctx is not None else None
+    out, err = write_state(a, ctx, why)
+    pct = ("context %.0f%%" % ctx) if ctx is not None else ("context unknown: %s" % why)
+    if out:
+        msg = "gt-state: before compaction (%s) — session state written to %s" % (pct, out)
+    else:
+        msg = "gt-state: before compaction (%s) — session state NOT written (%s)" % (pct, err)
+    if event:
+        emit(msg, msg, event)
+    else:
+        print(msg, file=sys.stdout if out else sys.stderr)
+    return 0
 
 
 def do_show(_a) -> int:
@@ -269,12 +382,14 @@ def main(argv=None) -> int:
     c.add_argument("--margin", type=float, default=DEFAULT_MARGIN)
     c.add_argument("--write", action="store_true", help="write if the threshold is crossed")
     c.add_argument("--repo"); c.add_argument("--json", action="store_true")
+    c.add_argument("--session", help="this session's id (a hook payload's session_id wins "
+                                     "when absent); filters the shared usage ledger")
 
     w = sub.add_parser("write"); w.set_defaults(fn=do_write)
-    w.add_argument("--reason"); w.add_argument("--repo")
+    w.add_argument("--reason"); w.add_argument("--repo"); w.add_argument("--session")
 
     h = sub.add_parser("hook"); h.set_defaults(fn=do_hook)
-    h.add_argument("--repo")
+    h.add_argument("--repo"); h.add_argument("--session")
 
     s = sub.add_parser("show"); s.set_defaults(fn=do_show)
 
