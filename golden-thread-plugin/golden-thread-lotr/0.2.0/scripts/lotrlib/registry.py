@@ -53,8 +53,10 @@ def validate_connection(entry, zone):
     if entry.get("zone") != zone:
         raise _bad(f"{where}: zone {entry.get('zone')!r} does not match registry zone "
                    f"{zone!r} (zones never mix)")
+    if entry.get("kind") == "mcp":
+        return _validate_mcp(entry, where)
     if entry.get("kind") != "http":
-        raise _bad(f"{where}: kind must be 'http' in 0.1.0")
+        raise _bad(f"{where}: kind must be 'http' or 'mcp'")
     for field in ("identity", "profile"):
         if not isinstance(entry.get(field), str) or not entry.get(field):
             raise _bad(f"{where}: {field} is required")
@@ -112,6 +114,64 @@ def validate_connection(entry, zone):
             raise _bad(f"{where}: policy.{key} must be a list of globs")
     if not isinstance(entry.get("enabled", True), bool):
         raise _bad(f"{where}: enabled must be true or false")
+
+
+MCP_TRANSPORTS = ("http",)   # streamable HTTP, JSON or SSE-framed replies; stdio/legacy sse later
+
+
+def _endpoint_ok(where, url, network, field):
+    parts = urlsplit(url) if isinstance(url, str) else None
+    host = ((parts.hostname if parts else "") or "").lower()
+    if not (parts and ((parts.scheme == "https" and host) or
+                       (parts.scheme == "http" and host in LOCAL_HOSTS))):
+        raise _bad(f"{where}: {field} must be https (or http to 127.0.0.1/localhost)")
+    if parts.username or parts.password:
+        raise _bad(f"{where}: {field} must not carry credentials")
+    hosts = network.get("hosts") if isinstance(network, dict) else None
+    if not isinstance(hosts, list) or not all(isinstance(h, str) for h in hosts):
+        raise _bad(f"{where}: network.hosts must be a list of host names")
+    if host not in [h.lower() for h in hosts]:
+        raise _bad(f"{where}: {field} host {host} is not in network.hosts")
+
+
+def _validate_mcp(entry, where):
+    """An `mcp` connection (0.2.0): a downstream MCP endpoint behind SSO/OAuth, reached with the
+    bearer token its local client already holds -- by REF, never a literal -- and refreshed by
+    that client's own helper (`refresh_cmd`, an argv list run with no shell)."""
+    if not isinstance(entry.get("identity"), str) or not entry.get("identity"):
+        raise _bad(f"{where}: identity is required")
+    _endpoint_ok(where, entry.get("endpoint"), entry.get("network"), "endpoint")
+    if entry.get("transport") not in MCP_TRANSPORTS:
+        raise _bad(f"{where}: transport must be one of {', '.join(MCP_TRANSPORTS)} in this "
+                   "release (stdio and the legacy sse transport are not supported yet)")
+    if entry.get("trust") not in TRUST:
+        raise _bad(f"{where}: trust must be one of {', '.join(TRUST)}")
+    auth = entry.get("auth")
+    if not isinstance(auth, dict) or auth.get("scheme") not in ("bearer", "none"):
+        raise _bad(f"{where}: auth.scheme must be bearer or none for an mcp connection")
+    if auth.get("scheme") == "bearer":
+        ref = auth.get("token_ref")
+        if not isinstance(ref, str) or not TOKEN_REF.match(ref):
+            raise _bad(f"{where}: auth.token_ref must be a secret ref "
+                       "(file:, store:, keychain:, env:), never a literal token")
+    cmd = entry.get("refresh_cmd")
+    if cmd is not None and (not isinstance(cmd, list) or not cmd
+                            or not all(isinstance(x, str) and x for x in cmd)):
+        raise _bad(f"{where}: refresh_cmd must be a list of program arguments, or absent")
+    tools = entry.get("tools", [])
+    if not isinstance(tools, list) or not all(isinstance(x, dict) and isinstance(x.get("name"), str)
+                                              for x in tools):
+        raise _bad(f"{where}: tools must be a list of objects with a name")
+    policy = entry.get("policy", {})
+    if not isinstance(policy, dict):
+        raise _bad(f"{where}: policy must be an object")
+    for key in POLICY_KEYS:
+        globs = policy.get(key, [])
+        if not isinstance(globs, list) or not all(isinstance(g, str) for g in globs):
+            raise _bad(f"{where}: policy.{key} must be a list of globs")
+    if not isinstance(entry.get("enabled", True), bool):
+        raise _bad(f"{where}: enabled must be true or false")
+    return None
 
 
 def _validate_client(c, zone):

@@ -8,6 +8,8 @@ caller and nowhere else -- not printed, not logged, not put in argv.
 
 Schemes:
   file:/abs/path            file must be mode & 0o077 == 0 (owner-only), else secret_perms
+  file:/abs/path#field      the same file read as JSON; the value is that top-level field
+                            (0.2.0: an MCP client's own token file, e.g. #access_token)
   store:<name>              file: under the store dir ($LOTR_STORE_DIR or ~/.secrets)
   keychain:<service>/<acct> macOS `security find-generic-password -s S -a A -w`
   env:<NAME>                only when LOTR_ALLOW_ENV_SECRETS=1 (tests); refused otherwise
@@ -58,8 +60,32 @@ def _store_dir(store_dir=None):
     return Path(env).expanduser() if env else Path.home() / ".secrets"
 
 
+def _field(target):
+    """`/path#field` -> ("/path", "field"); no `#` -> (target, None)."""
+    if "#" in target:
+        path, field = target.rsplit("#", 1)
+        if not field or not re.match(r"^[A-Za-z_][A-Za-z0-9_.-]*$", field):
+            raise GatewayError("secret_ref_invalid", "file: ref field after # must be a plain key")
+        return path, field
+    return target, None
+
+
+def _from_json(ref, text, field):
+    import json
+    try:
+        data = json.loads(text)
+    except ValueError:
+        raise GatewayError("secret_unreadable", f"secret {ref} is not JSON")
+    value = data.get(field) if isinstance(data, dict) else None
+    if not isinstance(value, str) or not value:
+        raise GatewayError("secret_missing", f"secret {ref}: the file has no string field "
+                                             f"{field!r}")
+    return value
+
+
 def _file_path(scheme, target, store_dir):
     if scheme == "file":
+        target, _f = _field(target)
         p = Path(target)
         if not p.is_absolute():
             raise GatewayError("secret_ref_invalid", f"file: ref must be an absolute path: {target}")
@@ -156,7 +182,9 @@ def resolve(ref, *, store_dir=None):
     """Return the secret value for `ref`. Raises GatewayError naming the ref, never the value."""
     scheme, target = _split(ref)
     if scheme in ("file", "store"):
-        return _read_file(ref, _file_path(scheme, target, store_dir))
+        value = _read_file(ref, _file_path(scheme, target, store_dir))
+        field = _field(target)[1] if scheme == "file" else None
+        return _from_json(ref, value, field) if field else value
     if scheme == "keychain":
         return _keychain(ref, target)
     return _env(ref, target)
@@ -174,7 +202,7 @@ def describe(ref, *, store_dir=None):
         except OSError:
             present = False
         return {"scheme": scheme, "target": str(path) if scheme == "store" else target,
-                "present": present}
+                "present": present}   # a #field is not looked up: a stat only, never a read
     if scheme == "env":
         return {"scheme": scheme, "target": target,
                 "present": bool(_ENV_NAME.match(target) and os.environ.get(target))}

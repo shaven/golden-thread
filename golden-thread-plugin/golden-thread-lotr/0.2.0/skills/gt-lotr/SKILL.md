@@ -49,6 +49,26 @@ travel over the network.
   - **The token is a reference** (`keychain:`, `store:`, `file:`), never a value. Ask the owner to
     put the secret in the keychain or the store themselves.
   - **Never ask for a token's value**, and never echo, cat or print one.
+- **Add an SSO/OAuth-protected MCP endpoint (0.2.0):**
+  `lotr add-mcp jira@personal --endpoint https://<mcp-host>/mcp --identity "<you> @ <host>" --auth-ref file:/Users/<you>/.claude/<client>-tokens.json#access_token --refresh-cmd "<the MCP client's own refresh helper>"`.
+  - For systems that answer only to an SSO/OAuth token. LOTR does not run an OAuth flow of its
+    own: the MCP client that already signed in keeps its token in an owner-only file, and LOTR
+    reads it **by reference** (`file:<path>#<json-field>`) and sends it only as the
+    `Authorization` header. It never logs, returns or prints it.
+  - On HTTP 401 LOTR runs `--refresh-cmd` (no shell; its output is discarded, so a helper that
+    prints the token cannot leak it), re-reads the reference and retries **once**. A refresh
+    that does not help is `auth_failed`, naming the reference, never the token.
+  - **Why this is not a new exposure:** everything runs on one machine. The token is already in
+    a mode-600 file that local processes read; LOTR adds no copy of it, and the registry holds
+    only the reference (a literal token is refused).
+  - `add-mcp` lists the server's tools at once (`initialize` + `tools/list`), so `find` works
+    immediately. Each tool's tier comes from its annotations (`readOnlyHint` = read,
+    `destructiveHint` = consent), else its name (`get_`/`list_`/`search` read; `delete_`/
+    `send_`/`merge_` consent), else write. Re-run `add-mcp` to refresh the list.
+  - Transport `http` (streamable HTTP, JSON or SSE replies). stdio servers and the legacy `sse`
+    transport are not supported yet.
+  - **A work endpoint from a personal gateway needs the owner's ruling first** (zones never
+    mix): ask before registering one.
 - **Enroll a client machine (hub):**
   `lotr enroll mbp-shaven --machine "MacBook Pro" --max-tier write --secret-out <path>`.
   - The secret goes to a mode-600 file, never to the screen. The owner moves it into that

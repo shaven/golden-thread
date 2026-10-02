@@ -19,6 +19,7 @@ from pathlib import Path
 from . import audit, confirm as confirm_mod, policy, profiles, recipes as recipes_mod, shaping
 from .config import load_settings
 from .conn_http import HttpConnection
+from .conn_mcp import McpConnection
 from .errors import GatewayError
 from .index import Index, build_docs
 from .registry import Registry
@@ -174,7 +175,7 @@ class Engine:
                 conn = self.registry.connection(connection)
                 identity = conn.get("identity")
                 client = self._client(client_id)
-                prof = profiles.get(conn["profile"])
+                prof = profiles.for_connection(conn)
                 recipe = self._recipe(op, conn)
                 if recipe:
                     steps = recipes_mod.expand(recipe, conn, args)
@@ -204,7 +205,10 @@ class Engine:
                     text = confirm_mod.describe(connection, identity, op, args,
                                                 client_id or LOCAL_CLIENT)
                     confirm_mod.confirm(mode, text, dialog=self._dialog)
-                http = self._connection_factory(
+                factory = self._connection_factory
+                if conn.get("kind") == "mcp" and factory is HttpConnection:
+                    factory = McpConnection           # 0.2.0: an SSO/OAuth MCP downstream
+                http = factory(
                     conn, prof, **({"secret_resolver": self._secret_resolver}
                                    if self._secret_resolver else {}))
                 result = None

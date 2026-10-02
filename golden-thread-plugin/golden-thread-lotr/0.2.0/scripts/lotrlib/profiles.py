@@ -254,6 +254,50 @@ PROFILES = {
 }
 
 
+# -- MCP downstream (0.2.0) --------------------------------------------------------------------
+# An `mcp` connection has no hand-written profile: its ops are the downstream server's own tools,
+# cached at `add-mcp` (connection["tools"]). The tier comes from the tool's MCP annotations when
+# it has them, else from its name, else it is a write -- the gateway decides, never the caller.
+MCP_PROFILE = "mcp"
+_MCP_READ = ("get_", "list_", "search", "find_", "read_", "fetch_", "query", "describe_", "show_")
+_MCP_CONSENT = ("delete_", "remove_", "send_", "merge_", "drop_", "destroy_", "purge_")
+
+
+def mcp_tier(tool):
+    ann = tool.get("annotations") if isinstance(tool.get("annotations"), dict) else {}
+    if ann.get("destructiveHint") is True:
+        return "consent"
+    if ann.get("readOnlyHint") is True:
+        return "read"
+    name = str(tool.get("name") or "").lower()
+    if name.startswith(_MCP_CONSENT):
+        return "consent"
+    if name.startswith(_MCP_READ):
+        return "read"
+    return "write"
+
+
+def mcp_profile(conn):
+    ops = []
+    for t in conn.get("tools") or []:
+        if not isinstance(t, dict) or not t.get("name"):
+            continue
+        props = ((t.get("inputSchema") or {}).get("properties") or {})
+        ops.append(_op(t["name"], "MCP", t["name"],
+                       (t.get("description") or t["name"]).strip().split("\n")[0][:200],
+                       params={k: (v or {}).get("description", "") if isinstance(v, dict) else ""
+                               for k, v in props.items()},
+                       tags=["mcp"], tier=mcp_tier(t)))
+    return {"name": MCP_PROFILE, "title": "MCP endpoint", "ops": ops, "noise_keys": ()}
+
+
+def for_connection(conn):
+    """The profile a connection's ops come from: its cached MCP tools, or a named profile."""
+    if conn.get("kind") == "mcp":
+        return mcp_profile(conn)
+    return get(conn.get("profile"))
+
+
 def get(name):
     """The profile named `name` (a copy, so callers cannot edit the tables)."""
     if name not in PROFILES:

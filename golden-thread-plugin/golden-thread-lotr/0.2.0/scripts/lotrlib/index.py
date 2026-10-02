@@ -109,7 +109,8 @@ def build_docs(connections, recipes):
             continue
         cid = conn["id"]
         try:
-            prof = profiles_mod.PROFILES[conn.get("profile")]
+            prof = (profiles_mod.mcp_profile(conn) if conn.get("kind") == "mcp"
+                    else profiles_mod.PROFILES[conn.get("profile")])
         except KeyError:
             raise GatewayError("unknown_profile", f"connection {cid} names unknown profile "
                                                   f"{conn.get('profile')!r}")

@@ -13,6 +13,8 @@ Admin plane (edits the files under the home directly; refused in mode client):
     init --zone Z --mode local|hub|client
     add-http ID --profile P --base-url U --identity S --auth bearer|basic|header|none
              [--token-ref R] [--user U] [--header H] [--description D] [--trust T]
+    add-mcp  ID --endpoint URL --identity S [--auth-ref file:/abs/tokens.json#access_token]
+             [--refresh-cmd "<the MCP client's refresh helper>"]   (0.2.0: SSO/OAuth MCP)
     enroll CLIENT --machine M [--allow GLOB ...] [--max-tier T] --secret-out PATH
     revoke CLIENT
     connections
@@ -174,6 +176,32 @@ def cmd_add_http(ns):
     return {"ok": True, "added": ns.id}
 
 
+def cmd_add_mcp(ns):
+    """Register an SSO/OAuth-protected MCP endpoint (0.2.0): the token by REF, refreshed by the
+    MCP client's own helper; its tools discovered now and cached, so find works at once."""
+    import shlex
+    from lotrlib.conn_mcp import McpConnection
+    from lotrlib.registry import validate_connection
+    home = _admin_home(ns)
+    _, reg = _registry(home)
+    host = urlparse(ns.endpoint).hostname
+    entry = {
+        "id": ns.id, "identity": ns.identity, "zone": reg.zone, "kind": "mcp",
+        "profile": "mcp", "description": ns.description or "",
+        "endpoint": ns.endpoint, "transport": ns.transport,
+        "auth": {"scheme": "bearer" if ns.auth_ref else "none", "token_ref": ns.auth_ref},
+        "refresh_cmd": shlex.split(ns.refresh_cmd) if ns.refresh_cmd else None,
+        "network": {"hosts": [host] if host else []}, "trust": ns.trust,
+        "policy": {"deny": [], "consent": [], "write": [], "read": []}, "tools": [],
+        "enabled": True,
+    }
+    validate_connection(entry, reg.zone)       # before any network: a literal token stops here
+    entry["tools"] = McpConnection(entry, None).discover()
+    reg.add_connection(entry)
+    reg.save(home / "registry.json")
+    return {"ok": True, "added": ns.id, "tools": len(entry["tools"])}
+
+
 def cmd_enroll(ns):
     home = _admin_home(ns)
     out = Path(ns.secret_out).expanduser()
@@ -269,6 +297,18 @@ def build_parser():
     a.add_argument("--description")
     a.add_argument("--trust", default="T0", choices=("T0", "T1", "T2"))
     a.set_defaults(fn=cmd_add_http)
+
+    m = sub.add_parser("add-mcp")
+    m.add_argument("id")
+    m.add_argument("--endpoint", required=True)
+    m.add_argument("--transport", default="http", choices=("http",))
+    m.add_argument("--identity", required=True)
+    m.add_argument("--auth-ref", help="a secret REF to the bearer token, e.g. "
+                                      "file:/abs/tokens.json#access_token -- never the token")
+    m.add_argument("--refresh-cmd", help="the MCP client's own refresh helper, run on HTTP 401")
+    m.add_argument("--description")
+    m.add_argument("--trust", default="T1", choices=("T0", "T1", "T2"))
+    m.set_defaults(fn=cmd_add_mcp)
 
     e = sub.add_parser("enroll")
     e.add_argument("client")
