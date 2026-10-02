@@ -7,6 +7,9 @@ is a demotion, which moves a note somewhere cheaper and leaves a pointer behind.
   gt_optimize.py --vault V [--project SLUG] [--json]        report
   gt_optimize.py --vault V --demote <path>                  move one note down a tier
   gt_optimize.py --vault V --demote <path> --apply          ... and actually move it
+  gt_optimize.py --execution --vault V [--project P] [--repo R] [--apply ID]
+                                                            how work EXECUTES (0.18.0):
+                                                            gt_optimize_exec.py, see there
 
 THE ACTION IS DEMOTION, NOT REMOVAL
 
@@ -389,6 +392,12 @@ def analyse(vault, project=None):
 
 
 def main(argv=None):
+    # 0.18.0: the execution member (timings, metrics, settings) lives in its own module and is
+    # reached through this one flag, so the context optimizer's options stay as they were.
+    argv = sys.argv[1:] if argv is None else list(argv)
+    if "--execution" in argv:
+        import gt_optimize_exec
+        return gt_optimize_exec.main([a for a in argv if a != "--execution"])
     ap = argparse.ArgumentParser(description=__doc__.split("\n")[0])
     ap.add_argument("--vault", required=True, help="the vault to analyse (never inferred)")
     ap.add_argument("--project", help="limit to one project slug")
@@ -400,6 +409,9 @@ def main(argv=None):
     ap.add_argument("--apply", action="store_true",
                     help="with --demote: actually move it. Reporting never writes.")
     ap.add_argument("--json", action="store_true")
+    ap.add_argument("--execution", action="store_true",
+                    help="report how work EXECUTES instead (gt_optimize_exec.py, 0.18.0)")
+    ap.add_argument("--repo", help="with --execution: also look at this repo's scripts")
     args = ap.parse_args(argv)
 
     if args.demote:

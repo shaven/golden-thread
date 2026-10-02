@@ -54,6 +54,12 @@ COVERED = {
     # 0.17.10: queued vault writes -- submitting writes the queue, draining writes the vault
     "scripts/gt_write_queue.py": (),
     "scripts/gt_broker.py": ("drain",),
+    # 0.18.0: execution metrics live in the vault's project folders; the pipeline flag queues
+    # README writes; the staged ingest pipeline writes packets and drafts.
+    "scripts/gt_metrics.py": ("record", "time", "mark"),
+    "scripts/gt_pipeline.py": ("flag", "init", "add", "set", "remove", "render"),
+    "scripts/gt_ingest_pipeline.py": ("survey", "packet", "fan-in", "reconcile", "draft",
+                                      "promote-scan", "promote-plan"),
 }
 
 EXEMPT = {

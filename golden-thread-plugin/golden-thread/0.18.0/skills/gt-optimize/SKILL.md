@@ -217,3 +217,30 @@ walk straight past the guard. These are the ones the code performs:
   with the reasoning recorded.
 - Only files this tool is *for* are looked at — memory, global-memory, core-rules, CLAUDE.md and
   the living project docs. Generated files, `Sources/` and recorded artifacts are never reported.
+
+## Execution: how work runs, not what it costs in context (0.18.0)
+
+```bash
+python3 <base_dir>/../../scripts/gt_optimize.py --execution --vault "<vault>" [--project SLUG] [--repo <code root>] [--json]
+```
+
+Reads what was MEASURED — the execution rows `gt_metrics.py` records for every project (tests,
+release-pipeline steps, gt skills), the test runner's per-unit timings, the parallel profile and
+the execution settings, and with `--repo` the repo's shell scripts — and reports, ranked by
+measured cost with the expected saving: serial bottlenecks, redundant re-runs, the full suite run
+where a scoped run would do, slow steps and slow test units, repeated installs, regressions
+against each process's own rolling baseline (naming what changed since), a much cheaper peer
+process in another project (and what it does differently), defaults never revisited, and
+hand-written step scripts a recipe could generate (`gt_recipe.py`). Findings about gt's own
+development are labelled `gt-development`; every other project's are about its own processes.
+
+Reporting writes nothing. To apply one, **ask the owner first**, then:
+
+```bash
+python3 <base_dir>/../../scripts/gt_optimize.py --execution --vault "<vault>" --apply <ID> [--dry-run]
+```
+
+Only a finding with an exact change (a setting, a measurement) can be applied; it is recorded as
+a change marker with its rollback, and `gt_metrics.py verify --process <P> --project <SLUG>`
+later reports the measured before/after against the baseline. A change that did not beat it is
+reported as such, with the rollback offered.
