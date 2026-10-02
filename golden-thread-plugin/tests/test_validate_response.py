@@ -44,6 +44,20 @@ def say(*texts, tool=False, string=False):
     return {"type": "assistant", "message": {"role": "assistant", "content": blocks}}
 
 
+def injected(stamp=TS):
+    """What Claude Code records after a prompt when inject_core_rules.sh ran: the time it gave."""
+    return {"type": "attachment", "attachment": {
+        "type": "hook_additional_context", "hookEvent": "UserPromptSubmit",
+        "hookName": "UserPromptSubmit", "content": ["Current date and time: %s" % stamp]}}
+
+
+def _is_prompt(e):
+    c = (e.get("message") or {}).get("content")
+    return e.get("type") == "user" and not (
+        isinstance(c, list) and c and all(isinstance(b, dict) and b.get("type") == "tool_result"
+                                          for b in c))
+
+
 def tool_only():
     return {"type": "assistant", "message": {"role": "assistant", "content": [
         {"type": "tool_use", "id": "t1", "name": "Bash", "input": {"command": "ls"}}]}}
@@ -99,7 +113,11 @@ class ValidateResponseTest(Sandbox):
         self.assertOk(proc, "the Stop hook must always exit 0 (block is signalled in JSON)")
         return proc
 
-    def stop(self, entries, **payload):
+    def stop(self, entries, inject=True, **payload):
+        # A real transcript carries the injected time right after each prompt whenever the
+        # reminder hook is wired; inject=False is a turn that was never given one (0.19.0).
+        if inject:
+            entries = [x for e in entries for x in ([e, injected()] if _is_prompt(e) else [e])]
         self.transcript.write_text("".join(json.dumps(e) + "\n" for e in entries),
                                    encoding="utf-8")
         body = {"session_id": "s1", "hook_event_name": "Stop",
@@ -178,6 +196,24 @@ class ValidateResponseTest(Sandbox):
         ctx = json.loads(inj.stdout)["hookSpecificOutput"]["additionalContext"]
         stamp = re.match(r"^Current date and time: (.+)$", ctx, flags=re.M).group(1)
         self.assertAllowed(self.stop([user("hi"), say(f"{stamp} — reply")]))
+
+    # -- a turn never given the time (0.19.0) -----------------------------------------
+    def test_a_turn_with_no_injected_time_is_not_held_to_the_rule(self):
+        """install.sh wires this Stop hook partway through the session that runs it. The
+        prompt of that turn went out before inject_core_rules.sh was wired, so the reply had
+        no time to show -- and was blocked for a rule it was never given."""
+        self.assertAllowed(self.stop([user("run the installer"), say("Installed.")],
+                                     inject=False))
+
+    def test_an_earlier_turns_injection_does_not_count_for_this_one(self):
+        entries = [user("first"), injected(), say(f"{TS} — ok"), user("second"),
+                   say("no stamp")]
+        self.assertAllowed(self.stop(entries, inject=False))
+
+    def test_secrets_are_still_blocked_in_a_turn_with_no_injected_time(self):
+        leak = next(iter(LEAKS.values()))
+        self.assertBlocked(self.stop([user("hi"), say("here: " + leak)], inject=False),
+                           "core_no_secrets_in_transcript")
 
     # -- fail open ----------------------------------------------------------------
     def test_loop_guard_never_blocks_twice(self):

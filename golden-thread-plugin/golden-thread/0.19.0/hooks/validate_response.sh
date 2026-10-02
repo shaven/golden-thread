@@ -79,14 +79,28 @@ for i in range(len(entries) - 1, -1, -1):
 
 # The reply "begins" with the FIRST text the model emitted this turn — a turn may be
 # text -> tool_use -> more text, and the timestamp belongs at the very start.
-first = ""
-for e in entries[start + 1:]:
+first, first_at = "", len(entries)
+for j in range(start + 1, len(entries)):
+    e = entries[j]
     if e.get("type") != "assistant":
         continue
     t = text_of(e).strip()
     if t:
-        first = t
+        first, first_at = t, j
         break
+
+# Was this turn GIVEN the time? (0.19.0) Claude Code records inject_core_rules.sh's output as a
+# UserPromptSubmit `hook_additional_context` attachment beside the prompt. install.sh wires this
+# Stop hook partway through the session that runs it, so the prompt of that turn went out
+# before the reminder was wired: the reply had no time to show and was blocked for a rule it
+# was never handed. The search runs from the end of the previous turn to the reply's first text.
+prev_end = max([i for i in range(start) if entries[i].get("type") == "assistant"] or [-1])
+given_time = any(
+    e.get("type") == "attachment"
+    and (e.get("attachment") or {}).get("type") == "hook_additional_context"
+    and (e.get("attachment") or {}).get("hookEvent") == "UserPromptSubmit"
+    and "Current date and time" in json.dumps((e.get("attachment") or {}).get("content"))
+    for e in entries[prev_end + 1:first_at])
 
 if not first:
     sys.exit(ALLOW)  # tool-only turn, nothing user-visible to check
@@ -190,6 +204,9 @@ if leaks:
         ),
     }))
     sys.exit(ALLOW)
+
+if not given_time:
+    sys.exit(ALLOW)   # never handed a time this turn: nothing to hold the reply to
 
 # Accept a leading timestamp with common markdown wrappers: **2026-08-16 15:32 CDT**,
 # `## 2026-08-16 15:32`, plain, etc. Requires date + HH:MM.
