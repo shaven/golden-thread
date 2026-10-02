@@ -49,7 +49,7 @@ real damage when missed. Be specific — a named file, a named failure.
 ## Deeper context, if this machine has the vault
 
 If `~/.claude/vault-config.json` exists, read `vault_path` from it; the notes are at
-`Projects/{{SLUG}}/`. **If it is absent, skip this section — everything above stands
+`{{PROJECT_PATH}}/`. **If it is absent, skip this section — everything above stands
 on its own.**
 
 | Question | File |

@@ -1474,6 +1474,19 @@ Platform wiki:
     update_claude_md(global_claude, gt_section)
 
 
+def _resolve_parent(vault: Path, parent: str) -> str:
+    """`parent`'s path under Projects/, via the vault tools' shared resolver; the name
+    itself when it resolves to nothing (a parent created on the fly, as before)."""
+    tools = str(TEMPLATES_DIR / "tools")
+    if tools not in sys.path:
+        sys.path.insert(0, tools)
+    try:
+        import gt_spool
+        return gt_spool.resolve_project(vault, parent)
+    except Exception:
+        return parent
+
+
 def cmd_create_project(vault: Path, slug: str, title: str = None, tags: list = None,
                        parent: str = None, runbook: bool = False, project_dir=None,
                        topology: str = None, repo_url: str = None, fleet: str = None,
@@ -1483,8 +1496,13 @@ def cmd_create_project(vault: Path, slug: str, title: str = None, tags: list = N
     tags = tags or []
 
     if parent:
-        proj = vault / "Projects" / parent / slug
-        master_index = vault / "Projects" / parent / "README.md"
+        # The parent is a NAME too: resolved the way gt_adr resolves a project
+        # (gt_spool.resolve_project, 0.18.0), so `--parent child-of-x` lands under
+        # Projects/x/child-of-x/ rather than in a new top-level folder. A parent that
+        # does not exist yet keeps the old behaviour: it is created at Projects/<parent>/.
+        parent_rel = _resolve_parent(vault, parent)
+        proj = vault / "Projects" / parent_rel / slug
+        master_index = vault / "Projects" / parent_rel / "README.md"
     else:
         proj = vault / "Projects" / slug
         master_index = vault / "Projects" / "README.md"
@@ -1508,9 +1526,14 @@ def cmd_create_project(vault: Path, slug: str, title: str = None, tags: list = N
     # CLAUDE.md — the outward axis. Unlike every other file here, this one is
     # written for a reader who has never seen the vault, and is committed to the
     # project's repo root so any session working in that code picks it up.
+    # PROJECT_PATH, not `Projects/{{SLUG}}`: for a sub-project the slug is only the last
+    # segment of the address, and until 0.18.0 every sub-project's CLAUDE.md pointed at a
+    # `Projects/<slug>/` that did not exist -- read by exactly the reader least able to
+    # notice. The path is the folder just created, so it cannot disagree with it.
     seed_template("project-CLAUDE.md", proj / "CLAUDE.md", {
         "TITLE": display_title,
         "SLUG": slug,
+        "PROJECT_PATH": proj.relative_to(vault).as_posix(),
     })
 
     # source.md — where the code lives and how it is deployed.

@@ -477,3 +477,101 @@ def is_generated(path):
             encoding="utf-8", errors="replace")[:600]
     except OSError:
         return False
+
+
+# -- project slug -> folder ---------------------------------------------------------
+#
+# A slug is a NAME, not an address. For a top-level project the two coincide --
+# `Projects/<slug>/` -- and every tool that joined `Projects/` with the slug was right by
+# accident. A sub-project created with `create-project --parent P` lives at
+# `Projects/P/<slug>/`, so the same join pointed at a folder that does not exist: on
+# 2026-09-15 `gt_adr.py merge gt-extensions` reported "updated" while writing a new
+# top-level `Projects/gt-extensions/decisions.md` beside nothing, and the sub-project's
+# own decisions.md stayed an empty stub. ONE resolver, here, so the class of bug is fixed
+# once rather than per tool (0.18.0).
+
+class ProjectNotFound(ValueError):
+    """The name matches no project folder (or more than one). The message names it."""
+
+
+# Folders under Projects/ that hold project MACHINERY with many files and never a project:
+# walking into them finds nothing and costs a scan of every spool file. Deliberately short --
+# a name listed here can never be a sub-project's slug.
+_NOT_PROJECTS = {"spool", "memory", "sessions"}
+_MAX_DEPTH = 4
+
+
+def _readme_slug(readme):
+    """The `slug:` in a project README's frontmatter, or None."""
+    try:
+        head = Path(readme).read_text(encoding="utf-8", errors="replace")[:2000]
+    except OSError:
+        return None
+    if not head.startswith("---"):
+        return None
+    end = head.find("\n---", 3)
+    m = re.search(r"^slug:\s*['\"]?([^'\"\n]+?)['\"]?\s*$", head[3:end if end > 0 else None], re.M)
+    return m.group(1).strip() if m else None
+
+
+def project_dirs(vault):
+    """{relative path under Projects/: folder} for every folder holding a README.md."""
+    root = Path(vault) / "Projects"
+    out = {}
+    if not root.is_dir():
+        return out
+    for cur, dirs, files in os.walk(str(root)):
+        rel = os.path.relpath(cur, str(root))
+        depth = 0 if rel == "." else rel.count(os.sep) + 1
+        dirs[:] = sorted(d for d in dirs if not d.startswith(".") and d not in _NOT_PROJECTS
+                         and depth < _MAX_DEPTH)
+        if rel != "." and "README.md" in files:
+            out[rel.replace(os.sep, "/")] = Path(cur)
+    return out
+
+
+def resolve_project(vault, name, allow_unregistered=False):
+    """The path under `Projects/` of the project called `name`, e.g. `parent/child`.
+
+    `name` may be a bare slug or already a path (`parent/child`). In order:
+
+      1. `Projects/<name>/README.md` exists -> `name`, exactly as before 0.18.0, so a
+         top-level project and every caller that already passes `parent/child` are
+         unchanged;
+      2. exactly one project folder whose NAME, or whose README `slug:`, is `name` ->
+         that folder's path. Two -> ProjectNotFound naming both: guessing between two
+         projects is how an ADR lands in the wrong one;
+      3. with allow_unregistered, an existing `Projects/<name>/` folder with no README.
+         Only `migrate` asks for this: create-project runs it on a folder whose README
+         is written a moment later, and merge-project on a staging copy that has none.
+         It never creates anything, so it cannot invent a project.
+
+    Anything else raises ProjectNotFound naming `name`. A folder with no README.md is
+    never resolved by step 2: that is exactly what the bug left behind, and finding it
+    again would make the stray folder self-sustaining.
+    """
+    name = str(name).strip().strip("/")
+    projects = Path(vault) / "Projects"
+    if not name or ".." in Path(name).parts:
+        raise ProjectNotFound("not a project name: %r" % name)
+    if (projects / name / "README.md").is_file():
+        return name
+    base = name.rsplit("/", 1)[-1]
+    hits = sorted(rel for rel, d in project_dirs(vault).items()
+                  if rel.rsplit("/", 1)[-1] == base or _readme_slug(d / "README.md") == name)
+    if "/" in name:
+        hits = [h for h in hits if h.endswith("/" + name) or h == name]
+    if len(hits) == 1:
+        return hits[0]
+    if len(hits) > 1:
+        raise ProjectNotFound("%r matches more than one project: %s -- pass the path "
+                              "under Projects/ instead" % (name, ", ".join(hits)))
+    if allow_unregistered and (projects / name).is_dir():
+        return name
+    raise ProjectNotFound("no project called %r: no Projects/**/README.md has that folder "
+                          "name or slug (nothing was created)" % name)
+
+
+def project_path(vault, name, allow_unregistered=False):
+    """The folder of the project called `name` (see resolve_project)."""
+    return Path(vault) / "Projects" / resolve_project(vault, name, allow_unregistered)
