@@ -147,3 +147,39 @@ fails these silently.
 
 Fix by re-pointing the link, or by leaving a tombstone README at the old slug (which
 is what `merge-project` does automatically).
+
+## Review-queue checks (0.18.0)
+
+Four checks that file **questions for the owner** into `review-queue.md`, not defects. Each is
+suppressible in `lint-declines.md`; none writes anything but the queue.
+
+**`adr-expires`** — an ADR declares `Expires when: <condition>` (listed at any age, with the
+condition text) or `Expires: YYYY-MM-DD` (listed once the date has passed). A superseded ADR is
+not listed. Ask whether the condition has been met: if so, write the replacement with
+`gt_adr.py --vault "<vault>" allocate <project> --supersedes N`; if it still holds, suppress that ADR with
+`suppress: Projects/<p>/decisions.md:ADR-N`.
+
+**`bundled-concept`** — a Knowledge page with 4+ `## ` headings of which **at most 2** share a
+keyword (prefix match, 4+ letters) with its `title`/`tags`. Exactly two is treated as bundled;
+three or more is coherent. `category: decision` pages are exempt. Never propose a specific
+split — show the heading list and ask whether to split or suppress the page.
+
+**`decision-candidate`** — a line of a project's `design.md` or `research.md` carrying a
+decision-signal phrase. Headings, fenced code and HTML comments are skipped. The finding has
+the line number, the phrase, the sentence and a proposed ADR title. Convert it with
+the allocate command the queue entry prints, or decline that one line with the
+`suppress: <path>:#<hash>` it prints (survives the line moving; `:L<n>` by number also works).
+Never write the ADR without the user. Default phrases (case-insensitive; `...` matches up to
+60 characters):
+
+> we chose · we decided · this is intentional · don't change this · do not change this ·
+> deliberately · by design · we use ... instead of · this workaround · existing behavior is
+> correct · existing behaviour is correct · trade-off we accepted
+
+Change them without code: `gt_settings.py set decision_signals "+we went with;-deliberately"`
+(`+`/bare adds, `-` removes, `default` restores, `off` silences the check).
+
+**`memory-entity-orphan`** — a memory file names something 3+ times that its `entities:`
+frontmatter does not list: a name another memory file declares (anywhere), or — only in a
+project where some memory file already uses `entities:` — an ALLCAPS or backticked identifier.
+Propose the `entities:` line; suppress one name with `suppress: <path>:<name>`.
