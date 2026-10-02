@@ -1,0 +1,106 @@
+{
+ "files": {
+  "scripts/lotr.py": {
+   "bytes": 10938,
+   "sha256": "fe4f68856765e16c3ff7ecac2167548dc13e03e35a42f622b18d8cb96fa838e4"
+  },
+  "scripts/lotr_mcp.py": {
+   "bytes": 11070,
+   "sha256": "550668cbdc7feab0d194db0fcb71b0e644548e809c5b674a7ea00d40de4330ab"
+  },
+  "scripts/lotrd.py": {
+   "bytes": 4253,
+   "sha256": "e63f55fef96ad3a211755a092dcaf2b6ba90828330b50d4399d775c58d41ab2c"
+  },
+  "scripts/lotrlib/__init__.py": {
+   "bytes": 0,
+   "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  "scripts/lotrlib/audit.py": {
+   "bytes": 2989,
+   "sha256": "a1ec61325eec271c95a90bae812ca2ba1599141fdacb2cff41c1c1d3bb602b15"
+  },
+  "scripts/lotrlib/client.py": {
+   "bytes": 7565,
+   "sha256": "0142111f11d3a49beb310af4d2d007e0026ee6a485eb1f6b53ec66d3338b2206"
+  },
+  "scripts/lotrlib/config.py": {
+   "bytes": 4531,
+   "sha256": "826dd524886bc3553e6e1303f5e574a14dd0326b9c2a63f1456bcc770ee6d43d"
+  },
+  "scripts/lotrlib/confirm.py": {
+   "bytes": 3661,
+   "sha256": "58a7b324ac1f3aad8ca50ff0c3f4e4b25196276d8fe23f0a5ca603a22719c1d8"
+  },
+  "scripts/lotrlib/conn_http.py": {
+   "bytes": 15865,
+   "sha256": "a2c7754397953fdcabe1b042c3b723be91f04a18351473c8ea4c37c942a258b0"
+  },
+  "scripts/lotrlib/engine.py": {
+   "bytes": 14151,
+   "sha256": "a0c1b579ef3ea83523a0ed941c6d749df1c3f22c03d05b6dcd33c2fb6e8d8c56"
+  },
+  "scripts/lotrlib/errors.py": {
+   "bytes": 632,
+   "sha256": "0351ca471deeb379362fd64e5599e6616db134324260b3bb4c45ab3c93d4bf3f"
+  },
+  "scripts/lotrlib/index.py": {
+   "bytes": 5953,
+   "sha256": "e88f18a38ec4e0c257a969079a67be6c416ee8368129593b36b90824e6bd723a"
+  },
+  "scripts/lotrlib/policy.py": {
+   "bytes": 3199,
+   "sha256": "26d3ff0981c1158da1e7e7d74a7b4bf405bce539503730607b3bb464ff727f29"
+  },
+  "scripts/lotrlib/profiles.py": {
+   "bytes": 17754,
+   "sha256": "411f273a35b2033dea96aa6356ad79df1a1261276ff7f2bd9b4ea1579d239992"
+  },
+  "scripts/lotrlib/recipes.py": {
+   "bytes": 6670,
+   "sha256": "5d2f47f6f03fe953a3571c94ac467d7ba0a04d534d9d7d3d38edd5775018ca85"
+  },
+  "scripts/lotrlib/registry.py": {
+   "bytes": 12101,
+   "sha256": "61da99213938e9f976d42feb56b69d63c2f9d86a86f1ab7a5bb91529e11ca15f"
+  },
+  "scripts/lotrlib/secrets.py": {
+   "bytes": 8415,
+   "sha256": "ebb04b5acaf592b0279342b37be8dd332724c168aac8c145e769b1024df5e4dd"
+  },
+  "scripts/lotrlib/server.py": {
+   "bytes": 15744,
+   "sha256": "ee5edd90e5ea37ff84d18908ab8da7eaff7f844bdbbc359716cf57e60ab7007f"
+  },
+  "scripts/lotrlib/shaping.py": {
+   "bytes": 8635,
+   "sha256": "57cf7964ef49d118d84b64f22d24e0cf3bd2ae18da6362f83760b90c5d0b95b3"
+  },
+  "scripts/lotrlib/util.py": {
+   "bytes": 1544,
+   "sha256": "c385e395ed9b648293bc22eac57ca3b8cc2fdf6e435070a562a468d165a90562"
+  },
+  "scripts/mcp.py": {
+   "bytes": 437,
+   "sha256": "218338276a970641c1592e7e80789d5a52c71c31859b24e77982d221e1b4974c"
+  },
+  "templates/recipes/github.my_open_prs.json": {
+   "bytes": 860,
+   "sha256": "f3305301926164e2aa5cf1d591036c94bc4e887e9517398e545ad40f301e2477"
+  },
+  "templates/recipes/github.pr_status.json": {
+   "bytes": 800,
+   "sha256": "767550399bd212085d0296a02dd256cc6a3a43952c5d609dc5e3686d38749647"
+  },
+  "templates/recipes/jira.my_open_issues.json": {
+   "bytes": 986,
+   "sha256": "27761fbb27c5644162532d9c4197e694afabc86f8a2b2e9857e16e960feed4ab"
+  },
+  "templates/recipes/m365.today.json": {
+   "bytes": 772,
+   "sha256": "0a5dc06c80759b3c11ce748a9cfea2213d37f4138bb4e97010ee01db27b6ea66"
+  }
+ },
+ "generated": "2026-10-01T20:07:35",
+ "version": "0.1.1"
+}

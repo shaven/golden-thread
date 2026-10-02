@@ -1,0 +1,17 @@
+{
+  "name": "gt-lotr",
+  "version": "0.1.1",
+  "description": "Golden Thread LOTR: one gateway to rule them all. A small, fixed MCP surface (find, call_read, call_write, call_consent) in front of any number of downstream connections -- GitHub, Jira, Microsoft Graph and other REST APIs -- with a registry that says who talks to whom, as whom, and from which machine.",
+  "author": {
+    "name": "Stacy Haven",
+    "email": "shaven@shavenconsulting.com"
+  },
+  "mcpServers": {
+    "gt-lotr": {
+      "command": "python3",
+      "args": [
+        "${CLAUDE_PLUGIN_ROOT}/scripts/lotr_mcp.py"
+      ]
+    }
+  }
+}

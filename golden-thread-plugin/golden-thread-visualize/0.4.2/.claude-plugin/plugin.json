@@ -1,0 +1,9 @@
+{
+  "name": "gt-visualize",
+  "version": "0.4.2",
+  "description": "Golden Thread Visualize: draw a repository as an interactive 3D code city -- directories as districts, files as buildings, height by lines, colour by language or churn -- as one self-contained, offline HTML page (three.js inlined), with a --redact mode for anything shared.",
+  "author": {
+    "name": "Stacy Haven",
+    "email": "shaven@shavenconsulting.com"
+  }
+}
