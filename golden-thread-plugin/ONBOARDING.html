@@ -104,10 +104,10 @@
 </style></head><body><h1 id="golden-thread-getting-started">Golden Thread — Getting Started</h1>
 <blockquote>
 <p><strong>Reader:</strong> the first thirty minutes — the happy path only
-<strong>Claims last checked against the code:</strong> 2026-09-28 — see <em>The documents, and what belongs in each</em> in <a href="../CLAUDE.md"><code>CLAUDE.md</code></a>.</p>
+<strong>Claims last checked against the code:</strong> 2026-10-01 (gt 0.18.0) — see <em>The documents, and what belongs in each</em> in <a href="../CLAUDE.md"><code>CLAUDE.md</code></a>.</p>
 </blockquote>
 <p>A guided walkthrough for your first session. Six steps, ~15 minutes.</p>
-<p><strong>Requirements:</strong> Python 3.8+, Claude Code installed. Written against <strong>gt v0.17.11</strong>.</p>
+<p><strong>Requirements:</strong> Python 3.8+, Claude Code installed. Written against <strong>gt v0.18.0</strong>.</p>
 <hr />
 <h2 id="step-1-install">Step 1 — Install</h2>
 <p>Unzip the plugin and run the installer:</p>
@@ -166,7 +166,7 @@ want your hand edits committed on a timer alongside Claude's.</p>
 <pre><code>/gt:gt-open &lt;project-name&gt;
 </code></pre>
 <p>This reads your project docs in order — idea → research → decisions → design → spec → runbook — reads CONVENTIONS.md and PROTOCOL.md once per session, then reads the session memory index and stops. It summarizes where things stand and asks where to pick up.</p>
-<p><strong>Why it stops at the index:</strong> a project with 70 notes would otherwise dump 2,000 lines into context. <code>gt-open</code> reads the one-line index and loads individual files only when you need them. If <code>research.md</code> exceeds ~200 lines, it reads headings first, then only the relevant sections.</p>
+<p><strong>Why it stops at the index:</strong> a project with 70 notes would otherwise dump 2,000 lines into context. <code>gt-open</code> reads the one-line index and loads individual files only when you need them. If <code>research.md</code> exceeds ~200 lines, it reads its one-line-per-entry digest (<code>research-digest.md</code>, kept current by <code>/gt:gt-work</code>) or, failing that, the headings, then only the relevant sections. Come back after a week away and it opens with a short generated catch-up first.</p>
 <hr />
 <h2 id="step-5-write-back-at-the-end-of-each-session">Step 5 — Write back at the end of each session</h2>
 <pre><code>/gt:gt-work

@@ -1,11 +1,11 @@
 # Golden Thread — Getting Started
 
 > **Reader:** the first thirty minutes — the happy path only
-> **Claims last checked against the code:** 2026-09-28 — see *The documents, and what belongs in each* in [`CLAUDE.md`](../CLAUDE.md).
+> **Claims last checked against the code:** 2026-10-01 (gt 0.18.0) — see *The documents, and what belongs in each* in [`CLAUDE.md`](../CLAUDE.md).
 
 A guided walkthrough for your first session. Six steps, ~15 minutes.
 
-**Requirements:** Python 3.8+, Claude Code installed. Written against **gt v0.17.11**.
+**Requirements:** Python 3.8+, Claude Code installed. Written against **gt v0.18.0**.
 
 ---
 
@@ -96,7 +96,7 @@ This scans your existing notes and memory files and imports them into the vault 
 
 This reads your project docs in order — idea → research → decisions → design → spec → runbook — reads CONVENTIONS.md and PROTOCOL.md once per session, then reads the session memory index and stops. It summarizes where things stand and asks where to pick up.
 
-**Why it stops at the index:** a project with 70 notes would otherwise dump 2,000 lines into context. `gt-open` reads the one-line index and loads individual files only when you need them. If `research.md` exceeds ~200 lines, it reads headings first, then only the relevant sections.
+**Why it stops at the index:** a project with 70 notes would otherwise dump 2,000 lines into context. `gt-open` reads the one-line index and loads individual files only when you need them. If `research.md` exceeds ~200 lines, it reads its one-line-per-entry digest (`research-digest.md`, kept current by `/gt:gt-work`) or, failing that, the headings, then only the relevant sections. Come back after a week away and it opens with a short generated catch-up first.
 
 ---
 

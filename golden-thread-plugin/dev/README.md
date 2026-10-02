@@ -81,6 +81,17 @@ previous release still passes** — that is what the per-document guidance is fo
 `render-pdfs.sh`, and a manifest regeneration — and the gate only checks that skills are
 *named*, never that what the docs say is still true.
 
+Since 0.18.0 it also reads the MANUAL's skill count ("gt's N skills") and its gt_lint count, and
+spells numbers up to forty-five: with 35 skills shipping and the map ending at thirty, every
+skill-count check had been skipping silently.
+
+**Reviewed by hand each release:** `golden-thread/<ver>/hooks/known_events.json` and
+`known_tools.json`, the allowlists `/gt:gt-doctor`'s `hooks-schema` row checks `settings.json`
+against. Each carries `claude_code_reference`; compare them with Claude Code's current hook
+documentation and bump it. `tests/test_gt_doctor_hooks_schema.AllowlistsShip` fails only when a
+list is empty or lacks an event gt or a module registers — it cannot know about an event Claude
+Code added.
+
 ## Publishing
 
 **`dev/publish.sh` is the entry point.** It runs every publish requirement in order and

@@ -90,7 +90,13 @@ WORDS = {1: "One", 2: "Two", 3: "Three", 4: "Four", 5: "Five", 6: "Six", 7: "Sev
          14: "Fourteen", 15: "Fifteen", 16: "Sixteen", 17: "Seventeen", 18: "Eighteen",
          19: "Nineteen", 20: "Twenty", 21: "Twenty-One", 22: "Twenty-Two",
          23: "Twenty-Three", 24: "Twenty-Four", 25: "Twenty-Five", 26: "Twenty-Six",
-         27: "Twenty-Seven", 28: "Twenty-Eight", 29: "Twenty-Nine", 30: "Thirty"}
+         27: "Twenty-Seven", 28: "Twenty-Eight", 29: "Twenty-Nine", 30: "Thirty",
+         # 0.18.0 shipped 35 skills, and with the map ending at 30 every skill-count check
+         # below silently skipped: "Thirty-Five Skills" had no entry to compare against.
+         31: "Thirty-One", 32: "Thirty-Two", 33: "Thirty-Three", 34: "Thirty-Four",
+         35: "Thirty-Five", 36: "Thirty-Six", 37: "Thirty-Seven", 38: "Thirty-Eight",
+         39: "Thirty-Nine", 40: "Forty", 41: "Forty-One", 42: "Forty-Two",
+         43: "Forty-Three", 44: "Forty-Four", 45: "Forty-Five"}
 
 
 def check(facts):
@@ -149,6 +155,17 @@ def check(facts):
                 bad.append(("README.md",
                             "says %s skills in gt; %d (%s) ship" % (m.group(1), n, want)))
 
+    # The MANUAL's opening line counts the skills too ("Complete reference for gt's
+    # twenty-eight skills"), and nothing read it: it was seven behind when 0.18.0 was documented.
+    s = read("golden-thread-plugin/MANUAL.md")
+    if s is not None:
+        numbers = "|".join(list(WORDS.values()) + [str(k) for k in WORDS])
+        want = WORDS.get(n, str(n))
+        for m in re.finditer(r"\bgt's (%s) skills\b" % numbers, s, re.I):
+            if m.group(1).lower() not in (want.lower(), str(n)):
+                bad.append(("golden-thread-plugin/MANUAL.md",
+                            "says gt's %s skills; %d (%s) ship" % (m.group(1), n, want)))
+
     for rel in ("README.md", "golden-thread-plugin/golden-thread-docs.md"):
         s = read(rel)
         if s is None:
@@ -183,7 +200,10 @@ def check(facts):
     n_lint = facts.get("lint_checks")
     if n_lint:
         want = {str(n_lint), WORDS.get(n_lint, "").casefold()}
-        for rel in ("README.md", "golden-thread-plugin/golden-thread-docs.md", "CLAUDE.md"):
+        # MANUAL.md joined in 0.18.0: it said "emits **eighteen** check kinds" while 19 shipped,
+        # because no document but these three was read.
+        for rel in ("README.md", "golden-thread-plugin/golden-thread-docs.md", "CLAUDE.md",
+                    "golden-thread-plugin/MANUAL.md"):
             s = read(rel)
             if s is None:
                 continue
