@@ -96,7 +96,7 @@ class OptimizeTest(unittest.TestCase):
     def test_a_symlinked_project_cannot_reach_a_protected_directory(self):
         os.symlink(str(core_rules_dir(self.vault)),
                    str(self.vault / "Projects" / "cr"))
-        r = self.run_opt("--project", "cr")
+        r = self.run_opt("--project", "cr", "--only", "vault")
         self.assertIn(r.returncode, (0, 1, 2), r.stdout)
         before = tree_digest(self.vault)
         self.run_opt("--project", "cr")
@@ -200,7 +200,9 @@ class OptimizeTest(unittest.TestCase):
 
     def test_clean_vault_exits_zero(self):
         self.write("Projects/alpha/memory/a.md", "One clear fact that stands on its own.\n")
-        self.assertEqual(self.run_opt().returncode, 0)
+        # --only vault since 0.18.0: a bare run is an aggregator, and its session member cannot
+        # run in a sandbox with no transcripts -- exit 3, which is the point of the aggregator.
+        self.assertEqual(self.run_opt("--only", "vault").returncode, 0)
 
 
 if __name__ == "__main__":

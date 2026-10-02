@@ -76,6 +76,7 @@ NOT_REGISTERED = {
     "guard_test_before_commit.py": "called by guard_test_before_commit.sh, not by the harness",
     "guard_protected_paths.py": "called by guard_protected_paths.sh, not by the harness",
     "gt_paths.py": "a library the hooks import; it is not a hook",
+    "log_knowledge_read.py": "called by log_knowledge_read.sh, not by the harness",
 }
 
 

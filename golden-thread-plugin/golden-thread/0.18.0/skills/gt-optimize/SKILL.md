@@ -1,13 +1,27 @@
 ---
 name: gt-optimize
-description: "Find vault content that costs context and earns nothing back — duplicated facts across memory files, dead index rows, relative dates that rot, memory files over budget. Reporting never writes; the one write action is `--demote`, which moves a note to a cheaper tier and leaves a pointer behind."
+description: "Find what costs context and earns nothing back — in the vault (duplicated facts, dead index rows, relative dates, memory over budget, single-project globals, Knowledge pages nobody reads, what each project costs to open) and in sessions (prompt-cache writes lost to expiry or a changed prefix). Reporting never writes; the write actions are `--demote`, `--archive` and `--supersede`, each of which moves or marks content and leaves a pointer behind."
 ---
 
 # Golden Thread Optimize
 
 Memory is read into every session. A duplicated fact is paid for on every turn, in every
-project, forever — this finds that waste. It never removes anything: the only thing it writes
-is a demotion.
+project, forever — this finds that waste. It never removes anything: what it writes is a
+demotion, an archive of old research entries, or a supersede mark, and each leaves a pointer.
+
+## Two members, one report
+
+`gt_optimize.py` is an aggregator (the same `gt_aggregate` rules as `/gt:gt-scan` and
+`/gt:gt-allin`) over two members:
+
+| member | asks | cost paid |
+|---|---|---|
+| `vault` | what the vault **stores** that a session pays for | every session, forever |
+| `session` | what sessions **carry**: prompt-cache writes by cause, from the Claude Code transcripts | once per resume |
+
+A bare run runs both and ends with `N of 2 member(s) ran`. A member that could not run — no
+transcripts on this machine, a crash — is printed as **COULD NOT RUN** and the exit is 3: that is
+never a clean result. `--only vault` or `--only session` runs one.
 
 ## What it is not
 
@@ -74,12 +88,32 @@ The vault is **always named explicitly** on the command line — never inferred 
 **Step 2 — Report. Reporting never writes.**
 
 ```bash
-python3 <base_dir>/../../scripts/gt_optimize.py --vault "<vault>" [--project SLUG] [--json]
+python3 <base_dir>/../../scripts/gt_optimize.py --vault "<vault>" [--project SLUG] \
+    [--only vault|session] [--cost] [--days N] [--json]
 ```
 
 `--project` takes a **slug, not a path**: a value containing `/` or `\`, or that is `.` or `..`,
 or that resolves outside the vault, is a usage error. Each section prints its first 40 findings and then
-a count of the rest.
+a count of the rest. `--cost` adds the **open cost** table: per project, the lines and approximate
+tokens `/gt:gt-open` actually loads (README, source, idea, research — skimmed as gt-open skims it
+past 200 lines — decisions, design, spec, runbook, and the memory index; never the memory notes
+themselves), the total, and the once-per-session CONVENTIONS + PROTOCOL. `--json` always carries
+it as `open_cost`.
+
+The **session** member reads `~/.claude/projects/**/*.jsonl` for the last `--days` (setting
+`optimize_session_days`, default 30) and splits every cache write into `cold`, `growth`,
+`expiry` (the gap outlived the TTL the prefix was written at — 5 minutes or 1 hour, read from the
+write) and `invalid` (the cached prefix changed). Only the last two are avoidable. Dollars are
+**list-price equivalents, not a bill**. For a one-liner, or a threshold gate, run the member
+directly:
+
+```bash
+python3 <base_dir>/../../scripts/gt_optimize_session.py --brief
+python3 <base_dir>/../../scripts/gt_optimize_session.py --check [PCT]   # exit 3 above PCT
+```
+
+When expiry dominates, the advice is the user's habit, not the vault: cut before stepping away
+(`/gt:gt-minimize`), not after.
 
 Read the report with the user. Most findings are for a person to act on by editing the file.
 
@@ -95,6 +129,14 @@ These are the valuable ones and they need a person:
 - `relative-date` — "last week" in a file injected into a session months later. Replace with the
   absolute date. Only flagged in silently-loaded files, where it genuinely misleads.
 - `duplicate-line` — check whether it is structure before removing it.
+- `single-project-global` — a `global-memory/` note whose body names exactly one project (the
+  evidence `/gt:gt-lint`'s `global-scope-leak` reads, sharpened to the demotion case). It is that
+  project's memory charged to every other project. The message names the `--demote` command.
+- `knowledge-unused` — a `Knowledge/` page with no read logged in `--unused-days` (default 90),
+  or **never read** since the access log began. Reads are logged by the `log_knowledge_read`
+  hook (setting `knowledge_access_log`) to `usage/knowledge.jsonl`, which is never committed.
+  With no log yet, nothing is reported. A candidate for review, not for deletion: some pages are
+  rightly rare.
 
 When the user agrees a fix and you make it, it goes through the write queue (Core rule 1),
 never Write, Edit or a shell redirect: write the section's corrected body to a scratch file
@@ -143,6 +185,36 @@ asymmetry is the entire reason demotion exists as a separate command rather than
 
 A `MEMORY.md` row naming the moved file is **not** rewritten. The run says so, before and after:
 those rows now point at the pointer, which is correct and worth tidying by hand.
+
+**Step 4b — Archive old research entries, or mark one superseded**
+
+`research.md` is append-only and only grows; `/gt:gt-open` skims it past 200 lines, and a March
+finding sits above the April entry that corrected it with equal weight. Two actions, both
+**previews unless `--apply`**:
+
+```bash
+# move every `## YYYY-MM-DD...` entry before the cutoff to research-archive-<YYYY>.md
+python3 <base_dir>/../../scripts/gt_optimize.py --vault "<vault>" \
+    --archive --project <slug> --before 2026-01-01 [--apply]
+
+# mark one entry superseded by a later one, in place
+python3 <base_dir>/../../scripts/gt_optimize.py --vault "<vault>" --supersede \
+    --file Projects/<slug>/research.md --entry "<old heading>" --by "<new heading>" [--apply]
+```
+
+- **Archive** writes the archive file(s) first, through the write queue, reads them back, and
+  only when every moved entry is verified on disk rewrites `research.md` — leaving one dated
+  line per moved entry under `## Archived entries`, linking to it. A heading that is not a
+  dated entry is never moved. If `research.md` changed in the meantime it is left alone and the
+  entries simply exist in both places — visible, never lost.
+- **Supersede** adds `> superseded_by: [[file#heading]] — marked <date>` directly under the old
+  entry's heading (the `superseded_by:` idiom `Sources/` already uses). The entry stays, word for
+  word. An `--entry` or `--by` heading that matches zero or several headings is refused.
+- Both refuse a file another live session has claimed (Core rule 1), naming the holder.
+- Neither summarises or rewrites anything. Compressing memory is out of scope on purpose: the
+  line a summary drops is the one nothing downstream can notice is gone.
+
+Choose the cutoff with the user; show the preview first, always.
 
 **Step 5 — Record**
 
@@ -199,12 +271,14 @@ walk straight past the guard. These are the ones the code performs:
 
 ## Exit codes
 
-| Code | Reporting | With `--demote` |
-|---|---|---|
-| 0 | nothing to report | done, or a preview printed (no `--apply`) |
-| 1 | findings reported | refused, and the reason is printed |
-| 2 | usage — bad vault, bad `--project`, or `--apply` without `--demote` | usage — traversal in the path, or no such note |
-| 3 | — | an error mid-move; nothing was removed, so the content exists in both places |
+| Code | Reporting | With `--demote` | With `--archive` / `--supersede` |
+|---|---|---|---|
+| 0 | every member clean | done, or a preview printed (no `--apply`) | done, or a preview printed |
+| 1 | findings reported | refused, and the reason is printed | refused (claimed, no match, ambiguous heading) |
+| 2 | usage — bad vault, bad `--project`, unknown `--only` member, or `--apply` without an action | usage — traversal in the path, or no such note | usage — missing `--before`, `--file`, `--entry` or `--by` |
+| 3 | a member **could not run** — never a pass | an error mid-move; nothing was removed, so the content exists in both places | a write did not land; nothing was removed (an archive that landed while research.md did not leaves the entries in both places) |
+
+`gt_optimize.py --member vault` (what the aggregator runs) keeps the pre-0.18 codes: 0 / 1 / 2.
 
 ## Rules
 

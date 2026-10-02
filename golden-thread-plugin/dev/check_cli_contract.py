@@ -54,6 +54,8 @@ COVERED = {
     # 0.17.10: queued vault writes -- submitting writes the queue, draining writes the vault
     "scripts/gt_write_queue.py": (),
     "scripts/gt_broker.py": ("drain",),
+    # 0.18.0: --archive and --supersede queue writes to research.md (--demote already moved notes)
+    "scripts/gt_optimize.py": (),
 }
 
 EXEMPT = {

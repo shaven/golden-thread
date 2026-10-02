@@ -130,7 +130,11 @@ def build_cmd(name, meta, vault, repo):
         # Report only. --apply is never passed from here: a sweep command that edits files as a
         # side effect of "checking everything" is how content gets changed without anyone
         # deciding to change it.
-        cmd += ["--vault", vault]
+        # `--only vault` (0.18.0): gt_optimize became an aggregator whose `session` member reads
+        # the Claude Code transcripts. That is a cost report about the user's habits, not a check
+        # of this vault, and on a machine with no transcripts (a CI runner) it cannot run -- which
+        # would make every allin sweep report optimize as could-not-run.
+        cmd += ["--vault", vault, "--only", "vault"]
     elif name == "doctor":
         if vault:
             cmd += ["--vault", vault]
