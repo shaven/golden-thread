@@ -68,6 +68,14 @@ class FeatureRequestTest(Sandbox):
         rc, r = self.verdict(GOOD)
         self.assertEqual((rc, r["verdict"]), (0, "ready"), r)
 
+    def test_repository_layout_src_descends_into_the_plugin(self):
+        # gt-src carries the repo layout since 0.17.3: --src names the repo root, and the
+        # components live under golden-thread-plugin/. 31 of 51 requests were once rejected
+        # as stale-reference because the validator did not look there.
+        proc = self.py(FR, "validate", self.write(GOOD), "--src", REPO.parent, "--json")
+        r = json.loads(proc.stdout)[0]
+        self.assertEqual((proc.returncode, r["verdict"]), (0, "ready"), r)
+
     def test_missing_test_plan_is_incomplete(self):
         rc, r = self.verdict(GOOD.split("## Test Plan")[0])
         self.assertEqual((rc, r["reason"]), (1, "incomplete"))

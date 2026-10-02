@@ -95,9 +95,16 @@ def _unquote(s):
 
 # -- source resolution ----------------------------------------------------------------
 def resolve_roots(src):
-    """-> [src, newest release of every plugin under src] — dev/plugins.py decides which."""
+    """-> [src, newest release of every plugin under src] — dev/plugins.py decides which.
+
+    Since 0.17.3 gt-src carries the repository layout (repo root + golden-thread-plugin/), so
+    `--src gt-src` names the REPO root. Descend into golden-thread-plugin/ when it is there:
+    without this every request validated against gt-src as documented was rejected as
+    stale-reference (2026-10-01: 31 of 51)."""
     sys.path.insert(0, str(Path(__file__).resolve().parent))
     import plugins
+    if (src / "golden-thread-plugin").is_dir():
+        src = src / "golden-thread-plugin"
     return [src] + ([v for _, v, _ in plugins.discover(src)] if src.is_dir() else [])
 
 
