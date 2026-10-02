@@ -40,8 +40,12 @@ class Fixture(Sandbox):
         self.assertOk(p, "create-project %s failed" % name)
 
     def tree(self):
+        # __pycache__ is Python writing bytecode for a vault tool it imported, not a vault
+        # change: it appears on a first import wherever PYTHONDONTWRITEBYTECODE is unset (the
+        # local gate), and never on the remote runner -- which hid this until the Mac gate ran.
         return sorted(p.relative_to(self.v).as_posix() for p in self.v.rglob("*")
-                      if "spool" not in p.parts and ".git" not in p.parts)
+                      if "spool" not in p.parts and ".git" not in p.parts
+                      and "__pycache__" not in p.parts)
 
     def assertNoStray(self, name="child"):
         self.assertFalse((self.v / "Projects" / name).exists(),
