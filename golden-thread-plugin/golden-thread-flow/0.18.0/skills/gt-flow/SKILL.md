@@ -42,7 +42,7 @@ environment through unchanged (the demo sets `GT_VAULT`).
    (task events hidden — toggle in Kinds)"), and whether names are redacted.
 
 Redacted pages replace every project, file path, task id, domain and session with a
-short salted hash (`p-3fa2`, `f-91c0`), drop notes, and keep levels, kinds, colours
+short salted hash (`p-3fa2c1`, `f-91c0e7`, at least 6 hex characters), drop notes, and keep levels, kinds, colours
 and counts. The salt is random per render and not saved, so a redacted page cannot be
 mapped back, and two redacted renders do not share hashes. If the script reports that
 its redaction self-check failed, nothing was written: report it, never work around it.

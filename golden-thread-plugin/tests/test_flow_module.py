@@ -283,8 +283,8 @@ class FlowRender(Sandbox):
         for n in sorted(needles):
             self.assertNotIn(n, page, "redacted page contains %r" % n)
         self.assertNotIn(str(vault), p.stdout.replace(str(target), ""))
-        self.assertRegex(page, r"\bp-[0-9a-f]{4,}\b")
-        self.assertRegex(page, r"\bf-[0-9a-f]{4,}\b")
+        self.assertRegex(page, r"\bp-[0-9a-f]{6,}\b")
+        self.assertRegex(page, r"\bf-[0-9a-f]{6,}\b")
         data = json.loads(re.search(r'id="flow-data">(.*?)</script>', page, re.S).group(1))
         self.assertTrue(data["redacted"])
         self.assertEqual({e["kind"] for e in data["events"]}, {e["kind"] for e in events})
@@ -295,7 +295,7 @@ class FlowRender(Sandbox):
         promotes = [e for e in data["events"] if e["kind"] == "promote"]
         self.assertTrue(any(a["to"] == b["from"] for a in promotes for b in promotes), order)
         # A fresh salt per render. Asserted through the MAPPING, not through the sets of
-        # hashes: a redacted name is sha256(salt + value) truncated to 4 hex characters,
+        # hashes: a redacted name is sha256(salt + value) truncated (4 hex before 0.18.0, 6 since),
         # so two renders draw from 65,536 values and their sets intersect by chance about
         # once in a thousand runs at this fixture's size. The old form asserted
         # `not (h1 & h2)`, which no salt can guarantee -- it failed a release-check on
