@@ -17,9 +17,12 @@ prompt the agent receives, and whether the record the agent's result was saved i
 fields the spec promised. The skill owns the one step only Claude can take: spawning the agent
 with that prompt, then writing the record to the path `spool-path` names.
 
-THE SETTINGS. `agent_specialization` (default off) gates all of it. With it off, `resolve`
-answers `action: inline` for every skill and the skills run exactly as they did before this
-existed. `skeptic_pass` (default off) additionally gates the `skeptic` job for gt-work.
+THE SETTINGS. Two independent switches (0.18.0; before that the skeptic needed both).
+`agent_specialization` (default off) gates the ingest and validation hand-off: with it off,
+`resolve` answers `action: inline` for gt-ingest and gt-validate and they run exactly as they
+did before this existed. `skeptic_pass` (default off) alone gates the `skeptic` job for
+gt-work: with it on, gt-work spawns the skeptic whatever `agent_specialization` says, and with
+it off there is no skeptic whatever `agent_specialization` says.
 
 WHERE SPECS LIVE. The release ships them in `templates/agent-specs/<job-type>.json`. NOT in
 `packs/`: that directory is the input to gt_registry, it is hashed into MANIFEST.json as an
@@ -89,6 +92,10 @@ SESSION_RE = re.compile(r"[^A-Za-z0-9_-]")
 
 # The skills that know a job type without looking at a path. gt-ingest is decided by the path.
 SKILL_JOBS = {"gt-validate": "validate", "gt-work": "skeptic"}
+# The setting that alone switches a job type on. Every job answers to agent_specialization
+# except the skeptic, which answers to skeptic_pass only (0.18.0): turning the skeptic on must
+# not also hand ingest and validation to specialists, which is a separate decision and cost.
+MASTER_SWITCH = {"skeptic": "skeptic_pass"}
 
 # -- ingest heuristics: file extensions and a few marker file names, nothing deeper -------------
 CODE_EXT = {".py", ".go", ".ts", ".tsx", ".js", ".jsx", ".mjs", ".rs", ".java", ".kt", ".kts",
@@ -330,10 +337,11 @@ def validate_spec(data, stem=None):
                      % data["trigger_skill"])
 
     rs = data.get("requires_settings", ["agent_specialization"])
+    master = MASTER_SWITCH.get(data.get("job_type"), "agent_specialization")
     if not (isinstance(rs, list) and all(isinstance(x, str) and FIELD_RE.match(x) for x in rs)):
         p.append("requires_settings: must be a list of setting names")
-    elif "agent_specialization" not in rs:
-        p.append("requires_settings: must include 'agent_specialization', the master switch")
+    elif master not in rs:
+        p.append("requires_settings: must include '%s', the master switch" % master)
 
     sf = data.get("summary_fields")
     if sf is not None:
@@ -450,8 +458,8 @@ def resolve(skill, path=None, vault=None, specs_dir=None):
     """-> dict {skill, job, why, spec, source, tier, action, notice}. Never raises for a
     missing or bad spec: the answer is then `inline`, with a notice."""
     out = {"skill": skill, "job": None, "why": "", "spec": None, "source": None, "tier": None,
-           "agent_specialization": setting("agent_specialization"), "action": "inline",
-           "notice": None}
+           "agent_specialization": setting("agent_specialization"),
+           "skeptic_pass": setting("skeptic_pass"), "action": "inline", "notice": None}
     if skill == "gt-ingest":
         out["job"], out["why"] = classify_path(path)
     elif skill in SKILL_JOBS:
@@ -466,19 +474,16 @@ def resolve(skill, path=None, vault=None, specs_dir=None):
                           "several specs name %s (%s); pass the job type to render"
                           % (skill, ", ".join(hits)))
 
-    skeptic_on = setting("skeptic_pass") == "on"
-    if out["agent_specialization"] != "on":
-        out["why"] = out["why"] or "agent_specialization is off"
-        if skill == "gt-work" and skeptic_on:
-            out["notice"] = ("skeptic_pass is on but agent_specialization is off, so no skeptic "
-                             "pass runs; turn both on to get one")
+    master = MASTER_SWITCH.get(out["job"], "agent_specialization")
+    if setting(master) != "on":
+        if master == "skeptic_pass":
+            out["why"] = "skeptic_pass is off, so gt-work writes back with no skeptic pass"
+        else:
+            out["why"] = out["why"] or "agent_specialization is off"
         return out
     if out["job"] is None:
         out["notice"] = "no specialist job type for this %s run (%s); running inline" % (
             skill, out["why"])
-        return out
-    if out["job"] == "skeptic" and not skeptic_on:
-        out["why"] = "skeptic_pass is off, so gt-work writes back with no skeptic pass"
         return out
 
     specs, problems = load_specs(vault, specs_dir)
@@ -492,6 +497,10 @@ def resolve(skill, path=None, vault=None, specs_dir=None):
                                                              spec_dirs(vault, specs_dir))))
         return out
     for s in spec["data"].get("requires_settings", ["agent_specialization"]):
+        # A skeptic spec written before 0.18.0 (a vault override) still lists
+        # agent_specialization; the skeptic no longer answers to it, so it is not consulted.
+        if master == "skeptic_pass" and s == "agent_specialization":
+            continue
         if setting(s) != "on":
             out["notice"] = "the %s spec needs the %s setting on; running inline" % (
                 out["job"], s)
@@ -734,8 +743,11 @@ def cmd_list(a):
     print("\nagent_specialization: %s   skeptic_pass: %s" % (state["agent_specialization"],
                                                            state["skeptic_pass"]))
     if state["agent_specialization"] != "on":
-        print("Skills run inline. Turn specialists on with: "
+        print("Ingest and validation run inline. Turn specialists on with: "
               "gt_settings.py set agent_specialization on")
+    if state["skeptic_pass"] != "on":
+        print("No skeptic pass at gt-work. Turn it on (on its own) with: "
+              "gt_settings.py set skeptic_pass on")
     return 1 if problems else 0
 
 
@@ -760,7 +772,8 @@ def cmd_resolve(a):
     print("skill:   %s" % _clean(r["skill"], 60))
     print("job:     %s" % (r["job"] or "none"))
     print("why:     %s" % _clean(r["why"], 300))
-    print("setting: agent_specialization=%s" % r["agent_specialization"])
+    print("setting: agent_specialization=%s skeptic_pass=%s" % (r["agent_specialization"],
+                                                                r["skeptic_pass"]))
     if r["spec"]:
         print("spec:    %s (%s)" % (_clean(r["spec"], 300), r["source"]))
         print("tier:    %s (advisory: the session's model configuration decides)" % r["tier"])

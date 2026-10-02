@@ -195,16 +195,7 @@ class AgentSpecTest(AgentSpecBase):
         p = self.py(TOOL, "resolve", "--skill", "gt-ingest")
         self.assertEqual(2, p.returncode)
 
-    def test_skeptic_needs_both_settings(self):
-        self.settings(agent_specialization="on")
-        self.assertEqual("inline", self.resolve("--skill", "gt-work")["action"])
-        self.settings(skeptic_pass="on")
-        r = self.resolve("--skill", "gt-work")
-        self.assertEqual("inline", r["action"])
-        self.assertIn("agent_specialization is off", r["notice"])
-        self.settings(agent_specialization="on", skeptic_pass="on")
-        r = self.resolve("--skill", "gt-work")
-        self.assertEqual(("skeptic", "spawn"), (r["job"], r["action"]))
+    # skeptic_pass x agent_specialization: test_skeptic_pass_independent.py (0.18.0)
 
     def test_validate_spawns_when_on(self):
         self.settings(agent_specialization="on")

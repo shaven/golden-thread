@@ -3,7 +3,7 @@
   "spec_version": 1,
   "summary": "Read the research entries a write-back is about to land and flag what is unverified or overclaimed.",
   "trigger_skill": "gt-work",
-  "requires_settings": ["agent_specialization", "skeptic_pass"],
+  "requires_settings": ["skeptic_pass"],
   "model_tier": "careful",
   "executor": "claude",
   "prompt_delta": [

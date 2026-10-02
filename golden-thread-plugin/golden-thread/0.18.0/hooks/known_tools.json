@@ -1,0 +1,12 @@
+{
+  "claude_code_reference": "2026-10",
+  "note": "Conservative allowlist of Claude Code tool names a tool-event matcher may name, read by gt_doctor.py hooks-schema. mcp__* names, '*' and regex patterns are not judged. A plain name not listed is flagged for review (hooks-unknown-tool), never removed. Update per release.",
+  "tools": [
+    "Bash", "BashOutput", "KillShell", "Read", "Write", "Edit", "MultiEdit", "Glob", "Grep", "LS",
+    "NotebookEdit", "NotebookRead", "WebFetch", "WebSearch", "Task", "Agent", "TodoWrite",
+    "TodoRead", "TaskCreate", "TaskUpdate", "TaskGet", "TaskList", "TaskOutput", "TaskStop",
+    "ExitPlanMode", "EnterPlanMode", "AskUserQuestion", "Skill", "SlashCommand", "ToolSearch",
+    "Monitor", "SendMessage", "LSP", "EnterWorktree", "ExitWorktree", "ListMcpResourcesTool",
+    "ReadMcpResourceTool"
+  ]
+}

@@ -79,10 +79,11 @@ Rules:
 - One entry per finding, date-stamped
 - If a finding supersedes an earlier one, note it: "Supersedes 2026-01-15 entry"
 
-#### Skeptic pass (only when `skeptic_pass` and `agent_specialization` are on)
+#### Skeptic pass (only when `skeptic_pass` is on)
 
-Both settings default to `off`, and then there is no skeptic pass: write the entries as
-above. Before the first `research.md` entry lands, ask the resolver (`<base_dir>` is the
+`skeptic_pass` alone decides this; it is independent of `agent_specialization`, which
+governs only the ingest and validation hand-off. Both settings default to `off`, and with
+`skeptic_pass` off there is no skeptic pass: write the entries as above. Before the first `research.md` entry lands, ask the resolver (`<base_dir>` is the
 `Base directory for this skill:` header):
 ```bash
 python3 <base_dir>/../../scripts/gt_agent_spec.py resolve --skill gt-work --vault "<vault>"
@@ -98,6 +99,20 @@ scratchpad, then:
 3. Show the user the flags. For each, they fix the entry, keep it as written, or drop it.
    The pass is advice, never a gate: write-back completes whatever is decided, and a
    skeptic that fails to run is reported in one line, not retried.
+
+#### Research digest (after the research entries land)
+
+Once this session's `research.md` entries are applied (drained), regenerate the project's
+digest — a cheap first read beside the append-only file:
+```bash
+python3 <base_dir>/../../scripts/gt_digest.py write --vault "<vault>" --project <slug>
+```
+It rewrites `Projects/<slug>/research-digest.md` through the write queue: the last 20 `## `
+sections newest first, one line each (heading + first line, nothing inferred), plus up to 5
+sections whose heading carries `[pinned]`. The first time, it also indexes the digest in
+`memory/MEMORY.md`. It never touches `research.md`. A `held` or `escalated` result is reported
+in one line, like any other queued write. To pin a finding, the user adds `[pinned]` to its
+heading — the one edit to an existing research entry that is allowed.
 
 ### decisions.md — generated from atomically allocated ADRs
 

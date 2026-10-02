@@ -40,7 +40,8 @@ Two guards ARE registered, and the line is not "core versus not". `test_gate` go
 core_test_before_commit because a gate that fires where it cannot be satisfied is a
 gate people switch off for everything, so it is better switched off knowingly, per
 repo, than bypassed wholesale; `protected_paths` governs guard_protected_paths.sh,
-which is tied to no Core rule.
+which is tied to no Core rule. (0.18.0 adds a third: `foreign_checkout_guard` governs
+guard_foreign_checkout.sh, also tied to no Core rule.)
 
 ## Adding a setting
 
@@ -205,6 +206,7 @@ SETTINGS = {
             "     validate) spawns a specialist agent with that spec applied; its full output\n"
             "     lands in the spool and the session sees a summary\n"
             "\n"
+            "Independent of skeptic_pass: this does not switch the gt-work skeptic on or off.\n"
             "A job type with no spec runs inline with a notice. Specs are data:\n"
             "gt_agent_spec.py list | validate <spec>."),
     },
@@ -214,9 +216,12 @@ SETTINGS = {
         "summary": "Whether /gt:gt-work runs a skeptic agent over the session's findings before they land.",
         "detail": (
             "off  write-back as before  (default)\n"
-            "on   (needs agent_specialization on) a zero-context agent reads the research\n"
-            "     entries about to be written and flags unverified or overclaimed figures\n"
-            "     first; nothing is dropped, the session decides."),
+            "on   a zero-context agent reads the research entries about to be written and\n"
+            "     flags unverified or overclaimed figures first; nothing is dropped, the\n"
+            "     session decides\n"
+            "\n"
+            "Independent of agent_specialization (0.18.0): this alone turns the skeptic on,\n"
+            "and does not hand ingest or validation to specialist agents."),
     },
     "handoff_surface": {
         "default": "any",
@@ -329,6 +334,41 @@ SETTINGS = {
             "when a remote end is rate-limited. `1` is not the same as parallel_work=off:\n"
             "one worker still runs through the parallel path, so it does not tell you\n"
             "whether the parallel path is what broke a test. Use `off` for that."),
+    },
+    "brief_absence_days": {
+        "default": "7",
+        "values": ["off", "3", "7", "14", "30"],
+        "summary": "How long away from a project before /gt:gt-open leads with a generated catch-up brief.",
+        "detail": (
+            "N    when a project has not been opened on this machine for N days, gt-open\n"
+            "     starts with one generated paragraph (150 words at most): commits since\n"
+            "     the last open, the newest research entry, the oldest open p::1 task and\n"
+            "     anything waiting on you. Then it reads the files as usual.  (default 7)\n"
+            "off  never on its own; `/gt:gt-open <slug> --brief` still asks for one\n"
+            "\n"
+            "The brief is assembled from git and structured fields (gt_catchup.py), never a\n"
+            "summary of prose, and is labelled as generated. A project with no commits\n"
+            "while you were away gets none (0.18.0)."),
+    },
+    "foreign_checkout_guard": {
+        "default": "on",
+        "values": ["off", "on"],
+        "summary": "Deny git commit/push inside a checkout you declared as another machine's.",
+        "detail": (
+            "on   a `git commit` or `git push` whose directory is inside a path listed in\n"
+            "     `foreign_checkouts` in ~/.claude/vault-config.json is denied, naming the\n"
+            "     checkout and the supported route. Read-only git and file writes are\n"
+            "     untouched. With nothing declared it denies nothing.  (default)\n"
+            "off  no check\n"
+            "\n"
+            "Ownership is DECLARED, never guessed from a path, remote or credential:\n"
+            "  python3 ~/.claude/golden-thread/hooks/guard_foreign_checkout.py add <path> \\\n"
+            "      [--label 'the build machine'] [--route 'run copygt.sh there']\n"
+            "  ... list | remove <path>\n"
+            "One-off exception, visible in the transcript: GT_FOREIGN_CHECKOUT=allow git push\n"
+            "\n"
+            "Why: 2026-09-11 a session committed a release into another machine's checkout\n"
+            "and started rewriting its remote URL to get the push through (0.18.0)."),
     },
     "protected_paths": {
         "default": "ask",

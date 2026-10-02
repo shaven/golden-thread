@@ -49,6 +49,20 @@ take it before the prose. Note:
 - Stage (idea / researching / designing / implementing / done)
 - Tags and related links
 
+**Step 3b — Catch-up brief (when returning after a while)**
+
+Before reading anything else, run:
+```bash
+python3 <base_dir>/../../scripts/gt_catchup.py --vault "<vault>" --project <slug> --mark
+```
+Add `--brief` when the user asked for one (`/gt:gt-open <slug> --brief`), `--no-brief` when they
+asked for none. It prints one paragraph — **only** when the project has not been opened on this
+machine for `brief_absence_days` days (default 7) or `--brief` was given, and there were commits
+to the project in that window — and nothing otherwise. Show it **first, verbatim**, as the
+generated summary it says it is; never restate it as established fact. It does not replace the
+reading sequence below: Step 4 still follows in full. `--mark` records this open so the next
+absence is measured from now.
+
 **Step 4 — Read documents in order**
 
 Read all existing files in this sequence (skip any that don't exist):
@@ -72,6 +86,13 @@ remembered it existed.)
 If `source.md` links a fleet page (`**Fleet:** [[INFRASTRUCTURE]]`), read that page too — it holds the host table the project deliberately does not duplicate.
 
 **On `research.md`:** it is append-only and grows without bound. If it exceeds ~200 lines, do not read it whole — read its `##` headings to learn what is covered, then read only the entries relevant to what the user is about to do, plus the most recent few.
+
+**If `research-digest.md` exists and is current, read it instead of the headings.** Ask first:
+`python3 <base_dir>/../../scripts/gt_digest.py check --vault "<vault>" --project <slug>` — exit 0
+means the digest was built from `research.md` exactly as it is now (its frontmatter carries the
+hash). The digest gives one line per recent section plus pinned findings; read the full entries
+in `research.md` only where the work needs them. Exit 1 (missing or stale) → fall back to the
+headings as above. `/gt:gt-work` regenerates the digest.
 
 Then index the memory files — **do not read them all**:
 
@@ -101,6 +122,7 @@ After loading, briefly tell the user:
 - What the next action is (from the status board)
 - Any blockers or open questions noted in the docs
 - **What's available but not loaded** — how many memory files exist and roughly what they cover, so the user knows the depth is there to ask for
+- **Which repo a repo-scoped command will answer for** — once per session, one line, when the working directory is the vault and the vault is a git repo: say that repo-scoped commands such as `/security-review` and `/code-review` (and any test runner or "current branch" tool) will target the **vault**, not the code under discussion, so a code review must be pointed at the code repo explicitly — or run `gt_code_review.py plan <repo>`, which takes the root as an argument. This is orientation, not a warning. `gt_doctor.py --only repo-target` shows the resolved paths.
 
 Then ask: "Where do you want to pick up?"
 

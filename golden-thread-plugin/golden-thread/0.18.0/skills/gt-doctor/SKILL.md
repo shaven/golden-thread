@@ -70,8 +70,13 @@ and it is not "clean" either.
 | `push` | do this machine's commits exist anywhere else? |
 | `gt-src` | does the publish destination still hold only what was published? |
 | `lint` | what does the vault linter say, in one line? |
+| `repo-target` | which git repo does this working directory resolve to, and is it the vault? Always an `i` (note) row: when it is the vault, repo-scoped commands such as `/security-review` and `/code-review` review the vault, not your code — point them at the code repo, or use `gt_code_review.py plan <repo>`, which takes the root explicitly |
+| `hooks-schema` | does every `settings.json` hook entry name an event Claude Code fires (`hooks/known_events.json`) and, on tool events, a tool it knows (`hooks/known_tools.json`)? Flags `hooks-unknown-event`, `hooks-unknown-tool` and `hooks-missing-file` (an entry pointing at a gt hook file that no longer exists) as WARN — an unknown name prompts review, it is not proof of breakage |
 
-Those ten are the whole list — `--only` accepts exactly these names.
+Those rows plus `schedule` and `astgrep` are the whole list — `--only` accepts exactly these names.
+
+An `i` row is a **note**: orientation the operator needs, neither healthy nor broken. It
+never raises the exit code and never prints `ok`.
 
 **`core-rules` is not the same question as `wiring`, and the difference is the point.**
 `wiring` asks whether every hook the RELEASE declares is present in `settings.json`.

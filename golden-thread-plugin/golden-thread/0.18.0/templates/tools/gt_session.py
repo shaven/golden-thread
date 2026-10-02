@@ -29,7 +29,10 @@ per claimed file -- saying what is open. (There is no `files_claimed` frontmatte
 key; the docstring claimed one until 0.16.5 and no code ever wrote or read it.)
 A session that finishes its writes REMOVES its file -- absence means done.
 
-    register   announce this session and what it intends to touch
+    register   announce this session and what it intends to touch; since 0.18.0 it
+               also records `start_commit:` -- the vault's `git rev-parse HEAD` when the
+               session opened -- so gt_handoff.py can say what changed in the vault since
+               (kept as-is when a registration is taken over or resumed)
     beat       refresh last_execution (call on every execution)
     claim      add files to this session's claim, refreshing the heartbeat
     check      who holds a given file? exit 1 if someone else does
@@ -96,6 +99,7 @@ import pathlib
 import re
 import socket
 import stat
+import subprocess
 import sys
 import tempfile
 import time
@@ -769,6 +773,17 @@ def _pid_alive(fm, me=None):
         return None
 
 
+def _vault_head():
+    """The vault's HEAD commit, or None (not a git repo, no commits, no git). Never raises."""
+    try:
+        r = subprocess.run(["git", "-C", str(VAULT), "rev-parse", "--verify", "-q", "HEAD"],
+                           capture_output=True, text=True, timeout=15)
+        sha = r.stdout.strip()
+        return sha if r.returncode == 0 and re.fullmatch(r"[0-9a-f]{7,64}", sha) else None
+    except Exception:
+        return None
+
+
 def _claimed_files(body):
     return re.findall(r"^-\s+`([^`]+)`", body, flags=re.M)
 
@@ -806,6 +821,10 @@ def _take_over(p, sid, args, how):
             fm["task"] = args.task      # no --task keeps what the entry already says
         fm.setdefault("task", "(unstated)")
         fm.setdefault("started", stamp)
+        if "start_commit" not in fm:    # the session opened when it opened (0.18.0)
+            head = _vault_head()
+            if head:
+                fm["start_commit"] = head
         fm["last_execution"] = stamp
         fm["status"] = "active"
         fm["pid"] = _my_pid()
@@ -914,6 +933,11 @@ def cmd_register(args):
     # made, which _machine_id has already said; readers then use the label.
     if _machine_id():
         fm["machine"] = _machine_id()
+    # Where the vault stood when this session opened (0.18.0): gt_handoff.py diffs from it
+    # to list what this session added -- memory files, research sections, ADRs, Knowledge.
+    head = _vault_head()
+    if head:
+        fm["start_commit"] = head
     body = "# What this session has open\n\n"
     body += "".join(f"- `{f}`\n" for f in args.files) if args.files else "_nothing claimed yet_\n"
     if dry("register %s as %s" % (sid, p)):

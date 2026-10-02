@@ -231,6 +231,15 @@ python3 <base_dir>/../../scripts/gt_handoff.py \
 Writes `Projects/<slug>/handoff/<date>-handoff.md`. Use `--json` to read the facts without
 writing a file.
 
+**What changed this session (0.18.0).** When this session registered with
+`gt_session.py register`, the vault's HEAD was recorded as `start_commit`. The script finds it
+from the session id (`--session <id>`, else `$CLAUDE_CODE_SESSION_ID`) and adds a
+`## What Changed This Session` section: new memory files with their descriptions, research
+headings appended, new ADRs, design files touched, Knowledge pages created or updated —
+derived from `git diff <start>..HEAD`, labelled `self-verified`. Pass `--since-commit <sha>` to
+diff from somewhere else. Only committed vault changes count; if the section is missing, no
+start commit was found, and nothing was guessed. `--dry-run` prints the handoff without writing.
+
 **Step 3 — Write the design section yourself**
 
 Replace the placeholder under `## The design, in the author's words` with what only this
