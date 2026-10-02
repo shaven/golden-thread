@@ -6,6 +6,8 @@ Contract:
     fail it.
   * Every row fails closed: a row that cannot run is FAIL "could not run: ...", never PASS.
   * Read-only: the vault, settings.json and vault-config.json are byte-identical afterwards.
+    Its one write (0.19.0) is the receipt, post-install-validated.json, after a COMPLETED
+    session/final run -- never after a crash, an install-stage run or --dry-run.
   * --stage install|session: what only /gt:gt-upgrade can make true is PENDING, not FAIL.
   * install.sh runs it at the end of every install with a vault; a real FAIL is exit 9.
   * gt_version_check.py, as a SessionStart hook, runs it once per installed gt version and
@@ -207,7 +209,7 @@ class TheReleaseIsTheInstalledOneFromAnyPath(InstalledMachine):
         return json.loads(p.stdout)
 
     def test_every_copy_names_the_installed_release_and_agrees_on_every_row(self):
-        got ={k: self.run_from(v) for k, v in self.copies().items()}
+        got = {k: self.run_from(v) for k, v in self.copies().items()}
         cache_rel = self.copies()["cache"].parent.parent.name
         for where, data in got.items():
             with self.subTest(where=where):
@@ -215,6 +217,73 @@ class TheReleaseIsTheInstalledOneFromAnyPath(InstalledMachine):
         states = {k: {r["row"]: r["state"] for r in d["rows"]} for k, d in got.items()}
         self.assertEqual(states["marketplace"], states["cache"])
         self.assertFalse(got["marketplace"]["failed"], got["marketplace"]["rows"])
+
+
+class EveryCompletedRunWritesTheReceipt(InstalledMachine):
+    """0.19.0 (request gate-receipt-only-written-at-session-start). The receipt was written only
+    on the SessionStart hook path, so a manual run that passed left the previous version's
+    receipt in place. Now every completed session/final run writes it and names its writer; a
+    gate that could not run, an install-stage run and --dry-run write nothing."""
+
+    def receipt(self):
+        return self.home / ".claude" / "golden-thread" / "post-install-validated.json"
+
+    def fresh(self):
+        """No receipt now; whatever was there before is put back after the test."""
+        if self.receipt().exists():
+            self.break_file(self.receipt())
+        else:
+            self.addCleanup(self.receipt().unlink, missing_ok=True)
+
+    def read(self):
+        return json.loads(self.receipt().read_text())
+
+    def test_a_manual_final_run_writes_version_verdict_counts_and_writer(self):
+        self.fresh()
+        rc, _rows, data = self.gate()
+        r = self.read()
+        self.assertEqual((r["version"], r["failed"], r["counts"], r["writer"], r["stage"]),
+                         (data["release"], data["failed"], data["counts"], "manual", "final"))
+        self.assertEqual(rc, 0)
+
+    def test_a_failing_manual_run_records_the_failure(self):
+        self.set_old_rule1()
+        self.fresh()
+        rc, _rows, data = self.gate()
+        self.assertEqual(rc, 1)
+        self.assertTrue(self.read()["failed"])
+        self.assertEqual(self.read()["counts"], data["counts"])
+
+    def test_the_session_hook_writes_it_as_the_hook(self):
+        self.fresh()
+        self.session_hook()
+        r = self.read()
+        self.assertEqual((r["writer"], r["stage"]), ("hook", "session"))
+
+    def test_install_stage_and_dry_run_write_nothing(self):
+        self.fresh()
+        self.gate("--stage", "install")
+        self.gate("--dry-run")
+        self.assertFalse(self.receipt().exists())
+
+    def test_a_gate_that_could_not_run_leaves_the_previous_receipt_byte_identical(self):
+        self.break_file(self.receipt(), '{"version": "0.0.1", "failed": false}\n')
+        before = self.receipt().read_bytes()
+        code = ("import sys; sys.path.insert(0, %r); import gt_doctor as d\n"
+                "def boom(*a, **k): raise RuntimeError('forced')\n"
+                "d.post_install = boom\n"
+                "sys.exit(d.main(['post-install', '--vault', %r, '--json']))\n"
+                % (str(self.hooks), str(self.vault)))
+        p = self.run_cmd([PYTHON, "-c", code])
+        self.assertEqual(p.returncode, 1, p.stdout + p.stderr)
+        self.assertIn("could not run", p.stdout)
+        self.assertEqual(self.receipt().read_bytes(), before)
+
+    def test_the_skill_says_where_the_receipt_comes_from(self):
+        text = (_ti.GT / "skills" / "gt-doctor" / "SKILL.md").read_text(encoding="utf-8")
+        self.assertIn("post-install-validated.json", text)
+        for writer in ("hook", "manual"):
+            self.assertIn("`%s`" % writer, text)
 
 
 class BrokenRowsFail(InstalledMachine):

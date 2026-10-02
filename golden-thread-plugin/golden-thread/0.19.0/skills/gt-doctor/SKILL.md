@@ -107,3 +107,21 @@ and is reported as "not installed by choice", never as drift — what it flags i
 contradiction: an off module whose plugin is still installed or enabled, an on module
 whose plugin is missing, an invalid `module.json`, or a module that does not admit the
 running gt release.
+
+## The post-install gate and its receipt
+
+`gt_doctor.py post-install --vault <vault>` is the release gate: a PASS/FAIL table, exit 1 on
+any FAIL. Every **completed** run at the `session` or `final` stage records its verdict in
+`~/.claude/golden-thread/post-install-validated.json` — the release version, `failed`, the
+counts per state, the stage, the time, and `writer`, which says who ran it:
+
+| `writer` | Who |
+|---|---|
+| `hook` | the SessionStart hook (`gt_version_check.py`), once per newly installed version |
+| `manual` | a person or a session running the command (the default) |
+
+Nothing is written by a gate that could not run (a crash is not a verdict, and the previous
+receipt stays as it was), by `install.sh`'s `--stage install` run (vault rows are PENDING there
+by design; the hook validates on the next session), or by `--dry-run`. Since 0.19.0 the
+doctor is the receipt's only writer; before that only the hook wrote it, so a passing manual
+run left the previous version's receipt in place.

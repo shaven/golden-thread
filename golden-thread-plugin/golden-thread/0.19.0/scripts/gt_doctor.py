@@ -1799,6 +1799,26 @@ def _placement(gate, vault, root, rel):
     pi_daily_job(gate)
 
 
+RECEIPT = Path.home() / ".claude" / "golden-thread" / "post-install-validated.json"
+WRITERS = ("hook", "manual", "install")
+
+
+def write_receipt(version, failed, counts, stage, writer):
+    """The one writer of post-install-validated.json (0.19.0). gt_version_check reads it to run
+    the session gate once per installed version; a person reads it to see what was proven."""
+    import time
+    try:
+        RECEIPT.parent.mkdir(parents=True, exist_ok=True)
+        tmp = RECEIPT.with_name(RECEIPT.name + ".tmp")
+        tmp.write_text(json.dumps({"version": version, "failed": bool(failed), "counts": counts,
+                                   "stage": stage, "writer": writer,
+                                   "at": time.strftime("%Y-%m-%dT%H:%M:%S%z")}) + "\n",
+                       encoding="utf-8")
+        os.replace(tmp, RECEIPT)
+    except OSError:
+        pass
+
+
 def post_install_main(a):
     stage = getattr(a, "stage", None) or "final"
     rel = release_dir(getattr(a, "release", None), plugin_root(getattr(a, "plugin_root", None)))
@@ -1808,15 +1828,23 @@ def post_install_main(a):
     vault = vault_path(getattr(a, "vault", None))
     import time
     t0 = time.monotonic()
+    crashed = False
     try:
         gate = post_install(vault, root, rel, stage)
     except (Exception, SystemExit) as exc:   # fail closed: a crashed gate is a failed gate
+        crashed = True
         gate = Gate(stage)
         gate.add("post-install", PFAIL, "could not run: %s: %s" % (exc.__class__.__name__, exc))
     elapsed = round(time.monotonic() - t0, 1)
     counts = {}
     for r in gate.rows:
         counts[r["state"]] = counts.get(r["state"], 0) + 1
+    # 0.19.0: every COMPLETED session/final run records its verdict, whoever ran it. Not a
+    # crashed gate (could not run is not a verdict), not the install stage (vault rows are
+    # PENDING there by design), not --dry-run.
+    if (not crashed and rel is not None and stage in ("session", "final")
+            and not getattr(a, "dry_run", False)):
+        write_receipt(rel.name, gate.failed, counts, stage, getattr(a, "writer", None) or "manual")
     if getattr(a, "json", False):
         print(json.dumps({"release": rel.name if rel else None,
                           "vault": str(vault) if vault else None, "stage": stage,
@@ -2069,7 +2097,9 @@ def main(argv=None):
     pi.add_argument("--json", action="store_true", default=argparse.SUPPRESS,
                     help="machine-readable output")
     pi.add_argument("--dry-run", action="store_true", default=argparse.SUPPRESS,
-                    help="accepted for the CLI contract; this profile never writes")
+                    help="write nothing, not even the receipt")
+    pi.add_argument("--writer", choices=WRITERS, default=argparse.SUPPRESS,
+                    help="who ran this, recorded in the receipt (default: manual)")
     a = ap.parse_args(argv)
     if getattr(a, "cmd", None) == "post-install":
         return post_install_main(a)

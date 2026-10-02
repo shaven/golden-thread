@@ -320,13 +320,19 @@ def post_install_once(src_root):
         return
     try:
         with open(doctor, encoding="utf-8") as fh:
-            if "def post_install_main" not in fh.read():
-                return
+            src = fh.read()
     except OSError:
         return
+    if "def post_install_main" not in src:
+        return
+    # 0.19.0: the doctor writes the receipt itself (one writer, every completed run); a doctor
+    # from before that is still answered here, so a mixed install keeps working.
+    doctor_writes = "def write_receipt" in src
     import subprocess
     import time
     cmd = [sys.executable or "python3", doctor, "post-install", "--stage", "session", "--json"]
+    if doctor_writes:
+        cmd += ["--writer", "hook"]
     if src_root:
         cmd += ["--plugin-root", src_root]
         # Judge the release that is INSTALLED (a deliberate rollback included), not the
@@ -358,6 +364,8 @@ def post_install_once(src_root):
             print("          fix: %s" % r["fix"])
     if data.get("failed") or any(r.get("state") == "PENDING" for r in rows):
         print("  full gate: python3 %s post-install --vault <vault>" % doctor)
+    if doctor_writes:
+        return
     try:
         os.makedirs(os.path.dirname(GATE_MARKER), exist_ok=True)
         tmp = GATE_MARKER + ".tmp"
