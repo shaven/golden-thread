@@ -19,7 +19,8 @@ run: why", never PASS. It is read-only -- it writes neither the vault nor settin
 hooks it exercises are run against a copy of vault-config.json in a temporary HOME.
 
   release         which release dir the answers are relative to (--release, else this file's own
-                  release when run from one, else the newest under the wired plugin root)
+                  release when its directory is named as a version, else the installed release
+                  from installed_plugins.json, else the newest under the wired plugin root)
   installed       installed gt version == the release, and every ON module at its newest version
   components      gt_components drift clean against the release (reuses `components`)
   wiring          every declared hook wired (reuses `wiring`) and each Core rule's mechanism
@@ -1075,13 +1076,39 @@ class Gate:
 
 def release_dir(explicit, root):
     """The release this gate answers for. Explicit wins; then this file's own release when it
-    runs from one (a source tree, not the hooks dir); then the newest under the plugin root."""
+    runs from a directory named as a version (a source tree or the cache, not the hooks dir or
+    the marketplace's `gt/`); then the installed release; then the newest under the root."""
     if explicit:
         p = Path(explicit).expanduser()
         return p if (p / ".claude-plugin" / "plugin.json").is_file() else None
     if (HERE.parent / ".claude-plugin" / "plugin.json").is_file():
-        return HERE.parent
+        # 0.19.0: only a directory NAMED as a version is a release. The marketplace copy sits
+        # in `plugins/gt/`, and taking `gt` for the release failed components against it while
+        # the cache copy of the same install passed. Ask the install record instead.
+        if _VERSION_NAME.match(HERE.parent.name):
+            return HERE.parent
+        return installed_release() or version_dir(root) or HERE.parent
     return version_dir(root)
+
+
+_VERSION_NAME = __import__("re").compile(r"\A\d+\.\d+\.\d+\Z")
+
+
+def installed_release():
+    """The release Claude Code has installed for gt, from installed_plugins.json, or None."""
+    try:
+        data = json.loads(INSTALLED_PLUGINS.read_text(encoding="utf-8"))
+    except Exception:
+        return None
+    plugins = data.get("plugins", data) if isinstance(data, dict) else {}
+    for key, entries in (plugins if isinstance(plugins, dict) else {}).items():
+        if not key.startswith("gt@"):
+            continue
+        for e in entries if isinstance(entries, list) else [entries]:
+            p = Path(str((e or {}).get("installPath") or "")).expanduser()
+            if _VERSION_NAME.match(p.name) and (p / ".claude-plugin" / "plugin.json").is_file():
+                return p
+    return None
 
 
 def _fold(gate, rep, check, row=None, ok_states=(OK,), warn_as=PFAIL):
@@ -2033,8 +2060,9 @@ def main(argv=None):
     pi.add_argument("--plugin-root", default=argparse.SUPPRESS,
                     help="plugin source (default: read from settings.json)")
     pi.add_argument("--release", default=argparse.SUPPRESS,
-                    help="the release dir to validate against (default: this file's release, "
-                         "else the newest under the plugin root)")
+                    help="the release dir to validate against (default: this file's release "
+                         "when its dir is a version, else the installed release, else the "
+                         "newest under the plugin root)")
     pi.add_argument("--stage", choices=STAGES, default=argparse.SUPPRESS,
                     help="install/session: rows that need /gt:gt-upgrade are PENDING; "
                          "final (default): they FAIL")

@@ -197,8 +197,8 @@
    "sha256": "5e44883a367e6f4b50b8dd83428b20ffeaf2619a32a7cc9d2cda2343f92bec17"
   },
   "scripts/gt_doctor.py": {
-   "bytes": 101303,
-   "sha256": "179f468d865a5575e9ef17caf5dfc5233e3dbad618d55734e32862fa81a90c8a"
+   "bytes": 102779,
+   "sha256": "0a25a324c456f023558c6d0a038ed9139156081f5b5956461e527711ba3be8e8"
   },
   "scripts/gt_entities.py": {
    "bytes": 5423,
@@ -629,7 +629,7 @@
    "sha256": "05a5e61333b0ba5d6f97866735268f7f99ff354d9502b2b05e0e512a86f82a6b"
   }
  },
- "generated": "2026-10-02T09:59:32",
+ "generated": "2026-10-02T10:16:47",
  "hooks": [
   {
    "args": [

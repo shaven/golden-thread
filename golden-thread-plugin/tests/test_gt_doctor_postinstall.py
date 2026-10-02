@@ -188,6 +188,35 @@ class CorrectInstallPasses(InstalledMachine):
         self.assertEqual(rc, 0)
 
 
+class TheReleaseIsTheInstalledOneFromAnyPath(InstalledMachine):
+    """0.19.0 (request post-install-misreads-release-from-marketplace-path). Run from the
+    marketplace copy, whose plugin directory is named `gt`, post-install took `gt` for the
+    release and failed components against it; from the cache copy it passed. One install, one
+    answer, whichever copy of the doctor is asked."""
+
+    def copies(self):
+        plugins = self.home / ".claude" / "plugins"
+        cache = sorted(plugins.glob("cache/*/gt/*/scripts/gt_doctor.py"))
+        market = sorted(plugins.glob("marketplaces/*/plugins/gt/scripts/gt_doctor.py"))
+        self.assertTrue(cache and market, "the fixture install has no cache/marketplace copy")
+        return {"cache": cache[-1], "marketplace": market[-1]}
+
+    def run_from(self, doctor):
+        p = self.py(doctor, "post-install", "--vault", self.vault, "--json")
+        self.assertNotIn("Traceback", p.stdout + p.stderr)
+        return json.loads(p.stdout)
+
+    def test_every_copy_names_the_installed_release_and_agrees_on_every_row(self):
+        got ={k: self.run_from(v) for k, v in self.copies().items()}
+        cache_rel = self.copies()["cache"].parent.parent.name
+        for where, data in got.items():
+            with self.subTest(where=where):
+                self.assertEqual(data["release"], cache_rel)
+        states = {k: {r["row"]: r["state"] for r in d["rows"]} for k, d in got.items()}
+        self.assertEqual(states["marketplace"], states["cache"])
+        self.assertFalse(got["marketplace"]["failed"], got["marketplace"]["rows"])
+
+
 class BrokenRowsFail(InstalledMachine):
     def test_old_rule1_text_in_the_vault_fails_row_2(self):
         self.set_old_rule1()
