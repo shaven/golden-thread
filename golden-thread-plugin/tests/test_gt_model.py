@@ -241,6 +241,50 @@ FAST = {"gt-task-list", "gt-handoff-list", "gt-list", "gt-context", "gt-settings
 DEEP = {"gt-validate", "gt-validation", "gt-plan", "gt-implement", "gt-promote"}
 
 
+class EffortResolvesWithTheModel(ModelBase):
+    """0.19.0: each intent maps to a model AND an effort. The shipped pack is the `average`
+    profile (owner, 2026-10-02): fast = haiku with NO effort (Haiku has no effort levels),
+    balanced = sonnet medium, deep = opus high. An effort a model does not support is refused
+    and names the allowed values -- Claude Code would lower it silently, so gt never sets one."""
+
+    def test_the_shipped_pack_is_the_average_profile(self):
+        got = {}
+        for intent in ("fast", "balanced", "deep"):
+            p, d = self.resolve(intent)
+            self.assertOk(p)
+            got[intent] = (d["model"], d.get("effort"))
+        self.assertEqual(got, {"fast": ("haiku", None), "balanced": ("sonnet", "medium"),
+                               "deep": ("opus", "high")})
+
+    def test_the_line_names_the_effort(self):
+        _p, d = self.resolve("deep")
+        self.assertIn("effort high", d["line"])
+
+    def test_an_effort_on_haiku_is_refused_naming_why(self):
+        self.local([{"intent": "fast", "model": "haiku", "effort": "low",
+                     "verified": "2026-10-02"}])
+        p, _d = self.resolve("fast")
+        self.assertEqual(p.returncode, 2, p.stdout + p.stderr)
+        self.assertIn("haiku", p.stdout + p.stderr)
+        self.assertIn("no effort levels", p.stdout + p.stderr)
+
+    def test_an_unknown_effort_is_refused_naming_the_allowed_values(self):
+        self.local([{"intent": "deep", "model": "opus", "effort": "turbo",
+                     "verified": "2026-10-02"}])
+        p, _d = self.resolve("deep")
+        self.assertEqual(p.returncode, 2)
+        self.assertIn("low, medium, high, xhigh, max", p.stdout + p.stderr)
+
+    def test_xhigh_on_opus_and_sonnet_is_accepted(self):
+        for model in ("opus", "sonnet"):
+            with self.subTest(model=model):
+                self.local([{"intent": "deep", "model": model, "effort": "xhigh",
+                             "verified": "2026-10-02"}])
+                p, d = self.resolve("deep")
+                self.assertOk(p)
+                self.assertEqual((d["model"], d["effort"]), (model, "xhigh"))
+
+
 class EveryShippedSkillDeclaresItsIntent(TheMappingPackIsTheOnlyPlace):
 
     def test_each_skill_declares_the_intent_the_table_gives_it(self):

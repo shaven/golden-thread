@@ -48,6 +48,13 @@ import gt_registry                                        # noqa: E402
 SLOT = "model"
 INTENTS = ("fast", "balanced", "deep")
 DEFAULT = "balanced"
+# Effort (0.19.0). Which levels each model accepts, from Claude Code's model-config docs
+# (code.claude.com/docs/en/model-config.md, read 2026-10-02): Opus/Sonnet 5.5 take all five;
+# "Haiku does not have native effort level support". Claude Code LOWERS an unsupported level
+# silently, so gt refuses one instead of writing it.
+EFFORTS = ("low", "medium", "high", "xhigh", "max")
+MODEL_EFFORTS = {"haiku": (), "sonnet": EFFORTS, "opus": EFFORTS}
+EFFORTS_VERIFIED = "2026-10-02"
 SESSION_DEFAULT = "the session's own model"
 FRONTMATTER_KEY = re.compile(r"^model_intent:[ \t]*(.*?)[ \t]*$")
 OK, PROBLEMS, USAGE = 0, 1, 2
@@ -55,6 +62,34 @@ OK, PROBLEMS, USAGE = 0, 1, 2
 
 # Agent specs predate intents and say `model_tier`; one vocabulary from here on (0.19.0).
 TIER_INTENT = {"fast": "fast", "standard": "balanced", "careful": "deep"}
+
+
+def allowed_efforts(model):
+    """-> tuple of efforts the model accepts, () for none, None when gt does not know."""
+    m = (model or "").lower()
+    for family, levels in MODEL_EFFORTS.items():
+        if family in m:
+            return levels
+    return None
+
+
+def effort_problem(model, effort):
+    """-> None when `effort` may be set for `model`, else why not, naming the allowed values."""
+    if effort is None:
+        return None
+    if effort not in EFFORTS:
+        return "effort %r is not one of %s" % (effort, ", ".join(EFFORTS))
+    allowed = allowed_efforts(model)
+    if allowed is None:
+        return ("effort %s for model %r: gt does not know which levels that model accepts "
+                "(known: %s); leave effort unset" % (effort, model, ", ".join(MODEL_EFFORTS)))
+    if not allowed:
+        return ("model %s has no effort levels (Claude Code docs, verified %s); leave "
+                "effort unset" % (model, EFFORTS_VERIFIED))
+    if effort not in allowed:
+        return "model %s does not accept effort %s; it accepts %s" % (
+            model, effort, ", ".join(allowed))
+    return None
 
 
 def intent_for_tier(tier):
@@ -71,7 +106,8 @@ def mapping(vault=None):
     out = {}
     for rec in effective:
         e = rec["entry"]
-        out[e.get("intent")] = {"model": e.get("model"), "verified": e.get("verified"),
+        out[e.get("intent")] = {"model": e.get("model"), "effort": e.get("effort"),
+                                "verified": e.get("verified"),
                                 "source": rec["source"], "tier": rec["tier"]}
     return out, shadowed, retracted, problems
 
@@ -82,7 +118,8 @@ def resolve(intent, vault=None):
     if intent is not None and intent not in INTENTS:
         raise ValueError("model_intent %r is not one of %s" % (intent, "|".join(INTENTS)))
     table, shadowed, _retracted, problems = mapping(vault)
-    res = {"intent": intent, "declared": intent is not None, "model": None, "ran_at": None,
+    res = {"intent": intent, "declared": intent is not None, "model": None, "effort": None,
+           "ran_at": None,
            "unmapped": False, "verified": None, "source": None, "tier": None,
            "shadowed": [{"intent": s["entry"].get("intent"), "model": s["entry"].get("model"),
                          "source": s["source"], "tier": s["tier"], "lost_to": s["lost_to"]}
@@ -103,14 +140,18 @@ def resolve(intent, vault=None):
                        % (intent, "UNMAPPED" if res["unmapped"] else "unmapped", at,
                           SESSION_DEFAULT))
         return res
-    res.update(model=hit["model"], verified=hit["verified"], source=hit["source"],
-               tier=hit["tier"])
+    bad = effort_problem(hit["model"], hit.get("effort"))
+    if bad:
+        raise ValueError("model_intent %s (%s pack %s): %s" % (at, hit["tier"], hit["source"], bad))
+    res.update(model=hit["model"], effort=hit.get("effort"), verified=hit["verified"],
+               source=hit["source"], tier=hit["tier"])
     where = "%s pack %s, verified %s" % (hit["tier"], hit["source"], hit["verified"] or "never")
     if res["unmapped"]:
         res["line"] = ("model_intent %s is UNMAPPED -> running at %s -> model %s (%s)"
                        % (intent, at, hit["model"], where))
     else:
-        res["line"] = "model_intent %s -> model %s (%s)" % (intent, hit["model"], where)
+        res["line"] = "model_intent %s -> model %s, effort %s (%s)" % (
+            intent, hit["model"], hit.get("effort") or "none (unset)", where)
     return res
 
 

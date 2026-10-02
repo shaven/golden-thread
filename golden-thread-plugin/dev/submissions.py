@@ -121,9 +121,10 @@ SLOTS = {
     # 0.18.1: the intent -> model mapping (gt_model.py). Tier D because the resolved name is
     # printed. `verified` is the date the name was last checked against the provider -- a
     # model name nobody re-checked reads as evidence while being wrong (see SPDX_LIST_VERSION).
-    "model":            {"model_reachable": True,
+    "model":            {"model_reachable": True, "optional": ("effort",),
                          "fields": {"intent": "enum:%s" % "|".join(("fast", "balanced", "deep")),
-                                    "model": "token", "verified": "date"}},
+                                    "model": "token", "verified": "date",
+                                    "effort": "enum:low|medium|high|xhigh|max"}},
 }
 # The one vocabulary a skill or agent may declare as `model_intent` (gt_model.INTENTS). An
 # unknown value is refused here, at submission, rather than discovered when the skill runs.

@@ -105,8 +105,8 @@
    "sha256": "a7e103378a7fd9889056458608b8fbdcfaff7ceed2b63afb0cd7ec0929031307"
   },
   "packs/core/model.intents.pack.json": {
-   "bytes": 618,
-   "sha256": "0e20813a6afda31936cd18b588d37b522e9649405fbeefe3451d7ba7d0cb8e34"
+   "bytes": 716,
+   "sha256": "08c0a4f9eab2a30b1aef3e08810f9cea3837f6a31d96e7591dacf0952d6bbee3"
   },
   "packs/core/naming.conventions.pack.json": {
    "bytes": 1744,
@@ -257,8 +257,8 @@
    "sha256": "1b958e3f06b7a9246659ee8cffbdb5791b42fab2df614ddd044f5fcf5043a1f6"
   },
   "scripts/gt_model.py": {
-   "bytes": 9244,
-   "sha256": "a958d86a2056dc1e1924dbd5cc641f9af9af9d9331a6e29e410455c54ddd3c01"
+   "bytes": 11193,
+   "sha256": "e548f01cf68d858ab78c3f5c7897d1b6e722771d43fb757eaa1482065f3c8351"
   },
   "scripts/gt_model_prices.json": {
    "bytes": 730,
@@ -629,7 +629,7 @@
    "sha256": "05a5e61333b0ba5d6f97866735268f7f99ff354d9502b2b05e0e512a86f82a6b"
   }
  },
- "generated": "2026-10-02T10:45:13",
+ "generated": "2026-10-02T11:16:46",
  "hooks": [
   {
    "args": [
