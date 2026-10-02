@@ -2,7 +2,7 @@
 """gt_allin_commit.py -- commit, but only once the evidence exists. Never pushes.
 
   gt_allin_commit.py --repo PATH -m "message" [--vault V] [--allow-findings]
-                     [--allow-default-branch] [--dry-run]
+                     [--allow-default-branch] [--dry-run] [--timeout S]
 
 WHY THIS IS A SEPARATE COMMAND FROM gt_allin.py
 
@@ -48,7 +48,8 @@ sys.path.insert(0, HERE)
 # origin/HEAD when there is one. `Main`, `MASTER` and `MaIn` all committed unguarded against
 # the old exact-lowercase pair (validation 2026-09-16).
 DEFAULT_BRANCHES = ("main", "master", "trunk", "develop", "production")
-TIMEOUT_S = 300
+TIMEOUT_S = 300          # per check; --timeout or the allin_timeout setting (0.19.0)
+N_CHECKS = 12            # the checks run one after another: the whole run gets N x that
 # A commit that is halfway through something must not be concluded by a tool nobody told.
 IN_PROGRESS = ("MERGE_HEAD", "CHERRY_PICK_HEAD", "REVERT_HEAD", "rebase-merge", "rebase-apply")
 
@@ -71,15 +72,25 @@ def staged_files(repo):
     return [os.path.join(repo, n) for n in out.stdout.split("\0") if n.strip()]
 
 
-def run_script(name, args):
+def setting_timeout():
+    """The allin_timeout setting (seconds per check), or TIMEOUT_S."""
+    try:
+        import json
+        with open(os.path.expanduser("~/.claude/vault-config.json"), encoding="utf-8") as fh:
+            return int(json.load(fh).get("allin_timeout") or TIMEOUT_S)
+    except Exception:
+        return TIMEOUT_S
+
+
+def run_script(name, args, timeout=TIMEOUT_S):
     path = os.path.join(HERE, name)
     if not os.path.isfile(path):
         return None, "%s is not installed" % name
     try:
         proc = subprocess.run([sys.executable, path] + args, capture_output=True, text=True,
-                              timeout=TIMEOUT_S)
+                              timeout=timeout)
     except subprocess.TimeoutExpired:
-        return None, "%s did not finish within %ds" % (name, TIMEOUT_S)
+        return None, "%s did not finish within %ds" % (name, timeout)
     except OSError as exc:
         return None, "%s could not be run: %s" % (name, exc)
     return proc, None
@@ -129,7 +140,11 @@ def main(argv=None):
                     help="commit directly to main/master")
     ap.add_argument("--dry-run", action="store_true",
                     help="run every check and say what would happen; commit nothing")
+    ap.add_argument("--timeout", type=int,
+                    help="seconds each check may take (default: the allin_timeout setting, "
+                         "else %d)" % TIMEOUT_S)
     args = ap.parse_args(argv)
+    per_check = args.timeout or setting_timeout()
 
     repo = os.path.abspath(os.path.expanduser(args.repo))
     if not os.path.isdir(os.path.join(repo, ".git")):
@@ -163,10 +178,13 @@ def main(argv=None):
 
     # 1. The checks. A member that COULD NOT RUN is fatal regardless of --allow-findings:
     #    "I could not check" is not a finding to be accepted, it is an unknown.
-    allin_args = ["--repo", repo]
+    # `tests` is skipped ON PURPOSE (0.19.0): step 2 checks the test receipt, which is the
+    # evidence the suite passed. Re-running the suite here put it on the committing machine
+    # (gt's: 3000 tests, the load that froze a Mac) and could never finish in the limit.
+    allin_args = ["--repo", repo, "--skip", "tests", "--timeout", str(per_check)]
     if args.vault:
         allin_args += ["--vault", args.vault]
-    proc, err = run_script("gt_allin.py", allin_args)
+    proc, err = run_script("gt_allin.py", allin_args, timeout=per_check * N_CHECKS + 60)
     if err:
         refusals.append("the checks could not run: %s" % err)
     else:

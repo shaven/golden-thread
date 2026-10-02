@@ -211,6 +211,9 @@ def main(argv=None):
     ap.add_argument("--repo", help="the code tree to scan")
     ap.add_argument("--only", help="comma-separated member names")
     ap.add_argument("--list", action="store_true")
+    ap.add_argument("--skip", help="comma-separated members to leave out ON PURPOSE (named in "
+                                   "the output); gt_allin_commit skips `tests`, whose receipt it "
+                                   "checks itself")
     ap.add_argument("--suggest-push", action="store_true",
                     help="print the push command; this tool never runs it")
     ap.add_argument("--timeout", type=int, default=gt_aggregate.DEFAULT_TIMEOUT_S,
@@ -237,7 +240,16 @@ def main(argv=None):
     if err:
         print(err, file=sys.stderr)
         return USAGE
+    skipped = [s.strip() for s in (args.skip or "").split(",") if s.strip()]
+    unknown = [s for s in skipped if s not in MEMBERS]
+    if unknown:
+        print("--skip: no member named %s" % ", ".join(unknown), file=sys.stderr)
+        return USAGE
+    skipped = [s for s in skipped if s in wanted]
+    wanted = [w for w in wanted if w not in skipped]
     if not args.json:
+        if skipped:
+            print("skipped on request: %s" % ", ".join(skipped))
         print("running %d member(s): %s" % (len(wanted), ", ".join(wanted)))
         print("this command reports only -- it does not push, commit or apply anything\n")
 
@@ -248,7 +260,7 @@ def main(argv=None):
     found = [r for r in ran if r["status"] == "findings"]
 
     if args.json:
-        print(json.dumps({"version": 1, "asked": wanted,
+        print(json.dumps({"version": 1, "asked": wanted, "skipped": skipped,
                           "headline": "%d of %d member(s) ran; %d reported findings"
                                       % (len(ran), len(wanted), len(found)),
                           "ran": [r["member"] for r in ran],

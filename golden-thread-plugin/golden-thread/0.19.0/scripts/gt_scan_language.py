@@ -180,10 +180,30 @@ def scan_file(path, rel, raw, lang, checks):
     return found
 
 
+_VERSION_DIR = re.compile(r"\A\d+\.\d+\.\d+\Z")
+
+
+def superseded_releases(dirpath, dirnames):
+    """-> the child dirs to skip: a plugin's release folders older than its newest two (0.19.0).
+
+    A plugin repo keeps every release it shipped (gt had 29); scanning them all re-reports the
+    same findings 29 times and alone took a scan past the commit gate's limit. Only folders
+    named as a version AND holding .claude-plugin/plugin.json count, and only when there are
+    three or more -- a docs/1.2.0/ folder is never skipped. Secrets are deliberately NOT
+    filtered this way (gt_secrets walks everything): a credential in an old release still leaked."""
+    rel = [d for d in dirnames if _VERSION_DIR.match(d)
+           and os.path.isfile(os.path.join(dirpath, d, ".claude-plugin", "plugin.json"))]
+    if len(rel) < 3:
+        return set()
+    key = lambda v: tuple(int(x) for x in v.split("."))
+    return set(sorted(rel, key=key)[:-2])
+
+
 def walk(root, ignore_rules, classify_rules, all_files):
     """Yield (abspath, relpath, kind) for every file the rules say to look at."""
     for dirpath, dirnames, filenames in os.walk(root):
-        dirnames[:] = [d for d in sorted(dirnames) if d != ".git"]
+        old = superseded_releases(dirpath, dirnames)
+        dirnames[:] = [d for d in sorted(dirnames) if d != ".git" and d not in old]
         rel_dir = os.path.relpath(dirpath, root)
         keep = []
         for d in dirnames:

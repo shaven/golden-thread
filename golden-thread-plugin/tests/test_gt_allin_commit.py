@@ -207,5 +207,22 @@ class CommitTest(unittest.TestCase):
         self.assertNotEqual(r.returncode, 0)
 
 
+
+class TheGateFitsABigRepo(CommitTest):
+    """0.19.0: the gate's fixed 300 s could not cover gt's own repo. It takes --timeout (or
+    the allin_timeout setting), and it no longer re-runs the test suite: step 2 checks the
+    receipt, which IS the evidence the tests ran."""
+
+    def test_timeout_is_a_flag(self):
+        p = subprocess.run([sys.executable, str(SCRIPT), "--help"], capture_output=True, text=True)
+        self.assertIn("--timeout", p.stdout)
+
+    def test_the_gate_skips_the_tests_member_and_still_demands_a_receipt(self):
+        self.stage()
+        p = self.run_commit("--dry-run", "--timeout", "120")
+        self.assertIn("skipped on request: tests", p.stdout)
+        self.assertIn("receipt", (p.stdout + p.stderr).lower())
+        self.assertEqual(self.head_count(), 1)
+
 if __name__ == "__main__":
     unittest.main()

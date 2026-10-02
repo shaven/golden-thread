@@ -59,6 +59,19 @@ import sys
 CONFIG = os.path.expanduser("~/.claude/vault-config.json")
 
 SETTINGS = {
+    "allin_timeout": {
+        "default": "300",
+        "values": ["300", "600", "1200", "1800", "3600"],
+        "summary": "Seconds each all-in check may take, in gt-allin and the commit gate.",
+        "detail": (
+            "300     the default; enough for a typical repo\n"
+            "600-3600  for a large repo whose scan takes longer\n"
+            "\n"
+            "A check that runs past it is COULD NOT RUN, which refuses a commit like any other\n"
+            "unknown. The commit gate runs the checks one after another and gives the whole\n"
+            "run 12 times this. Until 0.19.0 it was a fixed 300 s, and gt's own repo (29\n"
+            "release folders) could never pass the gate."),
+    },
     "vault_hints": {
         "default": "off",
         "values": ["off", "on"],

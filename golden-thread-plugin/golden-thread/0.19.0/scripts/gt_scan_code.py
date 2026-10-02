@@ -124,12 +124,22 @@ def in_scope(path: Path, rel: str, excludes) -> tuple[bool, str | None]:
     return False, "not code by the union rule"
 
 
+try:                                   # 0.19.0: old plugin releases are not re-scanned
+    sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+    from gt_scan_language import superseded_releases as _superseded_releases
+except Exception:                      # noqa: BLE001 - a lone copy scans everything, as before
+    _superseded_releases = None
+
+
 def walk(root: Path):
     if root.is_file():
         yield root
         return
     for dirpath, dirnames, filenames in os.walk(root):
         dirnames[:] = [d for d in dirnames if d not in SKIP_DIRS]
+        if _superseded_releases:
+            old = _superseded_releases(dirpath, dirnames)
+            dirnames[:] = [d for d in dirnames if d not in old]
         for fn in sorted(filenames):
             yield Path(dirpath) / fn
 

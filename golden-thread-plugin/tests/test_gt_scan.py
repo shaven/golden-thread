@@ -417,5 +417,29 @@ class ShippedPackFalsePositives(unittest.TestCase):
         self.assertFalse(re.match(rx, "except:"))
 
 
+
+class OldReleaseFoldersAreNotScanned(ScanBase):
+    """0.19.0: a plugin repo keeps every release it ever shipped (gt: 29 folders). Only the
+    newest two -- what gt-src carries -- are scanned; the rest are history, re-reporting the
+    same findings, and alone they pushed a scan past the commit gate's time limit."""
+
+    def test_only_the_newest_two_release_folders_are_scanned(self):
+        self.language_packs()
+        for v in ("0.9.0", "0.10.0", "0.10.1"):
+            d = self.tree / "plug" / "golden-thread" / v
+            (d / ".claude-plugin").mkdir(parents=True)
+            (d / ".claude-plugin" / "plugin.json").write_text("{}")
+            self.write("plug/golden-thread/%s/x.py" % v, "def BadName(): pass\n")
+        d = json.loads(self.run_leaf("--json").stdout)
+        got = sorted({f["path"].split("/")[2] for f in d["findings"] if f["path"].endswith("x.py")})
+        self.assertEqual(got, ["0.10.0", "0.10.1"])
+
+    def test_plain_versioned_folders_without_a_plugin_are_still_scanned(self):
+        self.language_packs()
+        for v in ("1.0.0", "1.1.0", "1.2.0"):
+            self.write("docs/%s/x.py" % v, "def BadName(): pass\n")
+        d = json.loads(self.run_leaf("--json").stdout)
+        self.assertEqual(len([f for f in d["findings"] if f["path"].endswith("x.py")]), 3)
+
 if __name__ == "__main__":
     unittest.main()

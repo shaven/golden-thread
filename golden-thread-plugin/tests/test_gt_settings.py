@@ -71,6 +71,7 @@ EXPECTED = {
     "runners": ("", None),
     # 0.19.0: prompt-relevant vault hints, off by default (owner, 2026-10-02).
     "vault_hints": ("off", ["off", "on"]),
+    "allin_timeout": ("300", ["300", "600", "1200", "1800", "3600"]),
 }
 # install_demo is gone since 0.14.0: the demo is a module and its install is a module
 # choice (install-choices.json), not a gt setting.

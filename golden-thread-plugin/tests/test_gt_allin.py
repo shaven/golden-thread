@@ -255,5 +255,24 @@ class AllInTest(unittest.TestCase):
         self.assertIn("--repo", d["could_not_run"][0]["detail"])
 
 
+
+class SkipIsSaidOutLoud(AllInTest):
+    """0.19.0: --skip NAME leaves a member out ON PURPOSE and says so. gt_allin_commit skips
+    `tests` because it checks the test receipt itself; running the suite again inside the gate
+    put the whole suite on the committing machine and could never finish in its time limit."""
+
+    def test_a_skipped_member_is_named_and_not_run(self):
+        p = self.run_allin("--repo", str(self.repo), "--only", "scan,secrets", "--skip", "secrets",
+                           "--json")
+        d = json.loads(p.stdout)
+        self.assertEqual(d["asked"], ["scan"])
+        self.assertEqual(d["skipped"], ["secrets"])
+        p = self.run_allin("--repo", str(self.repo), "--only", "scan,secrets", "--skip", "secrets")
+        self.assertIn("skipped on request: secrets", p.stdout)
+
+    def test_skipping_an_unknown_member_is_usage(self):
+        p = self.run_allin("--repo", str(self.repo), "--skip", "nonesuch")
+        self.assertEqual(p.returncode, 2)
+
 if __name__ == "__main__":
     unittest.main()
