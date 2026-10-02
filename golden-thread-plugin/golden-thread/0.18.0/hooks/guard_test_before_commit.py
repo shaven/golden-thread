@@ -216,6 +216,77 @@ def mode():
         return "auto"
 
 
+def staged_hashes(root):
+    """{rel: sha256 of the STAGED bytes} for every added/copied/modified path. Deletions carry
+    no content a checker could object to. One `git cat-file --batch` for all of them."""
+    import hashlib
+    names = [n for n in git(root, "diff", "--cached", "--name-only", "--diff-filter=ACM",
+                            "-z").split("\0") if n]
+    if not names:
+        return {}
+    try:
+        p = subprocess.run(["git", "-C", root, "cat-file", "--batch"],
+                           input=("".join(":%s\n" % n for n in names)).encode("utf-8"),
+                           capture_output=True, timeout=30)
+    except Exception:
+        return None
+    if p.returncode != 0:
+        return None
+    out, buf = {}, p.stdout
+    for n in names:
+        nl = buf.find(b"\n")
+        head = buf[:nl].split()
+        if len(head) < 3 or head[1] == b"missing":
+            return None
+        size = int(head[2])
+        out[n] = hashlib.sha256(buf[nl + 1:nl + 1 + size]).hexdigest()
+        buf = buf[nl + 1 + size + 1:]
+    return out
+
+
+def check_gate(cwd):
+    """The validation host's commit gate (0.18.0) -- OFF unless `commit_checks on`.
+
+    One guard for every module's checkers: a commit whose staged content no passing
+    gt_check.py receipt covers is refused, naming the file and the failing checker. With the
+    setting off this returns before reading anything, so commits behave exactly as before.
+    Fails open like everything here, but says so when it cannot check."""
+    if os.environ.get("GT_CHECK_GATE", "").strip().lower() == "off":
+        return
+    try:
+        import gt_settings
+        if gt_settings.get("commit_checks") != "on":
+            return
+    except Exception:
+        return
+    root = git(cwd, "rev-parse", "--show-toplevel").strip()
+    if not root or os.path.exists(os.path.join(root, OPT_OUT)):
+        return
+    hashes = staged_hashes(root)
+    if hashes is None:
+        no_objection("commit_checks is DEGRADED: the staged content could not be read, so "
+                     "this commit was not checked.")
+    if not hashes:
+        return
+    try:
+        import gt_test_receipt
+        ok, why, checker = gt_test_receipt.check_covers(root, hashes)
+    except Exception as exc:
+        no_objection("commit_checks is DEGRADED and did not check this commit: %s: %s. "
+                     "gt_test_receipt.py should sit beside this hook -- re-run install.sh."
+                     % (type(exc).__name__, exc))
+    if ok:
+        return
+    deny("BLOCKED by the validation host (commit_checks on).\n\n"
+         "  %s%s\n\n"
+         "Do this instead:\n"
+         "  1. Check what you staged:  gt_check.py run --staged\n"
+         "     (a fix proposal is applied with gt_apply.py; re-stage, then run again)\n"
+         "  2. This one commit only:   GT_CHECK_GATE=off git commit ...\n"
+         "  3. This machine:           gt_settings.py set commit_checks off\n"
+         % (why, ("\n  failing checker: %s" % checker) if checker else ""))
+
+
 def main():
     try:
         payload = json.load(sys.stdin)
@@ -226,6 +297,8 @@ def main():
     command = (payload.get("tool_input") or {}).get("command") or ""
     if "commit" not in command or not is_commit(command):
         no_objection()
+
+    check_gate(payload.get("cwd") or os.getcwd())
 
     setting = mode()
     if setting == "off":

@@ -1791,8 +1791,37 @@ def post_install_main(a):
     return 1 if gate.failed else 0
 
 
+def check_checkers(rep, root, vdir):
+    """The validation host (0.18.0): how many module checkers are installed, and which of
+    them cannot run because a tool they require is not on PATH. Read-only."""
+    chk = _load_script("gt_check.py", HERE, vdir / "scripts" if vdir else None)
+    if chk is None:
+        rep.add("checkers", UNKNOWN, "gt_check.py could not be loaded", fix="run install.sh")
+        return
+    if not root:
+        rep.add("checkers", UNKNOWN, "cannot locate the plugin source",
+                fix="run install.sh, then restart Claude Code")
+        return
+    try:
+        found = chk.installed_checkers(str(root))
+    except Exception as exc:                                  # noqa: BLE001
+        rep.add("checkers", UNKNOWN, "checkers could not be listed", str(exc))
+        return
+    missing = [c for c in found if c["missing_tools"]]
+    lines = ["%s — tool(s) missing: %s" % (c["key"], ", ".join(c["missing_tools"]))
+             for c in missing]
+    summary = "%d checker(s) installed" % len(found)
+    if missing:
+        rep.add("checkers", WARN, summary + ", %d cannot run (required tool missing)"
+                % len(missing), "\n".join(lines),
+                fix="install the named tool(s); until then those checkers report cannot-check")
+    else:
+        rep.add("checkers", OK, summary,
+                "\n".join(c["key"] for c in found))
+
+
 CHECKS = ("version", "components", "wiring", "core-rules", "modules", "vault",
-          "schedule", "workers", "push", "gt-src", "lint", "astgrep")
+          "schedule", "workers", "push", "gt-src", "lint", "astgrep", "checkers")
 
 
 def main(argv=None):
@@ -1856,6 +1885,8 @@ def main(argv=None):
         check_lint(rep, vault)
     if "astgrep" in wanted:
         check_astgrep(rep)
+    if "checkers" in wanted:
+        check_checkers(rep, root, vdir)
 
     if a.fix:
         fix_wiring(rep, vdir, vault)

@@ -35,6 +35,27 @@ From the user's request, or from what this session just produced. Reduce it to a
 If there are several claims, validate them **separately**. A bundled claim returns a
 bundled verdict, which hides which part failed.
 
+**Step 1b — Can an installed checker decide it?**
+
+Some claims are mechanical: "this page is valid HTML", "this file's content matches its
+MIME type", "every input on this form has a label". A module may have installed a
+**checker** that decides exactly that, deterministically and without a model call. Ask:
+
+```bash
+python3 <base_dir>/../../scripts/gt_check.py list --for <the artifact file(s)>
+```
+
+If a listed checker decides the claim **as stated**, run it instead of an agent:
+
+```bash
+python3 <base_dir>/../../scripts/gt_check.py run <the artifact file(s)> --no-receipt
+```
+
+Report its verdict as the validation result — `pass` → **confirmed**, `fail` → **refuted**
+(name each finding), and `cannot-check` → **cannot-verify**, never a pass. Then go to Step 7.
+Use the fresh-context agent (Steps 2–6) only for a claim no checker covers, or for the part
+of a claim a checker does not decide — and say which part went where.
+
 **Step 2 — Load the project's rule pack**
 
 Read `<vault>/Projects/<slug>/validation-rules.md` if it exists. For a sub-project,

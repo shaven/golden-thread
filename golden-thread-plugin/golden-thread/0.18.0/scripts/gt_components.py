@@ -561,10 +561,21 @@ MODULE_FILE = "module.json"
 MODULE_SCHEMA = 1
 MODULE_KEYS = ("schema", "name", "plugin", "version", "requires_gt", "summary", "default",
                "skills", "scripts", "templates", "hooks", "hookdir_scripts", "settings",
-               "requires_modules", "replaces_core", "demo")
+               "requires_modules", "replaces_core", "demo", "checkers")
 MODULE_REQUIRED = ("schema", "name", "plugin", "version", "requires_gt", "summary", "default")
 MODULE_LISTS = ("skills", "scripts", "templates", "hooks", "hookdir_scripts", "settings",
-                "requires_modules", "replaces_core")
+                "requires_modules", "replaces_core", "checkers")
+# Validation checkers (0.18.0): a module contributes deterministic checks to the core
+# validation host, gt_check.py. Every key is closed; `fixes` is the grant under which the
+# checker may return fix proposals (gt_apply.py writes them, never the checker).
+CHECKER_KEYS = ("id", "script", "globs", "mime", "events", "requires_tools", "timeout",
+                "fixes", "rules", "summary")
+CHECKER_EVENTS = ("pre-commit", "commit-msg")
+CHECKER_RULESETS = ("html",)
+# A fix grant may never name these, whatever the module says; gt_apply.py refuses them again
+# at write time, so a grant that slips past here still cannot write there.
+PROTECTED_FIX_SEGMENTS = ("core-rules", "global-memory", "Sources", ".githooks", ".git",
+                          ".claude")
 MODULE_HOOK_KINDS = ("guard", "reporter")
 # Core-rule enforcement is never module-owned (owner decision 2026-09-14): a module the
 # user can switch off must not be able to take a Core rule's mechanism with it.
@@ -783,6 +794,60 @@ def validate_module(version_dir):
             reasons.append("demo %r is not a relative path inside the module" % (dm,))
         elif not os.path.isfile(os.path.join(version_dir, dm)):
             reasons.append("demo %r does not exist in the module" % (dm,))
+    seen_ids = set()
+    for i, c in enumerate(lst("checkers")):
+        if not isinstance(c, dict):
+            reasons.append("checkers[%d] is not an object" % i)
+            continue
+        for k in sorted(set(c) - set(CHECKER_KEYS)):
+            reasons.append("checkers[%d] unknown key %r" % (i, k))
+        for k in ("id", "script"):
+            if k not in c:
+                reasons.append("checkers[%d] missing %r" % (i, k))
+        cid = c.get("id")
+        if "id" in c:
+            if not (isinstance(cid, str) and re.match(_MODULE_NAME_RE, cid)):
+                reasons.append("checkers[%d] id %r does not match %s" % (i, cid, _MODULE_NAME_RE))
+            elif cid in seen_ids:
+                reasons.append("checkers[%d] id %r is declared twice" % (i, cid))
+            else:
+                seen_ids.add(cid)
+        s = c.get("script")
+        if "script" in c:
+            if not _plain_entry(s):
+                reasons.append("checkers[%d] script %r is not a plain name" % (i, s))
+            elif not os.path.isfile(os.path.join(version_dir, "scripts", s)):
+                reasons.append("checkers[%d] script %r does not exist under scripts/" % (i, s))
+        for k in ("globs", "mime", "events", "requires_tools", "fixes", "rules"):
+            if k in c and not (isinstance(c[k], list)
+                               and all(isinstance(x, str) and x for x in c[k])):
+                reasons.append("checkers[%d] %s must be a list of non-empty strings" % (i, k))
+        if not any(c.get(k) for k in ("globs", "mime", "events")):
+            reasons.append("checkers[%d] applies to nothing: give globs, mime or events" % i)
+        for e in c.get("events") or [] if isinstance(c.get("events"), list) else []:
+            if e not in CHECKER_EVENTS:
+                reasons.append("checkers[%d] event %r is not one of %s"
+                               % (i, e, ", ".join(CHECKER_EVENTS)))
+        for r in c.get("rules") or [] if isinstance(c.get("rules"), list) else []:
+            if r not in CHECKER_RULESETS:
+                reasons.append("checkers[%d] rule set %r is not one of %s"
+                               % (i, r, ", ".join(CHECKER_RULESETS)))
+        for t in c.get("requires_tools") or [] if isinstance(c.get("requires_tools"), list) else []:
+            if not _plain_entry(t):
+                reasons.append("checkers[%d] required tool %r is not a plain name" % (i, t))
+        for g in c.get("fixes") or [] if isinstance(c.get("fixes"), list) else []:
+            if not _rel_entry(g):
+                reasons.append("checkers[%d] fixes %r is not a relative glob" % (i, g))
+            elif any(seg in PROTECTED_FIX_SEGMENTS for seg in g.split("/")):
+                reasons.append("checkers[%d] fixes %r names a protected path; fixes there are "
+                               "never granted" % (i, g))
+        if "timeout" in c and not (isinstance(c["timeout"], int)
+                                   and not isinstance(c["timeout"], bool)
+                                   and 1 <= c["timeout"] <= 600):
+            reasons.append("checkers[%d] timeout %r is not a whole number of seconds in 1..600"
+                           % (i, c["timeout"]))
+        if "summary" in c and not isinstance(c["summary"], str):
+            reasons.append("checkers[%d] summary must be a string" % i)
     return data, reasons
 # END module validator
 

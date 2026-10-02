@@ -359,6 +359,50 @@ SETTINGS = {
     # installed is a module choice (install.sh --with/--without demo, recorded in
     # ~/.claude/golden-thread/install-choices.json). A user's install_demo key in
     # vault-config.json is left alone; a later migration removes it.
+    # -- the validation host (0.18.0): gt_check.py runs module checkers, gt_apply.py
+    #    writes the fixes they propose. --
+    "commit_checks": {
+        "default": "off",
+        "values": ["off", "on"],
+        "summary": "Refuse a `git commit` whose staged content no passing gt_check.py run covers.",
+        "detail": (
+            "off  commits behave exactly as before; checkers run only when asked  (default)\n"
+            "on   the commit guard refuses a commit unless every staged file's EXACT staged\n"
+            "     bytes appear in a gt_check.py receipt on which every applicable checker\n"
+            "     passed. Run `gt_check.py run --staged`, then commit.\n"
+            "\n"
+            "One guard for every module's checkers, not one hook per module. `cannot-check`\n"
+            "(a missing tool, a timeout, malformed output) is not a pass. Per commit:\n"
+            "GT_CHECK_GATE=off git commit ...; per repo: `.gt-no-test-gate`."),
+    },
+    "addon_fixes": {
+        "default": "propose",
+        "values": ["off", "propose", "apply"],
+        "summary": "What happens to the fixes a checker proposes: ignored, listed for you, or applied.",
+        "detail": (
+            "off      proposals are discarded; findings are reported as before\n"
+            "propose  proposals are kept and shown with their diffs; nothing changes until\n"
+            "         you run `gt_apply.py apply <id>` (or --all)  (default)\n"
+            "apply    after a check run, proposals are applied automatically -- but only a\n"
+            "         FIRST-PARTY checker's (its script matches the release MANIFEST); any\n"
+            "         other is capped at propose, and the output says so\n"
+            "\n"
+            "Every apply re-reads the file under a lock and writes only if its hash still\n"
+            "equals the one the checker examined; runs EVERY applicable checker on a staged\n"
+            "copy first; refuses protected paths, files claimed by another live session,\n"
+            "files outside the checker's findings, and content rules (exec bits, new files,\n"
+            "symlinks, invisible Unicode, secret/scrub matches, size, HTML scripts and new\n"
+            "hosts). Applied fixes are left uncommitted; `gt_apply.py undo <id>` restores."),
+    },
+    "addon_fix_size_limit": {
+        "default": "16k",
+        "values": ["1k", "4k", "16k", "64k", "256k"],
+        "summary": "Largest size change (bytes added or removed) one add-on fix may make.",
+        "detail": (
+            "A formatter's fix is usually small. A proposal that grows or shrinks a file by\n"
+            "more than this is refused by gt_apply.py whatever its grant -- a fix that\n"
+            "large is a rewrite, and a rewrite needs a person.  (default 16k)"),
+    },
 }
 
 

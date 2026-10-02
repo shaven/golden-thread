@@ -39,6 +39,10 @@ EXPECTED = {
     "task_surface": ("on", ["off", "on"]),
     # values None == free-form; `validate` carries the shape instead of a closed list.
     "parallel_max": ("auto", None),
+    # 0.18.0: the validation host (gt_check.py) and the add-on fix path (gt_apply.py).
+    "commit_checks": ("off", ["off", "on"]),
+    "addon_fixes": ("propose", ["off", "propose", "apply"]),
+    "addon_fix_size_limit": ("16k", ["1k", "4k", "16k", "64k", "256k"]),
 }
 # install_demo is gone since 0.14.0: the demo is a module and its install is a module
 # choice (install-choices.json), not a gt setting.
