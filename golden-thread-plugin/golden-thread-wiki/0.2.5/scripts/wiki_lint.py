@@ -11,8 +11,10 @@ Checks:
   4. unsourced           Knowledge pages with empty/missing sources, or sources
                          pointing at files that do not exist
   5. superseded-cited    pages citing a source that a newer source supersedes
-  6. review-due          pages whose `updated` (or mtime) is older than N days
-                         (default 90). Age is a REVIEW signal, not staleness.
+  6. review-due          pages last reviewed or touched more than N days ago
+                         (default 90): the newer of `last_reviewed` (stamped when
+                         a page is read) and `updated` (or mtime). Age is a REVIEW
+                         signal, not staleness.
   7. index-mismatch      index entries without files / Knowledge files without
                          index entries
   8. status-schema       status field missing or not in the allowed set
@@ -77,6 +79,30 @@ def frontmatter(text):
                 fm[key] = []
             fm[key].append(line.lstrip()[2:].strip().strip('"').strip("'"))
     return fm, text[end + 4:]
+
+def _date(v):
+    """A frontmatter date, or None. Tolerates quotes; anything else is not a date."""
+    if not v or isinstance(v, list):
+        return None
+    try:
+        return datetime.date.fromisoformat(str(v).strip().strip('"').strip("'"))
+    except ValueError:
+        return None
+
+def review_ref(fm, mtime):
+    """-> (date the review clock starts from, what it was).
+
+    0.2.5: `last_reviewed:` -- stamped when /gt:gt-query or /gt:gt-open READS the page
+    (gt_review_stamp.py, through the write queue) -- counts as a review. The clock runs from the
+    NEWER of `last_reviewed` and `updated`, because rewriting a page is a review of it too; a page
+    with no `last_reviewed` behaves exactly as before (`updated`, else the file's mtime).
+    """
+    reviewed, updated = _date(fm.get("last_reviewed")), _date(fm.get("updated"))
+    if reviewed and (not updated or reviewed >= updated):
+        return reviewed, "review"
+    if updated:
+        return updated, "touch"
+    return datetime.date.fromtimestamp(mtime), "touch"
 
 def norm(target):
     t = str(target).strip().strip('"').strip("'")
@@ -194,13 +220,9 @@ def main():
             findings["expiry-declared"].append(f"{p['file']} (expires_when: {exp})")
         is_principle = (str(p["fm"].get("category")) == "decision"
                         or str(p["fm"].get("kind")) == "principle")
-        upd = p["fm"].get("updated")
-        try:
-            ref = datetime.date.fromisoformat(str(upd)) if upd else datetime.date.fromtimestamp(p["mtime"])
-        except ValueError:
-            ref = datetime.date.fromtimestamp(p["mtime"])
+        ref, how = review_ref(p["fm"], p["mtime"])
         if not is_principle and (today - ref).days > days:
-            findings["review-due"].append(f"{p['file']} (last touch {ref.isoformat()})")
+            findings["review-due"].append(f"{p['file']} (last {how} {ref.isoformat()})")
         st = p["fm"].get("status")
         if not st or str(st) not in STATUSES:
             findings["status-schema"].append(f"{p['file']} (status: {st!r})")

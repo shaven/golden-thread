@@ -9,6 +9,7 @@ constants in this file: a contributed language pack changes what the scan does, 
 whole point of the registry existing.
 
   gt_scan_language.py <path> [--vault V] [--only encoding,naming] [--json] [--all-files]
+                      [--checkpoint FILE | --resume FILE]
   gt_scan_language.py --languages [--vault V]     what this machine can actually check
 
 CHECKS, each named after the slot that defines it
@@ -30,6 +31,11 @@ the `secrets` slot still exists for it. Conflating the two is what hid all three
 REPORTING RULE. This check prints source text (an identifier is the finding), so it must never
 be pointed at content where the text itself is the sensitive thing. That is precisely why
 secrets does not live here.
+
+CHECKPOINTS (0.18.0). `--checkpoint FILE` records progress per file (the walk's order is
+fixed: sorted, so a resume sees the same list) and deletes FILE when the walk completes;
+`--resume FILE` skips the files FILE says were done and merges their findings back in.
+`gt_scan.py` passes these for you. Without either, nothing is written.
 
 Exit: 0 clean | 1 findings, and every definition loaded | 2 usage | 3 the registry reported a
 problem, so the definitions are incomplete and this scan is PARTIAL -- whether or not findings
@@ -265,6 +271,11 @@ def main(argv=None):
                     help="also scan generated, vendored and static files")
     ap.add_argument("--languages", action="store_true",
                     help="print what this machine can actually check, and exit")
+    ck_group = ap.add_mutually_exclusive_group()
+    ck_group.add_argument("--checkpoint", metavar="FILE",
+                          help="record per-file progress in FILE (deleted on completion)")
+    ck_group.add_argument("--resume", metavar="FILE",
+                          help="skip the files FILE records as done; merge their findings")
     args = ap.parse_args(argv)
 
     if args.languages:
@@ -341,18 +352,49 @@ def main(argv=None):
         return 4
 
     findings, unreadable = [], []
-    for abspath, rel, _kind in walk(root, ignore_rules, classify_rules, args.all_files):
+    files = list(walk(root, ignore_rules, classify_rules, args.all_files))
+    ck = None
+    if args.resume or args.checkpoint:
+        import gt_checkpoint                                       # noqa: PLC0415
+        from pathlib import Path                                   # noqa: PLC0415
+        rels = [rel for _a, rel, _k in files]
+        try:
+            if args.resume:
+                ck = gt_checkpoint.Checkpoint.load(args.resume, "scan-language")
+                if ck.items[:ck.next_index] != rels[:ck.next_index]:
+                    raise gt_checkpoint.CheckpointError(
+                        "the tree changed under the files it had done; start over")
+                ck.data["items"] = rels
+            else:
+                ck = gt_checkpoint.Checkpoint.start("scan-language", root, rels,
+                                                    path=Path(args.checkpoint))
+        except gt_checkpoint.CheckpointError as exc:
+            print("cannot resume: %s" % exc, file=sys.stderr)
+            return 2
+        for res in ck.results:
+            findings += res.get("findings", [])
+            unreadable += [tuple(u) for u in res.get("unreadable", [])]
+    for i, (abspath, rel, _kind) in enumerate(files):
+        if ck is not None and i < ck.next_index:
+            continue
+        got, bad = [], []
         try:
             if os.path.getsize(abspath) > MAX_BYTES:
-                continue
-            with open(abspath, "rb") as fh:
-                raw = fh.read()
+                raw = None
+            else:
+                with open(abspath, "rb") as fh:
+                    raw = fh.read()
         except OSError as exc:
-            unreadable.append((rel, str(exc)))
-            continue
-        if b"\x00" in raw[:4096]:                          # binary: nothing to read
-            continue
-        findings += scan_file(abspath, rel, raw, lang_of(rel, filetypes), checks)
+            bad.append((rel, str(exc)))
+            raw = None
+        if raw is not None and b"\x00" not in raw[:4096]:   # binary: nothing to read
+            got = scan_file(abspath, rel, raw, lang_of(rel, filetypes), checks)
+        findings += got
+        unreadable += bad
+        if ck is not None:
+            ck.done(i, {"path": rel, "findings": got, "unreadable": [list(b) for b in bad]})
+    if ck is not None:
+        ck.finish()
 
     if args.json:
         print(json.dumps({"version": 1, "root": root, "loaded": loaded,

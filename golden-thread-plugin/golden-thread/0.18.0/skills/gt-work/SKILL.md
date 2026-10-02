@@ -484,3 +484,26 @@ entities:
 
 Optional — skip it when the note is not about a nameable thing. Never add entities the user
 did not confirm.
+
+## Suggest cross-domain links after a Knowledge page is written (0.18.0)
+
+Whenever this write-back created or updated a page in `Knowledge/`, run the link suggestion
+pass for that page once the write has been applied:
+```bash
+python3 <base_dir>/../../scripts/gt_link_suggest.py suggest --vault "<vault>" --page "Knowledge/<Page>.md"
+```
+It reads the page's title, tags and opening, and only the frontmatter of every other Knowledge
+page, so it is cheap. It prints up to five candidates, cross-domain first, each with the reason
+(shared tag or title keyword) and the link type (cross-domain / hub / upstream / downstream /
+sibling). It never suggests a page that is already linked.
+
+- **No output → skip the pass silently.** Say nothing about it.
+- **Otherwise show the list and ask:** "Add any of these links? Each one adds the link to this
+  page AND a back-link on the other page. Pick numbers, or skip." Do not pre-select any.
+- **Write only what the user picked**, and only after they pick:
+  ```bash
+  python3 <base_dir>/../../scripts/gt_link_suggest.py apply --vault "<vault>" --page "Knowledge/<Page>.md" --to "<Target>" [--to "<Target>" ...]
+  ```
+  Both links go into each page's `## Related` section through the write queue. If the user wants
+  only the forward link for one target, add `--forward-only` for that call. Skipped → write
+  nothing, and do not ask again in this session for the same page.

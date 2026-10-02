@@ -232,11 +232,37 @@ def main():
         print(__doc__.strip().splitlines()[0])
         print("usage: gt_push_check.py check [vault-path]")
         return 2
-    if _registry_get("push_check", "report") == "off":
+    push_on = _registry_get("push_check", "report") != "off"
+    sync_on = _registry_get("sync_check", "off") != "off"     # 0.18.0, see behind()
+    if not push_on and not sync_on:
         return 0
     vault = args[1] if len(args) > 1 else None
-    _emit(report, vault)
+
+    def both(v):
+        # ONE delivery: as a hook, each _emit prints one JSON object, and two on one stdout
+        # would be unparseable -- so the behind line rides in the same report.
+        r = report(v) if push_on else 0
+        behind(v)
+        return r
+    _emit(both, vault)
     return 0      # never a failing exit: advisory only, like the other probes
+
+
+def behind(vault=None):
+    """The opposite direction (0.18.0): does origin have commits this machine lacks? That needs
+    a fetch, so it is opt-in -- the `sync_check` setting (off | cached | fetch). gt_sync.py owns
+    the comparison; this only prints its one line. Silent when off or when gt_sync is absent."""
+    mode = _registry_get("sync_check", "off")
+    if mode == "off":
+        return 0
+    try:
+        import gt_sync
+    except Exception:
+        return 0
+    line = gt_sync.behind_line(vault or _vault_path(), mode)
+    if line:
+        print(line)
+    return 0
 
 
 if __name__ == "__main__":

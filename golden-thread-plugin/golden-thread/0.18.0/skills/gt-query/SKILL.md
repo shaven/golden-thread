@@ -52,6 +52,18 @@ python3 "<vault>/Projects/golden-thread/tools/gt_log.py" --vault "<vault>" add \
     '<today> [query] "<topic>" → <found|not found> — <page name or "no match">'
 ```
 
+**Step 8 — Stamp the pages you used (after the answer, never before)**
+
+Once the answer is in front of the user, record which Knowledge pages it was drawn from, so the
+wiki lint's `review-due` check measures when a page was last READ rather than last edited:
+```bash
+python3 <base_dir>/../../scripts/gt_review_stamp.py --vault "<vault>" "Knowledge/<Page>.md" ...
+```
+Only pages you actually read and used — not every page a grep matched. It writes
+`last_reviewed: <today>` through the write queue (never edit the frontmatter yourself), skips a
+page already stamped today, and does nothing when the `review_stamp` setting is `off`. If the
+query found nothing, or the read failed, stamp nothing.
+
 ## Notes
 
 - Always read the full Knowledge page, not just the preview — the detail is in the content

@@ -172,3 +172,16 @@ project's current list. Otherwise show the full line and every field (`p`, `wait
 what it holds. If the line cites a handoff, name it. Then offer the four ways on:
 `/gt:gt-close task <id>`, `/gt:gt-handle task`, `/gt:gt-open <slug>` for the whole project, or
 just start the work. Read-only.
+
+## Review stamps for Knowledge pages (0.18.0)
+
+Loading a project is read-only for **project** files. The one write it makes is outside the
+project: after the Step 7 summary, if loading read any `Knowledge/` page as context (a fleet page
+such as `[[INFRASTRUCTURE]]`, a page `source.md` or the README points at), stamp those pages so
+the wiki lint's `review-due` check sees that they were read:
+```bash
+python3 <base_dir>/../../scripts/gt_review_stamp.py --vault "<vault>" "Knowledge/<Page>.md" ...
+```
+It writes `last_reviewed: <today>` through the write queue, skips pages already stamped today,
+and does nothing when the `review_stamp` setting is `off`. Stamp nothing if no Knowledge page was
+read.

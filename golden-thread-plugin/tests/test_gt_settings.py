@@ -41,6 +41,14 @@ EXPECTED = {
     "foreign_checkout_guard": ("on", ["off", "on"]),
     # 0.18.0: gt-open's catch-up brief (gt_catchup.py).
     "brief_absence_days": ("7", ["off", "3", "7", "14", "30"]),
+    # 0.18.0 (group g5): review stamps, vault sync behind-check, reminder channels -- every
+    # push channel off by default (owner, 2026-10-01).
+    "review_stamp": ("on", ["off", "on"]),
+    "sync_check": ("off", ["off", "cached", "fetch"]),
+    "reminder_days": ("7", ["1", "3", "7", "14", "30"]),
+    "reminder_macos": ("off", ["off", "on"]),
+    "reminder_relay": ("off", ["off", "sms", "discord"]),
+    "reminder_email": ("off", ["off", "on"]),
     # values None == free-form; `validate` carries the shape instead of a closed list.
     "parallel_max": ("auto", None),
     # 0.18.0: gt-lint decision-candidate phrase list (free-form edits to a built-in list).

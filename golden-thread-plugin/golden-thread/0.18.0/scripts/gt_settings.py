@@ -417,6 +417,84 @@ SETTINGS = {
             "Added 0.18.0: decisions stated in prose and never recorded are re-debated by\n"
             "the next session, or changed because nothing said they were deliberate."),
     },
+    # -- 0.18.0, group g5 (review stamps, vault sync, reminders) ------------------------
+    "review_stamp": {
+        "default": "on",
+        "values": ["off", "on"],
+        "summary": "Stamp last_reviewed on a Knowledge page when gt-query or gt-open reads it.",
+        "detail": (
+            "on   after /gt:gt-query answers from a Knowledge page, or /gt:gt-open loads one\n"
+            "     as project context, gt_review_stamp.py queues `last_reviewed: <today>` on\n"
+            "     it through the write queue  (default)\n"
+            "off  nothing is stamped\n"
+            "\n"
+            "The wiki lint's review-due check runs from the NEWER of last_reviewed and\n"
+            "updated, so a page read every week stops showing up as review-due merely\n"
+            "because nobody has edited it. A page never stamped behaves exactly as before.\n"
+            "Each stamp is one frontmatter line, at most once per page per day."),
+    },
+    "sync_check": {
+        "default": "off",
+        "values": ["off", "cached", "fetch"],
+        "summary": "At session start, say whether the vault is BEHIND its upstream (gt_sync).",
+        "detail": (
+            "off     no behind-check  (default)\n"
+            "cached  compare with the remote-tracking ref already on disk -- no network,\n"
+            "        but only as fresh as the last fetch (the line says how old that is)\n"
+            "fetch   run one bounded `git fetch` first (a few seconds at most, never a\n"
+            "        password prompt), then compare\n"
+            "\n"
+            "The push check says when this machine has commits origin lacks. The opposite\n"
+            "-- origin has commits this machine lacks -- needs a fetch to see, and a fetch\n"
+            "is network I/O at session start, which is why it is opt-in. Pull with\n"
+            "/gt:gt-sync pull (fast-forward only; never merges or rebases)."),
+    },
+    "reminder_days": {
+        "default": "7",
+        "values": ["1", "3", "7", "14", "30"],
+        "summary": "Reminders cover overdue items plus items due within this many days.",
+        "detail": (
+            "Overdue items are always included. A row of <vault>/deadlines.md due within\n"
+            "this many days is included too  (default 7). Applies to the push channels\n"
+            "(reminder_macos, reminder_relay, reminder_email); the session-start MUST DO\n"
+            "block keeps its own 14-day window."),
+    },
+    "reminder_macos": {
+        "default": "off",
+        "values": ["off", "on"],
+        "summary": "Reminder channel: a macOS notification from the scheduled reminder job.",
+        "detail": (
+            "off  no notification  (default)\n"
+            "on   the `reminder` job (gt_schedule.py install reminder) posts one macOS\n"
+            "     notification listing overdue and near items. No credential.\n"
+            "\n"
+            "Setup and test: gt_reminder.py setup macos / gt_reminder.py check macos."),
+    },
+    "reminder_relay": {
+        "default": "off",
+        "values": ["off", "sms", "discord"],
+        "summary": "Reminder channel: SMS or Discord through your notification relay.",
+        "detail": (
+            "off      nothing is sent  (default)\n"
+            "sms      POST the reminder to your relay, routed to SMS\n"
+            "discord  POST the reminder to your relay, routed to Discord\n"
+            "\n"
+            "The relay URL and any credential live in a mode-600 file written by your\n"
+            "secrets store (~/.claude/golden-thread/reminder/relay.json), never here.\n"
+            "Setup and test: gt_reminder.py setup relay / gt_reminder.py check relay."),
+    },
+    "reminder_email": {
+        "default": "off",
+        "values": ["off", "on"],
+        "summary": "Reminder channel: an email through your SMTP server.",
+        "detail": (
+            "off  nothing is sent  (default)\n"
+            "on   the reminder job sends one email over SMTP (STARTTLS or SSL)\n"
+            "\n"
+            "Server, addresses and password live in a mode-600 file written by your secrets\n"
+            "store (~/.claude/golden-thread/reminder/email.json), never here.\n"
+            "Setup and test: gt_reminder.py setup email / gt_reminder.py check email."),
+    },
     # install_demo was removed in 0.14.0: the demo is a module, and whether it is
     # installed is a module choice (install.sh --with/--without demo, recorded in
     # ~/.claude/golden-thread/install-choices.json). A user's install_demo key in

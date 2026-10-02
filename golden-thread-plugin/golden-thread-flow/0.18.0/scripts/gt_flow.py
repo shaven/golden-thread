@@ -44,7 +44,8 @@ hidden -- toggle in Kinds)". `--tasks` renders with them shown.
 ## --redact
 
 Every project, path, task id, domain and session becomes a short salted hash
-(`p-3fa2`, `f-91c0`, `d-..`, `s-..`); notes are dropped. Levels, kinds, actors, stages,
+(`p-3fa2c1`, `f-91c0e7`, `d-..`, `s-..`: at least 6 hex characters, widened further only
+when two names collide inside one render); notes are dropped. Levels, kinds, actors, stages,
 colours and counts are kept. The salt is random per render and never written, so one
 file is internally consistent and two renders cannot be joined. The redacted payload is
 built from a whitelist -- nothing from an event reaches the page except through the hash
@@ -321,6 +322,12 @@ def levels(ev):
 
 
 # -- redaction ---------------------------------------------------------------------------
+MIN_HASH_HEX = 6   # 0.18.0: was 4. At 4, two renders of 8 names shared a truncated hash
+                   # about once in 1,024 runs (a release-check failed on it 2026-09-23);
+                   # at 6 the space is 256-fold larger. Within one render the loop below
+                   # widens on collision, so one page never shows two names under one hash.
+
+
 class Namer:
     """Real names, or salted short hashes that are stable within one render."""
 
@@ -337,14 +344,26 @@ class Namer:
             return value
         m = self.maps.setdefault(prefix, {})
         if value not in m:
-            digest = hashlib.sha256(self.salt + prefix.encode() + b"\0"
-                                    + value.encode("utf-8")).hexdigest()
-            n = 4
-            while "%s-%s" % (prefix, digest[:n]) in self.used:
+            digest = self._digest(prefix, value)
+            n = MIN_HASH_HEX
+            # Terminates: two distinct values have distinct full digests in practice, and
+            # if even the whole digest is taken the name falls through to a counter suffix.
+            while n <= len(digest) and "%s-%s" % (prefix, digest[:n]) in self.used:
                 n += 1
+            if n > len(digest):
+                k = 2
+                while "%s-%s-%d" % (prefix, digest, k) in self.used:
+                    k += 1
+                m[value] = "%s-%s-%d" % (prefix, digest, k)
+                self.used.add(m[value])
+                return m[value]
             m[value] = "%s-%s" % (prefix, digest[:n])
             self.used.add(m[value])
         return m[value]
+
+    def _digest(self, prefix, value):
+        return hashlib.sha256(self.salt + prefix.encode() + b"\0"
+                              + value.encode("utf-8")).hexdigest()
 
 
 GENERIC_NAMES = {"README.md", "research.md", "decisions.md", "design.md", "spec.md",

@@ -7,7 +7,9 @@
     gt_schedule.py remove  <job>
 
 Jobs: daily (--vault, --repo ... the repos that count as work), lint-weekly (reads
-vault-config.json itself), sweep (--vault and exactly one --repo: the tree it sweeps).
+vault-config.json itself), sweep (--vault and exactly one --repo: the tree it sweeps),
+reminder (0.18.0; --vault optional: given, the deadlines mirror is refreshed first -- the job
+itself never reads the vault, see gt_reminder.py on TCC).
 
 WHY THIS EXISTS. The weekly lint agent was installed BY HAND in 2026-09-08 and its only record
 is two lines in a runbook. That is a manual step with no --check and no rollback, on a machine
@@ -55,6 +57,11 @@ JOBS = {
     # nobody needs, and the lint's report lands first.
     "sweep": ("gt_sweep.py", 7, 30, 1,
               "whole-tree secrets + code sweep, verdict filed in the vault (Mondays)"),
+    # 0.18.0: the reminder tool. Reads ~/.claude/golden-thread/reminder/deadlines.json, the
+    # mirror every session start refreshes, never the vault: a launchd job is refused
+    # CloudStorage by TCC. 08:30 daily, after the 07:xx jobs.
+    "reminder": ("gt_reminder.py", 8, 30, None,
+                 "send overdue / due-soon deadlines through the enabled reminder channels"),
 }
 
 # Exit codes that are a NORMAL outcome for each job, not a failure. Without this the check
@@ -72,6 +79,7 @@ BENIGN_EXITS = {
     "daily": {"0", "1"},          # 1 = nothing recorded for the day (a crash is 3, see gt_daily)
     "lint-weekly": {"0"},         # findings are still exit 0; 3 = could not run
     "sweep": {"0"},               # findings are a report, exit 0; 3 = a member could not run
+    "reminder": {"0"},            # nothing due is 0; 1 = a channel failed, 3 = no mirror
 }
 
 
@@ -111,6 +119,9 @@ def build_plist(job, vault, repos, hour, minute, weekday):
         # Both explicit: gt_sweep refuses to guess its vault, and its --path defaults to the
         # cwd, which under launchd is `/` -- a sweep of the whole disk reported as one tree.
         args += ["--vault", str(vault), "--path", str(repos[0])]
+    elif job == "reminder":
+        # No --vault, deliberately: the job reads the mirror outside CloudStorage.
+        args += ["run", "--scheduled"]
     cal = {"Hour": int(hour), "Minute": int(minute)}
     if weekday is not None:
         cal["Weekday"] = int(weekday)
@@ -173,6 +184,20 @@ def do_install(a) -> int:
             print(pre.stdout + pre.stderr, file=sys.stderr)
             print("gt-schedule: CANNOT INSTALL — the job's own --check failed, so scheduling "
                   "it would schedule a job that does nothing", file=sys.stderr)
+            return PROBLEM
+
+    if job == "reminder":
+        # Refresh the mirror from THIS terminal (which can read the vault), then the job's own
+        # preflight: a mirror, at least one channel on, each enabled channel configured.
+        py = sys.executable or "/usr/bin/python3"
+        if vault:
+            mir = run([py, str(target), "mirror", "--vault", str(vault)])
+            print((mir.stdout + mir.stderr).strip())
+        pre = run([py, str(target), "run", "--check"])
+        if pre.returncode != 0:
+            print(pre.stdout + pre.stderr, file=sys.stderr)
+            print("gt-schedule: CANNOT INSTALL — the reminder preflight failed, so scheduling "
+                  "it would schedule a job that sends nothing", file=sys.stderr)
             return PROBLEM
 
     AGENTS.mkdir(parents=True, exist_ok=True)

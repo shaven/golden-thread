@@ -3,7 +3,22 @@
 gt_ingest.py — Scan an existing project and classify its content as Golden Thread migration candidates.
 
 Usage:
-  python3 gt_ingest.py <project-dir> [--json]
+  python3 gt_ingest.py <project-dir> [--json] [--vault V] [--no-checkpoint | --dry-run]
+  python3 gt_ingest.py --resume CHECKPOINT [--json]            # what is left, in order
+  python3 gt_ingest.py --done CHECKPOINT --index N [--result TEXT] [--json]
+  python3 gt_ingest.py --status CHECKPOINT
+
+Checkpoints (0.18.0): the candidates ARE the batch. The scan itself takes a second; the work
+that gets interrupted is the migration the skill does for each candidate, one at a time,
+sometimes across a context limit. So a scan writes a checkpoint holding the candidate list
+(gt_checkpoint.py, `<vault>/Projects/golden-thread/spool/ingest/...progress.json`) and names it
+on stderr as `checkpoint: <path> (N items)`; every candidate carries its `index`. After
+migrating candidate N the skill records it with `--done CHECKPOINT --index N --result "<where
+it went>"`, strictly in order. `--resume CHECKPOINT` prints only the candidates still to do (same
+shape as a scan) -- from any later session -- and the prior results on stderr. When the last
+candidate is marked done, every result (old and new, merged) is printed and the checkpoint is
+deleted. A plain scan never resumes: it starts a fresh checkpoint whatever exists.
+`--no-checkpoint` (alias `--dry-run`) writes nothing.
 
 Output (--json): JSON array of candidate objects:
   [{
@@ -18,10 +33,13 @@ Output (--json): JSON array of candidate objects:
 """
 import argparse
 import json
+import os
 import re
 import subprocess
 import sys
 from pathlib import Path
+
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 
 KNOWLEDGE_KEYWORDS = ("auth", "platform", "networking", "identity", "orchestration", "infrastructure")
@@ -218,11 +236,102 @@ def scan_git_log(project_dir: Path, candidates: list):
         pass
 
 
+def _checkpoint_mod():
+    import gt_checkpoint                                           # noqa: PLC0415
+    return gt_checkpoint
+
+
+def print_candidates(candidates, as_json):
+    if as_json:
+        print(json.dumps(candidates, indent=2))
+        return
+    by_dest = {}
+    for c in candidates:
+        by_dest.setdefault(c["suggested_dest"], []).append(c)
+    for dest, items in sorted(by_dest.items()):
+        print(f"\n=== {dest.upper()} ({len(items)} items) ===")
+        for item in items:
+            idx = f"#{item['index']} " if "index" in item else ""
+            print(f"  {idx}[{item['confidence']}] {item['filename']}")
+            print(f"        {item['content_preview'][:100]}...")
+
+
+def do_resume(path, as_json):
+    gc = _checkpoint_mod()
+    try:
+        ck = gc.Checkpoint.load(path, "ingest")
+    except gc.CheckpointError as exc:
+        print(json.dumps({"error": str(exc)}))
+        return 1
+    print("checkpoint: %s -- %d of %d candidate(s) already migrated"
+          % (ck.path, ck.next_index, ck.total), file=sys.stderr)
+    for i, r in enumerate(ck.results):
+        print("  done #%d: %s" % (i, (r or {}).get("result", "")), file=sys.stderr)
+    print_candidates([item for _i, item in ck.remaining()], as_json)
+    return 0
+
+
+def do_done(path, index, result, as_json):
+    gc = _checkpoint_mod()
+    try:
+        ck = gc.Checkpoint.load(path, "ingest")
+        item = ck.items[index] if 0 <= index < ck.total else None
+        if item is None:
+            raise gc.CheckpointError("no candidate #%d (the checkpoint has %d)" % (index, ck.total))
+        ck.done(index, {"index": index, "filename": item.get("filename"),
+                        "result": result or ""})
+    except gc.CheckpointError as exc:
+        print(json.dumps({"error": str(exc)}))
+        return 1
+    if ck.next_index < ck.total:
+        msg = {"done": ck.next_index, "total": ck.total, "checkpoint": str(ck.path)}
+        print(json.dumps(msg) if as_json else
+              "recorded #%d; %d of %d done" % (index, ck.next_index, ck.total))
+        return 0
+    results = list(ck.results)
+    ck.finish()
+    if as_json:
+        print(json.dumps({"done": ck.total, "total": ck.total, "complete": True,
+                          "results": results}, indent=2))
+    else:
+        print("ingest complete: %d of %d candidate(s); checkpoint removed" % (ck.total, ck.total))
+        for r in results:
+            print("  #%d %s -> %s" % (r["index"], r.get("filename"), r.get("result")))
+    return 0
+
+
 def main():
     parser = argparse.ArgumentParser(description="Golden Thread project scanner")
-    parser.add_argument("project_dir", type=Path, help="Root of the project to scan")
+    parser.add_argument("project_dir", type=Path, nargs="?", help="Root of the project to scan")
     parser.add_argument("--json", action="store_true", help="Output as JSON (default: pretty print)")
+    parser.add_argument("--vault", help="the vault whose spool holds the checkpoint")
+    parser.add_argument("--no-checkpoint", "--dry-run", dest="no_checkpoint",
+                        action="store_true", help="write no checkpoint")
+    parser.add_argument("--resume", metavar="CHECKPOINT",
+                        help="print the candidates an interrupted ingest has not migrated yet")
+    parser.add_argument("--done", metavar="CHECKPOINT",
+                        help="record candidate --index as migrated")
+    parser.add_argument("--index", type=int)
+    parser.add_argument("--result", help="where the candidate went (one line)")
+    parser.add_argument("--status", metavar="CHECKPOINT", help="one line of progress")
     args = parser.parse_args()
+
+    if args.status:
+        gc = _checkpoint_mod()
+        try:
+            print(gc.Checkpoint.load(args.status, "ingest").summary())
+            return 0
+        except gc.CheckpointError as exc:
+            print(str(exc), file=sys.stderr)
+            return 1
+    if args.resume:
+        return do_resume(args.resume, args.json)
+    if args.done:
+        if args.index is None:
+            parser.error("--done needs --index")
+        return do_done(args.done, args.index, args.result, args.json)
+    if args.project_dir is None:
+        parser.error("a project directory is required")
 
     project_dir = args.project_dir.resolve()
     if not project_dir.exists():
@@ -238,20 +347,22 @@ def main():
 
     # Filter out empty previews
     candidates = [c for c in candidates if c["content_preview"].strip()]
+    for i, c in enumerate(candidates):
+        c["index"] = i
 
-    if args.json:
-        print(json.dumps(candidates, indent=2))
-    else:
-        # Human-readable summary
-        by_dest = {}
-        for c in candidates:
-            by_dest.setdefault(c["suggested_dest"], []).append(c)
-        for dest, items in sorted(by_dest.items()):
-            print(f"\n=== {dest.upper()} ({len(items)} items) ===")
-            for item in items:
-                print(f"  [{item['confidence']}] {item['filename']}")
-                print(f"        {item['content_preview'][:100]}...")
+    if candidates and not args.no_checkpoint:
+        gc = _checkpoint_mod()
+        try:
+            ck = gc.Checkpoint.start("ingest", str(project_dir), candidates,
+                                     gc.find_vault(args.vault))
+            print("checkpoint: %s (%d items)" % (ck.path, ck.total), file=sys.stderr)
+        except OSError as exc:
+            print("note: no checkpoint (%s); an interrupted ingest will start over"
+                  % exc.__class__.__name__, file=sys.stderr)
+
+    print_candidates(candidates, args.json)
+    return 0
 
 
 if __name__ == "__main__":
-    main()
+    sys.exit(main())
