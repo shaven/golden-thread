@@ -375,3 +375,38 @@ requires wiring an enforcement hook, which is `/gt:gt-promote`'s job. A file mar
 exists to catch.
 
 Template: `templates/memory-file.md`.
+
+## Learn: patterns worth keeping (0.18.0)
+
+Run this step **after Promotion Candidates and before the Log Entry** — it is where a separate
+`gt-learn` would have gone, folded in here so there is one capture path, not two (owner,
+2026-10-01). The findings above are *what happened*; this looks for *how the work was done* that
+should be done the same way next time.
+
+Scan this session's conversation for:
+
+- **A pattern applied more than once** — the same fix, check, command sequence or workaround used
+  twice or more.
+- **A decision that is not yet written down** — made in conversation, absent from the project's
+  `decisions.md` (search it first).
+- **A reusable technique** — something that could become a convention, a runbook step, or a
+  skill.
+
+**Quality gate before showing anything:** skip a candidate that is already captured (search the
+project's `decisions.md`, `research.md`, `runbook.md` and `memory/`, and the wiki index), that
+happened once with no reason to expect a repeat, or that is only true of today's state. Fewer,
+real candidates beat a long list the user learns to wave through.
+
+Present the survivors **one at a time**, one line each, and ask where it goes:
+
+| answer | where | how |
+|---|---|---|
+| **project convention** | an ADR in `Projects/<slug>/decisions.md` | allocate with `gt_adr.py`, then the body through the write queue — exactly as *decisions.md* above |
+| **runbook step** | `Projects/<slug>/runbook.md` | a queued `append` (*Every write goes through the queue* above) |
+| **memory note** | `Projects/<slug>/memory/<name>.md` + its `MEMORY.md` line | queued `create` and `append` |
+| **beyond this project** | `Knowledge/` or `global-memory/` | `/gt:gt-promote` — not written from here |
+| **skip** | nowhere | — |
+
+Every save goes through `gt_write_queue.py` + `gt_broker.py drain` (or `gt_adr.py` for an ADR) —
+never Write/Edit on a vault path (Core rule 1). Count what was saved in the Log Entry line
+(`… , L pattern(s) kept`). Nothing found is a fine result; say so in one line and move on.
