@@ -348,7 +348,7 @@ class LanguageLeafTest(ScanBase):
         self.assertEqual([f for f in d["findings"] if "node_modules" in f["path"]], [])
 
     def test_a_name_a_framework_requires_can_be_exempted(self):
-        """0.19.0: `exempt` lists names a naming rule must not flag (owner, 2026-10-02).
+        """0.19.1: `exempt` lists names a naming rule must not flag (owner, 2026-10-02).
 
         unittest only calls `setUp` and the `assert*` helpers by those camelCase names, so a
         snake_case rule flagging them is noise that buries real findings -- 371 hits on gt's
@@ -419,7 +419,7 @@ class ShippedPackFalsePositives(unittest.TestCase):
 
 
 class OldReleaseFoldersAreNotScanned(ScanBase):
-    """0.19.0: a plugin repo keeps every release it ever shipped (gt: 29 folders). Only the
+    """0.19.1: a plugin repo keeps every release it ever shipped (gt: 29 folders). Only the
     newest two -- what gt-src carries -- are scanned; the rest are history, re-reporting the
     same findings, and alone they pushed a scan past the commit gate's time limit."""
 

@@ -116,11 +116,11 @@ th, td { border:1px solid #ddd; padding:3px 5px; text-align:left; vertical-align
 </style></head><body><h1 id="golden-thread-user-manual">User Manual</h1>
 <blockquote>
 <p><strong>Reader:</strong> a daily user — the deepest document, where the <em>why</em> lives
-<strong>Claims last checked against the code:</strong> 2026-10-01 (gt 0.18.1) — see <em>The documents, and what belongs in each</em> in <a href="../CLAUDE.md"><code>CLAUDE.md</code></a>.</p>
+<strong>Claims last checked against the code:</strong> 2026-10-02 (gt 0.19.1) — see <em>The documents, and what belongs in each</em> in <a href="../CLAUDE.md"><code>CLAUDE.md</code></a>.</p>
 </blockquote>
-<p>Complete reference for gt's thirty-six skills and its nine modules. Written against <strong>gt v0.18.1</strong>
-(gt-wiki 0.2.5; gt-usage 0.1.4; gt-demo, gt-watch, gt-report-card, gt-farm and gt-flow 0.18.1; gt-visualize 0.4.2;
-gt-lotr 0.1.1 — the five named with 0.18.1 are versioned with gt and move with every release, changed or not).</p>
+<p>Complete reference for gt's thirty-six skills and its nine modules. Written against <strong>gt v0.19.1</strong>
+(gt-wiki 0.2.6; gt-usage 0.1.5; gt-demo, gt-watch, gt-report-card, gt-farm and gt-flow 0.19.1; gt-visualize 0.4.3;
+gt-lotr 0.2.0 — the five named with 0.19.1 are versioned with gt and move with every release, changed or not).</p>
 <blockquote>
 <p><strong>0.18.1 renamed the task and handoff skills to verbs</strong> — <code>gt-create</code>, <code>gt-open</code>, <code>gt-list</code>,
 <code>gt-handle</code>, <code>gt-close</code>, each taking the artifact as its argument. The old names (<code>gt-task</code>,
@@ -240,6 +240,79 @@ with <code>{"intent": "deep", "model": "&lt;alias&gt;", "verified": "YYYY-MM-DD"
 then SHADOWED); to unmap one, <code>"retract": [{"intent": "deep"}]</code>. Exit <code>0</code> resolved (UNMAPPED
 included) · <code>1</code> registry problems or a bad value · <code>2</code> unknown intent. <code>gt_code_review.py plan</code>
 prints each dimension's resolved model, and <code>/gt:gt-validate</code> declares <code>deep</code>.</p>
+<h3 id="model-and-effort-profiles-gt_model_policypy-0191">Model and effort profiles: <code>gt_model_policy.py</code> (0.19.1)</h3>
+<p>Since 0.19.1 every shipped skill declares a <code>model_intent</code>, and the intent pack also carries an
+<strong>effort</strong>. <code>gt_model_policy.py</code> writes the resolved <code>model:</code> and <code>effort:</code> into the <strong>installed</strong>
+copy of every gt skill (plugin cache and marketplace directory) — never the release source — and
+records exactly what it wrote in <code>~/.claude/golden-thread/model-policy-applied.json</code>.</p>
+<table>
+<thead>
+<tr>
+<th>Profile</th>
+<th>fast</th>
+<th>balanced</th>
+<th>deep</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>average</code> (a new install's default)</td>
+<td>haiku, no effort setting</td>
+<td>sonnet · medium</td>
+<td>opus · high</td>
+</tr>
+<tr>
+<td><code>very-high</code></td>
+<td>opus · xhigh</td>
+<td>opus · xhigh</td>
+<td>opus · xhigh</td>
+</tr>
+<tr>
+<td><code>inherit</code></td>
+<td>the session's own</td>
+<td>the session's own</td>
+<td>the session's own</td>
+</tr>
+</tbody>
+</table>
+<p>Haiku has no effort levels in Claude Code, so gt never sets one for it; an effort a model does not
+accept is <strong>refused</strong> when it is set, naming the allowed values (Claude Code would lower it
+silently). <code>install.sh --model-profile P</code> chooses; with no flag a new install gets <code>average</code>, an
+interactive upgrade asks once (average preselected), and a scripted upgrade keeps <code>inherit</code> without
+using up the question.</p>
+<pre><code class="language-bash">python3 $SCRIPTS/gt_model_policy.py show [--json]                        # every skill: model, effort, why
+python3 $SCRIPTS/gt_model_policy.py table --profile very-high            # what a profile means
+python3 $SCRIPTS/gt_model_policy.py choose very-high &amp;&amp; python3 $SCRIPTS/gt_model_policy.py apply
+python3 $SCRIPTS/gt_model_policy.py set --skill gt-plan --model opus --effort max   # re-applies at once
+python3 $SCRIPTS/gt_model_policy.py clear --skill gt-plan
+python3 $SCRIPTS/gt_model_policy.py verify                               # exit 1 on a hand edit
+</code></pre>
+<p>Precedence: per-skill override, per-plugin override, the skill's intent through the profile,
+inherit. Choices live with the install choices and survive reinstalls. The doctor's
+<code>model-policy</code> row names the active profile and WARNs when an installed field was edited by hand.
+<code>gt_model.py skill</code> reports the installed frontmatter's model and effort when the policy wrote
+them, so <code>/gt:gt-validate</code> names what actually runs.</p>
+<h3 id="supersession-and-expiry-gt_supersedepy-0191">Supersession and expiry: <code>gt_supersede.py</code> (0.19.1)</h3>
+<p>A note can declare that it replaces an earlier one — <code>supersedes: &lt;path&gt;</code> in its frontmatter (a
+path relative to the note's folder or the vault). A note is <strong>expired</strong> when it carries
+<code>expired: &lt;date&gt;</code> (its <code>expires_when</code> was reported met) or an <code>expires: YYYY-MM-DD</code> that has
+passed. Nothing is deleted: superseded and expired notes stay on disk and stay readable.</p>
+<pre><code class="language-bash">python3 $SCRIPTS/gt_supersede.py listing Projects/&lt;slug&gt;/memory --vault V   # gt-open: newest of each chain
+python3 $SCRIPTS/gt_supersede.py rank PATH ... --vault V                    # gt-query: current, expired, superseded
+python3 $SCRIPTS/gt_supersede.py dangling --vault V                         # a supersedes: pointing at nothing
+</code></pre>
+<p><code>/gt:gt-open</code> lists memory through <code>listing</code>, <code>/gt:gt-query</code> orders matches through <code>rank</code>, and
+<code>/gt:gt-work</code> records <code>supersedes:</code> on the current note when you resolve a contradiction in its
+favour. gt-lint's <code>supersedes-missing</code> reports a broken link.</p>
+<h3 id="recall-benchmark-and-prompt-hints-gt_keyword_recallpy-0191">Recall benchmark and prompt hints: <code>gt_keyword_recall.py</code> (0.19.1)</h3>
+<p><code>gt_keyword_recall.py "&lt;question&gt;" --vault V</code> ranks vault pages the way gt-query finds them (index
+first, then the pages). <code>gt_bench.py recall --fixture DIR [--retriever keyword|FILE.py ...]</code>
+measures any retriever on a fixed question set: recall@1/3/10, files read and approximate tokens
+per question; a retriever that cannot load is could-not-run, never zero. The synthetic fixture
+is <code>tests/fixtures/recall-bench</code> (36 questions).</p>
+<p>The <code>vault_hints</code> setting (default <code>off</code>) adds a UserPromptSubmit hook that matches each prompt
+against <code>index.md</code> only and adds at most three <code>- &lt;title&gt; — &lt;path&gt;</code> lines — never a page body,
+nothing below its threshold or past its 0.8 s budget.</p>
 <h3 id="what-gtgt-scan-can-check-and-how-to-ask">What <code>/gt:gt-scan</code> can check, and how to ask</h3>
 <p>Fourteen languages ship with definitions. <strong>Do not trust a list in a document for this</strong> — it
 goes stale the moment a pack ships. Ask the machine you are on:</p>
@@ -2215,6 +2288,9 @@ that machine, are refused in <code>client</code> mode and never travel over the 
 python3 &lt;gt-lotr&gt;/scripts/lotrd.py --zone personal           # the daemon
 lotr add-http github@personal --profile github --base-url https://api.github.com \
     --identity &quot;me @ github.com&quot; --auth bearer --token-ref keychain:gt-lotr/github-personal
+lotr add-mcp jira@personal --endpoint https://&lt;mcp-host&gt;/mcp --identity &quot;me @ &lt;host&gt;&quot; \
+    --auth-ref file:/Users/&lt;me&gt;/.claude/&lt;client&gt;-tokens.json#access_token \
+    --refresh-cmd &quot;&lt;the MCP client's own refresh helper&gt;&quot;           # 0.2.0: SSO/OAuth MCP
 lotr enroll laptop --machine &quot;MacBook Pro&quot; --max-tier write --secret-out &lt;path&gt;   # hub only
 lotr revoke laptop
 lotr status            # connections, whether each credential is present (never its value), clients
@@ -2225,6 +2301,14 @@ lotr status            # connections, whether each credential is present (never 
 <li><strong>Placement, per zone:</strong> <code>local</code> (one box, e.g. a work machine) or <code>hub</code> with enrolled <code>client</code>
   machines. Hybrid is parsed and refused in 0.1.0. Zones never mix: work and personal run separate
   gateways.</li>
+<li><strong>SSO/OAuth MCP endpoints (lotr 0.2.0):</strong> <code>add-mcp</code> fronts a downstream MCP server that answers
+  only to an SSO/OAuth token. LOTR runs no OAuth flow: it reuses the token the MCP client that
+  signed in already keeps in an owner-only file, <strong>by reference</strong> (<code>file:&lt;path&gt;#&lt;json-field&gt;</code>),
+  sends it only as the <code>Authorization</code> header, and on HTTP 401 runs <code>--refresh-cmd</code> (no shell,
+  output discarded) and retries once. The tools are listed at registration, so <code>find</code> works at
+  once; each is tiered by its <code>readOnlyHint</code>/<code>destructiveHint</code> annotations, else its name, else
+  write. Transport <code>http</code> (JSON or SSE replies); stdio and legacy <code>sse</code> servers are not supported
+  yet. A work endpoint on a personal gateway needs the owner's zone ruling first.</li>
 <li><strong>Credentials are references</strong> — <code>keychain:</code>, <code>store:</code>, <code>file:</code> — never values. The owner puts
   the secret in place; the skill never asks for a token's value. An enrolled client's secret goes
   to a mode-600 file, never to the screen; revoking a client needs no external credential rotated.</li>
@@ -2600,14 +2684,18 @@ a timestamp — and the newest receipt for a file wins <em>by recorded time</em>
 <td><em>(0.18.1)</em> A project with code (a topology) marked <code>release_pipeline: no</code>, one marked <code>yes</code> with no <code>release.sh</code>, or a value other than <code>yes</code>/<code>no</code>/<code>planned</code>. A README without the key reads as <code>planned</code> — see <a href="#release-pipeline-gt_pipelinepy">Release pipeline</a></td>
 </tr>
 <tr>
+<td><code>supersedes-missing</code></td>
+<td><em>(0.19.1)</em> A note's <code>supersedes:</code> names a path that does not exist, so the chain gt-open and gt-query read is broken there — see <a href="#supersession-and-expiry-gt_supersedepy-0191">Supersession and expiry</a></td>
+</tr>
+<tr>
 <td><code>runbook-duplicate</code></td>
 <td>A line duplicated across two or more projects' <code>runbook.md</code> — <code>--runbooks</code> only, and the detection step of <code>/gt:gt-runbook-lint</code></td>
 </tr>
 </tbody>
 </table>
-<p>gt_lint emits twenty-four checks, and every one of them runs on an ordinary pass,
+<p>gt_lint emits twenty-five checks, and every one of them runs on an ordinary pass,
 each wired to a function the run actually calls. <code>runbook-duplicate</code> is not one of the
-twenty-four:
+twenty-five:
 it is a separate read-only mode, <code>gt_lint.py --runbooks</code>, which runs nothing else and reports
 under its own record shape — the detection step of <code>/gt:gt-runbook-lint</code>. Fewer than two
 runbooks prints "nothing to compare" and exits 0. <code>core-unenforced</code> is the critical one — it is the machine-checkable form of "rule
@@ -2736,6 +2824,10 @@ against 0.6.0. Say the version, then the findings.</p>
 <tr>
 <td><code>hooks-schema</code></td>
 <td>does every <code>settings.json</code> hook entry name an event Claude Code fires and, on a tool event, a tool it has? (0.18.1)</td>
+</tr>
+<tr>
+<td><code>model-policy</code></td>
+<td>which model profile is active, and does every installed skill still carry exactly the <code>model:</code>/<code>effort:</code> the policy wrote? A hand edit is a WARN with the fix (0.19.1)</td>
 </tr>
 <tr>
 <td><code>execution</code></td>
@@ -3231,6 +3323,18 @@ is registered here and can be switched off.</p>
 <td>Where the test runner puts throwaway files; <code>noindex</code> = <code>~/Library/Caches/gt-tests.noindex</code> on macOS, <code>$XDG_CACHE_HOME/gt-tests</code> elsewhere (0.18.1)</td>
 </tr>
 <tr>
+<td><code>vault_hints</code></td>
+<td><code>off</code> · <code>on</code></td>
+<td><code>off</code></td>
+<td>Up to three vault page titles relevant to each prompt, from <code>index.md</code> only, never a page body (0.19.1). See <a href="#recall-benchmark-and-prompt-hints-gt_keyword_recallpy-0191">Recall benchmark and prompt hints</a></td>
+</tr>
+<tr>
+<td><code>allin_timeout</code></td>
+<td><code>300</code> · <code>600</code> · <code>1200</code> · <code>1800</code> · <code>3600</code></td>
+<td><code>300</code></td>
+<td>Seconds each all-in check may take, in <code>/gt:gt-allin</code> and the commit gate (0.19.1); the gate gives the whole run twelve times this</td>
+</tr>
+<tr>
 <td><code>runners</code></td>
 <td>empty · comma-separated ssh aliases</td>
 <td>empty</td>
@@ -3624,6 +3728,11 @@ python3 $SCRIPTS/gt_allin_commit.py --repo &quot;&lt;repo&gt;&quot; --vault &quo
 <p><code>--dry-run</code> runs every check and commits nothing — the safe first move, always. It commits <strong>the
 index, not the working tree</strong>; nothing staged is a refusal, not a no-op. The staged file list is
 printed <em>before</em> the verdict.</p>
+<p>Since 0.19.1 <code>--timeout S</code> sets how long each check may take (default: the <code>allin_timeout</code>
+setting, else 300 s; the whole run gets twelve times that), and the gate runs gt-allin with
+<code>--skip tests</code>: the test receipt it checks itself is the evidence the suite passed, so the suite is
+not re-run on the committing machine. <code>gt_allin.py --skip NAME</code> names what it left out. The code and
+naming scans skip a plugin's release folders older than its newest two (secrets still scan them).</p>
 <p><strong>It commits but will not push.</strong> A commit is local and reversible — <code>git reset</code> undoes it and
 nobody else ever saw it. A push is outward-facing and effectively permanent. That asymmetry is
 the whole line, and there is no <code>--push</code> flag. (After a successful commit it checks whether HEAD

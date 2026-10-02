@@ -1,7 +1,7 @@
 # Golden Thread
 
 > **Reader:** someone who has never heard of Golden Thread
-> **Claims last checked against the code:** 2026-10-01 (gt 0.18.1) — see *The documents, and what belongs in each* in [`CLAUDE.md`](CLAUDE.md).
+> **Claims last checked against the code:** 2026-10-02 (gt 0.19.1) — see *The documents, and what belongs in each* in [`CLAUDE.md`](CLAUDE.md).
 
 A memory system for AI coding sessions, built on plain markdown and git — and,
 unusually, one where the rules that matter most are **mechanically enforced** rather
@@ -15,12 +15,27 @@ it at startup, look things up while working, and write back what they learn.
 Its distinguishing idea is the second problem, the one most memory systems never
 address: **writing a rule down does not mean it gets followed.**
 
-Plugin **v0.18.1**. Ten Core rules currently enforced, five of them *validated* — a
+Plugin **v0.19.1**. Ten Core rules currently enforced, five of them *validated* — a
 hook inspects the finished reply (`Stop`) or the tool call about to run (`PreToolUse`)
 and blocks it if the rule was broken.
 
 
 > [!IMPORTANT]
+> **0.19.1: right-sized models, SSO for LOTR, and fixes from installing 0.18.1.** (There is no
+> published 0.19.0.) **Model and effort per skill:** every skill declares fast/balanced/deep, and the
+> installer writes a profile into the installed copies — `average` (haiku with no effort setting,
+> sonnet·medium, opus·high; a new install's default), `very-high` (opus·xhigh) or `inherit` —
+> with per-skill and per-plugin overrides (`gt_model_policy.py`) and a doctor `model-policy` row.
+> **LOTR handles SSO:** `lotr add-mcp` fronts an SSO/OAuth MCP endpoint by reusing its client's
+> token by reference, refreshing on 401 (gt-lotr 0.2.0). **Recall:** `gt_bench.py recall` measures
+> how often lookup finds the right page; optional prompt hints (`vault_hints`, off by default).
+> **Supersession and expiry** applied when notes are read (`gt_supersede.py`). **Fixes:** the
+> queue guard reads shell tokens and follows `cd`; nothing writes bytecode into gt-src; post-install
+> resolves the installed release from any path and every completed run writes its receipt; one
+> recorded interpreter for every launchd job; the commit gate fits a large repo; the Stop validator
+> no longer demands a timestamp from a turn that was never given one (the install-time alert).
+> After installing, restart and run `/gt:gt-upgrade`.
+>
 > **0.18.1: one verb per action, a plan before code, and less to carry.**
 >
 > - **One skill per verb.** `/gt:gt-create`, `/gt:gt-open`, `/gt:gt-list`, `/gt:gt-handle` and the
@@ -301,7 +316,7 @@ removing any one leaves the rest working.
 | `gt-refresh` | Checks `Sources/` for upstream changes. Supersedes with a *new* immutable file carrying `supersedes:` rather than editing the old one, so the record of what you believed and when stays intact. |
 | `gt-upgrade` | Updates the VAULT after `install.sh` updates the plugin — the step that did not exist until a 0.11.0 migration had to be run by hand across 43 projects. Migrations detect their own work, documents are three-way merged against a base the vault carries, and a step that needs a person is reported rather than guessed at. |
 | `gt-doctor` | Answers "is this install healthy?" in one command — version, component drift, hook wiring, the vault's release stamp and pending migrations, the scheduled jobs' last exits, stray workers, unpushed commits, publish drift, lint. Every answer is stated relative to the release it was checked against, because a clean report from a check pinned to the wrong version reads exactly like a healthy install. |
-| `gt-lint` | Runs 24 deterministic health checks — broken links, orphans, index gaps, scope leaks, staleness, superseded sources — plus `core-unenforced`, which catches a rule that is stored but never re-asserted, and four that file questions for you: an ADR whose expiry may have come, a page covering two topics, a decision stated in prose with no ADR, a memory note missing its entity tags — and `release-pipeline`, a project that ships code with no release pipeline declared. |
+| `gt-lint` | Runs 25 deterministic health checks — broken links, orphans, index gaps, scope leaks, staleness, superseded sources — plus `core-unenforced`, which catches a rule that is stored but never re-asserted, and four that file questions for you: an ADR whose expiry may have come, a page covering two topics, a decision stated in prose with no ADR, a memory note missing its entity tags — and `release-pipeline`, a project that ships code with no release pipeline declared. |
 | `gt-optimize` | Finds what you pay for on every turn and get nothing back for — a fact duplicated across memory files, a dead index row, a `global-memory/` file over budget, a Knowledge page nobody reads — and, since 0.18.1, what your sessions spend rebuilding the prompt cache after sitting idle past its lifetime. Reporting never writes; moving a note somewhere cheaper or archiving old research happens only when asked, and deletes nothing. |
 | `gt-scan` | Checks code against the language definitions this machine actually has — naming and encoding, per language, entirely from packs: a contributed language pack teaches it a new language with no code change. It reports how many checks RAN next to what they found, so a scan that could not load its definitions can never be mistaken for a clean tree. An interrupted scan resumes where it stopped, from any later session. |
 | `gt-allin` | One command for every check, built so a skipped check can never pass for a clean one: the headline is "N of M members ran", and a member that could not execute outranks a member that found something. Since 0.17.2 it also runs the credential scan, the runbook lint and — while gt-wiki is installed — the wiki lint. It does not push — an aggregator is where a partial run is easiest to mistake for a complete one, and pushing there would break the very rule about seeing tests pass that the tool exists to serve. Since 0.18.1 it also runs a project's release pipeline up to the owner gate, where one is adopted. |
@@ -529,7 +544,7 @@ Full reference, including exit codes, in the
 ## Maintenance is code, not judgement
 
 The dangerous failure is not the fact you never captured — it is the fact you captured,
-kept, and still serve after reality moved on. `gt_lint.py` runs 24 deterministic checks
+kept, and still serve after reality moved on. `gt_lint.py` runs 25 deterministic checks
 (broken links, orphans, index gaps, scope leaks, 90-day staleness, superseded sources),
 `core-unenforced`, which catches a rule that is **stored but never re-asserted** — the
 exact failure this system exists to close — and `adr-collision`, which catches two

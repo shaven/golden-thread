@@ -209,7 +209,7 @@ class CommitTest(unittest.TestCase):
 
 
 class TheGateFitsABigRepo(CommitTest):
-    """0.19.0: the gate's fixed 300 s could not cover gt's own repo. It takes --timeout (or
+    """0.19.1: the gate's fixed 300 s could not cover gt's own repo. It takes --timeout (or
     the allin_timeout setting), and it no longer re-runs the test suite: step 2 checks the
     receipt, which IS the evidence the tests ran."""
 

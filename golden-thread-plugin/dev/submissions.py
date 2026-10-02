@@ -68,7 +68,7 @@ SLOTS = {
                   "kind": "enum:generated|vendored|template|executable|config|static"}},
     "encoding":  {"model_reachable": False, "fields": {"lang": "token",
                   "charset": "enum:utf-8", "eol": "enum:lf|crlf", "bom": "enum:never|allowed"}},
-    # `exempt` (0.19.0): names a framework requires (unittest's setUp, assert*) -- each one a
+    # `exempt` (0.19.1): names a framework requires (unittest's setUp, assert*) -- each one a
     # pattern, so it gets exactly the checks a `pattern` field gets.
     "naming":    {"model_reachable": False, "optional": ("exempt",),
                   "fields": {"lang": "token", "construct": "token",

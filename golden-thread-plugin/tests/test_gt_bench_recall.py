@@ -1,4 +1,4 @@
-"""gt_bench.py recall -- does vault lookup find the right page? (0.19.0, request recall-benchmark)
+"""gt_bench.py recall -- does vault lookup find the right page? (0.19.1, request recall-benchmark)
 
 A fixed question set against a synthetic fixture vault (tests/fixtures/recall-bench, generated
 by its make_fixture.py; no private content). Per retriever: recall@1/3/10, files read and an

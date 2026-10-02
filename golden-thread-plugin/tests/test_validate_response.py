@@ -115,7 +115,7 @@ class ValidateResponseTest(Sandbox):
 
     def stop(self, entries, inject=True, **payload):
         # A real transcript carries the injected time right after each prompt whenever the
-        # reminder hook is wired; inject=False is a turn that was never given one (0.19.0).
+        # reminder hook is wired; inject=False is a turn that was never given one (0.19.1).
         if inject:
             entries = [x for e in entries for x in ([e, injected()] if _is_prompt(e) else [e])]
         self.transcript.write_text("".join(json.dumps(e) + "\n" for e in entries),
@@ -197,7 +197,7 @@ class ValidateResponseTest(Sandbox):
         stamp = re.match(r"^Current date and time: (.+)$", ctx, flags=re.M).group(1)
         self.assertAllowed(self.stop([user("hi"), say(f"{stamp} — reply")]))
 
-    # -- a turn never given the time (0.19.0) -----------------------------------------
+    # -- a turn never given the time (0.19.1) -----------------------------------------
     def test_a_turn_with_no_injected_time_is_not_held_to_the_rule(self):
         """install.sh wires this Stop hook partway through the session that runs it. The
         prompt of that turn went out before inject_core_rules.sh was wired, so the reply had

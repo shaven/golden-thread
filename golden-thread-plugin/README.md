@@ -1,13 +1,28 @@
 # Golden Thread Plugin
 
 > **Reader:** someone who has installed it and wants the reference
-> **Claims last checked against the code:** 2026-10-01 (gt 0.18.1) — see *The documents, and what belongs in each* in [`CLAUDE.md`](../CLAUDE.md).
+> **Claims last checked against the code:** 2026-10-02 (gt 0.19.1) — see *The documents, and what belongs in each* in [`CLAUDE.md`](../CLAUDE.md).
 
 A Claude Code plugin that turns an Obsidian vault into the single source of truth for all AI memory across every project and every session.
 
 
 > [!IMPORTANT]
-> **0.18.1 has thirteen themes**; what changed and why is in the CHANGELOG, how to use each in the
+> **0.19.1: right-sized models, SSO for LOTR, and fixes from installing 0.18.1.** (There is no
+> published 0.19.0.) **Model and effort per skill:** every skill declares fast/balanced/deep, and the
+> installer writes a profile into the installed copies — `average` (haiku with no effort setting,
+> sonnet·medium, opus·high; a new install's default), `very-high` (opus·xhigh) or `inherit` —
+> with per-skill and per-plugin overrides (`gt_model_policy.py`) and a doctor `model-policy` row.
+> **LOTR handles SSO:** `lotr add-mcp` fronts an SSO/OAuth MCP endpoint by reusing its client's
+> token by reference, refreshing on 401 (gt-lotr 0.2.0). **Recall:** `gt_bench.py recall` measures
+> how often lookup finds the right page; optional prompt hints (`vault_hints`, off by default).
+> **Supersession and expiry** applied when notes are read (`gt_supersede.py`). **Fixes:** the
+> queue guard reads shell tokens and follows `cd`; nothing writes bytecode into gt-src; post-install
+> resolves the installed release from any path and every completed run writes its receipt; one
+> recorded interpreter for every launchd job; the commit gate fits a large repo; the Stop validator
+> no longer demands a timestamp from a turn that was never given one (the install-time alert).
+> After installing, restart and run `/gt:gt-upgrade`.
+>
+> **0.18.1 had thirteen themes**; what changed and why is in the CHANGELOG, how to use each in the
 > MANUAL. **One verb per action:** `gt-create`, `gt-open`, `gt-list`, `gt-handle` and the new
 > `gt-close` take the artifact (project, task, handoff) as their argument; the six old task and
 > handoff skills still work through 0.18.x as deprecated aliases. **A coding loop:** `gt-plan`

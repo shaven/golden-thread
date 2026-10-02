@@ -257,7 +257,7 @@ class AllInTest(unittest.TestCase):
 
 
 class SkipIsSaidOutLoud(AllInTest):
-    """0.19.0: --skip NAME leaves a member out ON PURPOSE and says so. gt_allin_commit skips
+    """0.19.1: --skip NAME leaves a member out ON PURPOSE and says so. gt_allin_commit skips
     `tests` because it checks the test receipt itself; running the suite again inside the gate
     put the whole suite on the committing machine and could never finish in its time limit."""
 

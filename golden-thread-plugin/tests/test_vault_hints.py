@@ -1,6 +1,6 @@
-"""hooks/vault_hints.py -- a few vault page titles relevant to the prompt, off by default (0.19.0).
+"""hooks/vault_hints.py -- a few vault page titles relevant to the prompt, off by default (0.19.1).
 
-Request 2026-10-02-prompt-relevant-vault-hints, accepted by the owner into 0.19.0 with the
+Request 2026-10-02-prompt-relevant-vault-hints, accepted by the owner into 0.19.1 with the
 setting OFF by default. On UserPromptSubmit it matches the prompt against the vault's index.md
 and adds at most three "title -- path" lines; never a page body, nothing below the threshold,
 nothing when it runs past its time budget, and it always exits 0.

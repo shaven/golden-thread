@@ -1,4 +1,4 @@
-"""gt_model_policy.py -- the model and effort each INSTALLED skill runs at (0.19.0).
+"""gt_model_policy.py -- the model and effort each INSTALLED skill runs at (0.19.1).
 
 Request 2026-10-02-model-and-effort-per-plugin. The policy writes `model:` and `effort:` into
 the installed copies of each SKILL.md (plugin cache and marketplace), never the release

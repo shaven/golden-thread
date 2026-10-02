@@ -434,7 +434,7 @@ class QueueFirstTest(GuardTestBase):
                 self.assertQueueDeny(self.bash(cmd, cwd=self.vault))
 
     def test_shell_writes_the_guard_cannot_resolve_or_that_land_elsewhere_are_allowed(self):
-        """0.19.0 (request queue-guard-bash-false-positives): the guard read redirects off the raw
+        """0.19.1 (request queue-guard-bash-false-positives): the guard read redirects off the raw
         string, so a quoted `>` was a redirect, `$VAR` was taken literally, and a `cd` earlier in
         the command was ignored -- each one blocked a scratch-file write as vault content."""
         s = self.tmp / "scratch"

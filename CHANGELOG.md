@@ -11,14 +11,55 @@ release's own summary line, kept short rather than reconstructed after the fact.
 
 ---
 
-## gt 0.19.0 — unreleased
+## gt 0.19.1 — unreleased
+
+> **There is no published 0.19.0.** `install.sh` changed (phases 5 and 6c) after the 0.19.0
+> directories were cut, and `check_installer_version` exists so one version name never covers
+> two installers; as with 0.18.1, the owner chose to re-cut (2026-10-02). The rollback target
+> stays 0.18.1, the last release published.
 
 Batch 1 of the 2026-10-02 accepted requests: model and effort per plugin, a recall benchmark,
 prompt-relevant vault hints (off by default), supersession and expiry at read time, and five
-fixes to rough edges found installing 0.18.1. Version directories copied from 0.18.1; modules
-gt-lotr 0.2.0, gt-usage 0.1.5, gt-visualize 0.4.3 and gt-wiki 0.2.6 are patch bumps with
-`requires_gt >=0.19.0,<0.20.0`. Entries are filled in as each phase lands.
+fixes to rough edges found installing 0.18.1 — plus, added during the build by the owner, SSO
+for LOTR, a commit gate that fits a large repo, scanner false positives and the install-time
+timestamp alert. Version directories copied from 0.18.1; gt-lotr 0.2.0 (new feature), gt-usage
+0.1.5, gt-visualize 0.4.3 and gt-wiki 0.2.6 with `requires_gt >=0.19.1,<0.20.0`.
 
+- **Model and effort per skill.** Every shipped skill declares `model_intent` (fast, balanced,
+  deep; agent `model_tier` standard/careful map to balanced/deep), enforced by
+  `skill_lint --require-intent` at release. The intent pack carries an effort, and the new
+  `gt_model_policy.py` writes `model:`/`effort:` into the INSTALLED copy of every gt skill,
+  never the release source. Profiles: `average` (haiku with no effort — Haiku has no effort
+  levels — sonnet·medium, opus·high; a new install's default), `very-high` (opus·xhigh) and
+  `inherit`. `install.sh --model-profile`; an interactive upgrade asks once, a scripted one keeps
+  `inherit`. Per-skill and per-plugin overrides (`set`/`clear`, re-applied at once); an effort a
+  model does not accept is refused, naming the allowed values. Doctor `model-policy` row;
+  `gt_model.py skill` reports the installed frontmatter.
+- **Prompt hints, off by default.** `vault_hints` adds a UserPromptSubmit hook naming at most
+  three `index.md` titles relevant to the prompt — never a page body, nothing past 0.8 s.
+- **Supersession and expiry at read time.** `gt_supersede.py listing|rank|dangling`; gt-open lists
+  the newest of each chain, gt-query ranks current before expired before superseded, gt-work
+  records `supersedes:` when a contradiction is resolved; gt-lint `supersedes-missing`.
+- **LOTR handles SSO (gt-lotr 0.2.0).** `lotr add-mcp` fronts an SSO/OAuth MCP endpoint by
+  reusing its client's token by reference (`file:<path>#<field>`), refreshing with the client's own
+  helper on 401 and retrying once; tools discovered and tiered by annotation or name.
+- **Queue guard reads shell tokens.** Quoted `>`, `$VAR` targets and a preceding `cd` no longer
+  draw false refusals; a `cd` into the vault is still caught.
+- **Nothing writes bytecode into gt-src.** Hook commands run `python3 -B`; the doctor and the
+  session checks switch bytecode off for themselves and their children.
+- **post-install resolves the installed release from any path**, and **every completed gate run
+  writes the receipt** (`writer`: hook or manual; a crash, the install stage and `--dry-run` write
+  nothing).
+- **One recorded interpreter for every launchd job.** `install.sh` records it and reconciles
+  installed jobs (reload only under the real home); an EPERM under CloudStorage names the
+  interpreter and folder that need Full Disk Access.
+- **The commit gate fits a large repo.** `--timeout` / `allin_timeout`; the gate skips the `tests`
+  member (the receipt is the evidence); code and naming scans skip release folders older than
+  the newest two.
+- **Scanner false positives.** `except _Name` is not bare; naming rules take `exempt` (unittest
+  names, `do_<METHOD>`); a private `_Pascal` class is PascalCase.
+- **No timestamp alert at install.** The Stop validator holds a reply to the timestamp rule only
+  when that turn was given the time — the turn that runs `install.sh` never was.
 - **Recall benchmark.** `gt_bench.py recall --fixture DIR [--retriever keyword|FILE.py ...]`
   reports recall@1/3/10, files read and approximate tokens per question; a retriever that cannot
   load or raises is could-not-run, never zero. Baseline, keyword retriever (`gt_keyword_recall`,

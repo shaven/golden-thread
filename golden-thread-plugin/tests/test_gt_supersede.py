@@ -1,4 +1,4 @@
-"""gt_supersede.py -- supersession and expiry at read time (0.19.0).
+"""gt_supersede.py -- supersession and expiry at read time (0.19.1).
 
 Request 2026-10-02-supersession-and-expiry-at-read-time. A note may declare
 `supersedes: <path>`; gt-open lists only the newest note of a chain, with a pointer to the

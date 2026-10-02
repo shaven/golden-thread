@@ -161,7 +161,7 @@ class ScheduleTest(Sandbox):
 
 
 class OneRecordedInterpreter(Sandbox):
-    """0.19.0 (request lint-weekly-uses-an-ungranted-interpreter). Each job ran whichever python
+    """0.19.1 (request lint-weekly-uses-an-ungranted-interpreter). Each job ran whichever python
     installed it -- gt-lint-weekly /usr/bin/python3, gt-daily python3.9 -- so a privacy grant
     given to one never covered the other, and lint-weekly died with EPERM every Monday."""
 

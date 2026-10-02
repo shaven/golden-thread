@@ -69,7 +69,7 @@ EXPECTED = {
     "scoped_receipts": ("on", ["off", "on"]),
     "test_tmpdir": ("off", ["off", "noindex"]),
     "runners": ("", None),
-    # 0.19.0: prompt-relevant vault hints, off by default (owner, 2026-10-02).
+    # 0.19.1: prompt-relevant vault hints, off by default (owner, 2026-10-02).
     "vault_hints": ("off", ["off", "on"]),
     "allin_timeout": ("300", ["300", "600", "1200", "1800", "3600"]),
 }

@@ -3,7 +3,7 @@
   "name": "wiki",
   "plugin": "gt-wiki",
   "version": "0.2.6",
-  "requires_gt": ">=0.19.0,<0.20.0",
+  "requires_gt": ">=0.19.1,<0.20.0",
   "summary": "LLM Wiki: immutable sources, interlinked Knowledge pages, and ingest, lint and refresh loops",
   "default": "on",
   "skills": [

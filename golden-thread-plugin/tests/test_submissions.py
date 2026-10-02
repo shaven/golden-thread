@@ -98,7 +98,7 @@ class SubmissionsTest(unittest.TestCase):
         self.assertReject(bad, "unknown-key", "prose field in a Tier A slot")
 
     def test_naming_exempt_is_a_list_of_checked_patterns(self):
-        """0.19.0: `exempt` is optional, and every item goes through the pattern checks."""
+        """0.19.1: `exempt` is optional, and every item goes through the pattern checks."""
         base = {"lang": "python", "construct": "function", "style": "snake"}
         self.assertReady(pack(slot="naming", name="conventions", entries=[dict(base)]))
         self.assertReady(pack(slot="naming", name="conventions", entries=[

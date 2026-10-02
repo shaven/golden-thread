@@ -796,7 +796,7 @@ LIST_PLUGINS=no
 REQUIRE_CHECKSUM="${GT_REQUIRE_CHECKSUM:+yes}"; REQUIRE_CHECKSUM="${REQUIRE_CHECKSUM:-no}"
 LIST_MODULES=no
 MODULE_FLAGS=()          # "with:NAME" / "without:NAME", in the order given
-MODEL_PROFILE=""         # --model-profile average|very-high|inherit (0.19.0)
+MODEL_PROFILE=""         # --model-profile average|very-high|inherit (0.19.1)
 ORIG_ARGS=("$@")         # kept for the re-run after a migration changes a module choice
 POSITIONAL=""
 while [ $# -gt 0 ]; do
@@ -1485,7 +1485,7 @@ if [ -d "$SRC/hooks" ]; then
   done < <(modpy onfiles "$MODJSON")
   set_modes ${GT_HOOK_FILES[@]+"${GT_HOOK_FILES[@]}"}
   echo "Installed Core-rule hooks → $GT_HOOKS"
-  # One interpreter for every scheduled job (0.19.0): record the python running this
+  # One interpreter for every scheduled job (0.19.1): record the python running this
   # install, then rewrite any installed job on another one. A macOS privacy grant is per
   # interpreter, so jobs on two pythons meant a grant that covered only some of them.
   if [ -f "$GT_HOOKS/gt_schedule.py" ]; then
@@ -1759,7 +1759,7 @@ print("Registered in settings.json  (backups in %s)" % BACKUPS)
 EOF
 
 
-# 5b. Model and effort per skill (0.19.0, request model-and-effort-per-plugin). The profile is,
+# 5b. Model and effort per skill (0.19.1, request model-and-effort-per-plugin). The profile is,
 # in order: --model-profile this run, the recorded choice, `average` on a NEW install, a one-time
 # question on an interactive upgrade (average preselected), else `inherit` -- a scripted upgrade
 # changes nothing unasked and does not use up the question. Written into the installed copies

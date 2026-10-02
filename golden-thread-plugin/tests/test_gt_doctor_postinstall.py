@@ -6,7 +6,7 @@ Contract:
     fail it.
   * Every row fails closed: a row that cannot run is FAIL "could not run: ...", never PASS.
   * Read-only: the vault, settings.json and vault-config.json are byte-identical afterwards.
-    Its one write (0.19.0) is the receipt, post-install-validated.json, after a COMPLETED
+    Its one write (0.19.1) is the receipt, post-install-validated.json, after a COMPLETED
     session/final run -- never after a crash, an install-stage run or --dry-run.
   * --stage install|session: what only /gt:gt-upgrade can make true is PENDING, not FAIL.
   * install.sh runs it at the end of every install with a vault; a real FAIL is exit 9.
@@ -191,7 +191,7 @@ class CorrectInstallPasses(InstalledMachine):
 
 
 class TheReleaseIsTheInstalledOneFromAnyPath(InstalledMachine):
-    """0.19.0 (request post-install-misreads-release-from-marketplace-path). Run from the
+    """0.19.1 (request post-install-misreads-release-from-marketplace-path). Run from the
     marketplace copy, whose plugin directory is named `gt`, post-install took `gt` for the
     release and failed components against it; from the cache copy it passed. One install, one
     answer, whichever copy of the doctor is asked."""
@@ -233,7 +233,7 @@ def _old_lint_weekly_job(case):
 
 
 class InstallRecordsOneInterpreterForEveryJob(InstalledMachine):
-    """0.19.0 (request lint-weekly-uses-an-ungranted-interpreter): install.sh records the python
+    """0.19.1 (request lint-weekly-uses-an-ungranted-interpreter): install.sh records the python
     it runs under and rewrites an installed job on another one. The sandbox HOME is not the
     real user's, so nothing may be reloaded into launchd."""
     PRE_INSTALL = _old_lint_weekly_job
@@ -258,7 +258,7 @@ def _cache_skill(case, name):
 
 
 class ANewInstallRunsTheAverageProfile(InstalledMachine):
-    """0.19.0 (request model-and-effort-per-plugin): a new install defaults to `average` and
+    """0.19.1 (request model-and-effort-per-plugin): a new install defaults to `average` and
     writes it into the installed copies; the release source stays byte-identical."""
 
     def test_fast_balanced_and_deep_skills_carry_the_average_profile(self):
@@ -298,7 +298,7 @@ class AScriptedUpgradeKeepsInherit(InstalledMachine):
 
 
 class EveryCompletedRunWritesTheReceipt(InstalledMachine):
-    """0.19.0 (request gate-receipt-only-written-at-session-start). The receipt was written only
+    """0.19.1 (request gate-receipt-only-written-at-session-start). The receipt was written only
     on the SessionStart hook path, so a manual run that passed left the previous version's
     receipt in place. Now every completed session/final run writes it and names its writer; a
     gate that could not run, an install-stage run and --dry-run write nothing."""

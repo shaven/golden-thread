@@ -1,11 +1,11 @@
 # Golden Thread — User Manual
 
 > **Reader:** a daily user — the deepest document, where the *why* lives
-> **Claims last checked against the code:** 2026-10-01 (gt 0.18.1) — see *The documents, and what belongs in each* in [`CLAUDE.md`](../CLAUDE.md).
+> **Claims last checked against the code:** 2026-10-02 (gt 0.19.1) — see *The documents, and what belongs in each* in [`CLAUDE.md`](../CLAUDE.md).
 
-Complete reference for gt's thirty-six skills and its nine modules. Written against **gt v0.18.1**
-(gt-wiki 0.2.5; gt-usage 0.1.4; gt-demo, gt-watch, gt-report-card, gt-farm and gt-flow 0.18.1; gt-visualize 0.4.2;
-gt-lotr 0.1.1 — the five named with 0.18.1 are versioned with gt and move with every release, changed or not).
+Complete reference for gt's thirty-six skills and its nine modules. Written against **gt v0.19.1**
+(gt-wiki 0.2.6; gt-usage 0.1.5; gt-demo, gt-watch, gt-report-card, gt-farm and gt-flow 0.19.1; gt-visualize 0.4.3;
+gt-lotr 0.2.0 — the five named with 0.19.1 are versioned with gt and move with every release, changed or not).
 
 > **0.18.1 renamed the task and handoff skills to verbs** — `gt-create`, `gt-open`, `gt-list`,
 > `gt-handle`, `gt-close`, each taking the artifact as its argument. The old names (`gt-task`,
@@ -154,6 +154,69 @@ with `{"intent": "deep", "model": "<alias>", "verified": "YYYY-MM-DD"}` entries 
 then SHADOWED); to unmap one, `"retract": [{"intent": "deep"}]`. Exit `0` resolved (UNMAPPED
 included) · `1` registry problems or a bad value · `2` unknown intent. `gt_code_review.py plan`
 prints each dimension's resolved model, and `/gt:gt-validate` declares `deep`.
+
+### Model and effort profiles: `gt_model_policy.py` (0.19.1)
+
+Since 0.19.1 every shipped skill declares a `model_intent`, and the intent pack also carries an
+**effort**. `gt_model_policy.py` writes the resolved `model:` and `effort:` into the **installed**
+copy of every gt skill (plugin cache and marketplace directory) — never the release source — and
+records exactly what it wrote in `~/.claude/golden-thread/model-policy-applied.json`.
+
+| Profile | fast | balanced | deep |
+|---|---|---|---|
+| `average` (a new install's default) | haiku, no effort setting | sonnet · medium | opus · high |
+| `very-high` | opus · xhigh | opus · xhigh | opus · xhigh |
+| `inherit` | the session's own | the session's own | the session's own |
+
+Haiku has no effort levels in Claude Code, so gt never sets one for it; an effort a model does not
+accept is **refused** when it is set, naming the allowed values (Claude Code would lower it
+silently). `install.sh --model-profile P` chooses; with no flag a new install gets `average`, an
+interactive upgrade asks once (average preselected), and a scripted upgrade keeps `inherit` without
+using up the question.
+
+```bash
+python3 $SCRIPTS/gt_model_policy.py show [--json]                        # every skill: model, effort, why
+python3 $SCRIPTS/gt_model_policy.py table --profile very-high            # what a profile means
+python3 $SCRIPTS/gt_model_policy.py choose very-high && python3 $SCRIPTS/gt_model_policy.py apply
+python3 $SCRIPTS/gt_model_policy.py set --skill gt-plan --model opus --effort max   # re-applies at once
+python3 $SCRIPTS/gt_model_policy.py clear --skill gt-plan
+python3 $SCRIPTS/gt_model_policy.py verify                               # exit 1 on a hand edit
+```
+
+Precedence: per-skill override, per-plugin override, the skill's intent through the profile,
+inherit. Choices live with the install choices and survive reinstalls. The doctor's
+`model-policy` row names the active profile and WARNs when an installed field was edited by hand.
+`gt_model.py skill` reports the installed frontmatter's model and effort when the policy wrote
+them, so `/gt:gt-validate` names what actually runs.
+
+### Supersession and expiry: `gt_supersede.py` (0.19.1)
+
+A note can declare that it replaces an earlier one — `supersedes: <path>` in its frontmatter (a
+path relative to the note's folder or the vault). A note is **expired** when it carries
+`expired: <date>` (its `expires_when` was reported met) or an `expires: YYYY-MM-DD` that has
+passed. Nothing is deleted: superseded and expired notes stay on disk and stay readable.
+
+```bash
+python3 $SCRIPTS/gt_supersede.py listing Projects/<slug>/memory --vault V   # gt-open: newest of each chain
+python3 $SCRIPTS/gt_supersede.py rank PATH ... --vault V                    # gt-query: current, expired, superseded
+python3 $SCRIPTS/gt_supersede.py dangling --vault V                         # a supersedes: pointing at nothing
+```
+
+`/gt:gt-open` lists memory through `listing`, `/gt:gt-query` orders matches through `rank`, and
+`/gt:gt-work` records `supersedes:` on the current note when you resolve a contradiction in its
+favour. gt-lint's `supersedes-missing` reports a broken link.
+
+### Recall benchmark and prompt hints: `gt_keyword_recall.py` (0.19.1)
+
+`gt_keyword_recall.py "<question>" --vault V` ranks vault pages the way gt-query finds them (index
+first, then the pages). `gt_bench.py recall --fixture DIR [--retriever keyword|FILE.py ...]`
+measures any retriever on a fixed question set: recall@1/3/10, files read and approximate tokens
+per question; a retriever that cannot load is could-not-run, never zero. The synthetic fixture
+is `tests/fixtures/recall-bench` (36 questions).
+
+The `vault_hints` setting (default `off`) adds a UserPromptSubmit hook that matches each prompt
+against `index.md` only and adds at most three `- <title> — <path>` lines — never a page body,
+nothing below its threshold or past its 0.8 s budget.
 
 ### What `/gt:gt-scan` can check, and how to ask
 
@@ -1909,6 +1972,9 @@ lotr --zone personal init --mode local|hub|client
 python3 <gt-lotr>/scripts/lotrd.py --zone personal           # the daemon
 lotr add-http github@personal --profile github --base-url https://api.github.com \
     --identity "me @ github.com" --auth bearer --token-ref keychain:gt-lotr/github-personal
+lotr add-mcp jira@personal --endpoint https://<mcp-host>/mcp --identity "me @ <host>" \
+    --auth-ref file:/Users/<me>/.claude/<client>-tokens.json#access_token \
+    --refresh-cmd "<the MCP client's own refresh helper>"           # 0.2.0: SSO/OAuth MCP
 lotr enroll laptop --machine "MacBook Pro" --max-tier write --secret-out <path>   # hub only
 lotr revoke laptop
 lotr status            # connections, whether each credential is present (never its value), clients
@@ -1919,6 +1985,14 @@ lotr status            # connections, whether each credential is present (never 
 - **Placement, per zone:** `local` (one box, e.g. a work machine) or `hub` with enrolled `client`
   machines. Hybrid is parsed and refused in 0.1.0. Zones never mix: work and personal run separate
   gateways.
+- **SSO/OAuth MCP endpoints (lotr 0.2.0):** `add-mcp` fronts a downstream MCP server that answers
+  only to an SSO/OAuth token. LOTR runs no OAuth flow: it reuses the token the MCP client that
+  signed in already keeps in an owner-only file, **by reference** (`file:<path>#<json-field>`),
+  sends it only as the `Authorization` header, and on HTTP 401 runs `--refresh-cmd` (no shell,
+  output discarded) and retries once. The tools are listed at registration, so `find` works at
+  once; each is tiered by its `readOnlyHint`/`destructiveHint` annotations, else its name, else
+  write. Transport `http` (JSON or SSE replies); stdio and legacy `sse` servers are not supported
+  yet. A work endpoint on a personal gateway needs the owner's zone ruling first.
 - **Credentials are references** — `keychain:`, `store:`, `file:` — never values. The owner puts
   the secret in place; the skill never asks for a token's value. An enrolled client's secret goes
   to a mode-600 file, never to the screen; revoking a client needs no external credential rotated.
@@ -2183,11 +2257,12 @@ a timestamp — and the newest receipt for a file wins *by recorded time*, not b
 | `decision-candidate` | *(review queue, 0.18.1)* A decision stated in prose — "we chose", "by design", "deliberately" … — in a project's `design.md` or `research.md`, with the line, the phrase and a proposed `gt_adr.py allocate` command. Nothing writes an ADR. Phrases: setting `decision_signals` |
 | `memory-entity-orphan` | *(review queue, 0.18.1)* A name that appears three or more times in a memory note's body and is not in its `entities:` list |
 | `release-pipeline` | *(0.18.1)* A project with code (a topology) marked `release_pipeline: no`, one marked `yes` with no `release.sh`, or a value other than `yes`/`no`/`planned`. A README without the key reads as `planned` — see [Release pipeline](#release-pipeline-gt_pipelinepy) |
+| `supersedes-missing` | *(0.19.1)* A note's `supersedes:` names a path that does not exist, so the chain gt-open and gt-query read is broken there — see [Supersession and expiry](#supersession-and-expiry-gt_supersedepy-0191) |
 | `runbook-duplicate` | A line duplicated across two or more projects' `runbook.md` — `--runbooks` only, and the detection step of `/gt:gt-runbook-lint` |
 
-gt_lint emits twenty-four checks, and every one of them runs on an ordinary pass,
+gt_lint emits twenty-five checks, and every one of them runs on an ordinary pass,
 each wired to a function the run actually calls. `runbook-duplicate` is not one of the
-twenty-four:
+twenty-five:
 it is a separate read-only mode, `gt_lint.py --runbooks`, which runs nothing else and reports
 under its own record shape — the detection step of `/gt:gt-runbook-lint`. Fewer than two
 runbooks prints "nothing to compare" and exits 0. `core-unenforced` is the critical one — it is the machine-checkable form of "rule
@@ -2258,6 +2333,7 @@ Sixteen checks, each answering a different question:
 | `checkers` | how many validation checkers are installed, and is any missing a tool it needs? (0.18.1; see [`gt_check.py`](#gt_checkpy-checkers-a-module-contributes)) |
 | `repo-target` | which git repo does this working directory resolve to, and is it the vault? (0.18.1) Always a **note** (`i`) |
 | `hooks-schema` | does every `settings.json` hook entry name an event Claude Code fires and, on a tool event, a tool it has? (0.18.1) |
+| `model-policy` | which model profile is active, and does every installed skill still carry exactly the `model:`/`effort:` the policy wrote? A hand edit is a WARN with the fix (0.19.1) |
 | `execution` | is the parallel profile measured or a default, and how old? Is the shell translated by Rosetta? Is TMPDIR inside a synced folder? (0.18.1; `gt_bench.py health`) |
 
 **`repo-target` (0.18.1).** gt makes the vault the working directory, and the vault is a git repo,
@@ -2554,6 +2630,8 @@ is registered here and can be switched off.
 | `execution_metrics` | `off` · `on` | `on` | Record one row per execution of tests, release-pipeline steps and gt skills (`gt_metrics.py`); `off` records nothing anywhere (0.18.1) |
 | `scoped_receipts` | `off` · `on` | `on` | On a feature branch, a commit may rely on a scoped receipt from `tests/run.sh --affected`; the default branch and release gates always need a full-suite receipt (0.18.1) |
 | `test_tmpdir` | `off` · `noindex` | `off` | Where the test runner puts throwaway files; `noindex` = `~/Library/Caches/gt-tests.noindex` on macOS, `$XDG_CACHE_HOME/gt-tests` elsewhere (0.18.1) |
+| `vault_hints` | `off` · `on` | `off` | Up to three vault page titles relevant to each prompt, from `index.md` only, never a page body (0.19.1). See [Recall benchmark and prompt hints](#recall-benchmark-and-prompt-hints-gt_keyword_recallpy-0191) |
+| `allin_timeout` | `300` · `600` · `1200` · `1800` · `3600` | `300` | Seconds each all-in check may take, in `/gt:gt-allin` and the commit gate (0.19.1); the gate gives the whole run twelve times this |
 | `runners` | empty · comma-separated ssh aliases | empty | Remote hosts that may run tests and calibration: `dev/remote-test.sh`, `prun.py --hosts`, `gt_bench.py --hosts` (0.18.1) |
 
 **Settings that come from modules.** Since 0.15.0 a module declares its own settings in
@@ -2891,6 +2969,12 @@ python3 $SCRIPTS/gt_allin_commit.py --repo "<repo>" --vault "<vault>" -m "your m
 `--dry-run` runs every check and commits nothing — the safe first move, always. It commits **the
 index, not the working tree**; nothing staged is a refusal, not a no-op. The staged file list is
 printed *before* the verdict.
+
+Since 0.19.1 `--timeout S` sets how long each check may take (default: the `allin_timeout`
+setting, else 300 s; the whole run gets twelve times that), and the gate runs gt-allin with
+`--skip tests`: the test receipt it checks itself is the evidence the suite passed, so the suite is
+not re-run on the committing machine. `gt_allin.py --skip NAME` names what it left out. The code and
+naming scans skip a plugin's release folders older than its newest two (secrets still scan them).
 
 **It commits but will not push.** A commit is local and reversible — `git reset` undoes it and
 nobody else ever saw it. A push is outward-facing and effectively permanent. That asymmetry is

@@ -232,7 +232,7 @@ class TheMappingPackIsTheOnlyPlace(unittest.TestCase):
             self.assertRegex(e.get("verified", ""), r"^\d{4}-\d{2}-\d{2}$", e)
 
 
-# 0.19.0 (request model-and-effort-per-plugin): every shipped skill declares an intent, from
+# 0.19.1 (request model-and-effort-per-plugin): every shipped skill declares an intent, from
 # this table. A skill left out ran on whatever the session used, which is the gap the policy
 # closes; a skill moved between tiers is a decision, so the table is asserted, not inferred.
 FAST = {"gt-task-list", "gt-handoff-list", "gt-list", "gt-context", "gt-settings", "gt-doctor",
@@ -242,7 +242,7 @@ DEEP = {"gt-validate", "gt-validation", "gt-plan", "gt-implement", "gt-promote"}
 
 
 class EffortResolvesWithTheModel(ModelBase):
-    """0.19.0: each intent maps to a model AND an effort. The shipped pack is the `average`
+    """0.19.1: each intent maps to a model AND an effort. The shipped pack is the `average`
     profile (owner, 2026-10-02): fast = haiku with NO effort (Haiku has no effort levels),
     balanced = sonnet medium, deep = opus high. An effort a model does not support is refused
     and names the allowed values -- Claude Code would lower it silently, so gt never sets one."""
@@ -286,7 +286,7 @@ class EffortResolvesWithTheModel(ModelBase):
 
 
 class TheSkillReportsWhatItsInstalledFrontmatterSays(ModelBase):
-    """0.19.0 criterion: gt-validate names the model it ran on, matching the installed
+    """0.19.1 criterion: gt-validate names the model it ran on, matching the installed
     frontmatter. Under very-high the policy writes opus xhigh while the intent pack says
     opus high; `gt_model.py skill` must report what Claude Code will actually run."""
 

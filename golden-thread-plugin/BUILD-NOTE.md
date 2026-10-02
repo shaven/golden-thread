@@ -1,4 +1,4 @@
-# Build note — gt 0.18.1
+# Build note — gt 0.19.1
 
 **Read this first if you are the person taking this tree into the other repository.**
 
@@ -8,7 +8,7 @@
 > content reaches you from the owner. `SOURCE.json`, at the root of gt-src, names the exact commit
 > the tree was cut from.
 
-> **Not released yet.** 0.18.1 is being built on `feat/0.18.1` from the accepted feature-request
+> **Not released yet.** 0.19.1 is being built on `feat/0.19.0` from the accepted feature-request
 > queue. Nothing is pushed, tagged or synced to gt-src until the owner says release; then it goes
 > straight to main.
 
@@ -18,18 +18,18 @@
 
 | Plugin | Version | Note |
 |---|---|---|
-| gt (core) | **0.18.1** | verb-first skills, gt-close, gt-plan/gt-implement, ADR expiry and lineage, gt-brief, gt-optimize session member and archive, gt-minimize, write-back checks, catch-up brief, doctor rows, foreign-checkout guard, checker host and fix writer, model intent, gt-sync, reminders, resumable scans and ingests, release pipelines, execution metrics and the fast test loop, staged ingest/promote |
-| gt-wiki | **0.2.5** | `review-due` ages a page from the newer of `last_reviewed` and `updated` |
-| gt-flow | **0.18.1** | redacted hashes at least 6 hex characters; draws the new `addon.fix` event |
-| gt-demo, gt-farm, gt-report-card, gt-watch | **0.18.1** | they move with gt |
-| gt-visualize | **0.4.2** | `requires_gt` admits 0.18 |
-| gt-usage | **0.1.4** | `requires_gt` admits 0.18 |
-| gt-lotr | **0.1.1** | `requires_gt` admits 0.18; still off by default |
+| gt (core) | **0.19.1** | model and effort profiles, recall benchmark, prompt hints (off), supersession and expiry at read time, queue-guard tokens, no bytecode in gt-src, post-install release resolution and receipt, one launchd interpreter, commit-gate timeout, Stop-validator install fix (no published 0.19.0) |
+| gt-wiki | **0.2.6** | every skill declares a model_intent; `requires_gt` admits 0.19 |
+| gt-demo, gt-farm, gt-flow, gt-report-card, gt-watch | **0.19.1** | they move with gt |
+| gt-visualize | **0.4.3** | model_intent on every skill; `requires_gt` admits 0.19 |
+| gt-usage | **0.1.5** | model_intent; `requires_gt` admits 0.19 |
+| gt-lotr | **0.2.0** | `add-mcp`: SSO/OAuth MCP endpoints by token reference, refresh on 401; still off by default |
 
-Skills **28 → 36**: `gt-handle`, `gt-list`, `gt-close`, `gt-plan`, `gt-implement`, `gt-brief`,
-`gt-minimize`, `gt-sync`. Nothing removed: `gt-task`, `gt-handoff`, `gt-task-list`, `gt-handoff-list`,
-`gt-task-handle`, `gt-handoff-handle` stay as deprecated aliases through 0.18.x. gt_lint checks
-**19 → 24**. Settings: twenty-two new (37 in all). Doctor checks: 16. Hook registrations **14 → 16** (both new ones `install.sh`-owned).
+Skills stay **36** (every one now declares a `model_intent`). gt_lint checks **24 → 25**
+(`supersedes-missing`). Settings: two new (`vault_hints`, `allin_timeout`); the model profile
+lives with the install choices. Doctor checks **16 → 17** (`model-policy`). Hook registrations
+**16 → 17** (`vault_hints.py`, `install.sh`-owned). New scripts: `gt_model_policy.py`,
+`gt_keyword_recall.py`, `gt_supersede.py`; `gt_bench.py recall`. 0.18.1 is the rollback target.
 
 ## 2. What changed, and why
 

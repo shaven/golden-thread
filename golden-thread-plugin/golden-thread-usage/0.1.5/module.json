@@ -3,7 +3,7 @@
   "name": "usage",
   "plugin": "gt-usage",
   "version": "0.1.5",
-  "requires_gt": ">=0.19.0,<0.20.0",
+  "requires_gt": ">=0.19.1,<0.20.0",
   "summary": "Plan-allowance meter: records the 5-hour, weekly and spend windows, speaks only near a ceiling, and reports what a cut would save",
   "default": "on",
   "skills": [

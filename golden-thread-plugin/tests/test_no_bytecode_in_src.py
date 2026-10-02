@@ -1,4 +1,4 @@
-"""Nothing gt runs writes into gt-src (0.19.0, request 2026-10-02-hooks-write-bytecode-into-gt-src).
+"""Nothing gt runs writes into gt-src (0.19.1, request 2026-10-02-hooks-write-bytecode-into-gt-src).
 
 Found 2026-10-02 on the publishing Mac: SessionStart hooks are handed the gt-src release path
 and imported from it with plain `python3`, so `__pycache__/*.pyc` landed in the publish folder
@@ -58,7 +58,7 @@ class NoBytecodeInSrc(Sandbox):
 
     def run_shell(self, command):
         # stdin as Claude Code gives every hook: a JSON payload. With none, a hook that reads its
-        # payload (vault_hints.py, 0.19.0) waits on an inherited stdin until the timeout.
+        # payload (vault_hints.py, 0.19.1) waits on an inherited stdin until the timeout.
         return subprocess.run(["bash", "-c", command], env=self.env, cwd=str(self.tmp),
                               input="{}", capture_output=True, text=True, timeout=120)
 

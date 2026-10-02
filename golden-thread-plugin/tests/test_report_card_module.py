@@ -132,7 +132,7 @@ class ReportCardInstalled(Sandbox):
         got = sorted((ev, argv[3:]) for ev, argv in self.card_entries())
         self.assertEqual(got, sorted(EXPECTED_HOOKS))
         for _ev, argv in self.card_entries():
-            self.assertEqual(argv[1:3], ["-B", str(self.hooks_dir / SCRIPT)])  # -B: 0.19.0
+            self.assertEqual(argv[1:3], ["-B", str(self.hooks_dir / SCRIPT)])  # -B: 0.19.1
 
     def test_declined_leaves_no_hook_and_no_hookdir_file(self):
         self.install("--no-vault")

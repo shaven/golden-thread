@@ -19,7 +19,7 @@ from _harness import Sandbox, SCRIPTS, load_module, ENFORCEMENT_HOOKS, GT
 
 TOOL = SCRIPTS / "gt_components.py"
 
-# vault_hints.py (0.19.0) is an install.sh-owned hook FILE in hooks/ that the wiring check
+# vault_hints.py (0.19.1) is an install.sh-owned hook FILE in hooks/ that the wiring check
 # resolves by path, so the fixture installs it like the enforcement hooks.
 HOOK_FILES = ENFORCEMENT_HOOKS + ("alpha.sh", "vault_hints.py")
 # Counts come from the declaration, never from a literal: 0.12.0 added an eleventh
@@ -155,7 +155,7 @@ class HookRegistrations(ComponentsBase):
         self.assertEqual(len(regs), N_HOOKS)
         by = {(r["event"], r["script"]): r for r in regs}
         argv = shlex.split(by[("SessionStart", "gt_components.py")]["command"])
-        # `-B` (0.19.0): these hooks are handed gt-src and must not write bytecode into it
+        # `-B` (0.19.1): these hooks are handed gt-src and must not write bytecode into it
         self.assertEqual(argv, ["python3", "-B", str(self.installed / "gt_components.py"),
                                 "check", str(self.vdir), "--hook"])
         argv = shlex.split(by[("SessionStart", "gt_version_check.py")]["command"])
@@ -810,7 +810,7 @@ class ExistingInstallEntriesBelongToTheModule(ModuleBase):
         for vd, n in ((self.mover, "gt_moved.py"), (self.zed, "zed_report.py")):
             shutil.copy2(vd / "scripts" / n, self.installed / n)
         # what an older gt wrote: exactly the command the module resolves to (with the `-B`
-        # every python hook carries since 0.19.0; wiring is matched by script, so an entry
+        # every python hook carries since 0.19.1; wiring is matched by script, so an entry
         # written without it still reads as wired)
         old_cmd = "python3 -B %s --hook" % shlex.quote(str(self.installed / "gt_moved.py"))
         mine = [r for r in self.registrations() if r.get("module") == "mover"]
