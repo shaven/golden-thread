@@ -54,6 +54,10 @@ COVERED = {
     # 0.17.10: queued vault writes -- submitting writes the queue, draining writes the vault
     "scripts/gt_write_queue.py": (),
     "scripts/gt_broker.py": ("drain",),
+    # 0.18.0: the validation host. `run` files fix proposals into the vault's ext-proposals/;
+    # `apply`/`undo` write the fixed file (vault Markdown through the queue).
+    "scripts/gt_check.py": ("run",),
+    "scripts/gt_apply.py": ("apply", "undo"),
 }
 
 EXEMPT = {

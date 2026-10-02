@@ -108,6 +108,10 @@
    "bytes": 12377,
    "sha256": "446a7eb5cb8d553562f5b2572a72fe3ff2e30fffc3e7d0886cdbd703e5730442"
   },
+  "scripts/gt_apply.py": {
+   "bytes": 35930,
+   "sha256": "9ec97e9cb9f25715747f457fed8c6b411b5b61d2fc47d0758732d09a66a52882"
+  },
   "scripts/gt_broker.py": {
    "bytes": 35307,
    "sha256": "9dcaae8ca6ef77cc8376c9cfab1a6d1a189939ac73af1c5782d83111626308c9"
@@ -393,8 +397,8 @@
    "sha256": "7386fa88b225580c3d8172310cfa2f21622e2cc13b3863d5f4517758da45e729"
   },
   "templates/shipped-hashes.json": {
-   "bytes": 8218,
-   "sha256": "4ae92d74aef2a1c74cd25a8b3b42fa2bb6ef2611c708e3ee03233814a08caaf6"
+   "bytes": 8573,
+   "sha256": "5223cf8650b09234692f2fe14ee5aa5691497aae2ad8c8d4e923aabfca7e9232"
   },
   "templates/source.md": {
    "bytes": 2462,
@@ -413,8 +417,8 @@
    "sha256": "4499af3b2b120031005532dd14cd0107c092e5b8819d25d60d5ff66127c5ad90"
   },
   "templates/tools/gt_events.py": {
-   "bytes": 40106,
-   "sha256": "963a2fffb5b4dab9627e9190babe7e3597826553033e0fb92908f8e3ed00850a"
+   "bytes": 40366,
+   "sha256": "eacf4fbf63f8e04efc3e2b11675972d9e010f640bb2e0e818734d98620058f4f"
   },
   "templates/tools/gt_log.py": {
    "bytes": 15894,
@@ -445,7 +449,7 @@
    "sha256": "05a5e61333b0ba5d6f97866735268f7f99ff354d9502b2b05e0e512a86f82a6b"
   }
  },
- "generated": "2026-10-01T20:46:20",
+ "generated": "2026-10-01T20:46:39",
  "hooks": [
   {
    "args": [
