@@ -1,6 +1,7 @@
 ---
 name: gt-validate
 description: "Independently verify a claim using a fresh-context validation agent. The validator receives only the claim, the rules and the artifact — never the reasoning that produced them — so it re-derives the answer instead of grading an argument. Use when a finding is about to be recorded as fact, before a production change, or when a number matters."
+model_intent: deep
 ---
 
 # Golden Thread Validate
@@ -101,6 +102,16 @@ isolation; withholding *reasoning* is.
 
 Launch a subagent per class with the matching prompt from `prompts/`, plus the packet.
 Run them in the background; they are slow by design because they redo the work.
+
+**Which model.** This skill declares `model_intent: deep` — a wrong verdict is expensive.
+Resolve it before dispatching, and pass the model it names as the subagent's model:
+```bash
+python3 <base_dir>/../../scripts/gt_model.py skill <base_dir> --vault "<vault>"
+```
+Say the line it prints to the user (`model_intent deep -> model …`). If it reports the intent
+**UNMAPPED**, it has already fallen back to `balanced` — use that model and say so; if it
+names no model at all, dispatch without one (the session's own model) and say that too.
+Never pick a model name yourself.
 
 **Specialist spec (only when `agent_specialization` is on).** The setting defaults to
 `off`, and then this paragraph changes nothing. Otherwise first run:

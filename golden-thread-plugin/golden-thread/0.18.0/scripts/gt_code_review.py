@@ -155,8 +155,19 @@ def cmd_plan(a) -> int:
     plan = []
     for d in dims:
         targets = applicable(d, files)
+        # 0.18.0: the intent resolves through the registry's `model` slot, and the plan SAYS
+        # which model it means -- a pass that ran on a model the reader did not assume is the
+        # same defect class as a check that did not run. Unmapped is loud, never fatal.
+        try:
+            import gt_model
+            res = gt_model.resolve(d["model_intent"], vault=a.vault)
+            model, model_line = res["model"], res["line"]
+        except Exception as exc:                          # noqa: BLE001
+            model, model_line = None, "model_intent %s could not be resolved (%s)" % (
+                d["model_intent"], exc)
         plan.append({"dimension": d["id"], "title": d["title"], "rubric": d["rubric"],
-                     "model_intent": d["model_intent"], "severity_max": d["severity_max"],
+                     "model_intent": d["model_intent"], "model": model,
+                     "model_resolution": model_line, "severity_max": d["severity_max"],
                      "files": targets, "source": d["source"]})
     if a.json:
         print(json.dumps({"root": str(root), "files": len(files), "plan": plan,
@@ -165,6 +176,7 @@ def cmd_plan(a) -> int:
         for row in plan:
             print("%-22s %4d file(s)   %s" % (row["dimension"], len(row["files"]),
                                               row["title"][:50]))
+            print("%-22s %s" % ("", row["model_resolution"]))
         print("gt-code-review: %d dimension(s) over %d file(s) in scope"
               % (len(plan), len(files)))
     return OK

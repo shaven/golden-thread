@@ -106,6 +106,11 @@ SLOTS = {
     # "this extensionless file is shell" or "here .inc means php" and be believed.
     "filetype":         {"mode": "map",   "key": ("match",)},
     "construct":        {"mode": "map",   "key": ("lang", "construct")},
+    # 0.18.0: which MODEL a skill's `model_intent` (fast|balanced|deep) means here. The ONE
+    # place a model name may appear in anything gt ships -- data, never code, so a local
+    # pack in the owner's vault overrides the shipped mapping and the loser is SHADOWED.
+    # Tier D: the resolved name is printed, so it reaches context.
+    "model":            {"mode": "map",   "key": ("intent",)},
 }
 # Which shipped tool READS each slot. A slot with no consumer resolves perfectly and is then
 # read by nobody: a user can write a pack, watch `show` list it as in effect, and get silence
@@ -138,6 +143,7 @@ CONSUMERS = {
     # is read.
     "lint": "gt_scan_code.py",
     "review": "gt_code_review.py",
+    "model": "gt_model.py",
 }
 
 TIERS = ("community", "core", "local")      # low to high precedence

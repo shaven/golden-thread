@@ -80,6 +80,10 @@
    "bytes": 2726,
    "sha256": "e50f630c4b15ff189ebd0bc9d084bd4bc2e41302bce6ff74d3d0b83d9d71694e"
   },
+  "packs/core/model.intents.pack.json": {
+   "bytes": 618,
+   "sha256": "0e20813a6afda31936cd18b588d37b522e9649405fbeefe3451d7ba7d0cb8e34"
+  },
   "packs/core/naming.conventions.pack.json": {
    "bytes": 1593,
    "sha256": "cadd417e1089bd7f8fde376c1e2e2fb4ad675f2a6b6ab8597ee38d2face04f35"
@@ -125,8 +129,8 @@
    "sha256": "c1a48c7f5c9eee67641c29e9aa6936c792305e740e7d4732d9728c9f5c8b678d"
   },
   "scripts/gt_code_review.py": {
-   "bytes": 15194,
-   "sha256": "b7419f33249edab6cd4dd4c60852bc1d9c162defad2030b8c23b91e7c044788c"
+   "bytes": 15968,
+   "sha256": "f3e480fa740de27dd132b845f778b45b4ed928856b80d88d4b3e460be732ca05"
   },
   "scripts/gt_components.py": {
    "bytes": 92376,
@@ -176,6 +180,10 @@
    "bytes": 19372,
    "sha256": "5e227f1dc418d26c65114bf8674884ac73a9fb8b903be61e19d7d3fb9237f72f"
   },
+  "scripts/gt_model.py": {
+   "bytes": 8802,
+   "sha256": "28b1f16b733eab37c2d4f2df1df26ab1c3c412ba6a9635eda5b4c776dbc4792a"
+  },
   "scripts/gt_optimize.py": {
    "bytes": 22067,
    "sha256": "ad7794651a47f6ed83914ef609ab4ffdecc1433b455517e841702dc35c13ccbc"
@@ -189,8 +197,8 @@
    "sha256": "97448249bb05b6a3dbb39cf1ab65aa1ca7bc9390ea427fbd5919a70a2954873c"
   },
   "scripts/gt_registry.py": {
-   "bytes": 36874,
-   "sha256": "af607a4f8e90247837459e431da4fe60c6fcd714fe8aa7947af8f811656936e9"
+   "bytes": 37302,
+   "sha256": "2d459e6cfe810f4e45810559ad4e36d43cedb464f7429584b7fa4b40d5120f37"
   },
   "scripts/gt_scan.py": {
    "bytes": 7987,
@@ -257,8 +265,8 @@
    "sha256": "165a5ac61a4d501d74e2500c1363e1aa69207ecd22b7450028cd1dc4ec175fa3"
   },
   "scripts/skill_lint.py": {
-   "bytes": 4723,
-   "sha256": "d56bbd01ce9ba0e74b36ea2bf15fcfccd5d2d4a1ef8fdbdd33d02ae8c36fb7a0"
+   "bytes": 5994,
+   "sha256": "48e2ee412f291637a28f3d0350463c589b9962a414d1a7505fc1f7846bf59317"
   },
   "scripts/vault_init.py": {
    "bytes": 88179,
@@ -449,7 +457,7 @@
    "sha256": "05a5e61333b0ba5d6f97866735268f7f99ff354d9502b2b05e0e512a86f82a6b"
   }
  },
- "generated": "2026-10-01T20:46:39",
+ "generated": "2026-10-01T20:49:47",
  "hooks": [
   {
    "args": [

@@ -27,7 +27,8 @@ Usage:
 
 Exit codes:
     0 = no trigger collisions
-    2 = at least one collision (rule 2 violated)
+    2 = at least one collision (rule 2 violated), or a skill declaring a model_intent
+        outside fast|balanced|deep (0.18.0)
 """
 import itertools
 import re
@@ -115,11 +116,35 @@ def main(argv):
             print(f"  {n}")
         print()
 
+    # model_intent (0.18.0): a skill may say what kind of thinking it needs, never which
+    # model -- and only in the closed vocabulary gt_model.py resolves. An unknown value is
+    # refused HERE, at the gate, not discovered when the skill runs.
+    bad_intents = model_intent_problems(skills)
+    if bad_intents:
+        print("UNKNOWN model_intent VALUES — refused:\n")
+        for b in bad_intents:
+            print("  " + b)
+        print()
+
     print("Rule 1 (compose through files, never through each other) is not")
     print("mechanically checkable and is not asserted here. Referring a user to")
     print("another skill is fine; requiring one to have run is not.")
 
-    return 2 if collisions else 0
+    return 2 if (collisions or bad_intents) else 0
+
+
+def model_intent_problems(skills):
+    """-> [str] naming file:line and the value for every model_intent outside the vocabulary.
+    The vocabulary and the reader are gt_model.py's, imported rather than copied."""
+    import importlib.util
+    here = Path(__file__).resolve().parent / "gt_model.py"
+    try:
+        spec = importlib.util.spec_from_file_location("gt_model_for_lint", str(here))
+        mod = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(mod)
+    except Exception as exc:                                  # noqa: BLE001
+        return ["model_intent could not be checked: gt_model.py unavailable (%s)" % exc]
+    return mod.check_paths([path for _desc, path in skills.values()])
 
 
 if __name__ == "__main__":

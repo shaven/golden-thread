@@ -1,0 +1,19 @@
+{
+  "schema": 1,
+  "slot": "model",
+  "name": "intents",
+  "tier": "D",
+  "spdx": "MIT",
+  "provenance": {
+    "origin": "original",
+    "contributor": "Golden Thread <gt@example.com>",
+    "upstream": null
+  },
+  "dco": "Signed-off-by: Golden Thread <gt@example.com>",
+  "notes": "Model aliases as Claude Code's subagent model parameter accepts them. Override any row with a local pack.",
+  "entries": [
+    {"intent": "fast", "model": "haiku", "verified": "2026-10-01"},
+    {"intent": "balanced", "model": "sonnet", "verified": "2026-10-01"},
+    {"intent": "deep", "model": "opus", "verified": "2026-10-01"}
+  ]
+}
