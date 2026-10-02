@@ -156,6 +156,10 @@
    "bytes": 25953,
    "sha256": "a68f97de784646404f0390d3c67264500c02494ae448fc101f6053d128ef75a7"
   },
+  "scripts/gt_link_suggest.py": {
+   "bytes": 14932,
+   "sha256": "ef920e5215f9289ed2f7fd758fba8fc2b2e9a53e57284dcbe143b641c48bf066"
+  },
   "scripts/gt_lint.py": {
    "bytes": 65842,
    "sha256": "797c597e364d4a5cdb7c71a7c0e1ed5daec54d205d438b1fb5fc884a1c22f6df"
@@ -445,7 +449,7 @@
    "sha256": "05a5e61333b0ba5d6f97866735268f7f99ff354d9502b2b05e0e512a86f82a6b"
   }
  },
- "generated": "2026-10-01T20:31:09",
+ "generated": "2026-10-01T20:34:07",
  "hooks": [
   {
    "args": [
