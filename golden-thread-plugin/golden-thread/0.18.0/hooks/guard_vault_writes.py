@@ -55,6 +55,7 @@ MUTATORS = {
     "gt_closeout.py": {"ask", "answer"},
     "vault_init.py": {"fresh", "create-project", "connect", "rename-project",
                       "merge-project", "archive-project", "install-core-rules"},
+    "gt_close.py": {"project", "task", "handoff"},   # /gt:gt-close (0.18.0)
 }
 
 # Naming the target, in any of these forms, is enough.

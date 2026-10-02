@@ -7,6 +7,8 @@
     gt_task.py done  ID --vault V [--reason TEXT] [--dry-run]
     gt_task.py drop  ID --vault V --reason TEXT [--dry-run]
     gt_task.py defer ID --vault V --until YYYY-MM-DD --reason TEXT [--dry-run]
+    gt_task.py shelve ID --vault V --reason TEXT [--dry-run]     # keep it, at p:: 7 (0.18.0)
+    gt_task.py move  ID --vault V --to SLUG --reason TEXT [--dry-run]   # to another project (0.18.0)
     gt_task.py count --vault V [--json]           # for gt_surface: p:: 1 waiting on the owner
 
 FILTERS (any combination; a task must match all of them):
@@ -50,6 +52,13 @@ whose base is the hash of the bytes this tool read, so an edit made in between i
 overwritten. One write stays direct, after the same claim check: a #conflict task raised by the
 broker itself ($GT_BROKER_APPLYING -- it holds the drain lock, so a queued task would wait a whole
 drain).
+
+SHELVE AND MOVE (0.18.0, for /gt:gt-close and /gt:gt-handle). Closing a project asks of each open
+task: close, drop, move to another project, or keep. "Keep" in a project being archived means
+SHELVED -- `[p:: 7]`, which gt_tasks never ranks or escalates -- so the line survives as a record
+without reappearing in TASKS.md. A move writes the line, fields and `since::` intact, under the
+destination's `## Tasks` FIRST, and only then checks the source line off with `moved to <slug>`:
+a move interrupted half-way leaves a duplicate, never a lost task.
 
 Exit: 0 ok | 1 not written now (claimed by another session -- the write stays queued -- or a
 stale ID, or the broker escalated a conflict, or no broker to drain with) | 2 usage | 3 could
@@ -579,6 +588,16 @@ def _settle(vault: Path, a, verb: str) -> int:
             return 3
         new = re.sub(r"\s*\[defer::[^\]]*\]", "", old)
         new = new.rstrip() + " [defer:: %s] — deferred %s: %s" % (a.until, stamp, a.reason)
+    elif verb == "shelve":
+        new = re.sub(r"\s*\[defer::[^\]]*\]", "", old)
+        if re.search(r"\[p::\s*\d+\]", new):
+            new = re.sub(r"\[p::\s*\d+\]", "[p:: %d]" % gt_tasks.SHELVED_P, new, count=1)
+        else:
+            new = new.rstrip() + " [p:: %d]" % gt_tasks.SHELVED_P
+        new = new.rstrip() + " — shelved %s: %s" % (stamp, a.reason)
+    elif verb == "move":
+        new = re.sub(r"^(\s*-\s*)\[ \]", r"\1[x]", old, count=1)
+        new = new.rstrip() + " — moved to %s %s: %s" % (a.to, stamp, a.reason)
     else:
         new = re.sub(r"^(\s*-\s*)\[ \]", r"\1[x]", old, count=1)
         word = "done" if verb == "done" else "dropped"
@@ -587,7 +606,8 @@ def _settle(vault: Path, a, verb: str) -> int:
     if a.dry_run:
         print("would change %s line %d:\n- %s\n+ %s" % (rel, i + 1, old.strip(), new.strip()))
         return 0
-    done = {"done": "closed", "drop": "dropped", "defer": "deferred"}[verb]
+    done = {"done": "closed", "drop": "dropped", "defer": "deferred", "shelve": "shelved",
+            "move": "moved"}[verb]
     lines[i] = new
     heading = enclosing_section(lines, i)
     if os.environ.get(BROKER_APPLYING) == "1":
@@ -623,6 +643,49 @@ def _settle(vault: Path, a, verb: str) -> int:
     return 0
 
 
+def cmd_move(a, vault: Path) -> int:
+    """Write the line under the destination's `## Tasks`, then check the source line off."""
+    found, err = locate(vault, a.id)
+    if err:
+        print(err, file=sys.stderr)
+        return 1
+    src_slug = a.id.rsplit(":", 2)[0]
+    dest = target(vault, a.to, False)
+    if dest is None:
+        print("no such project %r to move the task to" % a.to, file=sys.stderr)
+        return 3
+    if a.to == src_slug:
+        print("the task is already in %s" % a.to, file=sys.stderr)
+        return 3
+    path, i, lines = found
+    old = lines[i].strip()
+    line = re.sub(r"\s*\[defer::[^\]]*\]", "", old).rstrip() + \
+        " — moved from %s %s" % (src_slug, today().isoformat())
+    dlines = dest.read_text(encoding="utf-8").splitlines()
+    hs = [k for k, l in enumerate(dlines) if re.match(r"^## Tasks\s*$", l)]
+    if not hs:
+        dlines += ["", "## Tasks", ""]
+        hs = [len(dlines) - 2]
+    at = hs[0] + 1
+    while at < len(dlines) and not dlines[at].strip():
+        at += 1
+    drel = str(dest.relative_to(vault)).replace(os.sep, "/")
+    if a.dry_run:
+        print("would add to %s:\n%s" % (drel, line))
+        return _settle(vault, a, "move")
+    dlines.insert(at, line)
+    body = q_section_body(dlines, "Tasks")
+    if body is not None and line in body.split("\n"):
+        rc, msg = through_queue(vault, drel, "replace-section", body, "Tasks")
+    else:
+        rc, msg = through_queue(vault, drel, "append", line, "Tasks")
+    if msg:
+        print(msg, file=sys.stderr)
+        print("the source line was NOT checked off; nothing moved", file=sys.stderr)
+        return rc
+    return _settle(vault, a, "move")
+
+
 def cmd_count(a, vault: Path) -> int:
     now = today()
     mine = [r for r in all_tasks(vault) if matches(r, ["p1", "mine"], now)]
@@ -654,13 +717,15 @@ def main(argv=None) -> int:
     ls.add_argument("--vault", required=True)
     ls.add_argument("--json", action="store_true")
     ls.add_argument("--dry-run", action="store_true", help="accepted for symmetry; list writes nothing")
-    for verb in ("done", "drop", "defer"):
+    for verb in ("done", "drop", "defer", "shelve", "move"):
         s = sub.add_parser(verb, help="%s a task by ID" % verb)
         s.add_argument("id")
         s.add_argument("--vault", required=True)
         s.add_argument("--reason", required=(verb != "done"))
         if verb == "defer":
             s.add_argument("--until", required=True, help="YYYY-MM-DD, in the future")
+        if verb == "move":
+            s.add_argument("--to", required=True, help="destination project slug")
         s.add_argument("--dry-run", action="store_true")
     ct = sub.add_parser("count", help="p:: 1 tasks waiting on the owner (for gt_surface)")
     ct.add_argument("--vault", required=True)
@@ -686,6 +751,8 @@ def main(argv=None) -> int:
         return 0
     if a.cmd == "count":
         return cmd_count(a, vault)
+    if a.cmd == "move":
+        return cmd_move(a, vault)
     return _settle(vault, a, a.cmd)
 
 

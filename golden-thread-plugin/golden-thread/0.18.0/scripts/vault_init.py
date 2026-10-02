@@ -11,7 +11,7 @@ Modes:
                   [--repo-url <url>] [--fleet <page-name>]
   connect         --vault <path>
   install-core-rules --vault <path> [--no-hooks] [--settings <file>]
-  rename-project  --vault <path> --from <old-slug> --to <new-slug>\n  merge-project   --vault <path> --from <slug> --into <slug>\n  archive-project --vault <path> --slug <slug> [--reason <text>]
+  rename-project  --vault <path> --from <old-slug> --to <new-slug>\n  merge-project   --vault <path> --from <slug> --into <slug>\n  archive-project --vault <path> --slug <slug> [--reason <text>] [--move]
 
 Exit codes:
   0 = success: every recorded row is created / skipped / updated / would-*
@@ -1171,6 +1171,129 @@ def cmd_archive_project(vault: Path, slug: str, reason: str, today: str):
 
 
 
+def _move_claims(vault: Path, rel_dir: str):
+    """-> (holders, error) for LIVE claims, by any session but this one, on a file under rel_dir.
+
+    Read through gt_demote's parser of the session files (plugin-side, so a vault on an older
+    release still answers). A claim we cannot read is an error, and an error refuses the move:
+    moving a folder is a write to every file in it at once (Core rule 1)."""
+    try:
+        sys.path.insert(0, str(Path(__file__).resolve().parent))
+        import gt_demote                                        # noqa: PLC0415
+        claims, unreadable = gt_demote._claim_rows(str(vault))
+    except Exception as exc:                                    # noqa: BLE001
+        return [], "session files could not be read (%s)" % exc.__class__.__name__
+    if unreadable:
+        return [], "%d session file(s) unreadable" % len(unreadable)
+    me = None
+    for var in ("CLAUDE_CODE_SESSION_ID", "CLAUDE_SESSION_ID", "GT_SESSION_ID"):
+        if os.environ.get(var):
+            me = os.environ[var].strip()
+            break
+    pre = rel_dir.rstrip("/") + "/"
+    return sorted({sid for sid, status, last, files in claims
+                   if sid != me and gt_demote._is_live(status, last)
+                   and any(f.startswith(pre) for f in files)}), None
+
+
+def _repoint(text: str, rel: str, is_index: bool) -> str:
+    """Path references to Projects/<rel>/ re-pointed at Archive/<rel>/. Wikilinks by NAME
+    ([[design]]) need nothing: Obsidian resolves them wherever the file now lives."""
+    new = text.replace(f"Projects/{rel}/", f"Archive/{rel}/")
+    new = re.sub(rf"\[\[Projects/{re.escape(rel)}(?=[\]|#])", f"[[Archive/{rel}", new)
+    if is_index:     # Projects/README.md links its rows relatively: [Title](<slug>/)
+        new = new.replace(f"]({rel}/", f"](../Archive/{rel}/")
+    return new
+
+
+def cmd_archive_move(vault: Path, slug: str):
+    """--move (0.18.0, /gt:gt-close --move): relocate an ARCHIVED project to Archive/<rel>/.
+
+    Archiving stays in place by default -- the owner's decision (2026-10-01): nothing moves,
+    every link keeps resolving. --move is the explicit request to clear Projects/. The folder
+    itself is renamed (the write queue writes files, it cannot move a directory), after
+    refusing if any LIVE session claims a file in it. Every OTHER reference is re-pointed
+    through the write queue as a replace-file whose base is the bytes read here, drained at
+    once -- so an edit made in between is escalated by the broker, never overwritten. Files
+    the queue may not write (log.md, decisions.md, Sources/, spool/, Core rules) are history:
+    they keep naming the old path, and the count is reported. The decisions spool stays
+    where it is (spool/decisions/<rel>): it is the ADR history, and gt_adr reads it by name.
+    """
+    vault = vault.resolve()
+    proj = _proj_dir(vault, slug)
+    if proj is None:
+        record("error", vault, f"project not found: {slug}")
+        return None
+    rel = proj.relative_to(vault / "Projects").as_posix()
+    dest = vault / "Archive" / rel
+    if dest.exists():
+        record("conflict", dest, "Archive destination already exists")
+        return None
+    holders, err = _move_claims(vault, f"Projects/{rel}")
+    if err:
+        record("error", proj, f"not moved -- could not check claims: {err}")
+        return None
+    if holders:
+        record("conflict", proj, "not moved -- claimed by live session(s): "
+               + ", ".join(holders) + " (Core rule 1)")
+        return None
+    # what would be re-pointed, decided BEFORE the move (the reads are of the current tree)
+    sys.path.insert(0, str(Path(__file__).resolve().parent))
+    import gt_write_queue as WQ                                  # noqa: PLC0415
+    writes, history = [], 0
+    for md in sorted(vault.rglob("*.md")):
+        if ".git" in md.parts or md == proj or proj in md.parents:
+            continue
+        try:
+            text = md.read_text(encoding="utf-8")
+        except (OSError, UnicodeDecodeError):
+            continue
+        r = md.relative_to(vault).as_posix()
+        new = _repoint(text, rel, r == "Projects/README.md")
+        if new == text:
+            continue
+        if WQ.path_refusal(vault, r) or len(new.encode("utf-8")) > WQ.MAX_CONTENT:
+            history += 1
+            continue
+        writes.append({"path": r, "op": "replace-file", "content": new,
+                       "hint": f"archive --move {rel}: re-point links"})
+    inner = []                                   # links inside the project to itself
+    for md in sorted(proj.rglob("*.md")):
+        try:
+            text = md.read_text(encoding="utf-8")
+        except (OSError, UnicodeDecodeError):
+            continue
+        new = _repoint(text, rel, False)
+        if new != text:
+            inner.append((md.relative_to(proj).as_posix(), new))
+    if DRY_RUN:
+        record("would-move", proj, f"-> Archive/{rel}/; {len(writes) + len(inner)} file(s) "
+               f"re-pointed through the write queue, {history} left as history")
+        return proj
+    dest.parent.mkdir(parents=True, exist_ok=True)
+    proj.rename(dest)
+    record("updated", dest, f"moved from Projects/{rel}/")
+    for sub, new in inner:
+        writes.append({"path": f"Archive/{rel}/{sub}", "op": "replace-file", "content": new,
+                       "hint": f"archive --move {rel}: re-point links"})
+    if writes:
+        results, note = WQ.submit(vault, writes, session=None, origin="session", drain=True)
+        counts = {}
+        for res in results:
+            counts[res.get("decision")] = counts.get(res.get("decision"), 0) + 1
+        record("updated", vault, "links re-pointed through the write queue: " +
+               ", ".join(f"{n} {d}" for d, n in sorted(counts.items()))
+               + (f" ({note})" if note else ""))
+        for res in results:
+            if res.get("decision") not in ("apply", "deduplicate"):
+                record("skipped", vault / res["path"],
+                       f"not re-pointed yet: {res.get('decision')} -- {res.get('reason', '')}")
+    if history:
+        record("skipped", vault, f"{history} file(s) the queue may not write (log.md, "
+               f"decisions.md, Sources/, spool/) still name Projects/{rel}/ -- history")
+    return dest
+
+
 def seed_code_baseline(vault: Path):
     """Accept, with a reason, the two findings gt's own seeded files produce.
 
@@ -1717,6 +1840,9 @@ def main():
     p_ret.add_argument("--slug", required=True)
     p_ret.add_argument("--reason", default="Superseded.")
     p_ret.add_argument("--date", default=None)
+    p_ret.add_argument("--move", action="store_true",
+                       help="also relocate the project to Archive/<slug>/ and re-point links "
+                            "through the write queue (default: archive in place)")
 
     p_core = sub.add_parser("install-core-rules", parents=[common],
                             help="Establish the Core-rule tier in an existing vault and wire the hooks")
@@ -1764,6 +1890,13 @@ def main():
             rel = _rel_project(args.vault, done)
             _emit_event(args.vault.resolve(), "archive", "Projects/" + rel, project=rel,
                         note=f"archive-project: {' '.join(args.reason.split())}"[:120])
+            if args.move:
+                moved = cmd_archive_move(args.vault, args.slug)
+                did_nothing = moved is None
+                if moved is not None:
+                    _emit_event(args.vault.resolve(), "relocate", "Archive/" + rel,
+                                frm="Projects/" + rel, to="Archive/" + rel, project=rel,
+                                note=f"archive-project --move {rel}"[:120])
     elif args.mode == "rename-project":
         done = cmd_rename_project(args.vault, args.old, args.new)
         did_nothing = not done
