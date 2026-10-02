@@ -45,6 +45,20 @@ take it before the prose. Note:
 - Stage (idea / researching / designing / implementing / done)
 - Tags and related links
 
+**Step 3b — Catch-up brief (when returning after a while)**
+
+Before reading anything else, run:
+```bash
+python3 <base_dir>/../../scripts/gt_brief.py --vault "<vault>" --project <slug> --mark
+```
+Add `--brief` when the user asked for one (`/gt:gt-open <slug> --brief`), `--no-brief` when they
+asked for none. It prints one paragraph — **only** when the project has not been opened on this
+machine for `brief_absence_days` days (default 7) or `--brief` was given, and there were commits
+to the project in that window — and nothing otherwise. Show it **first, verbatim**, as the
+generated summary it says it is; never restate it as established fact. It does not replace the
+reading sequence below: Step 4 still follows in full. `--mark` records this open so the next
+absence is measured from now.
+
 **Step 4 — Read documents in order**
 
 Read all existing files in this sequence (skip any that don't exist):

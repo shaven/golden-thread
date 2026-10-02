@@ -335,6 +335,21 @@ SETTINGS = {
             "one worker still runs through the parallel path, so it does not tell you\n"
             "whether the parallel path is what broke a test. Use `off` for that."),
     },
+    "brief_absence_days": {
+        "default": "7",
+        "values": ["off", "3", "7", "14", "30"],
+        "summary": "How long away from a project before /gt:gt-open leads with a generated catch-up brief.",
+        "detail": (
+            "N    when a project has not been opened on this machine for N days, gt-open\n"
+            "     starts with one generated paragraph (150 words at most): commits since\n"
+            "     the last open, the newest research entry, the oldest open p::1 task and\n"
+            "     anything waiting on you. Then it reads the files as usual.  (default 7)\n"
+            "off  never on its own; `/gt:gt-open <slug> --brief` still asks for one\n"
+            "\n"
+            "The brief is assembled from git and structured fields (gt_brief.py), never a\n"
+            "summary of prose, and is labelled as generated. A project with no commits\n"
+            "while you were away gets none (0.18.0)."),
+    },
     "foreign_checkout_guard": {
         "default": "on",
         "values": ["off", "on"],

@@ -39,6 +39,8 @@ EXPECTED = {
     "task_surface": ("on", ["off", "on"]),
     # 0.18.0: guard_foreign_checkout (inert until a checkout is declared).
     "foreign_checkout_guard": ("on", ["off", "on"]),
+    # 0.18.0: gt-open's catch-up brief (gt_brief.py).
+    "brief_absence_days": ("7", ["off", "3", "7", "14", "30"]),
     # values None == free-form; `validate` carries the shape instead of a closed list.
     "parallel_max": ("auto", None),
 }
