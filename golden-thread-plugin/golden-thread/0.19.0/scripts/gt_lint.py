@@ -26,6 +26,7 @@ Checks:
   memory-bloat         global-memory file exceeds 30 lines (detail belongs in Knowledge/)
   global-scope-leak    global-memory file references a project slug (project-specific bleed-over)
   superseded-cited     Knowledge page cites a source that has been superseded
+  supersedes-missing   a note's `supersedes:` names a path that does not exist (0.19.0)
   stale                Knowledge page with status: stale in frontmatter
   source-todo          Project source.md with no topology or deployment targets
   frontmatter          Project README missing/incorrect property frontmatter
@@ -383,6 +384,26 @@ def build_superseded_map(vault: Path) -> dict:
         for old in parse_frontmatter_field(text, "supersedes"):
             superseded[Path(old).name] = src.name
     return superseded
+
+
+def check_supersedes_missing(vault: Path, findings: list, suppressed: set):
+    """A note's `supersedes:` naming nothing (0.19.0): the chain gt-open and gt-query read is
+    broken there, so the older note shows as current. gt_supersede.py owns the parsing."""
+    try:
+        sys.path.insert(0, str(Path(__file__).resolve().parent))
+        import gt_supersede
+    except Exception:
+        return
+    for x in gt_supersede.graph(vault.resolve())[2]:
+        if is_suppressed(suppressed, x["path"], Path(x["path"]).name):
+            continue
+        findings.append({
+            "check": "supersedes-missing",
+            "path": x["path"],
+            "message": f"`{x['path']}` supersedes `{x['target']}`, which does not exist",
+            "proposed_fix": "point `supersedes:` at the note it replaces (a path relative to "
+                            "the note's folder or the vault), or remove the line",
+        })
 
 
 def check_superseded_cited(vault: Path, findings: list, suppressed: set):
@@ -1872,6 +1893,7 @@ def main():
     check_core_rules(vault, findings, suppressed)
     check_project_refs(vault, findings, suppressed)
     check_superseded_cited(vault, findings, suppressed)
+    check_supersedes_missing(vault, findings, suppressed)
     check_stale(vault, findings, suppressed)
     check_attribution_wired(vault, findings, suppressed)
     check_secrets_gate_wired(vault, findings, suppressed)

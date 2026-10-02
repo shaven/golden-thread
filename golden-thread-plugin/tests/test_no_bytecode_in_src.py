@@ -57,8 +57,10 @@ class NoBytecodeInSrc(Sandbox):
             os.environ["HOME"] = saved
 
     def run_shell(self, command):
+        # stdin as Claude Code gives every hook: a JSON payload. With none, a hook that reads its
+        # payload (vault_hints.py, 0.19.0) waits on an inherited stdin until the timeout.
         return subprocess.run(["bash", "-c", command], env=self.env, cwd=str(self.tmp),
-                              capture_output=True, text=True, timeout=120)
+                              input="{}", capture_output=True, text=True, timeout=120)
 
     def assertSrcUnchanged(self):
         after = snapshot(self.release)

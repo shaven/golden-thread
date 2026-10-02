@@ -446,6 +446,7 @@ HOOK_DIR_SCRIPTS = ("gt_paths.py", "gt_components.py",
                     # script missing from this tuple, which is how both shipped unnoticed.
                     "gt_schedule.py",      # also imported by gt_doctor's `schedule` check
                     "gt_keyword_recall.py",  # vault_hints.py matches with it (0.19.0)
+                    "gt_supersede.py",     # gt_lint's supersedes-missing check imports it (0.19.0)
                     "gt_daily.py",         # job `daily` (stdlib only)
                     "gt_sweep.py",         # job `sweep`; its members and their imports follow
                     "gt_secrets.py", "gt_scan_code.py", "gt_check_report.py",

@@ -237,6 +237,11 @@ python3 <base_dir>/../../scripts/gt_promote_detect.py --vault "<vault>" --projec
   git reports as modified are used). Show each pair it prints — both paths, the conflicting
   sentences — and ask the question it asks: *same fact? which is current? update the older or
   link it to the newer?* Change nothing unless the user decides, and then through the queue.
+  **When the user picks the newer one (0.19.0), record it, do not just edit:** the current note
+  gets `supersedes: <path of the older note>` in its frontmatter (a `set-property` or
+  `replace-file` through the queue). The older note stays as it is, on disk; gt-open then lists
+  only the current one and gt-query ranks the older below it. A contradiction resolved by
+  editing the older note in place loses the history that link keeps.
 - **Promotion candidates**: a memory note edited in 3 of the last 5 memory commits
   (→ research.md / decisions.md), research.md sections overlapping another project's by the
   `promotion_overlap` setting (→ Knowledge/), and global-memory notes naming a project

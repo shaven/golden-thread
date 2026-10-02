@@ -31,6 +31,13 @@ If index.md has no match: search `Knowledge/` and `global-memory/` by keyword:
 grep -ril "<keyword>" "<vault>/Knowledge/" "<vault>/global-memory/" 2>/dev/null
 ```
 
+Before reading, order the matches (0.19.0):
+```bash
+python3 <base_dir>/../../scripts/gt_supersede.py rank <match> [<match> ...] --vault "<vault>"
+```
+It puts current pages first, then `[EXPIRED …]` ones, then `[SUPERSEDED by …]` ones, naming the replacement. Answer
+from current pages; mention an expired one only as expired, and for a superseded one read its replacement instead.
+
 Read any matching files and summarize relevant content.
 
 **Step 5 — Project memory fallback**

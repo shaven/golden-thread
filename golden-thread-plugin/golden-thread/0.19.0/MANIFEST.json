@@ -181,8 +181,8 @@
    "sha256": "a48cd97a138d3a12cdf4433a8e85c66297f9edeafa2a2d1239c9cc10cbb23ce5"
   },
   "scripts/gt_components.py": {
-   "bytes": 94414,
-   "sha256": "bf0b516deaf701747f17a4f72f7da14e1c0a08c9a703b6aa292178174aa8b066"
+   "bytes": 94514,
+   "sha256": "2caa076ca6a31ea282b95a8189b366e6549cf4fd232b56a4ca7bad1d16848a91"
   },
   "scripts/gt_context.py": {
    "bytes": 10260,
@@ -237,8 +237,8 @@
    "sha256": "0f41b3d2a7260811a6d79024c90dc496076ea59f36587883597d427620895e03"
   },
   "scripts/gt_lint.py": {
-   "bytes": 89411,
-   "sha256": "d269946738bfd60884512ade49c20be74a15421fcbefe206c1803578d755976b"
+   "bytes": 90483,
+   "sha256": "cb7ee7369b3af46dc122404bb8a99fbfff6cef99b8865f367b04cf9c0cb844d5"
   },
   "scripts/gt_lint_weekly.py": {
    "bytes": 11368,
@@ -351,6 +351,10 @@
   "scripts/gt_state.py": {
    "bytes": 17448,
    "sha256": "f534fe2ac3a57aa41d0f56d2b53918aab41b4cac60cdccb23cdba3fe31517cb3"
+  },
+  "scripts/gt_supersede.py": {
+   "bytes": 6748,
+   "sha256": "3d86d5edda5d12499210bd8d953c19cf5ba29cb74f0fe36c2de3c8b1c0775f9b"
   },
   "scripts/gt_surface.py": {
    "bytes": 23809,
@@ -641,7 +645,7 @@
    "sha256": "05a5e61333b0ba5d6f97866735268f7f99ff354d9502b2b05e0e512a86f82a6b"
   }
  },
- "generated": "2026-10-02T12:06:33",
+ "generated": "2026-10-02T12:44:12",
  "hooks": [
   {
    "args": [

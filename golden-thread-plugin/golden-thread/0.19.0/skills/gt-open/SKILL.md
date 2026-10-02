@@ -99,6 +99,12 @@ Then index the memory files — **do not read them all**:
 
 8. `memory/MEMORY.md` — read this index only. It is one line per file (`- [Title](file.md) — description`), which is enough to know what exists and what each file covers.
 9. **Do not follow the links yet.** Read an individual `memory/*.md` file only when the current task touches its subject, or the user asks for it.
+10. **Show the newest note of each chain only (0.19.0).** A note can declare `supersedes: <path>`; list the folder through
+    ```bash
+    python3 <base_dir>/../../scripts/gt_supersede.py listing Projects/<slug>/memory --vault "<vault>"
+    ```
+    and name only what it prints: a replaced note appears as `(replaces …)` on its successor, never as a line of its own, and an
+    `[EXPIRED …]` note is named as expired. The older notes are still on disk — open one only when the user asks for the history.
 
 This keeps session startup cheap. A project with 40 memory files costs ~45 lines to open instead of ~2,000, and the detail is still one read away the moment it is needed. Loading everything up front buys nothing and crowds out the context the actual work needs.
 
