@@ -79,10 +79,11 @@ Rules:
 - One entry per finding, date-stamped
 - If a finding supersedes an earlier one, note it: "Supersedes 2026-01-15 entry"
 
-#### Skeptic pass (only when `skeptic_pass` and `agent_specialization` are on)
+#### Skeptic pass (only when `skeptic_pass` is on)
 
-Both settings default to `off`, and then there is no skeptic pass: write the entries as
-above. Before the first `research.md` entry lands, ask the resolver (`<base_dir>` is the
+`skeptic_pass` alone decides this; it is independent of `agent_specialization`, which
+governs only the ingest and validation hand-off. Both settings default to `off`, and with
+`skeptic_pass` off there is no skeptic pass: write the entries as above. Before the first `research.md` entry lands, ask the resolver (`<base_dir>` is the
 `Base directory for this skill:` header):
 ```bash
 python3 <base_dir>/../../scripts/gt_agent_spec.py resolve --skill gt-work --vault "<vault>"

@@ -205,6 +205,7 @@ SETTINGS = {
             "     validate) spawns a specialist agent with that spec applied; its full output\n"
             "     lands in the spool and the session sees a summary\n"
             "\n"
+            "Independent of skeptic_pass: this does not switch the gt-work skeptic on or off.\n"
             "A job type with no spec runs inline with a notice. Specs are data:\n"
             "gt_agent_spec.py list | validate <spec>."),
     },
@@ -214,9 +215,12 @@ SETTINGS = {
         "summary": "Whether /gt:gt-work runs a skeptic agent over the session's findings before they land.",
         "detail": (
             "off  write-back as before  (default)\n"
-            "on   (needs agent_specialization on) a zero-context agent reads the research\n"
-            "     entries about to be written and flags unverified or overclaimed figures\n"
-            "     first; nothing is dropped, the session decides."),
+            "on   a zero-context agent reads the research entries about to be written and\n"
+            "     flags unverified or overclaimed figures first; nothing is dropped, the\n"
+            "     session decides\n"
+            "\n"
+            "Independent of agent_specialization (0.18.0): this alone turns the skeptic on,\n"
+            "and does not hand ingest or validation to specialist agents."),
     },
     "handoff_surface": {
         "default": "any",
