@@ -4,7 +4,7 @@
 #   dev/remote-test.sh [--host H] [-j N] [--keep] [--affected] [selector ...]
 #
 #   Selectors (test modules or units) run a subset; only a FULL run records a receipt.
-#   --affected (0.18.0): the tests mapped to this branch's changes (tests/prun.py --affected,
+#   --affected (0.18.1): the tests mapped to this branch's changes (tests/prun.py --affected,
 #   computed HERE, where the git history is) run on the runner; a pass records a SCOPED receipt
 #   here, which the commit guard accepts on a feature branch only.
 #   The runner: --host, else $GT_REMOTE_TEST_HOST, else the first of the gt setting `runners`,

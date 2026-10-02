@@ -1,4 +1,4 @@
-"""guard_foreign_checkout.sh / .py (0.18.0, 2026-09-11-guard-foreign-checkout-writes).
+"""guard_foreign_checkout.sh / .py (0.18.1, 2026-09-11-guard-foreign-checkout-writes).
 
 A commit or push inside a checkout the user DECLARED as another machine's is denied, naming
 the checkout and the supported route. Everything else is untouched, and every uncertainty

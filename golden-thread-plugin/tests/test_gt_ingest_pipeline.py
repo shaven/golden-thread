@@ -1,4 +1,4 @@
-"""gt_ingest_pipeline.py + stage x kind specs -- ingest and promote as staged pipelines (0.18.0).
+"""gt_ingest_pipeline.py + stage x kind specs -- ingest and promote as staged pipelines (0.18.1).
 
 One test (or class) per acceptance criterion of 2026-09-30-ingest-promote-stage-pipeline:
 

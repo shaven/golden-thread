@@ -1,4 +1,4 @@
-"""Cross-domain link suggestions during gt-work write-back (gt 0.18.0).
+"""Cross-domain link suggestions during gt-work write-back (gt 0.18.1).
 
 Request 2026-09-24-cross-domain-link-suggestions. Fixture: five Knowledge pages across two
 domains (infrastructure, trading) plus one new page that shares tags with two of them.

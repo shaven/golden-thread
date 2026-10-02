@@ -1,6 +1,6 @@
-"""Every tool that takes a project slug resolves it the way gt_adr does (0.18.0).
+"""Every tool that takes a project slug resolves it the way gt_adr does (0.18.1).
 
-0.18.0 gave gt_adr ONE shared resolver, gt_spool.resolve_project: a bare sub-project slug
+0.18.1 gave gt_adr ONE shared resolver, gt_spool.resolve_project: a bare sub-project slug
 means `Projects/<parent>/<slug>/`, a name that matches nothing is an error that creates
 nothing, and a name two projects share names both instead of guessing. The other tools
 still joined `Projects/` with the slug, so they missed sub-projects -- and the writing ones

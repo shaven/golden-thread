@@ -1,4 +1,4 @@
-"""gt-handoff's `## What Changed This Session` (0.18.0, 2026-09-24-session-vault-diff).
+"""gt-handoff's `## What Changed This Session` (0.18.1, 2026-09-24-session-vault-diff).
 
   * gt_session.py register (the VAULT tool -- session registration lives there, not in
     scripts/) records the vault's `git rev-parse HEAD` as `start_commit`

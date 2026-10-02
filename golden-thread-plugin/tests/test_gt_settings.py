@@ -37,11 +37,11 @@ EXPECTED = {
     "skeptic_pass": ("off", ["off", "on"]),
     "handoff_surface": ("any", ["any", "project", "manual"]),
     "task_surface": ("on", ["off", "on"]),
-    # 0.18.0: guard_foreign_checkout (inert until a checkout is declared).
+    # 0.18.1: guard_foreign_checkout (inert until a checkout is declared).
     "foreign_checkout_guard": ("on", ["off", "on"]),
-    # 0.18.0: gt-open's catch-up brief (gt_catchup.py).
+    # 0.18.1: gt-open's catch-up brief (gt_catchup.py).
     "brief_absence_days": ("7", ["off", "3", "7", "14", "30"]),
-    # 0.18.0 (group g5): review stamps, vault sync behind-check, reminder channels -- every
+    # 0.18.1 (group g5): review stamps, vault sync behind-check, reminder channels -- every
     # push channel off by default (owner, 2026-10-01).
     "review_stamp": ("on", ["off", "on"]),
     "sync_check": ("off", ["off", "cached", "fetch"]),
@@ -51,20 +51,20 @@ EXPECTED = {
     "reminder_email": ("off", ["off", "on"]),
     # values None == free-form; `validate` carries the shape instead of a closed list.
     "parallel_max": ("auto", None),
-    # 0.18.0: gt-lint decision-candidate phrase list (free-form edits to a built-in list).
+    # 0.18.1: gt-lint decision-candidate phrase list (free-form edits to a built-in list).
     "decision_signals": ("default", None),
-    # 0.18.0: memory and gt-optimize.
+    # 0.18.1: memory and gt-optimize.
     "knowledge_access_log": ("on", ["off", "on"]),
     "optimize_session_days": ("30", ["7", "30", "90", "180"]),
     "optimize_avoidable_pct": ("50", ["25", "50", "65", "75"]),
     "memory_contradiction_check": ("on", ["off", "on"]),
     "promotion_candidates": ("on", ["off", "on"]),
     "promotion_overlap": ("80", ["60", "70", "80", "90"]),
-    # 0.18.0: the validation host (gt_check.py) and the add-on fix path (gt_apply.py).
+    # 0.18.1: the validation host (gt_check.py) and the add-on fix path (gt_apply.py).
     "commit_checks": ("off", ["off", "on"]),
     "addon_fixes": ("propose", ["off", "propose", "apply"]),
     "addon_fix_size_limit": ("16k", ["1k", "4k", "16k", "64k", "256k"]),
-    # 0.18.0: execution metrics, scoped receipts, test temp dir, remote runners.
+    # 0.18.1: execution metrics, scoped receipts, test temp dir, remote runners.
     "execution_metrics": ("on", ["off", "on"]),
     "scoped_receipts": ("on", ["off", "on"]),
     "test_tmpdir": ("off", ["off", "noindex"]),

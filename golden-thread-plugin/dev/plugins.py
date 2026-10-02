@@ -103,7 +103,7 @@ MODULE_KEYS = ("schema", "name", "plugin", "version", "requires_gt", "summary", 
 MODULE_REQUIRED = ("schema", "name", "plugin", "version", "requires_gt", "summary", "default")
 MODULE_LISTS = ("skills", "scripts", "templates", "hooks", "hookdir_scripts", "settings",
                 "requires_modules", "replaces_core", "checkers")
-# Validation checkers (0.18.0): a module contributes deterministic checks to the core
+# Validation checkers (0.18.1): a module contributes deterministic checks to the core
 # validation host, gt_check.py. Every key is closed; `fixes` is the grant under which the
 # checker may return fix proposals (gt_apply.py writes them, never the checker).
 CHECKER_KEYS = ("id", "script", "globs", "mime", "events", "requires_tools", "timeout",

@@ -2436,7 +2436,7 @@ apply_vault_upgrades() {
   echo "Checking the vault for upgrades this release needs..."
   # Matches below read here-strings, never `printf "$out" | grep -q`: under pipefail, grep -q
   # exiting on its first match can SIGPIPE the printf, the pipeline then "fails", and a present
-  # line reads as absent -- the install intermittently reported "unrecognised output" (0.18.0).
+  # line reads as absent -- the install intermittently reported "unrecognised output" (0.18.1).
   out=$(python3 "$up" status --vault "$vault" 2>&1) || rc=$?
   if [ "$rc" -ne 0 ]; then
     echo "⚠ Vault upgrades: the check could not run (exit $rc) — run /gt:gt-upgrade to look"

@@ -1,4 +1,4 @@
-"""0.18.0: decision lineage (gt_adr.py lineage), entity lookup (gt_entities.py) and the
+"""0.18.1: decision lineage (gt_adr.py lineage), entity lookup (gt_entities.py) and the
 repo brief (gt_brief.py) -- the three readers of the structured ADR fields and of
 memory `entities:`.
 """

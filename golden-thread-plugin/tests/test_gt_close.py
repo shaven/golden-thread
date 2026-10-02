@@ -1,4 +1,4 @@
-"""gt_close.py and the gt_task.py verbs it needs -- closing a project, a task, a handoff (0.18.0).
+"""gt_close.py and the gt_task.py verbs it needs -- closing a project, a task, a handoff (0.18.1).
 
 Request 2026-10-01-gt-close-project, revised by the owner: a project closes only once every open
 task and handoff has a disposition (close, drop, move, keep shelved at p:: 7); it is then ARCHIVED

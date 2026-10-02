@@ -1,7 +1,7 @@
 # Contributing a pack to Golden Thread
 
 > **Reader:** an outside contributor sending a pack
-> **Claims last checked against the code:** 2026-10-01 (gt 0.18.0) — see *The documents, and what belongs in each* in [`CLAUDE.md`](CLAUDE.md).
+> **Claims last checked against the code:** 2026-10-01 (gt 0.18.1) — see *The documents, and what belongs in each* in [`CLAUDE.md`](CLAUDE.md).
 
 Golden Thread has **no plugin runtime**. Nobody's code runs on anyone's machine as a
 third-party add-on. Instead you **submit a pack**, it is reviewed, and if accepted it is
@@ -81,12 +81,12 @@ Send them together and say so in the pull request; they are reviewed as one cont
 
 `dev/submissions.py slots` lists every open slot; `gt_registry.py slots` also names the shipped
 tool that **reads** each one (`gt_registry.CONSUMERS`, and a test asserts each really does). As of
-0.18.0 every slot has one — `lint` is read by `gt_scan_code.py`, `secrets` by `gt_secrets.py`,
+0.18.1 every slot has one — `lint` is read by `gt_scan_code.py`, `secrets` by `gt_secrets.py`,
 `vocabulary`, `validation_rules` and `runbook` by `gt_context.py`, `model` by `gt_model.py`. If a
 future slot opens before its reader ships, `gt_registry.py slots` will say so; ask before spending
 time on one.
 
-### The `model` slot (0.18.0)
+### The `model` slot (0.18.1)
 
 Skills and agents declare a model **intent** — `model_intent: fast | balanced | deep` — never a
 model name. The `model` slot (Tier D, because the resolved name is printed) maps an intent to a

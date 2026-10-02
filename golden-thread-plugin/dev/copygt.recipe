@@ -1,4 +1,4 @@
-# copygt.recipe -- the recipe dev/copygt.sh is GENERATED from (gt_recipe.py, 0.18.0).
+# copygt.recipe -- the recipe dev/copygt.sh is GENERATED from (gt_recipe.py, 0.18.1).
 # Edit THIS file, then: python3 golden-thread/<release>/scripts/gt_recipe.py render dev/copygt.recipe --out dev/copygt.sh
 # tests/test_copygt.py fails while the two disagree.
 name: copygt.sh

@@ -1,4 +1,4 @@
-"""gt_doctor `repo-target` (0.18.0, 2026-09-25-repo-scoped-tools-target-the-vault).
+"""gt_doctor `repo-target` (0.18.1, 2026-09-25-repo-scoped-tools-target-the-vault).
 
 On 2026-09-25 Claude Code's /security-review, run in a gt session, reviewed the VAULT's 624 KB
 diff instead of a 174-line code change, because the working directory was the vault and the

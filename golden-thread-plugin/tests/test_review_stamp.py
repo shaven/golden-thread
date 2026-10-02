@@ -1,4 +1,4 @@
-"""Review scheduling by last READ, not last edit (gt 0.18.0, gt-wiki 0.2.5).
+"""Review scheduling by last READ, not last edit (gt 0.18.1, gt-wiki 0.2.5).
 
 Request 2026-09-24-srs-review-scheduling. Pinned here:
   * wiki_lint's review-due runs from the NEWER of `last_reviewed` and `updated`:

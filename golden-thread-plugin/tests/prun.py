@@ -4,8 +4,8 @@
     prun.py                 # every test, parallel
     prun.py test_gt_lint    # one module (or module.Class), still parallel
     prun.py -j 4            # cap the workers
-    prun.py --affected      # only the tests mapped to the files changed on this branch (0.18.0)
-    prun.py --hosts a,b     # split the units across ssh runners, heaviest first (0.18.0)
+    prun.py --affected      # only the tests mapped to the files changed on this branch (0.18.1)
+    prun.py --hosts a,b     # split the units across ssh runners, heaviest first (0.18.1)
 
 ## Why this is safe here, and where the limit is
 
@@ -23,7 +23,7 @@ The work is I/O-bound almost end to end: each test shells out to install.sh, vau
 or a hook and waits. That is why more workers than cores still helps, and why the
 default is generous rather than exactly `ncpu`.
 
-## Load-aware, not core-count-aware (0.18.0)
+## Load-aware, not core-count-aware (0.18.1)
 
 The worker count starts from the ceiling the settings allow and is scaled DOWN by the machine's
 measured load, memory pressure and other parallel runs already going (gt_load.recommend). As
@@ -34,7 +34,7 @@ against ~30 s and the owner's keystrokes were dropped. Units are also started he
 from those recorded times, so the slowest class is never the last one started.
 GT_TEST_LOAD_AWARE=0 turns both off.
 
-## --affected: a scoped run (0.18.0)
+## --affected: a scoped run (0.18.1)
 
 Maps every file changed since the branch left the default branch (committed, staged, unstaged
 and untracked) to the test modules that name it, and runs only those. A changed code file no
@@ -43,7 +43,7 @@ change is an unknown, and an unknown is not a pass. With GT_AFFECTED_OUT set it 
 mapping there, which tests/run.sh turns into a SCOPED receipt: accepted by the commit guard on a
 feature branch only, never by a release gate.
 
-## --hosts: units on other machines (0.18.0)
+## --hosts: units on other machines (0.18.1)
 
 The tree (tracked + untracked-not-ignored files) is shipped once to each listed ssh runner (the
 gt setting `runners`, or `--hosts a,b`; `local` means this machine), the units are split by the

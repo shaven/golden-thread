@@ -200,7 +200,7 @@ class OptimizeTest(unittest.TestCase):
 
     def test_clean_vault_exits_zero(self):
         self.write("Projects/alpha/memory/a.md", "One clear fact that stands on its own.\n")
-        # --only vault since 0.18.0: a bare run is an aggregator, and its session member cannot
+        # --only vault since 0.18.1: a bare run is an aggregator, and its session member cannot
         # run in a sandbox with no transcripts -- exit 3, which is the point of the aggregator.
         self.assertEqual(self.run_opt("--only", "vault").returncode, 0)
 

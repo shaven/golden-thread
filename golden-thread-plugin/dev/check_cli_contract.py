@@ -54,15 +54,15 @@ COVERED = {
     # 0.17.10: queued vault writes -- submitting writes the queue, draining writes the vault
     "scripts/gt_write_queue.py": (),
     "scripts/gt_broker.py": ("drain",),
-    # 0.18.0: /gt:gt-close and /gt:gt-handle -- closes tasks, handoffs and projects
+    # 0.18.1: /gt:gt-close and /gt:gt-handle -- closes tasks, handoffs and projects
     "scripts/gt_close.py": ("project", "task", "handoff"),
-    # 0.18.0: --archive and --supersede queue writes to research.md (--demote already moved notes)
+    # 0.18.1: --archive and --supersede queue writes to research.md (--demote already moved notes)
     "scripts/gt_optimize.py": (),
-    # 0.18.0: the validation host. `run` files fix proposals into the vault's ext-proposals/;
+    # 0.18.1: the validation host. `run` files fix proposals into the vault's ext-proposals/;
     # `apply`/`undo` write the fixed file (vault Markdown through the queue).
     "scripts/gt_check.py": ("run",),
     "scripts/gt_apply.py": ("apply", "undo"),
-    # 0.18.0 (group g5): review stamps and link suggestions queue vault writes; checkpoints
+    # 0.18.1 (group g5): review stamps and link suggestions queue vault writes; checkpoints
     # land in the vault spool; gt_sync moves the vault's git state; the reminder imports
     # into deadlines.md and mirrors it out.
     "scripts/gt_review_stamp.py": (),
@@ -72,7 +72,7 @@ COVERED = {
     "scripts/gt_ingest.py": (),
     "scripts/gt_sync.py": ("status", "pull", "push", "behind"),
     "scripts/gt_reminder.py": ("mirror", "import-tsv"),
-    # 0.18.0: execution metrics live in the vault's project folders; the pipeline flag queues
+    # 0.18.1: execution metrics live in the vault's project folders; the pipeline flag queues
     # README writes; the staged ingest pipeline writes packets and drafts.
     "scripts/gt_metrics.py": ("record", "time", "mark"),
     "scripts/gt_pipeline.py": ("flag", "init", "add", "set", "remove", "render"),

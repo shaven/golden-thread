@@ -295,7 +295,7 @@ class FlowRender(Sandbox):
         promotes = [e for e in data["events"] if e["kind"] == "promote"]
         self.assertTrue(any(a["to"] == b["from"] for a in promotes for b in promotes), order)
         # A fresh salt per render. Asserted through the MAPPING, not through the sets of
-        # hashes: a redacted name is sha256(salt + value) truncated (4 hex before 0.18.0, 6 since),
+        # hashes: a redacted name is sha256(salt + value) truncated (4 hex before 0.18.1, 6 since),
         # so two renders draw from 65,536 values and their sets intersect by chance about
         # once in a thousand runs at this fixture's size. The old form asserted
         # `not (h1 & h2)`, which no salt can guarantee -- it failed a release-check on

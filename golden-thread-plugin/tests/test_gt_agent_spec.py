@@ -1,4 +1,4 @@
-"""gt_agent_spec.py -- stage x kind specs for specialist agents (0.17.10; stage x kind 0.18.0).
+"""gt_agent_spec.py -- stage x kind specs for specialist agents (0.17.10; stage x kind 0.18.1).
 
 What is testable without spawning an agent, one test per acceptance criterion where it can be:
 
@@ -18,7 +18,7 @@ What is testable without spawning an agent, one test per acceptance criterion wh
 
 The spawning itself is Claude's step, driven by the skill text; that is asserted as text.
 
-0.18.0: the five 0.17.10 job types became stage x kind compositions (stages/*.json plus a
+0.18.1: the five 0.17.10 job types became stage x kind compositions (stages/*.json plus a
 per-kind delta in kinds/*.json). The old names are aliases for one release, and these tests
 keep exercising them through the CLI; tests that read a spec FILE read the stage file now.
 """
@@ -220,7 +220,7 @@ class AgentSpecTest(AgentSpecBase):
         p = self.py(TOOL, "resolve", "--skill", "gt-ingest")
         self.assertEqual(2, p.returncode)
 
-    # skeptic_pass x agent_specialization: test_skeptic_pass_independent.py (0.18.0)
+    # skeptic_pass x agent_specialization: test_skeptic_pass_independent.py (0.18.1)
 
     def test_validate_spawns_when_on(self):
         self.settings(agent_specialization="on")

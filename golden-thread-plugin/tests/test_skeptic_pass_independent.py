@@ -1,4 +1,4 @@
-"""skeptic_pass runs without agent_specialization (0.18.0,
+"""skeptic_pass runs without agent_specialization (0.18.1,
 2026-10-01-skeptic-pass-without-agent-specialization).
 
 Until 0.17.11 the gt-work skeptic needed BOTH settings, so turning the skeptic on also handed
@@ -9,7 +9,7 @@ ingest and validation to specialist agents. Now each setting governs its own job
   * skeptic_pass off -> no skeptic, whatever agent_specialization says.
   * all four combinations are asserted for gt-work, gt-ingest and gt-validate.
   * the settings detail text and the gt-work skill describe the two independently.
-  * a vault override of skeptic.json written before 0.18.0 (still listing
+  * a vault override of skeptic.json written before 0.18.1 (still listing
     agent_specialization) does not bring the old coupling back.
 """
 import json
@@ -42,7 +42,7 @@ class SkepticPassIndependentTest(AgentSpecBase):
     def test_skeptic_alone_spawns_the_shipped_skeptic_spec(self):
         self.settings(skeptic_pass="on")
         r = self.resolve("--skill", "gt-work")
-        # 0.18.0 g7: the skeptic is the reconcile stage composed with the session kind.
+        # 0.18.1 g7: the skeptic is the reconcile stage composed with the session kind.
         self.assertEqual(("reconcile-session", "spawn", None),
                          (r["job"], r["action"], r["notice"]))
         self.assertTrue(r["spec"].endswith("session.json"), r["spec"])

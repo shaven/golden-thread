@@ -68,7 +68,7 @@ class InstalledMachine(Sandbox):
                 # Its install depends on what PRE_INSTALL did first: never from the cache.
                 r = build(self)
             else:
-                # 0.18.0: classes with the same install share ONE build per run
+                # 0.18.1: classes with the same install share ONE build per run
                 # (tests/_harness.cached_sandbox; tests/test_cached_install.py).
                 key = "postinstall|%s|%s" % (" ".join(cls.INSTALL_ARGS),
                                              source_fingerprint(_ti.GT, _ti.WIKI,

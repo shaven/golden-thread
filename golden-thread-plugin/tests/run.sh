@@ -5,7 +5,7 @@
 #   tests/run.sh test_safe_write    # one file (module name, no .py)
 #   tests/run.sh -j 4               # cap the workers
 #   GT_TEST_SERIAL=1 tests/run.sh   # plain unittest, one process
-#   tests/run.sh --affected         # only the tests the branch's changes need (0.18.0): a pass
+#   tests/run.sh --affected         # only the tests the branch's changes need (0.18.1): a pass
 #                                   # records a SCOPED receipt, which the commit guard accepts
 #                                   # on a feature branch only -- never at a release gate
 #

@@ -1,5 +1,5 @@
 """gt_state's write-out is visible to the user, and a session sees only its own context figure
-(0.18.0, 2026-10-01-gt-state-write-out-visible-to-the-user).
+(0.18.1, 2026-10-01-gt-state-write-out-visible-to-the-user).
 
 A hook's plain stdout reaches the model only. These run gt_state the way Claude Code does --
 with the hook's JSON payload on stdin -- and assert on the `systemMessage` field, which is

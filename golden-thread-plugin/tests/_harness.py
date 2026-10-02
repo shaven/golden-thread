@@ -256,7 +256,7 @@ class Sandbox(unittest.TestCase):
         return path
 
 
-# ---- the cached install (0.18.0) ---------------------------------------------------------
+# ---- the cached install (0.18.1) ---------------------------------------------------------
 #
 # A full install into a throwaway HOME is the slowest thing this suite does, and most classes
 # that need "an installed machine" build the SAME one. cached_sandbox() builds it once per run

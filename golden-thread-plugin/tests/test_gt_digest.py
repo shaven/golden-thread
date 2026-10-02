@@ -1,5 +1,5 @@
 """gt_digest.py -- research-digest.md beside the append-only research.md
-(0.18.0, 2026-09-24-research-digest).
+(0.18.1, 2026-09-24-research-digest).
 
 Fixture: research.md with 25 sections, three [pinned]. Contract:
   * `write` produces research-digest.md through the write queue (Core rule 1)

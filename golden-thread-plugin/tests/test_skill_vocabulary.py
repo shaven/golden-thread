@@ -1,4 +1,4 @@
-"""Verb-first skill vocabulary (0.18.0): gt-create / gt-open / gt-handle / gt-list / gt-close, the
+"""Verb-first skill vocabulary (0.18.1): gt-create / gt-open / gt-handle / gt-list / gt-close, the
 coding loop gt-plan / gt-implement, and gt-learn folded into gt-work.
 
 Requests 2026-10-01-gt-verb-first-vocabulary, -gt-close-project and -gt-plan-implement-learn, with
@@ -94,7 +94,7 @@ class NewSkillsShip(unittest.TestCase):
 
     def test_gt_learn_is_folded_into_gt_work_not_shipped(self):
         self.assertFalse((SKILLS / "gt-learn").exists(), "owner: gt-learn folds into gt-work")
-        learn = section(text("gt-work"), "Learn: patterns worth keeping (0.18.0)")
+        learn = section(text("gt-work"), "Learn: patterns worth keeping (0.18.1)")
         self.assertIsNotNone(learn, "gt-work has no learn step")
         for must in ("one at a time", "gt_write_queue.py", "already captured", "/gt:gt-promote"):
             self.assertIn(must, learn)
@@ -202,7 +202,7 @@ class Dispatch(unittest.TestCase):
             pos = at + len(l)
 
     def test_open_handles_handoff_and_task(self):
-        sec = section(text("gt-open"), "Opening a handoff or a task (0.18.0)")
+        sec = section(text("gt-open"), "Opening a handoff or a task (0.18.1)")
         self.assertIsNotNone(sec)
         for must in ("/gt:gt-open handoff <id>", "/gt:gt-open task <id>", "gt_task.py list",
                      "gt_handoff_status.py list"):

@@ -1,4 +1,4 @@
-"""No `printf/echo "$X" | grep -q` in a pipefail script (0.18.0).
+"""No `printf/echo "$X" | grep -q` in a pipefail script (0.18.1).
 
 Under `set -o pipefail`, grep -q exits on its first match; the writer can then die of SIGPIPE,
 the pipeline's status becomes non-zero, and a line that IS present reads as absent. It made

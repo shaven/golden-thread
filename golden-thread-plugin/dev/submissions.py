@@ -114,7 +114,7 @@ SLOTS = {
     "vocabulary":       {"model_reachable": True, "fields": {"term": "token", "definition": "text"}},
     "validation_rules": {"model_reachable": True, "fields": {"id": "token", "rule": "text"}},
     "runbook":          {"model_reachable": True, "fields": {"id": "token", "step": "text"}},
-    # 0.18.0: the intent -> model mapping (gt_model.py). Tier D because the resolved name is
+    # 0.18.1: the intent -> model mapping (gt_model.py). Tier D because the resolved name is
     # printed. `verified` is the date the name was last checked against the provider -- a
     # model name nobody re-checked reads as evidence while being wrong (see SPDX_LIST_VERSION).
     "model":            {"model_reachable": True,

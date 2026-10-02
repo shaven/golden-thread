@@ -1,4 +1,4 @@
-"""Scoped test receipts (0.18.0): accepted on a feature branch, never on the default branch or
+"""Scoped test receipts (0.18.1): accepted on a feature branch, never on the default branch or
 at a release gate.
 
 Pinned (request 2026-10-01-fast-build-loop-and-execution-optimizer, test plan "a scoped receipt

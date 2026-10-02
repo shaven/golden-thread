@@ -1,0 +1,410 @@
+#!/usr/bin/env python3
+"""Deny a `git commit` of CODE whose tests nobody has seen pass.
+
+## Why this is a guard and not an intention
+
+Every other step of this project's release discipline is mechanical -- the gate, the
+manifest, the wiring check -- and the one step that decides whether any of them ran was
+a habit. On 2026-09-12 a release was committed and pushed, and the manifest turned out
+to be stale; the gate would have caught it, and the gate had been run before the last
+few edits rather than after. Nothing was wrong with the discipline. The discipline had
+no mechanism.
+
+## What it denies
+
+A Bash command containing `git commit` where:
+
+  * the repo has code staged (not only docs), AND
+  * the repo has a discoverable way to run tests -- IN `auto` ONLY, AND
+  * there is no PASSING receipt newer than every staged file
+    (see gt_test_receipt.py -- a run writes one, editing a file invalidates it).
+
+On a FEATURE branch (not the repo's default branch) a SCOPED receipt also counts, for the files
+it names: `tests/run.sh --affected` runs only the tests mapped to the changed files and records
+one (0.18.1, setting `scoped_receipts`, default on). The default branch still needs a full-suite
+receipt, and so does every release gate -- the full suite runs once per release, not per commit.
+
+The middle clause is the default's clause, not the gate's. `auto` waves through a repo with no
+visible test entry point, because asking a scratch repo to have tests is how a gate gets
+switched off. `test_gate block`, which someone sets deliberately, does NOT: a repo with no
+entry point and no receipt is denied, and the message names `.gt-no-test-gate` as the way to
+say "this repo has no tests" once and visibly. Stating the clause unconditionally read as a
+promise the `block` path does not make (corrected 2026-09-18).
+
+## The three escapes, in order of bluntness
+
+  1. `.gt-no-test-gate` in the repo root -- this repo is exempt, permanently and
+     visibly. A vault of notes and a scratch repo have no tests to run and should not
+     be arguing with a gate about it. Per-repo, because the exemption is a property of
+     the repo, not of whoever is committing.
+  2. `GT_TEST_GATE=off` in front of the command -- this one commit, said out loud.
+  3. `gt_settings.py set test_gate off` -- this machine, until changed.
+
+## FAIL OPEN, always
+
+Unparseable payload, unparseable shell, no git, not a repo, any exception: no objection
+(no output, exit 0 -- the normal permission flow decides). This
+sits in front of every Bash call in every session. A gate that blocks work it merely
+does not understand is a gate someone switches off, and then it guards nothing --
+which is how `guard_vault_writes.sh` shipped inert for three releases while every
+check reported clean.
+"""
+import json
+import os
+import re
+import subprocess
+import sys
+
+HERE = os.path.dirname(os.path.realpath(__file__))
+sys.path.insert(0, HERE)
+
+# NO OBJECTION = NO OUTPUT (2026-09-13). This hook used to print
+# permissionDecision "allow" on every call it did not block. Claude Code's hooks
+# reference: "allow" SKIPS the interactive permission prompt (only deny/ask rules still
+# apply), while "exit 0 with no output" is no decision and the normal permission flow
+# applies. Registered with no matcher, the guard runs on every tool call -- so gt was
+# silently approving every tool call past the user's permission prompt. A guard only
+# ever objects; when it has nothing to say it says nothing, and exits 0.
+
+# Files whose change cannot break a test. A commit touching only these is waved
+# through: demanding a test run for a typo fix in a README is how a gate earns the
+# reputation that gets it disabled.
+DOC_EXT = {".md", ".markdown", ".rst", ".txt", ".html", ".htm", ".pdf", ".png", ".jpg",
+           ".jpeg", ".gif", ".svg", ".ico", ".webp", ".csv", ".json5"}
+DOC_NAMES = {"LICENSE", "NOTICE", "CHANGELOG", "AUTHORS", "CODEOWNERS", ".gitignore"}
+
+# How this repo runs its tests. Discovery, not configuration: a repo with no visible
+# test entry point is not asked to have one.
+TEST_ENTRY_POINTS = (
+    ("tests/run.sh", "tests/run.sh"),
+    ("dev/release-check.sh", "dev/release-check.sh"),
+    ("pytest.ini", "pytest"),
+    ("tox.ini", "pytest"),
+    ("Cargo.toml", "cargo test"),
+    ("go.mod", "go test ./..."),
+)
+OPT_OUT = ".gt-no-test-gate"
+
+
+def out(payload):
+    print(json.dumps(payload))
+    sys.exit(0)
+
+
+def no_objection(context=None):
+    """Stay out of the permission decision. With context (warn mode, a degraded gate)
+    emit additionalContext ONLY -- never a permissionDecision; without, print nothing."""
+    if context:
+        out({"hookSpecificOutput": {"hookEventName": "PreToolUse",
+                                    "additionalContext": context}})
+    sys.exit(0)
+
+
+def deny(reason):
+    out({"hookSpecificOutput": {"hookEventName": "PreToolUse",
+                                "permissionDecision": "deny",
+                                "permissionDecisionReason": reason}})
+
+
+def git(root, *args, timeout=15):
+    try:
+        r = subprocess.run(["git", "-C", root, *args], capture_output=True, text=True,
+                           timeout=timeout)
+        return r.stdout if r.returncode == 0 else ""
+    except Exception:
+        return ""
+
+
+def strip_heredocs(command):
+    """Drop heredoc BODIES -- data being written, not commands being run.
+
+    The implementation is guard_vault_writes.strip_heredocs, imported rather than
+    copied: it is line-based and already proven against the 2026-09-12 case where a
+    guard fired on a command that merely QUOTED a tool invocation. A second copy here
+    would be a second copy to drift. If the import fails the raw command is inspected,
+    which can only produce a false deny on a heredoc that quotes `git commit` -- and
+    the test suite pins that case.
+    """
+    try:
+        from guard_vault_writes import strip_heredocs as impl
+        return impl(command)
+    except Exception:
+        return command
+
+
+def is_commit(command):
+    """A real `git commit`, not the words 'git commit' inside quoted text.
+
+    Heredoc bodies and message strings are data. `--amend` counts: amending a commit
+    with untested code produces exactly the same untested commit.
+    """
+    stripped = strip_heredocs(command)
+    for seg in re.split(r"&&|\|\||[;\n|]", stripped):
+        toks = seg.split()
+        if not toks:
+            continue
+        try:
+            gi = next(i for i, t in enumerate(toks) if os.path.basename(t) == "git")
+        except StopIteration:
+            continue
+        after = toks[gi + 1:]
+        if "--help" in after or "-h" in after:
+            continue                       # reading the manual is not committing
+        rest = [t for t in after if not t.startswith("-")]
+        # `git -C path commit`: the first non-flag token after -C is the path.
+        if "-C" in after:
+            rest = rest[1:]
+        if rest and rest[0] == "commit":
+            return True
+    return False
+
+
+def changed_files(root):
+    """Absolute paths of what this commit would carry.
+
+    Staged first. `git commit -a` stages nothing up front, so fall back to the modified
+    working tree, which is what -a would pick up.
+    """
+    # -z, because git QUOTES a path with non-ASCII or unusual characters by default
+    # (core.quotePath): `café.txt` arrives as `"caf\303\251.txt"`, which then does not stat.
+    # That used to be swallowed as "not evidence of staleness"; now an unstattable path fails
+    # closed, so quoting would turn every accented filename into a permanent refusal.
+    names = [n for n in git(root, "diff", "--cached", "--name-only", "-z").split("\0") if n]
+    if not names:
+        names = [l[3:].strip().strip('"') for l in git(root, "status", "--porcelain").splitlines()
+                 if l[:2] not in ("??",) and len(l) > 3]
+    return [os.path.join(root, n) for n in names if n]
+
+
+def is_doc(path):
+    base = os.path.basename(path)
+    stem, ext = os.path.splitext(base)
+    return ext.lower() in DOC_EXT or stem in DOC_NAMES or base in DOC_NAMES
+
+
+def entry_point(root):
+    for marker, how in TEST_ENTRY_POINTS:
+        if os.path.exists(os.path.join(root, marker)):
+            return how
+    pkg = os.path.join(root, "package.json")
+    if os.path.isfile(pkg):
+        try:
+            with open(pkg) as fh:
+                if (json.load(fh).get("scripts") or {}).get("test"):
+                    return "npm test"
+        except Exception:
+            pass
+    mk = os.path.join(root, "Makefile")
+    if os.path.isfile(mk):
+        try:
+            with open(mk) as fh:
+                if re.search(r"^test:", fh.read(), re.M):
+                    return "make test"
+        except Exception:
+            pass
+    return None
+
+
+def mode():
+    """off | warn | block | auto -- the SETTING, not a resolved decision.
+
+    `auto` is returned as itself and resolved later, in main(), against what the repo actually
+    has: it is the only value under which a repo with no test entry point is waved through.
+    This said it resolved `auto` here and never did (corrected 2026-09-18); a caller that
+    believed the docstring would treat `auto` as an unexpected value."""
+    if os.environ.get("GT_TEST_GATE", "").strip().lower() == "off":
+        return "off"
+    try:
+        import gt_settings
+        return gt_settings.get("test_gate") or "auto"
+    except Exception:
+        return "auto"
+
+
+def staged_hashes(root):
+    """{rel: sha256 of the STAGED bytes} for every added/copied/modified path. Deletions carry
+    no content a checker could object to. One `git cat-file --batch` for all of them."""
+    import hashlib
+    names = [n for n in git(root, "diff", "--cached", "--name-only", "--diff-filter=ACM",
+                            "-z").split("\0") if n]
+    if not names:
+        return {}
+    try:
+        p = subprocess.run(["git", "-C", root, "cat-file", "--batch"],
+                           input=("".join(":%s\n" % n for n in names)).encode("utf-8"),
+                           capture_output=True, timeout=30)
+    except Exception:
+        return None
+    if p.returncode != 0:
+        return None
+    out, buf = {}, p.stdout
+    for n in names:
+        nl = buf.find(b"\n")
+        head = buf[:nl].split()
+        if len(head) < 3 or head[1] == b"missing":
+            return None
+        size = int(head[2])
+        out[n] = hashlib.sha256(buf[nl + 1:nl + 1 + size]).hexdigest()
+        buf = buf[nl + 1 + size + 1:]
+    return out
+
+
+def check_gate(cwd):
+    """The validation host's commit gate (0.18.1) -- OFF unless `commit_checks on`.
+
+    One guard for every module's checkers: a commit whose staged content no passing
+    gt_check.py receipt covers is refused, naming the file and the failing checker. With the
+    setting off this returns before reading anything, so commits behave exactly as before.
+    Fails open like everything here, but says so when it cannot check."""
+    if os.environ.get("GT_CHECK_GATE", "").strip().lower() == "off":
+        return
+    try:
+        import gt_settings
+        if gt_settings.get("commit_checks") != "on":
+            return
+    except Exception:
+        return
+    root = git(cwd, "rev-parse", "--show-toplevel").strip()
+    if not root or os.path.exists(os.path.join(root, OPT_OUT)):
+        return
+    hashes = staged_hashes(root)
+    if hashes is None:
+        no_objection("commit_checks is DEGRADED: the staged content could not be read, so "
+                     "this commit was not checked.")
+    if not hashes:
+        return
+    try:
+        import gt_test_receipt
+        ok, why, checker = gt_test_receipt.check_covers(root, hashes)
+    except Exception as exc:
+        no_objection("commit_checks is DEGRADED and did not check this commit: %s: %s. "
+                     "gt_test_receipt.py should sit beside this hook -- re-run install.sh."
+                     % (type(exc).__name__, exc))
+    if ok:
+        return
+    deny("BLOCKED by the validation host (commit_checks on).\n\n"
+         "  %s%s\n\n"
+         "Do this instead:\n"
+         "  1. Check what you staged:  gt_check.py run --staged\n"
+         "     (a fix proposal is applied with gt_apply.py; re-stage, then run again)\n"
+         "  2. This one commit only:   GT_CHECK_GATE=off git commit ...\n"
+         "  3. This machine:           gt_settings.py set commit_checks off\n"
+         % (why, ("\n  failing checker: %s" % checker) if checker else ""))
+
+
+def default_branch(root):
+    ref = git(root, "symbolic-ref", "--quiet", "refs/remotes/origin/HEAD").strip()
+    if ref:
+        return ref.rsplit("/", 1)[-1]
+    for cand in ("main", "master"):
+        if git(root, "rev-parse", "--verify", "--quiet", "refs/heads/" + cand).strip():
+            return cand
+    return "main"
+
+
+def allow_scoped(root):
+    """A scoped receipt counts only on a named branch that is not the default branch, and only
+    while the `scoped_receipts` setting is on. Anything unreadable answers no: the full-suite
+    rule is the safe one."""
+    try:
+        import gt_settings
+        if gt_settings.get("scoped_receipts") == "off":
+            return False
+    except Exception:
+        pass
+    branch = git(root, "symbolic-ref", "--quiet", "--short", "HEAD").strip()
+    if not branch:
+        return False
+    return branch.casefold() != default_branch(root).casefold() and \
+        branch.casefold() not in ("main", "master")
+
+
+def main():
+    try:
+        payload = json.load(sys.stdin)
+    except Exception:
+        no_objection()
+    if payload.get("tool_name") != "Bash":
+        no_objection()
+    command = (payload.get("tool_input") or {}).get("command") or ""
+    if "commit" not in command or not is_commit(command):
+        no_objection()
+
+    check_gate(payload.get("cwd") or os.getcwd())
+
+    setting = mode()
+    if setting == "off":
+        no_objection()
+
+    cwd = payload.get("cwd") or os.getcwd()
+    root = git(cwd, "rev-parse", "--show-toplevel").strip()
+    if not root:
+        no_objection()                                   # not a repo: nothing to gate
+    if os.path.exists(os.path.join(root, OPT_OUT)):
+        no_objection()                                   # this repo is exempt, on purpose
+
+    files = changed_files(root)
+    if not files:
+        no_objection()
+    code = [f for f in files if not is_doc(f)]
+    if not code:
+        no_objection()                                   # docs-only commit
+
+    how = entry_point(root)
+    if not how and setting == "auto":
+        no_objection()                                   # no tests to run; do not pretend
+
+    try:
+        import gt_test_receipt
+        scoped_ok = allow_scoped(root)
+        ok, receipt, stale = gt_test_receipt.covers(root, code, allow_scoped=scoped_ok)
+    except Exception as exc:
+        # Fail open, but SAY SO. gt_test_receipt.py is installed into this directory by
+        # install.sh; if it cannot be imported the gate is inert, and an inert guard
+        # that stays quiet is the exact failure this project keeps finding
+        # (guard_vault_writes.sh shipped inert through three releases while every check
+        # reported clean). Same principle as inject_core_rules.sh: degradation is
+        # announced, never silent.
+        no_objection("core_test_before_commit is DEGRADED and did not check this commit: "
+              "%s: %s. gt_test_receipt.py should sit beside this hook in "
+              "~/.claude/golden-thread/hooks/ -- re-run install.sh, and say that the "
+              "gate is not currently enforcing." % (type(exc).__name__, exc))
+    if ok:
+        no_objection()
+
+    how = how or "this project's tests"
+    if stale and receipt is None:
+        why = ("%s is covered by no passing receipt (a scoped receipt covers only the files it "
+               "names)." % os.path.relpath(stale, root))
+    elif stale:
+        why = ("%s was changed after the last passing run (%s). A receipt only covers "
+               "files older than itself." % (os.path.relpath(stale, root),
+                                             receipt.get("at_human", "?")))
+    else:
+        why = "No passing test run is recorded for this repo."
+    n = len(code)
+    reason = (
+        "BLOCKED by Core rule core_test_before_commit.\n\n"
+        "  %d code file(s) staged, and their tests have not been seen to pass.\n"
+        "  %s\n\n"
+        "Do this instead:\n"
+        "  1. Run them:      %s%s\n"
+        "     then record it: gt_test_receipt.py record --repo . --what \"%s\" --ok\n"
+        "     (tests/run.sh and dev/release-check.sh record their own receipts.)\n"
+        "  2. This repo has no tests?   touch %s   -- exempt, visibly, for everyone.\n"
+        "  3. This one commit only:     GT_TEST_GATE=off git commit ...\n\n"
+        "Why: a release was committed on 2026-09-12 with a stale MANIFEST.json. The gate\n"
+        "that would have caught it existed and had been run before the last edits rather\n"
+        "than after. The discipline was fine; it had no mechanism." %
+        (n, why, how,
+         "\n     (on this feature branch, `tests/run.sh --affected` -- only the tests the "
+         "change needs -- also counts)" if scoped_ok and how == "tests/run.sh" else "",
+         how, OPT_OUT))
+
+    if setting == "warn":
+        no_objection("core_test_before_commit (warn mode): " + reason.replace("BLOCKED", "WARNING"))
+    deny(reason)
+
+
+if __name__ == "__main__":
+    main()

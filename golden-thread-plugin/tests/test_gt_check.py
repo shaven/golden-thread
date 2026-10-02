@@ -1,4 +1,4 @@
-"""gt_check.py -- the validation host, and module.json `checkers` (0.18.0).
+"""gt_check.py -- the validation host, and module.json `checkers` (0.18.1).
 
 Contracts pinned here (request 2026-09-15-validation-checker-slots):
   * both module validators accept a valid `checkers` list and reject an unknown checker key

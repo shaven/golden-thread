@@ -1,4 +1,4 @@
-"""gt_doctor `hooks-schema` (0.18.0, 2026-09-24-hook-config-drift-detector).
+"""gt_doctor `hooks-schema` (0.18.1, 2026-09-24-hook-config-drift-detector).
 
 `wiring` asks whether every hook the release declares is in settings.json. It cannot see an
 entry that is present, correctly pointed, and never fires because its event or tool matcher

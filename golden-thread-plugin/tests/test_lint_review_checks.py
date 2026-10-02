@@ -1,4 +1,4 @@
-"""gt_lint.py 0.18.0 checks that file into the review queue: adr-expires, bundled-concept,
+"""gt_lint.py 0.18.1 checks that file into the review queue: adr-expires, bundled-concept,
 decision-candidate, memory-entity-orphan.
 
 Each runs as part of a normal gt_lint run (no extra flag), writes through the one

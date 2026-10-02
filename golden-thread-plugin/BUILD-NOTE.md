@@ -1,4 +1,4 @@
-# Build note — gt 0.18.0
+# Build note — gt 0.18.1
 
 **Read this first if you are the person taking this tree into the other repository.**
 
@@ -8,7 +8,7 @@
 > content reaches you from the owner. `SOURCE.json`, at the root of gt-src, names the exact commit
 > the tree was cut from.
 
-> **Not released yet.** 0.18.0 is being built on `feat/0.18.0` from the accepted feature-request
+> **Not released yet.** 0.18.1 is being built on `feat/0.18.1` from the accepted feature-request
 > queue. Nothing is pushed, tagged or synced to gt-src until the owner says release; then it goes
 > straight to main.
 
@@ -18,10 +18,10 @@
 
 | Plugin | Version | Note |
 |---|---|---|
-| gt (core) | **0.18.0** | verb-first skills, gt-close, gt-plan/gt-implement, ADR expiry and lineage, gt-brief, gt-optimize session member and archive, gt-minimize, write-back checks, catch-up brief, doctor rows, foreign-checkout guard, checker host and fix writer, model intent, gt-sync, reminders, resumable scans and ingests, release pipelines, execution metrics and the fast test loop, staged ingest/promote |
+| gt (core) | **0.18.1** | verb-first skills, gt-close, gt-plan/gt-implement, ADR expiry and lineage, gt-brief, gt-optimize session member and archive, gt-minimize, write-back checks, catch-up brief, doctor rows, foreign-checkout guard, checker host and fix writer, model intent, gt-sync, reminders, resumable scans and ingests, release pipelines, execution metrics and the fast test loop, staged ingest/promote |
 | gt-wiki | **0.2.5** | `review-due` ages a page from the newer of `last_reviewed` and `updated` |
-| gt-flow | **0.18.0** | redacted hashes at least 6 hex characters; draws the new `addon.fix` event |
-| gt-demo, gt-farm, gt-report-card, gt-watch | **0.18.0** | they move with gt |
+| gt-flow | **0.18.1** | redacted hashes at least 6 hex characters; draws the new `addon.fix` event |
+| gt-demo, gt-farm, gt-report-card, gt-watch | **0.18.1** | they move with gt |
 | gt-visualize | **0.4.2** | `requires_gt` admits 0.18 |
 | gt-usage | **0.1.4** | `requires_gt` admits 0.18 |
 | gt-lotr | **0.1.1** | `requires_gt` admits 0.18; still off by default |
@@ -133,12 +133,12 @@ It does, in order, and stops at the first failure:
 Options: `--vault V`, `--report FILE` (never inside the repo).
 Exit codes: 0 done, 2 refused, 3 checksum, 4 not clean, 5 commit failed. (`--no-push` is still accepted and changes nothing.)
 
-**The tree_sha256 to compare is the one `sync-gt-src.sh` printed at the 0.18.0 sync** — not a
+**The tree_sha256 to compare is the one `sync-gt-src.sh` printed at the 0.18.1 sync** — not a
 number written here, since this note is written before the cut. `copygt.sh` prints the value it
 verified.
 
 **The same Dropbox-synced vault?** If the receiving machine opens the same vault as the publishing
-Mac, that vault will already have been upgraded to 0.18.0 here, `PROTOCOL.md` merged, and the merge
+Mac, that vault will already have been upgraded to 0.18.1 here, `PROTOCOL.md` merged, and the merge
 base recorded. `/gt:gt-upgrade` there should report nothing pending. **Never redo the
 merge.**
 
@@ -302,9 +302,9 @@ Then, in a Claude Code session on that machine:
   A failure in either is now a real failure.
 - **`gt_check.py run` exit 3 is "nothing applied", not clean** — with no checker modules installed,
   every run says so.
-- **A vault whose `tools/gt_events.py` predates 0.18.0 refuses an `addon.fix` event** until
+- **A vault whose `tools/gt_events.py` predates 0.18.1 refuses an `addon.fix` event** until
   `/gt:gt-upgrade` refreshes the vault tools.
 - **Reminder "DELIVERED" for macOS** means `osascript` exited 0; if Script Editor's notifications are
   off, nothing appears.
-- **Run the suite on the remote runner, not the Mac** (`GT_TEST_VERSION=0.18.0 bash
+- **Run the suite on the remote runner, not the Mac** (`GT_TEST_VERSION=0.18.1 bash
   dev/remote-test.sh -j 2 …`). A local full run drove the Mac's load to 50–96.

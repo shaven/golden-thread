@@ -1,4 +1,4 @@
-"""gt_upgrade backups never overwrite each other (0.18.0).
+"""gt_upgrade backups never overwrite each other (0.18.1).
 
 Backup names are stamped to the second. Two upgrades inside one second -- an install straight
 after another, which the faster cached test install made routine -- replaced the earlier

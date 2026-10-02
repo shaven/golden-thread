@@ -11,7 +11,13 @@ release's own summary line, kept short rather than reconstructed after the fact.
 
 ---
 
-## gt 0.18.0 — 2026-10-01
+## gt 0.18.1 — 2026-10-02
+
+> **There is no published 0.18.0.** The release was cut as 0.18.0, then `install.sh` and
+> `selftest.sh` were fixed after the cut (the SIGPIPE bug below). `check_installer_version` exists
+> so one version name never covers two different installers, so the owner chose to re-cut as
+> 0.18.1 (2026-10-02). The 0.18.0 directories were renamed, not copied, so the rollback target
+> stays 0.17.11 -- the last release that was actually published.
 
 A release built from the accepted feature-request queue rather than from one incident. Its themes:
 **one verb per action** (create, open, list, handle, close), a **coding loop** with a plan gate,
@@ -28,9 +34,9 @@ by notification, SMS/Discord or email), **batches that resume** after an interru
 **ingest and promote as staged pipelines**. Skills: 28 → 36. gt_lint checks: 19 → 24. Settings:
 twenty-two new, every one listed under its theme. Hook registrations: two new (one `PreToolUse` guard, one `PostToolUse` read log).
 
-Module versions: gt-demo, gt-farm, gt-flow, gt-report-card and gt-watch 0.18.0 (they move with
+Module versions: gt-demo, gt-farm, gt-flow, gt-report-card and gt-watch 0.18.1 (they move with
 gt); gt-wiki 0.2.5; gt-visualize 0.4.2; gt-usage 0.1.4; gt-lotr 0.1.1 — each bumped so its
-`requires_gt` admits 0.18. gt-flow 0.18.0 also widens redacted hashes and knows the `addon.fix`
+`requires_gt` admits 0.18. gt-flow 0.18.1 also widens redacted hashes and knows the `addon.fix`
 event; gt-wiki 0.2.5's `review-due` ages a page from when it was last read (both below).
 
 Owner decisions this release rests on (2026-10-01): the **verb-first vocabulary is accepted**;
@@ -387,7 +393,7 @@ applies; another live session claims the vault file. Hardened in the same path
 
 The original bytes are kept (`gt_apply.py undo <id>` restores them exactly), the fix is left
 uncommitted for the commit gate to re-check, vault Markdown goes through the write queue, and each
-apply, refusal, rollback and undo is one `addon.fix` event (a new kind; gt-flow 0.18.0 draws it).
+apply, refusal, rollback and undo is one `addon.fix` event (a new kind; gt-flow 0.18.1 draws it).
 
 **Why.** Mechanical checks — valid HTML, labels, a formatter, a commit-message convention — had
 nowhere to live: each would have been its own hook with its own matching and output, and nothing
@@ -621,7 +627,7 @@ Two failures were filed as load flakes during this release and were not:
   helper to switch them to. gt-lint does not flag the stray README-less folder the ADR bug left,
   nor a pre-0.18 sub-project CLAUDE.md with the wrong path.
 - **What changed this session counts committed changes only**, vault-wide: another session's
-  commits in the same window appear too, and sessions registered before 0.18.0 have no
+  commits in the same window appear too, and sessions registered before 0.18.1 have no
   `start_commit` (pass `--since-commit`).
 - **The catch-up brief's "absence" is per machine.** A `brief_absence_days` value outside its list
   falls back to 7.
@@ -648,7 +654,7 @@ Two failures were filed as load flakes during this release and were not:
   only, and nothing calls `--event commit-msg` yet (a git `commit-msg` hook would). `selftest.sh`
   did not gain a cold-install checker step (editing it would need an installer bump); the same
   assertion lives in `tests/test_gt_check.py`. No checkers ship — each is its own module request.
-- **A vault whose `tools/gt_events.py` predates 0.18.0 refuses to merge an `addon.fix` event**
+- **A vault whose `tools/gt_events.py` predates 0.18.1 refuses to merge an `addon.fix` event**
   until `/gt:gt-upgrade` refreshes it. Proposals (`ext-proposals/*.json`) are written directly, not
   through the queue: they are JSON, not Markdown.
 - **`agent-specs`' `model_tier` and `model_intent` are separate vocabularies**; not unified.
@@ -1163,7 +1169,7 @@ one scheduled job that could never install, one promised and never built, and a 
 failed for three weeks while its checker called the crash "findings".
 
 gt-demo, gt-watch, gt-report-card, gt-farm and gt-flow move to 0.17.2 with gt, as they do every
-release (content unchanged; `requires_gt` `>=0.17.2,<0.18.0`). gt-wiki stays at 0.2.3 and gt-usage
+release (content unchanged; `requires_gt` `>=0.17.2,<0.18.1`). gt-wiki stays at 0.2.3 and gt-usage
 at 0.1.3, on their own trains.
 
 ### Tasks and handoffs

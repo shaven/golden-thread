@@ -1,4 +1,4 @@
-"""gt_sync.py and the gt-sync skill: vault pull / push / status across machines (gt 0.18.0).
+"""gt_sync.py and the gt-sync skill: vault pull / push / status across machines (gt 0.18.1).
 
 Request 2026-09-24-cross-device-sync, with the triage correction that behind-origin needs a
 fetch (gt_push_check only reports ahead). Fixtures are real git repos: a bare "origin", the

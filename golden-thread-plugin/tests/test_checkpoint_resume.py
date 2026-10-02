@@ -1,4 +1,4 @@
-"""Batch checkpoints and resume for gt-scan and gt-ingest (gt 0.18.0).
+"""Batch checkpoints and resume for gt-scan and gt-ingest (gt 0.18.1).
 
 Request 2026-09-24-batch-skill-checkpoint-resume, with the owner's triage correction: resume
 must work ACROSS sessions. Pinned:

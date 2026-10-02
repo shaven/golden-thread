@@ -1,4 +1,4 @@
-"""gt_apply.py -- add-ons propose fixes, the host writes them (0.18.0).
+"""gt_apply.py -- add-ons propose fixes, the host writes them (0.18.1).
 
 Two requests, one write path:
 

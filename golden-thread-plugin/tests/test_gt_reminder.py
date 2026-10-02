@@ -1,4 +1,4 @@
-"""The reminder tool (gt 0.18.0): dated must-do items reach the owner by the channels chosen.
+"""The reminder tool (gt 0.18.1): dated must-do items reach the owner by the channels chosen.
 
 Request 2026-10-01-reminder-tool. Every sender is stubbed: macOS via GT_REMINDER_OSASCRIPT,
 the relay via a local HTTP server, email via a local fake SMTP server. Pinned:

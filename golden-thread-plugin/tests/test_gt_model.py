@@ -1,4 +1,4 @@
-"""gt_model.py -- skills declare a model INTENT, never a model name (0.18.0).
+"""gt_model.py -- skills declare a model INTENT, never a model name (0.18.1).
 
 Contracts pinned here (request 2026-09-27-skills-declare-a-model-intent):
   * `model_intent` is fast|balanced|deep; any other value is refused by dev/submissions.py

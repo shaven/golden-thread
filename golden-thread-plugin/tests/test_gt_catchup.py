@@ -1,4 +1,4 @@
-"""gt_catchup.py -- gt-open's catch-up brief (0.18.0, 2026-09-24-cold-start-session-brief).
+"""gt_catchup.py -- gt-open's catch-up brief (0.18.1, 2026-09-24-cold-start-session-brief).
 
 Fixture: a project with a research entry, one open p::1 task, one waiting::user task and two
 commits to its files in the last 10 days, last opened 10 days ago. Contract:

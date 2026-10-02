@@ -1,4 +1,4 @@
-"""A slug is a name, not an address (0.18.0).
+"""A slug is a name, not an address (0.18.1).
 
 Two bugs, one root: a sub-project created with `create-project --parent P` lives at
 `Projects/P/<slug>/`, but gt_adr joined `Projects/` with the bare slug (rendering a
@@ -112,7 +112,7 @@ class AdrSubprojectResolution(SubprojectBase):
         self.assertTrue((self.v / SPOOL / "parent/child/0001.md").is_file())
         self.assertIn("ADR-1: from the bug",
                       (self.v / "Projects/parent/child/decisions.md").read_text())
-        self.assertIn("pre-0.18.0", p.stderr, "the stray folder was not named")
+        self.assertIn("pre-0.18.1", p.stderr, "the stray folder was not named")
         self.assertEqual((stray / "decisions.md").read_text(), "stray\n",
                          "the stray folder must be left for its owner to delete")
 

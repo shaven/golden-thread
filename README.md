@@ -1,7 +1,7 @@
 # Golden Thread
 
 > **Reader:** someone who has never heard of Golden Thread
-> **Claims last checked against the code:** 2026-10-01 (gt 0.18.0) — see *The documents, and what belongs in each* in [`CLAUDE.md`](CLAUDE.md).
+> **Claims last checked against the code:** 2026-10-01 (gt 0.18.1) — see *The documents, and what belongs in each* in [`CLAUDE.md`](CLAUDE.md).
 
 A memory system for AI coding sessions, built on plain markdown and git — and,
 unusually, one where the rules that matter most are **mechanically enforced** rather
@@ -15,13 +15,13 @@ it at startup, look things up while working, and write back what they learn.
 Its distinguishing idea is the second problem, the one most memory systems never
 address: **writing a rule down does not mean it gets followed.**
 
-Plugin **v0.18.0**. Ten Core rules currently enforced, five of them *validated* — a
+Plugin **v0.18.1**. Ten Core rules currently enforced, five of them *validated* — a
 hook inspects the finished reply (`Stop`) or the tool call about to run (`PreToolUse`)
 and blocks it if the rule was broken.
 
 
 > [!IMPORTANT]
-> **0.18.0: one verb per action, a plan before code, and less to carry.**
+> **0.18.1: one verb per action, a plan before code, and less to carry.**
 >
 > - **One skill per verb.** `/gt:gt-create`, `/gt:gt-open`, `/gt:gt-list`, `/gt:gt-handle` and the
 >   new `/gt:gt-close` take what they act on — a project, a task, a handoff — as their argument.
@@ -59,7 +59,7 @@ and blocks it if the rule was broken.
 >   body — and a count of urgent tasks waiting on you. Switch any of it off in `/gt:gt-settings`.
 > - **Tasks the way a developer writes a TODO.** Add one tied to a page or source if you like,
 >   list them without opening anything, and clear a backlog — done, dropped with a reason, or
->   deferred to a date (since 0.18.0: `/gt:gt-create task`, `/gt:gt-list`, `/gt:gt-handle`).
+>   deferred to a date (since 0.18.1: `/gt:gt-create task`, `/gt:gt-list`, `/gt:gt-handle`).
 >   Handoffs get the same pair. Nothing is ever deleted.
 > - **Session claims survive a network change** — keyed on a machine id instead of a hostname.
 > - **Known:** macOS blocks scheduled (launchd) runs from reading a vault under CloudStorage; the
@@ -302,9 +302,9 @@ removing any one leaves the rest working.
 | `gt-upgrade` | Updates the VAULT after `install.sh` updates the plugin — the step that did not exist until a 0.11.0 migration had to be run by hand across 43 projects. Migrations detect their own work, documents are three-way merged against a base the vault carries, and a step that needs a person is reported rather than guessed at. |
 | `gt-doctor` | Answers "is this install healthy?" in one command — version, component drift, hook wiring, the vault's release stamp and pending migrations, the scheduled jobs' last exits, stray workers, unpushed commits, publish drift, lint. Every answer is stated relative to the release it was checked against, because a clean report from a check pinned to the wrong version reads exactly like a healthy install. |
 | `gt-lint` | Runs 24 deterministic health checks — broken links, orphans, index gaps, scope leaks, staleness, superseded sources — plus `core-unenforced`, which catches a rule that is stored but never re-asserted, and four that file questions for you: an ADR whose expiry may have come, a page covering two topics, a decision stated in prose with no ADR, a memory note missing its entity tags — and `release-pipeline`, a project that ships code with no release pipeline declared. |
-| `gt-optimize` | Finds what you pay for on every turn and get nothing back for — a fact duplicated across memory files, a dead index row, a `global-memory/` file over budget, a Knowledge page nobody reads — and, since 0.18.0, what your sessions spend rebuilding the prompt cache after sitting idle past its lifetime. Reporting never writes; moving a note somewhere cheaper or archiving old research happens only when asked, and deletes nothing. |
+| `gt-optimize` | Finds what you pay for on every turn and get nothing back for — a fact duplicated across memory files, a dead index row, a `global-memory/` file over budget, a Knowledge page nobody reads — and, since 0.18.1, what your sessions spend rebuilding the prompt cache after sitting idle past its lifetime. Reporting never writes; moving a note somewhere cheaper or archiving old research happens only when asked, and deletes nothing. |
 | `gt-scan` | Checks code against the language definitions this machine actually has — naming and encoding, per language, entirely from packs: a contributed language pack teaches it a new language with no code change. It reports how many checks RAN next to what they found, so a scan that could not load its definitions can never be mistaken for a clean tree. An interrupted scan resumes where it stopped, from any later session. |
-| `gt-allin` | One command for every check, built so a skipped check can never pass for a clean one: the headline is "N of M members ran", and a member that could not execute outranks a member that found something. Since 0.17.2 it also runs the credential scan, the runbook lint and — while gt-wiki is installed — the wiki lint. It does not push — an aggregator is where a partial run is easiest to mistake for a complete one, and pushing there would break the very rule about seeing tests pass that the tool exists to serve. Since 0.18.0 it also runs a project's release pipeline up to the owner gate, where one is adopted. |
+| `gt-allin` | One command for every check, built so a skipped check can never pass for a clean one: the headline is "N of M members ran", and a member that could not execute outranks a member that found something. Since 0.17.2 it also runs the credential scan, the runbook lint and — while gt-wiki is installed — the wiki lint. It does not push — an aggregator is where a partial run is easiest to mistake for a complete one, and pushing there would break the very rule about seeing tests pass that the tool exists to serve. Since 0.18.1 it also runs a project's release pipeline up to the owner gate, where one is adopted. |
 | `gt-context` | Renders what this vault's definitions SAY, for a session to read — the first consumer of the registry's model-reachable tier. Wrapped in an envelope that marks it as data rather than instruction, because a renderer can make content identifiable but cannot make it true. |
 | `gt-validation` | Writes down what a validation established about a file, including what it could NOT determine, stamped with the file's content hash. Edit the file and the recorded definition goes visibly stale — because every serious defect this project has shipped was a claim that outlived its implementation. |
 | `gt-allin-commit` | The separate, deliberate act of committing — kept apart from the sweep so a routine check is never also a write. It verifies a passing test receipt covers every staged file, refuses when a check could not run at all, and stops at the commit: a commit is reversible here, a push is fetched by other people. |
@@ -315,7 +315,7 @@ removing any one leaves the rest working.
 | `gt-implement` | Carries out the approved plan one phase at a time: the failing test first, then the code, then the checks, naming the tests that ran. Any red stops it; it commits only on your yes and never pushes. |
 | `gt-brief` | Drafts the section a project's code repository should carry in its `CLAUDE.md` — what it is, the standing decisions, where it runs, what not to do — for a reader with no vault. Printed for review, never written on its own. |
 | `gt-minimize` | Prunes a heavy session before you cut it: measures it and how long its prompt cache stays warm, keeps the few things worth keeping, and tells you to `/compact` or `/clear` while that is still cheap. |
-| `gt-task`, `gt-handoff`, `gt-task-list`, `gt-handoff-list`, `gt-task-handle`, `gt-handoff-handle` | The pre-0.18.0 names, kept working through 0.18.x as deprecated aliases: each says which verb replaced it, then does exactly what that verb does. |
+| `gt-task`, `gt-handoff`, `gt-task-list`, `gt-handoff-list`, `gt-task-handle`, `gt-handoff-handle` | The pre-0.18.1 names, kept working through 0.18.x as deprecated aliases: each says which verb replaced it, then does exactly what that verb does. |
 | `gt-settings` | Shows and changes everything the plugin does on its own — component drift checking, the version check, orphaned-worker detection, the unpushed-commit check, the session-start MUST DO and handoff surfacing (and where a waiting handoff is shown: every session, only in its project, or only on request), the pre-commit test gate, the parallel-work budget, the protected-path prompt, and the settings each installed module adds (the report card, the close-out question, the upstream watch). Every automatic behaviour is registered here and every one can be switched off. |
 | `gt-route` | Mid-session: names what the session has actually become, says where its output belongs, and checks you are in the right project. For when a session has drifted from what it opened with, or you cannot name what you are doing. |
 | `gt-runbook-lint` | Finds procedures duplicated across project runbooks and routes them to the right shared layer: `PROTOCOL.md`, a `Knowledge/` page, or a repo `CLAUDE.md`. Duplication across two runbooks is the signal a fact belongs one layer out. |
@@ -345,11 +345,11 @@ do them.
 | Command | What it does |
 |---|---|
 | `gt_log.py add "<line>"` | Records a log entry. Writes only **your session's** spool file, so two sessions can never overwrite one another. `log.md` is rendered from those spools, never written directly. |
-| `gt_adr.py allocate <project>` | Reserves the next ADR number and prints it. The number is taken with a single atomic operation, so two sessions cannot both take ADR-6 — which has happened. Write the decision into the file it names. Since 0.18.0 `--supersedes N`, `--expires-when` and `--expires` record what it replaced and when it stops being true, `gt_adr.py lineage <project> "<topic>"` prints a topic's chain of decisions, and a sub-project's bare slug resolves to its own folder. |
+| `gt_adr.py allocate <project>` | Reserves the next ADR number and prints it. The number is taken with a single atomic operation, so two sessions cannot both take ADR-6 — which has happened. Write the decision into the file it names. Since 0.18.1 `--supersedes N`, `--expires-when` and `--expires` record what it replaced and when it stops being true, `gt_adr.py lineage <project> "<topic>"` prints a topic's chain of decisions, and a sub-project's bare slug resolves to its own folder. |
 | `gt_log.py merge` · `gt_adr.py merge <project>` | Regenerate `log.md` / `decisions.md` from the spools. Idempotent: running twice changes nothing. |
 | `gt_log.py add "<line>" --event <kind> --item <path>` | The same log line, plus one structured event recording what moved where. `gt-promote` and `gt-refresh` record their moves this way; `gt-review`, `gt-work` and `gt-ingest` call `gt_events.py emit`. |
 | `gt_events.py` | The structured event stream (`events.jsonl`, schema v1) that `/gt-flow:gt-flow` draws. `backfill --dry-run` previews history rebuilt from git and `log.md` for a vault that predates the events. |
-| `gt_task.py add` · `list` · `done` · `drop` · `defer` · `shelve` · `move` · `count` | Creates and works tasks through a tool instead of by hand (0.17.2; `shelve` and `move` 0.18.0). One store — the README's `## Tasks` — parsed with `gt_tasks.py`'s own rules. IDs are `slug:LINE:HASH` and refused if the line changed; `drop` needs a reason, `defer` a future date; `move` writes the other project first, so an interruption leaves a duplicate, never a lost task; nothing is deleted. Refuses a README another live session has claimed. |
+| `gt_task.py add` · `list` · `done` · `drop` · `defer` · `shelve` · `move` · `count` | Creates and works tasks through a tool instead of by hand (0.17.2; `shelve` and `move` 0.18.1). One store — the README's `## Tasks` — parsed with `gt_tasks.py`'s own rules. IDs are `slug:LINE:HASH` and refused if the line changed; `drop` needs a reason, `defer` a future date; `move` writes the other project first, so an interruption leaves a duplicate, never a lost task; nothing is deleted. Refuses a README another live session has claimed. |
 | `gt_tasks.py` | Regenerates `TASKS.md`, the cross-project task rollup, ranked and computed against the clock rather than stored. |
 | `gt_session.py` | Registers a session, claims the files it is about to write, and reports which other sessions are live. Liveness is checked against the OS, not guessed from a timestamp — and since 0.17.2 "this machine" is a machine id created once in `~/.claude/golden-thread/machine-id`, not a hostname a network change can alter. |
 | `gt_closeout.py` | Names projects whose signals say they may be finished, with the reasons. Closure is asked for, never assumed. |

@@ -1,4 +1,4 @@
-"""gt-flow --redact: hash width and per-render salt, asserted directly (gt 0.18.0).
+"""gt-flow --redact: hash width and per-render salt, asserted directly (gt 0.18.1).
 
 Request 2026-09-23-flow-redact-hash-collides. A redacted name was sha256(salt + value)
 truncated to 4 hex characters, so two renders of 8 names shared a truncated hash about

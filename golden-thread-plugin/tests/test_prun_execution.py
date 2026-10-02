@@ -1,4 +1,4 @@
-"""tests/prun.py execution (0.18.0): load-aware workers, --affected, --hosts, and the scoped
+"""tests/prun.py execution (0.18.1): load-aware workers, --affected, --hosts, and the scoped
 receipt tests/run.sh records from --affected.
 
 Pinned (requests 2026-10-01-fast-build-loop-and-execution-optimizer and
