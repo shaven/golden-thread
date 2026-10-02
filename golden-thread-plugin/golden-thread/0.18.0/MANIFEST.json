@@ -25,8 +25,8 @@
    "sha256": "4c6c10cbfcb4df7f77b3c7baed8b25456f14f46da0067b19b7489fafcdeca367"
   },
   "hooks/guard_vault_writes.py": {
-   "bytes": 12565,
-   "sha256": "ee25cb1fcf865b6050254fa682f6d5830e75fddb960129292323ca510abf3ed4"
+   "bytes": 12642,
+   "sha256": "b81479698d5335e875fa9c2854c43050f6c2c77809143b2a01bf047a3cf94daf"
   },
   "hooks/guard_vault_writes.sh": {
    "bytes": 1490,
@@ -115,6 +115,10 @@
   "scripts/gt_check_report.py": {
    "bytes": 7544,
    "sha256": "c1a48c7f5c9eee67641c29e9aa6936c792305e740e7d4732d9728c9f5c8b678d"
+  },
+  "scripts/gt_close.py": {
+   "bytes": 12195,
+   "sha256": "e55b2a9a50fff813df3ae2001128332c8afeb8834c7056f81f9b696700fe864a"
   },
   "scripts/gt_code_review.py": {
    "bytes": 15194,
@@ -217,8 +221,8 @@
    "sha256": "b0db1c50b3f396e79c678e0f91d42b61ea848a90d2bd93c49b3a8cfbe780fd28"
   },
   "scripts/gt_surface.py": {
-   "bytes": 22450,
-   "sha256": "c7ae6b3f90ed45d46d42038c21026234ab85ffaf4494d0a6dd027153fcdb7e71"
+   "bytes": 22451,
+   "sha256": "c176b459f5bc70c94839d9d26019ea58e1d77b7d3aa5371fb65a6909f7a039c1"
   },
   "scripts/gt_sweep.py": {
    "bytes": 8761,
@@ -253,8 +257,8 @@
    "sha256": "d56bbd01ce9ba0e74b36ea2bf15fcfccd5d2d4a1ef8fdbdd33d02ae8c36fb7a0"
   },
   "scripts/vault_init.py": {
-   "bytes": 88179,
-   "sha256": "5184281cb09e411d70e7eade962366f5580097b69058d64e59b30242d3666594"
+   "bytes": 95136,
+   "sha256": "9549eadaa4d890370a4e5719214dc4ae6c60d0610a2859fdc088d40a2a8d7a6a"
   },
   "scripts/vault_refresh.py": {
    "bytes": 15540,
@@ -389,8 +393,8 @@
    "sha256": "7386fa88b225580c3d8172310cfa2f21622e2cc13b3863d5f4517758da45e729"
   },
   "templates/shipped-hashes.json": {
-   "bytes": 8218,
-   "sha256": "4ae92d74aef2a1c74cd25a8b3b42fa2bb6ef2611c708e3ee03233814a08caaf6"
+   "bytes": 8431,
+   "sha256": "78178c912f054b4a62c587e4a2ee88752b91cc727c21a91c923dab991de35681"
   },
   "templates/source.md": {
    "bytes": 2462,
@@ -425,8 +429,8 @@
    "sha256": "3d482c7783db2eb5fd682821f1054e39959c6e82605b3dad66c8e60defc778f9"
   },
   "templates/tools/gt_task.py": {
-   "bytes": 29741,
-   "sha256": "70f7fd0e27ce2faeeef3bad0906feb789a84185f05ff8e10779bc1aa765a8d8f"
+   "bytes": 32940,
+   "sha256": "d9fce4af60f970b8b43244ad15d3e7af2e278ad09630f71b379a6fe49395af6c"
   },
   "templates/tools/gt_tasks.py": {
    "bytes": 31424,
@@ -441,7 +445,7 @@
    "sha256": "05a5e61333b0ba5d6f97866735268f7f99ff354d9502b2b05e0e512a86f82a6b"
   }
  },
- "generated": "2026-10-01T20:07:35",
+ "generated": "2026-10-01T20:42:03",
  "hooks": [
   {
    "args": [

@@ -1,28 +1,21 @@
 ---
 name: gt-handoff-list
-description: "Show the handoffs still waiting — open, or whose deferral has ended — across every project or one, without opening any of them. Read-only. Use when the user says: list the handoffs, what handoffs are waiting, show handoffs, any handoffs pending, which handoffs are deferred."
+description: "Deprecated alias, removed after 0.18.x — use /gt:gt-list handoffs. Kept working for one release: it does exactly what /gt:gt-list handoffs does (show the waiting handoffs (read-only))."
 ---
 
-# Golden Thread — List Handoffs
+# gt-handoff-list (deprecated alias)
 
-Read-only. Shows what is waiting and changes nothing; dealing with one is
-`/gt:gt-handoff-handle`.
+**First, print this one line to the user, verbatim:**
 
-## Run it
+> Note: gt-handoff-list is deprecated. Use /gt:gt-list handoffs instead.
 
-Vault: `$GT_VAULT` if set, else `vault_path` from `~/.claude/vault-config.json`.
+Then do exactly what `/gt:gt-list handoffs` does: read `<base_dir>/../gt-list/SKILL.md` — `<base_dir>` is the
+path in this skill's `Base directory for this skill:` header. Take the vault location and the
+tool paths from the top of that file, then follow its
+**`## Handoffs`** section, with whatever the user passed to this command as that section's
+argument. That section is this command's procedure, moved there unchanged in 0.18.0
+(verb-first vocabulary: one verb per action, the artifact as its argument), so the result is the
+same. Skip that file's sections for the other artifacts.
 
-```bash
-python3 ~/.claude/golden-thread/hooks/gt_handoff_status.py list --vault "<vault>" [--project <slug>] [--all]
-```
-
-- No argument: every handoff waiting now (open, or deferral ended), oldest first.
-- A project named by the user → `--project <slug>` (sub-project as `parent/child`).
-- "All", "deferred", "including handled" → `--all`, which prints each handoff with its state
-  (`open`, `deferred` with its date, `handled`, `history`).
-
-Show the output as it is — one line each: path, project, age, open items. **Do not read any
-handoff's body.** Listing must cost no project context; that is the reason this is separate from
-handling (owner, 2026-09-28).
-
-End with one line: how many are waiting, and that `/gt:gt-handoff-handle` works through them.
+This alias has no trigger phrases of its own — they moved to `gt-list` — and it is removed in the
+release after 0.18.x.
