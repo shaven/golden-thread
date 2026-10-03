@@ -39,6 +39,13 @@ where should the vault live? Re-run with `--vault` once you know.
 `install.sh` resolves its own paths, so it can be run from anywhere. Run
 `bash install.sh --help` for every option.
 
+**On Windows** (0.19.2) run the same installer from Git Bash, or run `install.cmd` from
+cmd.exe, PowerShell or Explorer — it finds Git Bash and hands `install.sh` every argument
+unchanged (`install.cmd --vault C:\Users\you\Documents\GoldenThread`). Both need
+[Git for Windows](https://git-scm.com/download/win), which Claude Code on Windows needs anyway,
+and Python 3.8+ from [python.org](https://www.python.org/downloads/) with *Add python.exe to
+PATH* ticked. See *Windows* below.
+
 ---
 
 ## Option B — Install from zip
@@ -306,9 +313,19 @@ changed or not where the list puts it. **By default it then installs anyway, mar
 `GT_REQUIRE_CHECKSUM=1`) turns a mismatch into a refusal (exit 8, nothing copied); use it on the
 machine receiving a publish. A tree with no `SHA256SUMS` installs as it stands.
 
-**Windows** is not a tested platform. `install.sh` and the hooks are bash scripts, so use WSL or
-Git Bash. The repository's `.gitattributes` forces LF line endings on checkout (0.17.3), so a
-Windows clone neither breaks the shell scripts with CRLF nor fails the checksum check.
+**Windows** (native, 0.19.2; tested on Windows 11 with Git for Windows 2.56 and Python 3.12).
+`install.sh` and the hooks are bash scripts and run under Git Bash; `install.cmd` is only a
+launcher for it. The installer resolves a real Python once — `python3`, then `python`, then
+`py -3` — and **the Microsoft Store Python does not count**: neither the "Python was not found"
+stub Windows puts on PATH as `python3`, nor a real Store install (its virtualised AppData makes
+writes under your profile unreliable). With no other Python 3.8+ it stops before installing
+anything and says what to install. The interpreter it found is written into the hook commands
+and to `~/.claude/golden-thread/python` for the hook wrappers. Scheduled jobs
+(`gt_schedule.py`) are launchd jobs and are refused on Windows; run them by hand or from Task
+Scheduler. The repository's `.gitattributes` forces LF on checkout (0.17.3) — except `*.cmd`,
+which stays CRLF — so a Windows clone neither breaks the shell scripts nor fails the checksum
+check. Not yet exercised: the hooks as Claude Code for Windows itself runs them (they have been
+run directly, with the same payloads). WSL is Linux, and installs as Linux does.
 
 **Rollback:** the repo (and a gt-src copy) keeps the previous release, so
 `bash install.sh <previous version> --vault <vault>` reinstalls it; your recorded module

@@ -11,6 +11,48 @@ release's own summary line, kept short rather than reconstructed after the fact.
 
 ---
 
+## gt 0.19.2 — unreleased
+
+**gt installs on native Windows** (owner, 2026-10-03). Proven on a Windows 11 VM (Git for
+Windows 2.56.0, Python 3.12.10 from python.org): `install.sh` from Git Bash and the new
+`install.cmd` from cmd.exe both install with and without a vault, and the post-install gate
+passes there. Before this, the install stopped at the first line that ran Python. Version
+directories copied from 0.19.1 (gt, demo, farm, flow, report-card, watch; lockstep modules
+`requires_gt >=0.19.2,<0.20.0`); gt-lotr 0.2.0, gt-usage 0.1.5, gt-visualize 0.4.3 and gt-wiki
+0.2.6 already admit 0.19.2 and are unchanged. Nothing changes on macOS or Linux.
+
+- **A real Python, found once; the Microsoft Store's does not count.** On Windows `python3` is
+  the Store's "Python was not found" stub (exit 9009). `install.sh` now resolves `python3`, then
+  `python`, then `py -3`, rejects anything under `...\WindowsApps\` — the stub and a real Store
+  Python alike — and anything below 3.8, and with nothing left refuses **before anything is
+  installed**, naming python.org and *Add python.exe to PATH*. Every `python3` in the installer
+  then means that interpreter, in UTF-8 mode, with `\r` stripped from what it prints.
+- **`install.cmd`** beside `install.sh`: a launcher for cmd.exe, PowerShell and Explorer. It
+  finds Git Bash (skipping WSL's `System32\bash.exe`), refuses with the Git for Windows link
+  when there is none, and runs `install.sh` with every argument, passing its exit code back.
+  CRLF on purpose; `.gitattributes` pins `*.cmd` to CRLF.
+- **Hooks run on Windows.** Every hook wrapper sources the new `hooks/gt_python.sh` (a no-op off
+  Windows): the interpreter install.sh recorded beside the hooks dir, else the first non-Store
+  Python on PATH. `.py` hooks in `settings.json` name the interpreter by absolute path with
+  `-X utf8`, and every hook path is written with `/` — Git Bash reads a `\` as an escape.
+  Before, every hook failed open silently: no Core rules injected, no guard run.
+- **MANIFEST keys are `/` everywhere.** Windows `relpath` gives `hooks\x`, so every shipped file
+  read as both missing and extra and the installer refused; `gt_registry` refused every shipped
+  pack the same way.
+- **CRLF:** files a fresh vault is built from are written with `\n` (`vault_init`, and the
+  stamp and merge bases `gt_upgrade` writes). On Windows they came out CRLF, so a new vault
+  reported every tool and Core rule as "modified locally" and held both doc merges.
+- **UTF-8 output:** piped Windows Python is cp1252, and the first `⚠` or `→` was a
+  UnicodeEncodeError (vault refresh, `gt_daily`, the upgrade check).
+- `gt_doctor` sets `USERPROFILE` with `HOME` for its throwaway runs: Windows Python reads
+  `USERPROFILE`, so the smoke tests were reading the real user's `~/.claude`.
+- `gt_schedule.py install|check|remove` refuse in words on Windows (launchd only; it died on
+  `os.getuid`). `record-interpreter`, `reconcile` and `list` work.
+- **Not yet covered:** hooks as Claude Code for Windows runs them (run directly with the same
+  payloads instead); skills that tell the model to run `python3 …` (the model sees the stub's
+  message and retries with `python`); other text-mode writers outside the install path still
+  write CRLF on Windows; Task Scheduler jobs. Tests: `tests/test_windows_install.py`.
+
 ## gt 0.19.1 — 2026-10-02
 
 > **There is no published 0.19.0.** `install.sh` changed (phases 5 and 6c) after the 0.19.0

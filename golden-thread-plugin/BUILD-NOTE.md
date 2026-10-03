@@ -1,4 +1,4 @@
-# Build note — gt 0.19.1
+# Build note — gt 0.19.2
 
 **Read this first if you are the person taking this tree into the other repository.**
 
@@ -8,9 +8,9 @@
 > content reaches you from the owner. `SOURCE.json`, at the root of gt-src, names the exact commit
 > the tree was cut from.
 
-> **Not released yet.** 0.19.1 is being built on `feat/0.19.0` from the accepted feature-request
-> queue. Nothing is pushed, tagged or synced to gt-src until the owner says release; then it goes
-> straight to main.
+> **Not released yet.** 0.19.2 (native Windows install) is being built on `feat/windows-install`
+> from v0.19.1. Nothing is pushed, tagged or synced to gt-src until the owner says release; then it
+> goes straight to main. The table below is 0.19.1's, with the 0.19.2 changes on top.
 
 ---
 
@@ -18,9 +18,9 @@
 
 | Plugin | Version | Note |
 |---|---|---|
-| gt (core) | **0.19.1** | model and effort profiles, recall benchmark, prompt hints (off), supersession and expiry at read time, queue-guard tokens, no bytecode in gt-src, post-install release resolution and receipt, one launchd interpreter, commit-gate timeout, Stop-validator install fix (no published 0.19.0) |
+| gt (core) | **0.19.2** | 0.19.2: native Windows install (`install.cmd`, interpreter resolution, hooks under Git Bash, `/` manifest keys, LF vault writes, UTF-8 output). 0.19.1: model and effort profiles, recall benchmark, prompt hints (off), supersession and expiry at read time, queue-guard tokens, no bytecode in gt-src, post-install release resolution and receipt, one launchd interpreter, commit-gate timeout, Stop-validator install fix (no published 0.19.0) |
 | gt-wiki | **0.2.6** | every skill declares a model_intent; `requires_gt` admits 0.19 |
-| gt-demo, gt-farm, gt-flow, gt-report-card, gt-watch | **0.19.1** | they move with gt |
+| gt-demo, gt-farm, gt-flow, gt-report-card, gt-watch | **0.19.2** | they move with gt |
 | gt-visualize | **0.4.3** | model_intent on every skill; `requires_gt` admits 0.19 |
 | gt-usage | **0.1.5** | model_intent; `requires_gt` admits 0.19 |
 | gt-lotr | **0.2.0** | `add-mcp`: SSO/OAuth MCP endpoints by token reference, refresh on 401; still off by default |

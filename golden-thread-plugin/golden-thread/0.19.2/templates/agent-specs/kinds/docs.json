@@ -1,0 +1,20 @@
+{
+  "kind": "docs",
+  "spec_version": 1,
+  "summary": "A document corpus: runbooks, specs, notes, PDFs.",
+  "prompt_delta": ["The material is a DOCUMENT CORPUS (runbooks, specs, notes, PDFs)."],
+  "stages": {
+    "extract": {
+      "prompt_delta": [
+        "Extraction first: pull out each concrete fact, rule, figure and procedure, and cite the document (and section or page) it came from.",
+        "Compare the documents in this unit against each other. Where two disagree -- a different value, a different procedure, an older version of the same rule -- record it in `contradictions` naming both sources. Do not resolve it by picking one; the owner decides.",
+        "Note which documents look superseded or stale, and why."
+      ],
+      "output_schema": {
+        "documents": {"type": "list", "description": "Objects {path, title, kind, stale} for every document read."},
+        "contradictions": {"type": "list", "description": "Objects {a, b, detail}: two citations in this unit that disagree, and how."}
+      },
+      "summary_fields": ["summary", "findings", "contradictions", "gaps"]
+    }
+  }
+}

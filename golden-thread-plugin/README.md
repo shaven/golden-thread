@@ -7,6 +7,13 @@ A Claude Code plugin that turns an Obsidian vault into the single source of trut
 
 
 > [!IMPORTANT]
+> **0.19.2: gt installs on native Windows.** Run `install.sh` from Git Bash, or the new
+> `install.cmd` from cmd.exe, PowerShell or Explorer. The installer finds a real Python 3.8+
+> (the Microsoft Store Python does not count, and it says what to install when that is all
+> there is), and the hooks run under Git Bash as Claude Code for Windows runs them. Nothing
+> changes on macOS or Linux. See *Windows* in [`INSTALL.md`](INSTALL.md).
+
+> [!IMPORTANT]
 > **0.19.1: right-sized models, SSO for LOTR, and fixes from installing 0.18.1.** (There is no
 > published 0.19.0.) **Model and effort per skill:** every skill declares fast/balanced/deep, and the
 > installer writes a profile into the installed copies — `average` (haiku with no effort setting,

@@ -6,6 +6,73 @@ export PYTHONDONTWRITEBYTECODE=1
 
 # ── Preflight ──────────────────────────────────────────────────────────────
 
+# WINDOWS (Git Bash, 0.19.2): find a REAL interpreter once, before anything else runs (owner,
+# 2026-10-03). gt does not ship or download a Python; it requires one that is installed.
+# Every `python3` below then means that interpreter, through the function this defines.
+#
+# Three things break the plain `python3` the rest of this file calls, all seen on a
+# Windows 11 VM:
+#   * python.org's installer provides python.exe and py.exe, never python3.exe, so
+#     `python3` resolves to %LOCALAPPDATA%\Microsoft\WindowsApps\python3.exe -- the Store
+#     stub, which prints "Python was not found" and exits 9009 (49 under bash).
+#   * Anything under ...\WindowsApps\ does not count, a REAL Microsoft Store Python
+#     included: its file-system virtualisation of AppData makes writes under the user
+#     profile unreliable, and every file this installer writes is under the user profile.
+#   * Native Windows Python writes CRLF. `$(...)` strips only the LAST newline, so a
+#     multi-line answer kept a \r on every line but the last (`gt_report_card.py$'\r'`,
+#     and `cp` failed). The function strips \r from stdout, so a value bash reads is the
+#     value Python printed.
+# macOS and Linux never enter this block: their `python3` is used exactly as before.
+case "$(uname -s 2>/dev/null)" in
+  MINGW*|MSYS*|CYGWIN*)
+    GT_PYTHON="" _gt_found_store="" _gt_found_old=""
+    _gt_py_probe='import sys; print(sys.version_info[0] * 100 + sys.version_info[1]); print(sys.executable)'
+    _gt_try_python() {  # $1 = a candidate on PATH, rest = its fixed arguments ("-3" for py)
+      local cand="$1" out ver exe; shift
+      # Lower-cased with tr, not ${x,,}: install.sh must still PARSE on macOS's bash 3.2.
+      case "$(printf '%s' "$cand" | tr '[:upper:]' '[:lower:]')" in */microsoft/windowsapps/*) _gt_found_store="$cand"; return 1 ;; esac
+      out=$("$cand" "$@" -c "$_gt_py_probe" 2>/dev/null | tr -d '\r') || return 1
+      ver=$(printf '%s\n' "$out" | sed -n 1p); exe=$(printf '%s\n' "$out" | sed -n 2p)
+      [[ "$ver" =~ ^[0-9]+$ ]] && [ -n "$exe" ] || return 1
+      # The py launcher (or a clean-looking PATH entry) can still land on a Store Python.
+      case "$(printf '%s' "$exe" | tr '[:upper:]' '[:lower:]')" in *\\windowsapps\\*|*/windowsapps/*) _gt_found_store="$exe"; return 1 ;; esac
+      if [ "$ver" -lt 308 ]; then _gt_found_old="$exe (3.$((ver % 100)))"; return 1; fi
+      command -v cygpath >/dev/null 2>&1 && exe=$(cygpath -u "$exe")
+      GT_PYTHON="$exe"
+    }
+    _gt_resolve_python() {
+      local c
+      for c in $(type -aP python3 2>/dev/null) $(type -aP python 2>/dev/null); do
+        _gt_try_python "$c" && return 0
+      done
+      c=$(type -P py 2>/dev/null) && [ -n "$c" ] && _gt_try_python "$c" -3 && return 0
+      return 1
+    }
+    _gt_ifs="$IFS"; IFS=$'\n'           # "C:/Program Files/..." is one candidate, not two
+    _gt_resolve_python || true
+    IFS="$_gt_ifs"
+    if [ -z "$GT_PYTHON" ]; then
+      echo "✗ No usable Python found. gt needs Python 3.8 or newer."
+      [ -n "$_gt_found_store" ] && echo "  Found $_gt_found_store -- the Microsoft Store Python (or its \"Python was not found\" stub). The Microsoft Store Python does not count."
+      [ -n "$_gt_found_old" ] && echo "  Found $_gt_found_old -- too old."
+      echo "  Install Python 3.8 or newer from https://www.python.org/downloads/ (tick 'Add python.exe to PATH'),"
+      echo "  reopen the terminal, and run the installer again."
+      exit 1
+    fi
+    export GT_PYTHON
+    # UTF-8 mode: piped, Windows Python encodes stdout as cp1252 and the first "⚠" or "→"
+    # any script printed was a UnicodeEncodeError (vault_refresh, gt_daily, gt_upgrade).
+    # It also makes open() read and write UTF-8 by default, as it does on macOS and Linux.
+    export PYTHONUTF8=1
+    # Unbuffered: stdout now goes through a pipe, and a block-buffered Python would hold a
+    # progress line back until it exited.
+    export PYTHONUNBUFFERED=1
+    python3() { "$GT_PYTHON" "$@" | tr -d '\r'; return "${PIPESTATUS[0]}"; }
+    export -f python3
+    echo "Python: $GT_PYTHON"
+    ;;
+esac
+
 if ! command -v python3 &>/dev/null; then
   echo "✗ Python 3 is required. Install it from https://python.org and re-run."
   exit 1
@@ -613,7 +680,7 @@ def cmd_remove(a):
         shipped |= set(os.listdir(os.path.join(src, "hooks")))
     try:
         shipped |= set(subprocess.check_output(
-            ["python3", os.path.join(src, "scripts", "gt_components.py"), "hookdir-scripts",
+            [sys.executable, os.path.join(src, "scripts", "gt_components.py"), "hookdir-scripts",
              "--home", home],
             text=True, stderr=subprocess.DEVNULL).split())
     except (OSError, subprocess.SubprocessError):
@@ -1485,6 +1552,11 @@ if [ -d "$SRC/hooks" ]; then
   done < <(modpy onfiles "$MODJSON")
   set_modes ${GT_HOOK_FILES[@]+"${GT_HOOK_FILES[@]}"}
   echo "Installed Core-rule hooks → $GT_HOOKS"
+  # Windows: the interpreter the preflight resolved, for the hook wrappers (hooks/gt_python.sh
+  # reads it). Their `python3` is otherwise the Store stub and every hook fails open, silently.
+  if [ -n "${GT_PYTHON:-}" ]; then
+    printf '%s\n' "$GT_PYTHON" > "$GT_HOOKS/../python"
+  fi
   # One interpreter for every scheduled job (0.19.1): record the python running this
   # install, then rewrite any installed job on another one. A macOS privacy grant is per
   # interpreter, so jobs on two pythons meant a grant that covered only some of them.
@@ -1519,7 +1591,7 @@ shipped |= {n for n in os.listdir(hdir) if os.path.isfile(os.path.join(hdir, n))
 certain = True
 try:
     out = subprocess.check_output(
-        ["python3", os.path.join(src, "scripts", "gt_components.py"), "hookdir-scripts",
+        [sys.executable, os.path.join(src, "scripts", "gt_components.py"), "hookdir-scripts",
          "--home", os.path.expanduser("~")], text=True)
     shipped |= {n for n in out.split()
                 if os.path.isfile(os.path.join(src, "scripts", n))}
@@ -1822,7 +1894,7 @@ hooks = d.setdefault('hooks', {})
 # this script may run before one exists. Step 7 wires them once the vault path is
 # known, so an UPGRADE registers a newly shipped hook instead of leaving it inert.
 regs = json.loads(subprocess.check_output(
-    ['python3', os.path.join(src, 'scripts', 'gt_components.py'),
+    [sys.executable, os.path.join(src, 'scripts', 'gt_components.py'),
      'hook-registrations', src, script_dir, '--home', os.path.expanduser('~')], text=True))
 # Module hooks arrive in the same list, tagged "module". One whose module is off in THIS
 # run (by choice, or skipped for requires_gt) is not wired, and its entries are removed

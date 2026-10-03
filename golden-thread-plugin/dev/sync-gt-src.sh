@@ -194,7 +194,7 @@ else
 fi
 [ "$(shasum -a 256 "$DEST/SHA256SUMS" | cut -d' ' -f1)" = "$TREE_SHA" ] || vbad "SHA256SUMS changed in transit"
 P="$DEST/$PREFIX"                     # the plugin root inside the published repo layout
-for f in install.sh selftest.sh build-docs.py README.md MANUAL.md INSTALL.md tests/run.sh; do
+for f in install.sh install.cmd selftest.sh build-docs.py README.md MANUAL.md INSTALL.md tests/run.sh; do
   [ -f "$P$f" ] || vbad "missing $PREFIX$f"
 done
 # gt-src's own tools arrive, executable and listed in SHA256SUMS; the excluded files do not.

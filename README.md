@@ -15,10 +15,17 @@ it at startup, look things up while working, and write back what they learn.
 Its distinguishing idea is the second problem, the one most memory systems never
 address: **writing a rule down does not mean it gets followed.**
 
-Plugin **v0.19.1**. Ten Core rules currently enforced, five of them *validated* — a
+Plugin **v0.19.2**. Ten Core rules currently enforced, five of them *validated* — a
 hook inspects the finished reply (`Stop`) or the tool call about to run (`PreToolUse`)
 and blocks it if the rule was broken.
 
+
+> [!IMPORTANT]
+> **0.19.2: gt installs on native Windows.** Run `install.sh` from Git Bash, or the new
+> `install.cmd` from cmd.exe, PowerShell or Explorer. The installer finds a real Python 3.8+
+> (the Microsoft Store Python does not count, and it says what to install when that is all
+> there is), and the hooks run under Git Bash as Claude Code for Windows runs them. Nothing
+> changes on macOS or Linux. See *Windows* in [`INSTALL.md`](golden-thread-plugin/INSTALL.md).
 
 > [!IMPORTANT]
 > **0.19.1: right-sized models, SSO for LOTR, and fixes from installing 0.18.1.** (There is no

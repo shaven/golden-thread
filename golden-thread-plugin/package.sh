@@ -61,7 +61,7 @@ find "$STAGE" \( -name '__pycache__' -o -name '*.pyc' -o -name '.DS_Store' \) \
      -exec rm -rf {} + 2>/dev/null || true
 
 # The docs a fresh machine needs in hand before it has a vault to read them from.
-for f in install.sh selftest.sh README.md INSTALL.md ONBOARDING.md MANUAL.md; do
+for f in install.sh install.cmd selftest.sh README.md INSTALL.md ONBOARDING.md MANUAL.md; do
   [ -f "$f" ] && cp "$f" "$STAGE/$DIST/"
 done
 chmod +x "$STAGE/$DIST/install.sh" "$STAGE/$DIST/selftest.sh" 2>/dev/null || true

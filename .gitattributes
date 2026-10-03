@@ -5,3 +5,8 @@
 # SHA256SUMS a published tree carries, so install.sh would flag every file of an honest
 # download. `text=auto` leaves binaries (PDFs, images, zips) untouched.
 * text=auto eol=lf
+
+# Except Windows batch files (0.19.2): cmd.exe misparses labels and blocks in an LF .cmd, so
+# install.cmd is CRLF in the repository's working tree on every platform -- and so in gt-src
+# and in SHA256SUMS, which are made from that tree.
+*.cmd text eol=crlf
