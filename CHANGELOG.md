@@ -11,7 +11,7 @@ release's own summary line, kept short rather than reconstructed after the fact.
 
 ---
 
-## gt 0.19.1 — unreleased
+## gt 0.19.1 — 2026-10-02
 
 > **There is no published 0.19.0.** `install.sh` changed (phases 5 and 6c) after the 0.19.0
 > directories were cut, and `check_installer_version` exists so one version name never covers
