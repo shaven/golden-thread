@@ -14,7 +14,8 @@ import stat
 import unittest
 from pathlib import Path
 
-from _harness import Sandbox, SCRIPTS, REPO, latest_version_dir
+from _harness import (Sandbox, SCRIPTS, REPO, PYTHON, latest_version_dir, IS_WINDOWS,
+                      skip_on_windows, WIN_CRON, WIN_FAKE_EXE)
 
 WATCH_MODULE = latest_version_dir(REPO / "golden-thread-watch")
 WATCH = WATCH_MODULE / "scripts" / "gt_watch.py"
@@ -64,7 +65,7 @@ class WatchTest(Sandbox):
                          "GT_CORE_SCRIPTS": str(SCRIPTS),
                          "GT_WATCH": "report", "GH_FIXTURES": str(self.fixtures),
                          "CRONTAB_FILE": str(self.tmp / "crontab.txt"),
-                         "PATH": "%s:%s" % (self.bin, os.environ.get("PATH", ""))})
+                         "PATH": os.pathsep.join([str(self.bin), os.environ.get("PATH", "")])})
         # Hide any real gh so the default is "gh unavailable"; tests that want it add the stub.
         self._stub("gh", "#!/usr/bin/env bash\nexit 1\n")
         self._stub("crontab", CRONTAB_STUB)
@@ -233,6 +234,7 @@ class TestFetchAndRules(WatchTest):
         self.assertEqual(e["severity"], "p0")
         self.assertIn("p0_when", " ".join(e["reasons"]))
 
+    @skip_on_windows(WIN_FAKE_EXE)
     def test_rule1_advisory_and_release_via_gh_stub(self):
         self._stub("gh", GH_STUB)
         (self.fixtures / "releases.json").write_text("[]")
@@ -346,10 +348,10 @@ class TestHookAndAck(WatchTest):
         env = dict(self.env)
         env.pop("GT_WATCH")
         self._mixed()
-        p = self.run_cmd(["python3", WATCH, "--hook"], env={"GT_WATCH": ""})
+        p = self.run_cmd([PYTHON, WATCH, "--hook"], env={"GT_WATCH": ""})
         self.assertEqual(p.stdout, "", "watch defaults to off")
         (self.home / ".claude" / "vault-config.json").write_text(json.dumps({"watch": "report"}))
-        self.assertIn("P0", self.run_cmd(["python3", WATCH, "--hook"], env={"GT_WATCH": ""}).stdout)
+        self.assertIn("P0", self.run_cmd([PYTHON, WATCH, "--hook"], env={"GT_WATCH": ""}).stdout)
 
     def test_hook_reads_only(self):
         self._mixed()
@@ -395,6 +397,21 @@ class TestHookAndAck(WatchTest):
 
 class TestCron(WatchTest):
 
+    @unittest.skipUnless(IS_WINDOWS, "the Windows wording; POSIX installs the cron entry")
+    def test_windows_says_cron_is_posix_only(self):
+        """0.19.3: Windows has no cron. install-cron says so in words, and with watches the
+        report says nothing fetches on its own -- not a silent "nothing new" for ever."""
+        p = self.watch("install-cron", "--every", "30m")
+        self.assertEqual(p.returncode, 1, p.stdout)
+        self.assertIn("POSIX-only", p.stdout)
+        self.assertIn("fetch", p.stdout)
+        self.assertFalse((self.tmp / "crontab.txt").exists())
+        self.assertOk(self.watch("uninstall-cron"))
+        self.assertNotIn("no cron", self.hook_text())          # no watches yet: nothing to say
+        self.add()
+        self.assertIn("Windows has no cron", self.hook_text())
+
+    @skip_on_windows(WIN_CRON)
     def test_install_is_idempotent_and_uninstall_removes(self):
         cf = self.tmp / "crontab.txt"
         cf.write_text("0 3 * * * /usr/bin/true # someone else's\n")
@@ -410,12 +427,14 @@ class TestCron(WatchTest):
         self.assertNotIn("gt-watch", cf.read_text())
         self.assertIn("someone else's", cf.read_text())
 
+    @skip_on_windows(WIN_CRON)
     def test_every_30m(self):
         self.assertOk(self.watch("install-cron", "--every", "30m"))
         self.assertIn("*/30 * * * *", (self.tmp / "crontab.txt").read_text())
 
     NOTE = "no gt-watch cron entry"
 
+    @skip_on_windows(WIN_CRON)
     def test_hook_names_a_missing_cron_entry_and_only_then(self):
         # with the entry in place: no note
         self.add()
@@ -428,6 +447,7 @@ class TestCron(WatchTest):
         self.assertIn("install-cron", text)
         self.assertEqual(len([l for l in text.splitlines() if self.NOTE in l]), 1)
 
+    @skip_on_windows(WIN_CRON)
     def test_no_note_without_watches_or_without_a_crontab_binary(self):
         self.assertNotIn(self.NOTE, self.hook_text())          # no watches yet
         self.add()

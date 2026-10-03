@@ -23,7 +23,7 @@ import subprocess
 import sys
 import unittest
 
-from _harness import Sandbox, HOOKS, SCRIPTS, PYTHON
+from _harness import Sandbox, HOOKS, SCRIPTS, PYTHON, IS_WINDOWS
 
 SESSIONS = "Projects/golden-thread/sessions"
 TS_FMT = "%Y-%m-%d %H:%M:%S %Z"
@@ -39,7 +39,12 @@ OTHER_MACHINE = "99999999-8888-4777-8666-555555555555"
 
 def local_stamp(minutes_ago=0):
     dt = datetime.datetime.now().astimezone() - datetime.timedelta(minutes=minutes_ago)
-    return dt.strftime(TS_FMT).strip()
+    # Windows spells the local %Z as a phrase ("Central Daylight Time"), which no gt ever
+    # wrote: the zone-name heartbeat is a POSIX-era legacy form, and gt_session.py has
+    # written a numeric %z since before native Windows existed. So on Windows a local
+    # heartbeat is stamped the way gt writes one; the legacy zone-name cases below use
+    # explicit zones whose %Z is an abbreviation on every platform.
+    return dt.strftime("%Y-%m-%d %H:%M:%S %z" if IS_WINDOWS else TS_FMT).strip()
 
 
 class GuardTestBase(Sandbox):
@@ -115,6 +120,9 @@ class GuardTest(GuardTestBase):
     def dead_pid(self):
         p = subprocess.Popen([PYTHON, "-c", "pass"])
         p.wait()
+        # Hold the Popen: on Windows its handle is what stops the dead pid being reused by
+        # the next process started (harmless on POSIX).
+        self.addCleanup(lambda: p)
         return p.pid
 
     # -- no registration (request 2026-09-29) --------------------------------------------
@@ -425,7 +433,10 @@ class QueueFirstTest(GuardTestBase):
         self.assertAllow(self.guard(self.tmp / "elsewhere" / "notes.md"))
 
     def test_shell_writes_into_vault_content_are_denied(self):
-        t = self.vault / "Projects" / "alpha" / "research.md"
+        # Paths go into a SHELL command in the shell's own spelling: "/" on every platform
+        # (identical on POSIX). An unquoted C:\Users\... is not a path to bash at all --
+        # bash strips the backslashes, and so does the guard's shlex, correctly.
+        t = (self.vault / "Projects" / "alpha" / "research.md").as_posix()
         for cmd in (f'echo x >> "{t}"', f"echo x > '{t}'", f"printf x>>{t}",
                     f'cat <<EOF > "{t}"\nx\nEOF', f'echo x | tee -a "{t}"',
                     f"sed -i '' 's/a/b/' '{t}'", f"cp /tmp/a.md '{t}'", f"mv /tmp/a.md {t}",
@@ -437,7 +448,7 @@ class QueueFirstTest(GuardTestBase):
         """0.19.1 (request queue-guard-bash-false-positives): the guard read redirects off the raw
         string, so a quoted `>` was a redirect, `$VAR` was taken literally, and a `cd` earlier in
         the command was ignored -- each one blocked a scratch-file write as vault content."""
-        s = self.tmp / "scratch"
+        s = (self.tmp / "scratch").as_posix()          # the shell's spelling, see above
         for cmd in (f'S={s}; cat > $S/src.md <<\'EOF\'\nx\nEOF',
                     'echo x > "$D/research.md"', "echo x > `pwd`/INBOX.md",
                     'printf "a > Projects/alpha/research.md"',
@@ -450,10 +461,17 @@ class QueueFirstTest(GuardTestBase):
                 self.assertAllow(self.bash(cmd, cwd=self.vault))
 
     def test_a_cd_into_the_vault_is_followed(self):
-        for cmd in (f"cd {self.vault}/Projects; cat > alpha/research.md",
-                    f"cd {self.vault}/Projects && echo x >> alpha/research.md",
-                    f"cd {self.vault} && cp /tmp/a.md INBOX.md",
-                    f'cd "{self.vault}/Projects/alpha"; tee -a research.md < /tmp/x'):
+        v = self.vault.as_posix()                       # the shell's spelling, see above
+        cmds = [f"cd {v}/Projects; cat > alpha/research.md",
+                f"cd {v}/Projects && echo x >> alpha/research.md",
+                f"cd {v} && cp /tmp/a.md INBOX.md",
+                f'cd "{v}/Projects/alpha"; tee -a research.md < /tmp/x']
+        if IS_WINDOWS:
+            # Git Bash's own form of a drive path, /c/Users/..., is the same directory (0.19.3).
+            msys = "/" + v[0].lower() + v[2:]
+            cmds += [f"cd {msys}/Projects && echo x >> alpha/research.md",
+                     f'echo x >> "{msys}/INBOX.md"']
+        for cmd in cmds:
             with self.subTest(cmd=cmd):
                 self.assertQueueDeny(self.bash(cmd, cwd=self.tmp))
 

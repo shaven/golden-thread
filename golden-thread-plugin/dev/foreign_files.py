@@ -26,13 +26,13 @@ SKIP = {".DS_Store"}
 def foreign(dest: pathlib.Path, stage: pathlib.Path):
     if not dest.is_dir():
         return []
-    staged = {str(f.relative_to(stage)) for f in stage.rglob("*") if f.is_file()}
+    staged = {f.relative_to(stage).as_posix() for f in stage.rglob("*") if f.is_file()}
     staged.add("SOURCE.json")           # written into the destination, not the stage
     out = []
     for f in sorted(dest.rglob("*")):
         if not f.is_file() or f.name in SKIP:
             continue
-        rel = str(f.relative_to(dest))
+        rel = f.relative_to(dest).as_posix()
         if rel not in staged:
             out.append(rel)
     return out

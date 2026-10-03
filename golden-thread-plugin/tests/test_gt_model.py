@@ -13,6 +13,7 @@ Contracts pinned here (request 2026-09-27-skills-declare-a-model-intent):
   * the mapping pack records the date each name was last verified.
 """
 import json
+import os
 import re
 import unittest
 from pathlib import Path
@@ -112,8 +113,9 @@ class LintRefusesUnknownIntent(ModelBase):
         skill(self.tmp / "root", "bad", "cheapest")
         p = self.py(SKILL_LINT, self.tmp / "root")
         self.assertEqual(p.returncode, 2, p.stdout)
-        self.assertRegex(p.stdout, r"bad/SKILL\.md:4: model_intent 'cheapest'")
-        self.assertNotIn("good/SKILL.md", p.stdout)
+        # skill_lint names the file by its absolute path: native separators on Windows
+        self.assertRegex(p.stdout, r"bad[/\\]SKILL\.md:4: model_intent 'cheapest'")
+        self.assertNotIn(os.path.join("good", "SKILL.md"), p.stdout)
 
     def test_gt_model_check_agrees(self):
         skill(self.tmp / "root", "bad", "cheapest")
@@ -337,8 +339,8 @@ class EveryShippedSkillDeclaresItsIntent(TheMappingPackIsTheOnlyPlace):
         p = subprocess.run([sys.executable, str(SKILL_LINT), str(root), "--require-intent"],
                            capture_output=True, text=True)
         self.assertEqual(p.returncode, 2, p.stdout)
-        self.assertIn("silent/SKILL.md", p.stdout)
-        self.assertNotIn("declared/SKILL.md", p.stdout)
+        self.assertIn(os.path.join("silent", "SKILL.md"), p.stdout)
+        self.assertNotIn(os.path.join("declared", "SKILL.md"), p.stdout)
         p = subprocess.run([sys.executable, str(SKILL_LINT), str(root)],
                            capture_output=True, text=True)
         self.assertEqual(p.returncode, 0, "without the flag a silent skill is allowed")

@@ -151,7 +151,9 @@ class GitHooksTest(Sandbox):
         editor = self.tmp / "empty-editor.sh"
         editor.write_text("#!/bin/sh\n: > \"$1\"\n")
         editor.chmod(0o755)
-        proc = self.run_cmd(["git", "commit"], cwd=self.vault, env={"GIT_EDITOR": str(editor)})
+        # as_posix: git hands GIT_EDITOR to sh, which would eat a C:\ path's backslashes.
+        proc = self.run_cmd(["git", "commit"], cwd=self.vault,
+                            env={"GIT_EDITOR": editor.as_posix()})
         self.assertNotEqual(proc.returncode, 0, "the empty-message commit was not aborted")
         self.assertEqual(self.ledger_paths(), ["a.md"], "an aborted commit drained the ledger")
 
@@ -166,7 +168,7 @@ class GitHooksTest(Sandbox):
         editor.write_text('#!/bin/sh\nprintf "subject\\n" | cat - "$1" > "$1.n" && mv "$1.n" "$1"\n')
         editor.chmod(0o755)
         proc = self.run_cmd(["git", "-c", "commit.verbose=true", "commit", "-q"],
-                            cwd=self.vault, env={"GIT_EDITOR": str(editor)})
+                            cwd=self.vault, env={"GIT_EDITOR": editor.as_posix()})  # see above
         self.assertOk(proc)
         self.assertEqual(self.last_message().splitlines()[0], "subject")
         self.assertIn(self.trailer("a.md"), self.last_message(),

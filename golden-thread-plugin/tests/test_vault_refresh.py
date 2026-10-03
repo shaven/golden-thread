@@ -171,9 +171,10 @@ class BackupBeforeWrites(Base):
         rule.write_bytes(b"replaced by an install\n")
         p = self.py(REFRESH, "prune", "--vault", self.vault, "--backup", bak)
         self.assertTrue(bak.exists())
-        self.assertIn("changed: %s" % rule.relative_to(self.vault), p.stdout)
+        # vault-relative paths and tar member names are "/" on every platform
+        self.assertIn("changed: %s" % rule.relative_to(self.vault).as_posix(), p.stdout)
         with tarfile.open(bak) as tf:
-            self.assertEqual(tf.extractfile(str(rule.relative_to(self.vault))).read(), original)
+            self.assertEqual(tf.extractfile(rule.relative_to(self.vault).as_posix()).read(), original)
 
 
 if __name__ == "__main__":

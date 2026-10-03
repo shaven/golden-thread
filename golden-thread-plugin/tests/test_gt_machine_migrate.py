@@ -19,7 +19,7 @@ Contract:
 import json
 import textwrap
 
-from _harness import Sandbox, SCRIPTS, GT
+from _harness import Sandbox, SCRIPTS, GT, IS_WINDOWS
 
 MM = SCRIPTS / "gt_machine_migrate.py"
 REAL_ID = "install-choices-from-vault-config"
@@ -81,9 +81,10 @@ class RealMigration(MachineBase):
         self.config(install_demo="no")
         self.assertOk(self.mm("run"))
         doc = {"version": 1, "choices": {"demo": "off"}}
-        self.assertEqual(self.choices.read_text(),
-                         json.dumps(doc, indent=2, sort_keys=True) + "\n")
-        self.assertEqual(oct(self.choices.stat().st_mode & 0o777), oct(0o600))
+        self.assertEqual(self.choices.read_bytes(),
+                         (json.dumps(doc, indent=2, sort_keys=True) + "\n").encode())
+        if not IS_WINDOWS:          # Windows has no mode bits (_harness.WIN_MODE_BITS)
+            self.assertEqual(oct(self.choices.stat().st_mode & 0o777), oct(0o600))
         via = self.tmp / "other"
         (via / ".claude").mkdir(parents=True)
         self.assertOk(self.py(SCRIPTS / "gt_components.py", "record-choice", via, "demo", "off"))

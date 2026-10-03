@@ -10,6 +10,7 @@ Contract for `check_announced`:
 touches the network. publish.sh is SOURCED, which defines its steps and runs none.
 """
 import json
+import os
 import shutil
 import unittest
 
@@ -30,7 +31,7 @@ class CheckAnnounced(Sandbox):
         self.repo.mkdir()
         self.run_cmd(["git", "init", "-q", self.repo])
         self.set_origin("git@github.com:example-owner/example-repo.git")
-        self.env["PATH"] = "%s:%s" % (self.bin, self.env.get("PATH", ""))
+        self.env["PATH"] = os.pathsep.join([str(self.bin), self.env.get("PATH", "")])
 
     def set_origin(self, url):
         self.run_cmd(["git", "-C", self.repo, "remote", "remove", "origin"])

@@ -20,6 +20,7 @@ import unittest
 from pathlib import Path
 
 from _harness import REPO, latest_version_dir
+from _harness import LOTR_POSIX_ONLY, skip_on_windows
 
 
 def _gateway_dir():
@@ -34,8 +35,14 @@ def _gateway_dir():
 SCRIPTS = _gateway_dir() / "scripts"
 sys.path.insert(0, str(SCRIPTS))
 
-from lotrlib import server                      # noqa: E402
-from lotrlib.client import Client               # noqa: E402
+from _harness import IS_WINDOWS                 # noqa: E402
+if IS_WINDOWS:
+    # lotrlib.server defines a Unix-domain socket server at import, which Windows' socketserver
+    # does not have; every class below is skipped there with LOTR_POSIX_ONLY.
+    server = Client = None
+else:
+    from lotrlib import server                  # noqa: E402
+    from lotrlib.client import Client           # noqa: E402
 from lotrlib.errors import GatewayError         # noqa: E402
 
 SECRET = "s3cr3t-value-ABCDEFGHIJKLMNOP"
@@ -160,6 +167,7 @@ def _auth(cid="mbp", secret=SECRET):
             "Content-Type": "application/json"}
 
 
+@skip_on_windows(LOTR_POSIX_ONLY)
 class UnixServerTests(unittest.TestCase):
     def setUp(self):
         self.dir = _sockdir()
@@ -264,6 +272,7 @@ class UnixServerTests(unittest.TestCase):
             t.join(5)
 
 
+@skip_on_windows(LOTR_POSIX_ONLY)
 class HttpServerTests(unittest.TestCase):
     def test_auth_codes(self):
         with _HttpRunner() as h:
@@ -343,6 +352,7 @@ class HttpServerTests(unittest.TestCase):
         self.assertNotIn(SECRET, str(cm.exception.to_dict()))
 
 
+@skip_on_windows(LOTR_POSIX_ONLY)
 class ClientTests(unittest.TestCase):
     def test_daemon_down_is_daemon_unreachable(self):
         home = Path(_sockdir())
@@ -373,6 +383,7 @@ def _run(script, *args, inp=None, env=None, timeout=30):
                           capture_output=True, text=True, timeout=timeout, env=e)
 
 
+@skip_on_windows(LOTR_POSIX_ONLY)
 class CliTests(unittest.TestCase):
     def setUp(self):
         self.home = Path(_sockdir())
@@ -476,6 +487,7 @@ class CliTests(unittest.TestCase):
         self.assertFalse((self.home / "x.secret").exists())
 
 
+@skip_on_windows(LOTR_POSIX_ONLY)
 class DaemonTests(unittest.TestCase):
     def test_refuses_client_and_hybrid_modes(self):
         home = Path(_sockdir())
@@ -510,6 +522,7 @@ class DaemonTests(unittest.TestCase):
             proc.stderr.close()
 
 
+@skip_on_windows(LOTR_POSIX_ONLY)
 class McpShimTests(unittest.TestCase):
     def setUp(self):
         self.home = Path(_sockdir())

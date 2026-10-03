@@ -24,7 +24,7 @@ import unittest
 from contextlib import redirect_stderr, redirect_stdout
 from pathlib import Path
 
-from _harness import GT, load_module, CORE_RULES as CORE
+from _harness import GT, load_module, CORE_RULES as CORE, skip_on_windows, WIN_MODE_BITS, WIN_CHMOD_FAULT
 
 SCRIPT = GT / "scripts" / "gt_demote.py"
 
@@ -55,7 +55,9 @@ class DemoteTest(unittest.TestCase):
     def write(self, rel, text=BODY):
         p = self.vault / rel
         p.parent.mkdir(parents=True, exist_ok=True)
-        p.write_text(text, encoding="utf-8")
+        # Bytes, so the fixture is exactly `text` everywhere: write_text would turn "\n" into
+        # "\r\n" on Windows (and a CRLF body into "\r\r\n"). Identical on POSIX.
+        p.write_bytes(text.encode("utf-8"))
         return p
 
     def run_dem(self, *args):
@@ -92,6 +94,7 @@ class DemoteTest(unittest.TestCase):
         self.assertIn("kelvin", text)
         self.assertNotIn("U+212A looks identical", text, "content is moved, not duplicated")
 
+    @skip_on_windows(WIN_CHMOD_FAULT)
     def test_nothing_is_lost_when_the_destination_cannot_be_written(self):
         """The failure mode that matters: if step 1 fails, step 3 must not happen."""
         self.write("global-memory/kelvin.md")
@@ -328,6 +331,7 @@ class DemoteTest(unittest.TestCase):
         self.assertEqual(mod._norm_seg(unicodedata.normalize("NFD", "Sourcés")),
                          unicodedata.normalize("NFC", "sourcés"))
 
+    @skip_on_windows(WIN_MODE_BITS)
     def test_the_destination_keeps_the_source_file_mode(self):
         """A note at 0600 arrived at 0644 (2026-09-16): the destination was created with the
         writer's own default mode, so demoting a private note published it to every reader of

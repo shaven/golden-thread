@@ -29,7 +29,7 @@ import time
 import unittest
 from pathlib import Path
 
-from _harness import Sandbox, REPO, PYTHON, latest_version_dir
+from _harness import IS_WINDOWS, Sandbox, REPO, PYTHON, latest_version_dir
 
 USAGE = latest_version_dir(REPO / "golden-thread-usage")
 METER = USAGE / "scripts" / "gt_usage.py"
@@ -93,7 +93,12 @@ class UsageModule(Sandbox):
 
     def senv(self):
         """Named senv, not env: Sandbox already carries an `env` dict attribute."""
-        return dict(os.environ, HOME=str(self.home))
+        env = dict(os.environ, HOME=str(self.home))
+        if IS_WINDOWS:
+            # Windows Python's expanduser reads USERPROFILE: without it every tool run here
+            # read the real ~/.claude, not the sandbox's (Sandbox.env does the same)
+            env.update(USERPROFILE=str(self.home), PYTHONUTF8="1")
+        return env
 
     def reading(self, limits, age_hours=0.0):
         row = dict(limits)

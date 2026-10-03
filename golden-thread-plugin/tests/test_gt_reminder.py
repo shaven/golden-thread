@@ -27,7 +27,7 @@ import threading
 import unittest
 from pathlib import Path
 
-from _harness import Sandbox, SCRIPTS, load_module
+from _harness import Sandbox, SCRIPTS, load_module, IS_WINDOWS, skip_on_windows, WIN_MODE_BITS
 
 REM = SCRIPTS / "gt_reminder.py"
 SURFACE = SCRIPTS / "gt_surface.py"
@@ -138,10 +138,16 @@ class ReminderBase(Sandbox):
         return p
 
     def osascript_stub(self, code=0):
-        p = self.tmp / "osascript"
         out = self.tmp / "osascript.args"
-        p.write_text("#!/bin/sh\nprintf '%%s\\n' \"$@\" > '%s'\nexit %d\n" % (out, code))
-        os.chmod(p, 0o755)
+        if IS_WINDOWS:
+            # GT_REMINDER_OSASCRIPT is run directly on every OS; Windows runs only real
+            # executables, so the stub there is a .cmd (CreateProcess runs it via cmd.exe).
+            p = self.tmp / "osascript.cmd"
+            p.write_text('@echo %%* > "%s"\r\n@exit /b %d\r\n' % (out, code))
+        else:
+            p = self.tmp / "osascript"
+            p.write_text("#!/bin/sh\nprintf '%%s\\n' \"$@\" > '%s'\nexit %d\n" % (out, code))
+            os.chmod(p, 0o755)
         self.env["GT_REMINDER_OSASCRIPT"] = str(p)
         return out
 
@@ -183,6 +189,10 @@ class Parsing(ReminderBase):
         items = [r["item"] for r in m["rows"]]
         self.assertEqual(items[:4], [r[0] for r in ROWS[:4]])
         self.assertEqual(m["skipped"], 2, "no-date and bad-date rows are skipped and counted")
+
+    @skip_on_windows(WIN_MODE_BITS)
+    def test_the_mirror_is_private(self):
+        self.mirror()
         mode = stat.S_IMODE((self.rdir / "deadlines.json").stat().st_mode)
         self.assertEqual(mode, 0o600)
 
@@ -264,7 +274,7 @@ class MacOS(ReminderBase):
         self.set(reminder_macos="on")
         p = self.rem("run")
         self.assertOk(p)
-        args = out.read_text()
+        args = out.read_text(errors="replace")   # cmd echoes in the OEM code page on Windows
         self.assertIn("display notification", args)
         self.assertIn("Rotate the widget key", args)
         self.assertIn("macos delivered", self.log.read_text())
@@ -279,7 +289,7 @@ class MacOS(ReminderBase):
         p = self.rem("check", "macos")
         self.assertOk(p)
         self.assertIn("DELIVERED", p.stdout)
-        self.assertIn("test", ok.read_text())
+        self.assertIn("test", ok.read_text(errors="replace"))
 
 
 class Relay(ReminderBase):
@@ -314,6 +324,7 @@ class Relay(ReminderBase):
         self.assertEqual(p.returncode, 1)
         self.assertIn("could not be reached", p.stdout)
 
+    @skip_on_windows(WIN_MODE_BITS)
     def test_a_loose_credentials_file_is_refused(self):
         srv = self.http()
         self.cred("relay", {"url": "http://127.0.0.1:%d/" % srv.server_address[1],
@@ -388,7 +399,7 @@ class Schedule(ReminderBase):
         self.assertEqual(m.BENIGN_EXITS["reminder"], {"0"})
         doc = m.build_plist("reminder", None, [], *m.JOBS["reminder"][1:4])
         args = doc["ProgramArguments"]
-        self.assertTrue(args[1].endswith(".claude/golden-thread/hooks/gt_reminder.py"))
+        self.assertTrue(Path(args[1]).as_posix().endswith(".claude/golden-thread/hooks/gt_reminder.py"))
         self.assertNotIn("CloudStorage", " ".join(args))
         self.assertEqual(args[2:], ["run", "--scheduled"])
         self.assertNotIn("--vault", args, "the job must not be pointed at the vault (TCC)")

@@ -23,8 +23,9 @@ import re
 import shutil
 import subprocess
 import unittest
+from pathlib import Path
 
-from _harness import Sandbox, REPO, GT, WIKI, load_module, needs_dev
+from _harness import IS_WINDOWS, Sandbox, REPO, GT, WIKI, load_module, needs_dev
 
 INSTALL = REPO / "install.sh"
 # DERIVED from the declaration install.sh registers FROM. A literal count here tests only
@@ -159,7 +160,8 @@ class InstallsAThirdPlugin(Base):
         self.assertEqual(entries[EXTRA_NAME]["description"], "Fixture module.")
         self.assertEqual(mp["plugins"][0]["name"], "gt", "the core plugin is listed first")
         inst = json.loads((self.plugins / "installed_plugins.json").read_text())["plugins"]
-        self.assertEqual(inst[key][0]["installPath"], str(cache))
+        # Path(): on Windows the "C:/..." form Git Bash hands Python is the same path
+        self.assertEqual(Path(inst[key][0]["installPath"]), Path(cache))
         self.assertEqual(inst[key][0]["version"], EXTRA_VER)
         settings = json.loads((self.home / ".claude" / "settings.json").read_text())
         self.assertEqual(settings["enabledPlugins"],
@@ -253,7 +255,9 @@ class RunsMachineMigrations(Base):
         self.manifest()
         p = self.install()
         self.assertOk(p)
-        self.assertIn("run | --release | %s" % self.src, p.stdout)
+        # On Windows bash hands Python the path in the mixed "C:/..." form (MSYS conversion)
+        self.assertIn("run | --release | %s" % (self.src.as_posix() if IS_WINDOWS else self.src),
+                      p.stdout)
 
     def test_it_receives_the_gt_installed_before_this_install(self):
         """0.15.0: read from installed_plugins.json BEFORE install.sh overwrites it, and
@@ -286,8 +290,9 @@ class RunsMachineMigrations(Base):
         p = self.install("--vault", str(self.tmp / "v"))
         self.assertNotEqual(p.returncode, 0)
         self.assertIn("FAILED demo-to-install-choices: cannot write", p.stdout)
-        self.assertIn("INSTALL INCOMPLETE — machine migration failed; nothing was rolled back; "
+        self.assertIn("INSTALL INCOMPLETE — machine migration failed; the install is rolled back; "
                       "fix and re-run install.sh", p.stdout)
+        self.assertIn("ROLLED BACK", p.stdout)          # 0.19.3: tests/test_install_rollback.py
         self.assertLess(p.stdout.index("FAILED"), p.stdout.index("INSTALL INCOMPLETE"))
         self.assertNotIn("Vault ready", p.stdout, "the vault step ran after a failed migration")
         self.assertNotIn("Restart Claude Code", p.stdout)

@@ -232,7 +232,10 @@ class GtPathsCliTest(Sandbox):
         new.parent.mkdir(parents=True)
         old.rename(new)
         out = self.run_cli()
-        self.assertTrue(out["core_rules"].endswith("Projects/memory-system/core-rules"))
+        # An absolute path is printed natively (C:\\...\\core-rules on Windows); the recorded
+        # vault-relative one below is "/" everywhere.
+        self.assertTrue(Path(out["core_rules"]).as_posix().endswith(
+            "Projects/memory-system/core-rules"))
         cfg = json.loads((self.home / ".claude" / "vault-config.json").read_text())
         self.assertEqual(cfg["core_rules_path"], "Projects/memory-system/core-rules")
 

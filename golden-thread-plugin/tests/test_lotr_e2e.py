@@ -27,6 +27,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
 from _harness import REPO, latest_version_dir
+from _harness import LOTR_POSIX_ONLY, skip_on_windows
 
 GW = latest_version_dir(REPO / "golden-thread-lotr")
 SCRIPTS = GW / "scripts"
@@ -92,6 +93,7 @@ def _conn(cid, port, desc="GitHub repos, issues and pull requests"):
             "policy": {"deny": [], "consent": [], "write": [], "read": []}, "enabled": True}
 
 
+@skip_on_windows(LOTR_POSIX_ONLY)
 class GatewayE2E(unittest.TestCase):
     @classmethod
     def setUpClass(cls):

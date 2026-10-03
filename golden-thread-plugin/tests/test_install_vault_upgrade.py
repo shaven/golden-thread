@@ -22,10 +22,11 @@ older release equals a fresh install of the newest). Contracts pinned here:
 import hashlib
 import json
 import os
+import re
 import shutil
 import subprocess
 
-from _harness import GIT_ID, TEMPLATES, core_rules_dir
+from _harness import GIT_ID, IS_WINDOWS, TEMPLATES, core_rules_dir
 from test_install_prune import PruneBase
 
 BASE = ("Projects", "golden-thread", ".templates", "PROTOCOL.md")
@@ -244,7 +245,13 @@ class DirtyVaultIsLeftAlone(VaultUpgradeBase):
                       "(yours are never touched).", p.stdout)
         self.assertIn("doc-merge", p.stdout)
         self.assertIn("/gt:gt-upgrade", p.stdout)
-        self.assertIn('python3 "%s" --vault "%s" run' % (self.up, v), p.stdout)
+        if IS_WINDOWS:
+            # bash names the script in its own form (/tmp/... for %TEMP%), which is the shell
+            # the hint is for; the vault is the path the user gave
+            self.assertRegex(p.stdout, r'python3 "[^"]*/scripts/gt_upgrade\.py" --vault "%s" run'
+                             % re.escape(str(v)))
+        else:
+            self.assertIn('python3 "%s" --vault "%s" run' % (self.up, v), p.stdout)
 
 
 class NonGitVaultIsReportedOnly(VaultUpgradeBase):

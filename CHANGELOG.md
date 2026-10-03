@@ -11,6 +11,84 @@ release's own summary line, kept short rather than reconstructed after the fact.
 
 ---
 
+## gt 0.19.3 — unreleased
+
+**Windows, finished; a failed install rolls back; the scheduled jobs keep a working
+interpreter** (owner, 2026-10-03: "Finish the work for windows"). 0.19.2 made gt install on
+Windows; 0.19.3 makes it usable there. Version directories copied from 0.19.2 (gt, demo, farm,
+flow, report-card, watch; lockstep modules `requires_gt >=0.19.3,<0.20.0`); gt-lotr 0.2.0,
+gt-usage 0.1.5, gt-visualize 0.4.3 and gt-wiki 0.2.6 already admit 0.19.3 and are unchanged.
+
+- **`python3` works in Claude's shell on Windows.** Skills tell Claude to run `python3 <tool>.py`;
+  in Git Bash that was the Microsoft Store stub. `install.sh` writes a `python3` shim (the Python
+  it resolved, UTF-8 mode, `\r` stripped from piped output, exit code kept) to
+  `~/.claude/golden-thread/bin/` and to `~/bin/` (first on PATH in every Git Bash login shell),
+  never over a `~/bin/python3` that is not gt's. At session start gt's component check appends
+  gt's bin dir and `PYTHONUTF8=1` to `$CLAUDE_ENV_FILE`, which Claude Code sources before every
+  Bash command (the documented SessionStart mechanism). Nothing changes on macOS or Linux.
+- **Every gt write is LF.** 88 text-mode writes in 42 files (scripts, hooks, vault tools, the
+  watch/report-card/flow modules) wrote CRLF on Windows; each now writes `newline="\n"` and UTF-8
+  (`write_text` became `write_bytes`: `newline=` needs Python 3.10). `tests/test_text_writes_lf.py`
+  scans every shipped script so a new one cannot regress (allowlist: empty).
+- **Scheduled jobs on Task Scheduler.** `gt_schedule.py install|check|remove|list|reconcile` use
+  `schtasks` on Windows, per user and without admin, with the same job table and the same proof:
+  run the task once, read Task Scheduler's Last Result. The task runs
+  `~/.claude/golden-thread/jobs/gt-<job>.cmd`, which logs to the same `.out`/`.err` files as the
+  macOS jobs. Like a launchd agent, a task runs only while the user is logged on at the desktop;
+  from an SSH session `install` registers it and says NOT PROVEN. `gt_doctor`'s `schedule` and
+  `daily-job` rows read either platform.
+- **The test suite runs on Windows**, and running it there found the defects below. The harness
+  runs scripts with the interpreter running it (never the Store's), sandboxes `USERPROFILE` with
+  `HOME`, puts a `python3` shim first on PATH as an install does, locks the install cache with
+  `msvcrt` where there is no `fcntl`, and rewrites every spelling of a sandbox path in a cached
+  install; `tests/run.sh` resolves Python like the hooks do. A test that cannot run on Windows
+  skips with a specific reason (launchd, cron, osascript, permission bits, a `#!` fake of an
+  external program, a file name Windows forbids, gt-lotr, rolling back to a pre-Windows gt).
+- **Windows defects the suite found, fixed:**
+  - The session-claim guard and `gt_session.py` checked a pid with `os.kill(pid, 0)`, which on
+    Windows TERMINATES the process; they now ask the kernel (OpenProcess/GetExitCodeProcess).
+  - `gt_session.py` claims and heartbeats failed with "Access is denied" (Windows cannot rename
+    over an open file) and had no lock; they now close before the swap and serialise on an
+    `msvcrt` lock. Claims, lint keys, queue paths, handoffs and every other vault-relative path
+    are written with `/` (about 80 places printed `Projects\x`, so the claim guard never matched
+    and the write queue refused gt_daily's note).
+  - Vault git hooks ran the Store stub, so every commit to a gt vault was refused.
+  - Hook payloads were read as `{}` (`select()` on a pipe fails on Windows): gt_state,
+    gt_surface and the report card now peek the pipe.
+  - `os.open` without `O_BINARY` wrote CRLF below Python's newline handling (6 writers);
+    `gt_demote` died on `O_NOFOLLOW`; pack verification hashed decoded text instead of bytes;
+    a checker timeout used `os.killpg`; the doctor's smoke rows left read-only git objects in
+    TEMP; reminder credentials were refused for "mode 0o666"; `gt_lint` reported every vault git
+    hook "not executable"; the Git Bash `/c/...` spelling escaped the claim and foreign-checkout
+    guards; `gt_test_receipt` sent `.sh` suites to cmd.exe; queue timestamps collided.
+  - Said in words instead of silently "clean": `gt_workers` (no POSIX process table),
+    `gt_watch install-cron` (no cron), `gt_tasks` priority windows (no time-zone database without
+    the `tzdata` package), and gt-lotr, which is POSIX-only by design and is now off on Windows.
+  - `install.sh`'s "Python:" line goes to stderr, so `--list-plugins` / `--list-modules` stay
+    machine-readable; its embedded Python runs from a file (Windows' 32,767-character command line).
+- **A failed install is rolled back.** Before its first write `install.sh` copies aside
+  `settings.json`, `installed_plugins.json`, `known_marketplaces.json`, the golden-thread-plugin
+  marketplace and cache, `~/.claude/golden-thread` (not `backups/`), `vault-config.json`,
+  `~/.claude/CLAUDE.md` and the Windows shim, and on any non-zero exit puts them back and says
+  `ROLLED BACK` — except exit 4 (installed; the vault is a question for the user) and exit 9 under
+  `--force-manifest-mismatch`. Not covered: the vault (it has its own pre-write backup) and loaded
+  launchd jobs. Before this, exits 6, 7 and 9 left a half-installed machine.
+- **The scheduled jobs' interpreter is chosen, not overwritten** (seen on the publishing Mac,
+  2026-10-03). 0.19.1 and 0.19.2 recorded the python running the install (Homebrew's 3.9 there),
+  which macOS privacy refuses the vault under launchd: every install broke the jobs, `reconcile`
+  died on a traceback when a plist rewrite hit EPERM, and the daily job ended up gone. Now
+  `gt_schedule.py choose-interpreter` keeps the recorded interpreter; with a job installed it
+  proves the choice with a one-file write probe in the vault run as a launchd job, first success
+  wins; with no record macOS prefers `/usr/bin/python3` when it is a working 3.8+ (a Homebrew
+  path changes with every Python upgrade; without the Command Line Tools it is never run).
+  Plist rewrites are atomic, and one that fails leaves the job exactly as it was and says so in
+  words.
+- `gt_supersede.py` prints vault paths with `/` on every platform (on Windows it printed `\`,
+  which the model then wrote into `supersedes:`).
+- **Not covered:** Claude Code's PowerShell tool does not read `$CLAUDE_ENV_FILE` (there,
+  python.org's `python` works); hooks under a logged-in Claude Code for Windows are still an
+  owner step.
+
 ## gt 0.19.2 — 2026-10-03
 
 **gt installs on native Windows** (owner, 2026-10-03). Proven on a Windows 11 VM (Git for

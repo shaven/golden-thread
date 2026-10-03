@@ -20,6 +20,7 @@ import os
 import re
 import sys
 import unittest
+from pathlib import Path
 
 from _harness import GT, WIKI, HOOKS, DEMO, WATCH, REPORT_CARD, FARM, FLOW, load_module
 
@@ -113,7 +114,8 @@ class SkillCommandsNameTheVault(unittest.TestCase):
 
     def test_no_shipped_skill_command_is_denied(self):
         files = skill_files()
-        self.assertTrue(any("/golden-thread/" in str(f) for f in files), "no gt skills found")
+        self.assertTrue(any("/golden-thread/" in Path(f).as_posix() for f in files),
+                        "no gt skills found")
         checked, denied = 0, []
         for f in files:
             for n, cmd in commands(f.read_text(encoding="utf-8")):

@@ -8,7 +8,7 @@ import datetime as dt
 import re
 import unittest
 
-from _harness import Sandbox, load_module
+from _harness import Sandbox, load_module, needs_tzdb
 
 
 def readme(slug, pp=3, stage="active", tasks=(), parent=None, typ="project", extra=""):
@@ -345,11 +345,13 @@ class EscalationTest(Sandbox):
         self.assertEqual(self.eff(1, tasks), 1)
         self.assertEqual(self.eff(2, tasks), 1)
 
+    @needs_tzdb
     def test_open_window_reaches_pp0_and_closed_window_does_not(self):
         self.assertEqual(self.eff(3, [], "Mon-Fri 07:00-15:15 America/Chicago -> 0"), 0)
         self.assertEqual(self.eff(3, [], "Mon-Fri 13:00-15:15 America/Chicago -> 0"), 3)
         self.assertEqual(self.eff(3, [], "Sat-Sun 07:00-15:15 America/Chicago -> 0"), 3)
 
+    @needs_tzdb
     def test_span_window_reaches_pp0(self):
         # NOW is Wed 12:00 Chicago.
         self.assertEqual(self.eff(3, [], "Tue 16:00 → Thu 16:44 America/Chicago -> 0"), 0)
@@ -372,6 +374,7 @@ def chicago(y, mo, d, h, mi, s=0):
     return dt.datetime(y, mo, d, h, mi, s, tzinfo=ZoneInfo(CHI))
 
 
+@needs_tzdb
 class WindowTest(Sandbox):
     """parse_window / window_contains: daily and cross-day span forms, host-zone free."""
 
@@ -544,6 +547,7 @@ class CliClockTest(Sandbox):
         self.assertOk(proc, "gt_tasks.py --json failed")
         return json.loads(proc.stdout)
 
+    @needs_tzdb
     def test_json_never_writes_and_parses(self):
         self.fixture()
         tasks_md = self.vault / "TASKS.md"

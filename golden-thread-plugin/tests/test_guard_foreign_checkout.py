@@ -8,7 +8,7 @@ under a temporary HOME, no network, no real vault.
 import json
 import shutil
 
-from _harness import Sandbox, HOOKS, SCRIPTS, GT, load_module
+from _harness import Sandbox, HOOKS, SCRIPTS, GT, load_module, IS_WINDOWS
 
 HOOK = "guard_foreign_checkout.sh"
 ROUTE = "run copygt.sh on the owning machine"
@@ -92,8 +92,15 @@ class Denials(ForeignGuardBase):
         self.assertDenied(self.run_guard("git push", cwd=link))
 
     def test_dash_C_and_cd_into_the_checkout_are_seen(self):
-        self.assertDenied(self.run_guard("git -C %s commit -m x" % self.foreign, cwd=self.mine))
-        self.assertDenied(self.run_guard("cd %s && git push" % self.foreign, cwd=self.mine))
+        # A path inside a shell command is written the shell's way: "/" (identical on POSIX).
+        # Unquoted C:\Users\... is not that path to bash, nor to the guard's shlex.
+        f = self.foreign.as_posix()
+        self.assertDenied(self.run_guard("git -C %s commit -m x" % f, cwd=self.mine))
+        self.assertDenied(self.run_guard("cd %s && git push" % f, cwd=self.mine))
+        if IS_WINDOWS:          # Git Bash's own /c/... spelling of the same directory (0.19.3)
+            msys = "/" + f[0].lower() + f[2:]
+            self.assertDenied(self.run_guard("git -C %s commit -m x" % msys, cwd=self.mine))
+            self.assertDenied(self.run_guard("cd %s && git push" % msys, cwd=self.mine))
 
     def test_claude_code_heredoc_commit_message_is_still_seen(self):
         cmd = ("git add -A && git commit -m \"$(cat <<'EOF'\nrelease; push it\n\nCo-Authored-By: x\n"

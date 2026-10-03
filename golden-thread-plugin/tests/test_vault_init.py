@@ -10,7 +10,7 @@ import shutil
 import unittest
 from pathlib import Path
 
-from _harness import Sandbox, SCRIPTS, ENFORCEMENT_HOOKS, TEMPLATES, CORE_RULES as CORE, core_rules_dir, legacy_core_rules_dir
+from _harness import Sandbox, SCRIPTS, ENFORCEMENT_HOOKS, TEMPLATES, CORE_RULES as CORE, core_rules_dir, legacy_core_rules_dir, IS_WINDOWS
 
 VI = SCRIPTS / "vault_init.py"
 HOOK_NAMES = ENFORCEMENT_HOOKS
@@ -32,6 +32,15 @@ def vi_registrations():
     return [r for r in mod.HOOK_REGISTRATIONS
             if str(r.get("owner", "")).startswith("vault_init.py")]
 
+
+
+def hook_cmd(path):
+    """The settings.json command vault_init writes for a hook script (vault_init.hook_command):
+    the plain path on POSIX; on Windows "/"-separated and shell-quoted, as Git Bash reads it."""
+    if IS_WINDOWS:
+        import shlex
+        return shlex.quote(pathlib.Path(path).as_posix())
+    return str(path)
 
 class VaultInitBase(Sandbox):
     def vi(self, *args):
@@ -191,7 +200,7 @@ class FreshTest(VaultInitBase):
                             ("Stop", "validate_response.sh"),
                             ("PreToolUse", "guard_session_claims.sh")):
             cmds = [h["command"] for b in s["hooks"][event] for h in b["hooks"]]
-            self.assertIn(str(hooks / name), cmds, event)
+            self.assertIn(hook_cmd(hooks / name), cmds, event)
 
 
 # ---------------------------------------------------------------------------- daily notes
@@ -428,10 +437,10 @@ class InstallCoreRulesTest(VaultInitBase):
         s = json.loads(settings.read_text())
         self.assertEqual(s["model"], "keep")
         ups = [h["command"] for b in s["hooks"]["UserPromptSubmit"] for h in b["hooks"]]
-        self.assertEqual(ups, [str(hooks / "inject_core_rules.sh")], "stale copy not replaced")
+        self.assertEqual(ups, [hook_cmd(hooks / "inject_core_rules.sh")], "stale copy not replaced")
         stop = [h["command"] for b in s["hooks"]["Stop"] for h in b["hooks"]]
         self.assertIn("/usr/bin/true", stop, "unrelated hook dropped")
-        self.assertIn(str(hooks / "validate_response.sh"), stop)
+        self.assertIn(hook_cmd(hooks / "validate_response.sh"), stop)
         self.assertIn("PreToolUse", s["hooks"])
         self.assertFalse((self.home / ".claude" / "settings.json").exists(),
                          "--settings still wrote the default settings.json")
@@ -996,7 +1005,9 @@ class LifecycleEventsTest(VaultInitBase):
         self.project(v, "alpha")                       # re-run creates nothing: no event
         self.project(v, "kid", "--parent", "alpha")
         created = [e for e in self.events(v) if e["kind"] == "create"]
-        self.assertEqual([(e["item"], e["project"]) for e in created],
+        # sorted: two runs in the same second order by session id (gt_events' total order is
+        # (ts to the second, ts, session, line)), so their relative order is not defined
+        self.assertEqual(sorted((e["item"], e["project"]) for e in created),
                          [("Projects/alpha", "alpha"), ("Projects/alpha/kid", "alpha/kid")])
         self.project(v, "beta")
         self.vi_json("rename-project", "--vault", v, "--from", "beta", "--to", "gamma")
@@ -1075,7 +1086,7 @@ class DryRunTest(Sandbox):
         self.assertFalse((v / "Projects" / "ghost").exists())
         self.assertFalse((v / "Projects/golden-thread/spool/decisions/ghost").exists())
         self.assertTrue(any(r["action"] == "would-migrate"
-                            and r["path"].endswith("ghost/decisions.md")
+                            and pathlib.Path(r["path"]).as_posix().endswith("ghost/decisions.md")
                             for r in json.loads(p.stdout)),
                         "the dry run did not report the decisions.md migration")
 

@@ -88,12 +88,14 @@ class RetiredBase(PruneBase):
 
 class PrunesDroppedHookEntries(RetiredBase):
     def seed_settings(self):
-        old = str(self.hooks_dir / "gt_retired_check.py")
+        # as_posix: hook commands are "/"-separated as gt writes them (Git Bash reads them on
+        # Windows, where a backslash is an escape); identical to str() on POSIX
+        old = (self.hooks_dir / "gt_retired_check.py").as_posix()
         self.settings_path.write_text(json.dumps({"hooks": {
             "SessionStart": [
                 {"hooks": [{"type": "command", "command": "python3 %s check --hook" % old}]},
                 # a user's hook sharing a block with a retired gt entry
-                {"hooks": [{"type": "command", "command": str(self.hooks_dir / "gt_old.sh")},
+                {"hooks": [{"type": "command", "command": (self.hooks_dir / "gt_old.sh").as_posix()},
                            {"type": "command", "command": "echo mine"}]},
             ],
             # a user's hook that merely MENTIONS a retired script name, outside the dir
@@ -105,7 +107,7 @@ class PrunesDroppedHookEntries(RetiredBase):
                                          "command": "python3 ~/.claude/golden-thread/hooks/gt_workers.py check"}]}],
             # in the hooks dir, but gt has no record of it: unknown, left alone
             "UserPromptSubmit": [{"hooks": [{"type": "command",
-                                             "command": str(self.hooks_dir / "my_own.sh")}]}],
+                                             "command": (self.hooks_dir / "my_own.sh").as_posix()}]}],
         }}, indent=2))
 
     def test_retired_and_misplaced_entries_are_removed_and_reported(self):
@@ -137,7 +139,7 @@ class PrunesDroppedHookEntries(RetiredBase):
         # The property is SURVIVAL, not position: gt registering another UserPromptSubmit
         # entry (gt_state.py in 0.17.1) sorted ahead of the user's hook and broke an
         # index-0 assertion that was never about ordering.
-        self.assertIn(str(self.hooks_dir / "my_own.sh"), cmds["UserPromptSubmit"])
+        self.assertIn((self.hooks_dir / "my_own.sh").as_posix(), cmds["UserPromptSubmit"])
         self.assertIn("Unknown hook entry pointing into the gt hooks dir, left in place", p.stdout)
         self.assertIn("UserPromptSubmit/my_own.sh", p.stdout)
 

@@ -5,10 +5,11 @@ everything else goes through the CLI against a sandbox project and sandbox HOME.
 """
 import json
 import os
+import re
 import shutil
 import unittest
 
-from _harness import Sandbox, SCRIPTS, load_module
+from _harness import Sandbox, SCRIPTS, load_module, IS_WINDOWS
 
 INGEST = SCRIPTS / "gt_ingest.py"
 
@@ -165,8 +166,14 @@ class CliTest(Sandbox):
         strips that leading dash, so the memory directory is never found."""
         p = self.tmp / "proj"
         p.mkdir()
-        encoded = str(p.resolve()).replace("/", "-")
-        self.assertTrue(encoded.startswith("-"))
+        if IS_WINDOWS:
+            # Claude Code on Windows: C:\Users\me\proj -> C--Users-me-proj (every character
+            # that is not a letter or digit becomes '-'; no leading '/', so no leading '-').
+            encoded = re.sub(r"[^A-Za-z0-9]", "-", str(p.resolve()))
+            self.assertRegex(encoded, r"^[A-Za-z]--")
+        else:
+            encoded = str(p.resolve()).replace("/", "-")
+            self.assertTrue(encoded.startswith("-"))
         mem = self.home / ".claude" / "projects" / encoded / "memory"
         mem.mkdir(parents=True)
         (mem / "networking_gotchas.md").write_text("the VPN drops idle sockets\n")

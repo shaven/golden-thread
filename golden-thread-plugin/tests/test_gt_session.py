@@ -20,19 +20,31 @@ import subprocess
 import unittest
 from unittest import mock
 
-from _harness import PYTHON, SCRIPTS, Sandbox, load_module
+from _harness import PYTHON, SCRIPTS, Sandbox, load_module, IS_WINDOWS, skip_on_windows, WIN_MODE_BITS, WIN_CHMOD_FAULT
 
 TS_FMT = "%Y-%m-%d %H:%M:%S %Z"
+# Windows spells the local %Z as a phrase ("Central Daylight Time") that no gt ever wrote:
+# zone-name heartbeats are a POSIX-era legacy, and gt_session.py writes a numeric %z. So a
+# local heartbeat set by a test on Windows is spelled the way gt spells one (0.19.3).
+LOCAL_TS_FMT = "%Y-%m-%d %H:%M:%S %z" if IS_WINDOWS else TS_FMT
 LIVE_PID = str(os.getpid())
+
+
+_REAPED = []
 
 
 def dead_pid():
     p = subprocess.Popen(["true"])
     p.wait()
+    # Windows reuses a pid as soon as the last handle to the exited process closes, and that
+    # handle is this Popen's: let it be collected and the "dead" pid can belong to the next
+    # process started (seen 2026-10-03, a flaky ALREADY OPEN). Holding the object keeps the
+    # pid reserved and still dead. Harmless on POSIX, where the child is already reaped.
+    _REAPED.append(p)
     return str(p.pid)
 
 
-class SessionTools(Sandbox):
+class SessionToolsBase(Sandbox):
     """Fixture only: a vault, the tool in it, and the helpers for driving it."""
 
     def setUp(self):
@@ -108,12 +120,12 @@ class SessionTools(Sandbox):
     def set_heartbeat(self, sid, minutes_ago):
         (f,) = self.files_for(sid)
         when = datetime.datetime.now().astimezone() - datetime.timedelta(minutes=minutes_ago)
-        text = re.sub(r"^last_execution:.*$", "last_execution: " + when.strftime(TS_FMT).strip(),
+        text = re.sub(r"^last_execution:.*$", "last_execution: " + when.strftime(LOCAL_TS_FMT).strip(),
                       f.read_text(), flags=re.M)
         f.write_text(text)
 
 
-class GtSessionTest(SessionTools):
+class GtSessionTest(SessionToolsBase):
     # -- register ------------------------------------------------------------
     def test_register_writes_a_stamped_session_file(self):
         proc = self.gs("sessA", "register", "--task", "fix the thing", "--files", "log.md", "index.md")
@@ -284,7 +296,7 @@ class GtSessionTest(SessionTools):
         self.assertIn("nothing to release", again.stdout)
 
 
-class RegisterKeepsClaimsTest(SessionTools):
+class RegisterKeepsClaimsTest(SessionToolsBase):
     """H1: re-registering a session must not throw away what it holds.
 
     `register` never went through the compare-and-swap. It rebuilt the body from
@@ -341,7 +353,7 @@ class RegisterKeepsClaimsTest(SessionTools):
         self.assertNotIn("- `n.md`", f.read_text(), "the dead session's claims were kept")
 
 
-class OneIdTwoRegistrationsTest(SessionTools):
+class OneIdTwoRegistrationsTest(SessionToolsBase):
     """H8: a process must never operate on another process's registration.
 
     `_path` resolved an id with `sorted(glob, reverse=True)[0]`, and the plain
@@ -397,7 +409,7 @@ class OneIdTwoRegistrationsTest(SessionTools):
         self.assertEqual(self.files_for("solo"), [])
 
 
-class DryRunAndParsingTest(SessionTools):
+class DryRunAndParsingTest(SessionToolsBase):
     def test_dry_run_beat_does_not_advance_the_heartbeat(self):
         """cmd_beat had no dry() guard, and `last_execution` is exactly what every
         OTHER session reads to decide whether this one is stale."""
@@ -493,7 +505,7 @@ sys.exit(mod.cmd_claim(argparse.Namespace(id=sid, files=[target], force=False,
 '''
 
 
-class GtSessionConcurrencyTest(SessionTools):
+class GtSessionConcurrencyTest(SessionToolsBase):
     """The registry's writes must not lose each other.
 
     Every command here is a read-modify-write of one session file, and two
@@ -629,6 +641,7 @@ class GtSessionConcurrencyTest(SessionTools):
         self.assertNotIn("- `mine.md`", f.read_text(),
                          "a failed claim was written anyway")
 
+    @skip_on_windows(WIN_MODE_BITS)
     def test_the_swap_keeps_the_file_s_own_mode(self):
         """A temp file starts at 0600; the session file must not inherit that.
 
@@ -681,7 +694,7 @@ class GtSessionConcurrencyTest(SessionTools):
         self.assertIn("- `x.md`", f.read_text())
 
 
-class NoFlockIsAnnouncedTest(SessionTools):
+class NoFlockIsAnnouncedTest(SessionToolsBase):
     """H7: `_hold` returns True when fcntl is missing -- correct, but not equal.
 
     Measured with the shipped code and fcntl stubbed out, four concurrent claimers,
@@ -695,6 +708,7 @@ class NoFlockIsAnnouncedTest(SessionTools):
         mod = load_module(self.tool, "gt_session_noflock")
         mod.use_vault(self.vault)
         mod.fcntl = None                 # the platform this module's fallback is for
+        mod.msvcrt = None                # and no Windows lock either (0.19.3; None on POSIX)
         return mod
 
     def claim_args(self, sid, *files):
@@ -758,7 +772,7 @@ MACHINE_RE = r"[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}"
 OTHER_MACHINE = "99999999-8888-4777-8666-555555555555"
 
 
-class MachineIdentityTest(SessionTools):
+class MachineIdentityTest(SessionToolsBase):
     """Claim ownership is keyed on a stable machine id, never on the hostname.
 
     2026-09-28: the owner moved a laptop onto a wired network and DHCP handed it a new
@@ -867,11 +881,16 @@ class MachineIdentityTest(SessionTools):
         chk = self.gs("sessB", "check", "notes.md", pid="none")
         self.assertEqual(chk.returncode, 1, "the adopted file's pid is not judged:\n" + chk.stdout)
 
+    @skip_on_windows(WIN_CHMOD_FAULT)
     def test_an_unwritable_home_still_registers_and_says_so(self):
         gt_dir = self.home / ".claude"
         gt_dir.chmod(0o500)
-        self.addCleanup(gt_dir.chmod, 0o700)
-        reg = self.gs("sessA", "register", "--files", "notes.md")
+        # Restored HERE, not by addCleanup: cleanups run after tearDown's rmtree, which meets
+        # the 0o500 directory first (and may chmod its parents while retrying).
+        try:
+            reg = self.gs("sessA", "register", "--files", "notes.md")
+        finally:
+            gt_dir.chmod(0o700)
         self.assertOk(reg, "no machine id must never stop a registration")
         self.assertIn("no machine id", reg.stderr)
         self.assertNotIn("machine", self.fm("sessA"))

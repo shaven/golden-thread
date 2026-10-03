@@ -18,7 +18,8 @@ import sys
 import unittest
 from pathlib import Path
 
-from _harness import Sandbox, SCRIPTS, GT, ENFORCEMENT_HOOKS, core_rules_dir, path_without_astgrep
+from _harness import (Sandbox, SCRIPTS, GT, ENFORCEMENT_HOOKS, IS_WINDOWS, core_rules_dir,
+                      path_without_astgrep)
 
 
 DOCTOR = SCRIPTS / "gt_doctor.py"
@@ -235,7 +236,53 @@ class DoctorVaultCheck(DoctorBase):
         self.assertIn("does not exist", row["summary"])
 
 
-@unittest.skipUnless(sys.platform == "darwin", "scheduled jobs are launchd agents")
+@unittest.skipUnless(os.name == "nt", "Windows-only: the Task Scheduler backend (macOS has "
+                                      "DoctorScheduleCheck; Linux has no scheduler backend)")
+class DoctorScheduleCheckOnWindows(DoctorBase):
+    """`schedule` on Windows (0.19.3): an installed job is a spec + wrapper under
+    ~/.claude/golden-thread/jobs, judged by Task Scheduler's Last Result. schtasks is the stub
+    from test_schedule_task_scheduler, reached through GT_SCHTASKS_STUB -- never the real one."""
+
+    def install_job(self, job, script, last):
+        import test_schedule_task_scheduler as tst
+        sched = self.home / ".claude" / "golden-thread"
+        jobs = sched / "jobs"
+        jobs.mkdir(parents=True, exist_ok=True)
+        label = "com.markethaven.gt-%s" % job
+        (jobs / ("gt-%s.json" % job)).write_text(json.dumps({
+            "Label": label, "ProgramArguments": [sys.executable, str(self.hooks / script)],
+            "StartCalendarInterval": {"Hour": 7, "Minute": 0, "Weekday": 1},
+            "StandardOutPath": str(sched / ("%s.out" % job)),
+            "StandardErrorPath": str(sched / ("%s.err" % job))}), encoding="utf-8")
+        (jobs / ("gt-%s.cmd" % job)).write_text("@echo off\r\n", encoding="utf-8")
+        shutil.copy2(GT / "scripts" / script, self.hooks / script)
+        stub = self.tmp / "fake_schtasks.py"
+        stub.write_text(tst.FAKE_SCHTASKS, encoding="utf-8")
+        state = self.tmp / "schtasks.json"
+        state.write_text(json.dumps({"calls": [], "tasks": {label: {
+            "tr": "x", "sc": "WEEKLY", "d": "MON", "st": "07:00", "last": last,
+            "ran": "10/3/2026 7:00:00 AM"}}}), encoding="utf-8")
+        self.env["GT_SCHTASKS_STUB"] = str(stub)
+        self.env["FAKE_SCHTASKS_STATE"] = str(state)
+
+    def row(self):
+        p = self.doctor("--json", "--only", "schedule")
+        self.assertNotIn("Traceback", p.stdout + p.stderr)
+        return json.loads(p.stdout)["checks"][0]
+
+    def test_a_crashed_job_is_a_failure(self):
+        self.install_job("lint-weekly", "gt_lint_weekly.py", "1")
+        row = self.row()
+        self.assertEqual(row["state"], "fail", row)
+        self.assertIn("last result = 1", row["detail"])
+
+    def test_a_normal_result_is_ok(self):
+        self.install_job("lint-weekly", "gt_lint_weekly.py", "0")
+        self.assertEqual(self.row()["state"], "ok")
+
+
+@unittest.skipUnless(sys.platform == "darwin", "macOS-only: launchd agents (Windows has "
+                                               "DoctorScheduleCheckOnWindows)")
 class DoctorScheduleCheck(DoctorBase):
     """`schedule` (0.17.2): every INSTALLED gt_schedule job, judged by gt_schedule itself.
 
@@ -392,7 +439,7 @@ class DoctorGtSrcChecksums(DoctorGtSrcCheck):
         for f in sorted(p for p in d.rglob("*") if p.is_file() and p.name != "SOURCE.json"):
             lines.append("%s  ./%s" % (hashlib.sha256(f.read_bytes()).hexdigest(),
                                        f.relative_to(d).as_posix()))
-        (d / "SHA256SUMS").write_text("\n".join(lines) + "\n")
+        (d / "SHA256SUMS").write_bytes(("\n".join(lines) + "\n").encode())   # LF, as published
         return d
 
     def test_the_repository_layout_is_clean(self):
@@ -418,7 +465,8 @@ class DoctorWorkersAndLint(DoctorBase):
         self.install_hook_scripts(["gt_workers.py"])
         row = [c for c in json.loads(self.doctor("--json").stdout)["checks"]
                if c["check"] == "workers"][0]
-        self.assertIn(row["state"], ("ok", "warn"))
+        # unknown on native Windows: no `ps -eo`, so gt_workers says NOT CHECKED (0.19.3)
+        self.assertIn(row["state"], ("ok", "warn", "unknown") if IS_WINDOWS else ("ok", "warn"))
 
     def test_lint_findings_are_summarised_not_dumped(self):
         self.install_hook_scripts(["gt_lint.py", "gt_paths.py"])
@@ -651,7 +699,9 @@ class DoctorCoreRulesCheck(DoctorBase):
         (self.home / ".claude" / "settings.json").write_text(json.dumps({"hooks": hooks}))
 
     def hook(self, name):
-        return str(self.hooks / name)
+        # as gt writes a hook command: "/"-separated (on Windows Git Bash reads it, and a
+        # backslash is an escape there); identical to str() on POSIX
+        return (self.hooks / name).as_posix()
 
     def wire_everything(self):
         self.wire(("UserPromptSubmit", self.hook("inject_core_rules.sh")),
@@ -790,6 +840,18 @@ class DoctorUnderlyingCheckCrashes(DoctorBase):
                if c["check"] == "workers"][0]
         self.assertEqual(row["state"], "unknown", str(row))
 
+    def test_a_worker_check_that_could_not_look_is_unknown_not_clean(self):
+        # 0.19.3: gt_workers prints NOT CHECKED when it cannot read the process table (native
+        # Windows); that is neither "clean" nor a stray to reap.
+        (self.hooks / "gt_workers.py").write_text(
+            "print('GT workers: NOT CHECKED — the process table could not be read')\n",
+            encoding="utf-8")
+        row = [c for c in json.loads(self.doctor("--json").stdout)["checks"]
+               if c["check"] == "workers"][0]
+        self.assertEqual(row["state"], "unknown", str(row))
+        self.assertIn("NOT CHECKED", row["summary"])
+        self.assertFalse(row.get("fix"), "nothing to reap")
+
     def test_a_crashed_push_check_is_not_in_sync(self):
         self.crasher("gt_push_check.py")
         row = [c for c in json.loads(self.doctor("--json").stdout)["checks"]
@@ -799,6 +861,25 @@ class DoctorUnderlyingCheckCrashes(DoctorBase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+def _fake_tool(d, name, line):
+    """A stand-in `name` on PATH that prints `line`: a #! script, or on Windows a .cmd -- which
+    shutil.which() finds through PATHEXT and CreateProcess runs, as it does the ast-grep.cmd
+    that `npm install -g @ast-grep/cli` puts on PATH there."""
+    if IS_WINDOWS:
+        p = d / (name + ".cmd")
+        p.write_bytes(("@echo off\r\necho %s\r\n" % line).encode())
+    else:
+        p = d / name
+        p.write_text("#!/bin/sh\necho '%s'\n" % line)
+        p.chmod(0o755)
+    return p
+
+
+def _path_with(extra_path):
+    return (extra_path + os.pathsep + path_without_astgrep()) if extra_path \
+        else path_without_astgrep()
 
 
 class AstgrepIsOptionalNotMissing(Sandbox):
@@ -814,14 +895,11 @@ class AstgrepIsOptionalNotMissing(Sandbox):
     def fake_astgrep(self, version="ast-grep 0.45.3"):
         d = self.tmp / "bin"
         d.mkdir(exist_ok=True)
-        p = d / "ast-grep"
-        p.write_text("#!/bin/sh\necho '%s'\n" % version)
-        p.chmod(0o755)
+        _fake_tool(d, "ast-grep", version)
         return d
 
     def doctor(self, extra_path=None):
-        env = {"PATH": ("%s:%s" % (extra_path, path_without_astgrep())) if extra_path
-               else path_without_astgrep()}
+        env = {"PATH": _path_with(extra_path)}
         return self.py(SCRIPTS / "gt_doctor.py", "--only", "astgrep", env=env)
 
     def test_absent_is_reported_and_is_not_a_failure(self):
@@ -848,9 +926,7 @@ class AstgrepIsOptionalNotMissing(Sandbox):
         the version string is what settles it."""
         d = self.tmp / "bin2"
         d.mkdir(exist_ok=True)
-        p = d / "sg"
-        p.write_text("#!/bin/sh\necho 'setgid, from util-linux'\n")
-        p.chmod(0o755)
+        _fake_tool(d, "sg", "setgid, from util-linux")
         out = self.doctor(extra_path=str(d)).stdout
         self.assertIn("not installed", out,
                       "a look-alike binary was accepted as the structural matcher")
@@ -872,14 +948,11 @@ class AstgrepMustBeNewEnough(Sandbox):
     def fake(self, version):
         d = self.tmp / ("bin-%s" % version.replace(".", "_"))
         d.mkdir(exist_ok=True)
-        p = d / "ast-grep"
-        p.write_text("#!/bin/sh\necho 'ast-grep %s'\n" % version)
-        p.chmod(0o755)
+        _fake_tool(d, "ast-grep", "ast-grep %s" % version)
         return str(d)
 
     def doctor(self, path_dir=None):
-        env = {"PATH": ("%s:%s" % (path_dir, path_without_astgrep())) if path_dir
-               else path_without_astgrep()}
+        env = {"PATH": _path_with(path_dir)}
         return self.py(SCRIPTS / "gt_doctor.py", "--only", "astgrep", env=env)
 
     def test_a_stale_binary_is_a_WARN_because_it_looks_installed(self):

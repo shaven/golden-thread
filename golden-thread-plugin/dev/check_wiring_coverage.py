@@ -266,9 +266,19 @@ def module_cache_findings(repo, home, comp, gt_version=None):
 INSTALLED = (0, 9)
 
 
+def _sandbox_env(home):
+    """The environment for an install into the throwaway `home`. Windows (0.19.3): Python's
+    expanduser reads USERPROFILE, not HOME, so with HOME alone every Python step of the install
+    wrote the REAL user's ~/.claude and the sandbox's settings.json was never wired."""
+    env = dict(os.environ, HOME=str(home))
+    if os.name == "nt":
+        env.update(USERPROFILE=str(home), PYTHONUTF8="1")
+    return env
+
+
 def run_upgrade(repo, home, *extra):
     """install.sh against a vault that already exists (with `extra` arguments, if any)."""
-    env = dict(os.environ, HOME=str(home))
+    env = _sandbox_env(home)
     env.pop("GT_VAULT", None)
     for var in [k for k in env if k.startswith("CLAUDE")]:
         env.pop(var, None)
@@ -286,7 +296,7 @@ def run_upgrade(repo, home, *extra):
 
 
 def run_install(repo, home, vault):
-    env = dict(os.environ, HOME=str(home))
+    env = _sandbox_env(home)
     env.pop("GT_VAULT", None)
     for var in [k for k in env if k.startswith("CLAUDE")]:
         env.pop(var, None)

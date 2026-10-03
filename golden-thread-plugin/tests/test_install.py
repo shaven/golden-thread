@@ -26,8 +26,8 @@ import shutil
 import unittest
 from pathlib import Path
 
-from _harness import (Sandbox, REPO, GT, WIKI, WATCH, REPORT_CARD, latest_version_dir,
-                      load_module, SCRIPTS, path_without_astgrep)
+from _harness import (IS_WINDOWS, py_hook_command, Sandbox, REPO, GT, WIKI, WATCH, REPORT_CARD, latest_version_dir,
+                      load_module, SCRIPTS, path_without_astgrep, PYTHON)
 
 INSTALL = REPO / "install.sh"
 DEMO = ("skills/gt-demo", "scripts/gt_demo.sh", "templates/demo-pizzabot")
@@ -189,7 +189,9 @@ class InstallTest(Sandbox):
                          / "marketplace.json").read_text())
         self.assertEqual({x["name"] for x in mp["plugins"]}, {"gt", "gt-wiki"})
         inst = json.loads((self.plugins / "installed_plugins.json").read_text())["plugins"]
-        self.assertEqual(inst["gt@golden-thread-plugin"][0]["installPath"], str(self.cache("gt")))
+        # Path(): on Windows install.sh writes the mixed "C:/..." form Git Bash hands Python;
+        # Windows reads it as the same path. Identical to a string compare on POSIX.
+        self.assertEqual(Path(inst["gt@golden-thread-plugin"][0]["installPath"]), self.cache("gt"))
         self.assertEqual(inst["gt@golden-thread-plugin"][0]["version"], GT.name)
         self.assertEqual(inst["gt-wiki@golden-thread-plugin"][0]["version"], WIKI.name)
         known = json.loads((self.plugins / "known_marketplaces.json").read_text())
@@ -217,7 +219,8 @@ class InstallTest(Sandbox):
         self.assertNotIn("INCOMPLETE", p.stdout)
         reg = self.registered()
         self.assertEqual(sum(len(v) for v in reg.values()), N_GT_HOOKS, reg)
-        hooks_dir = str(self.home / ".claude" / "golden-thread" / "hooks")
+        # as_posix: hook commands carry "/" paths on Windows (gt_components._cmd_path)
+        hooks_dir = (self.home / ".claude" / "golden-thread" / "hooks").as_posix()
         for event, scripts in OWNED.items():
             cmds = reg.get(event, [])
             self.assertEqual(len(cmds), len(scripts), event)
@@ -227,7 +230,7 @@ class InstallTest(Sandbox):
                 self.assertIn(hooks_dir, hit[0])
                 self.assertTrue((Path(hooks_dir) / s).is_file(), s)
         # the wiring check, asked independently, agrees
-        w = self.run_cmd(["python3", self.src() / "scripts" / "gt_components.py", "wiring",
+        w = self.run_cmd([PYTHON, self.src() / "scripts" / "gt_components.py", "wiring",
                           self.src(), "--owner", "install.sh"])
         self.assertOk(w)
 
@@ -247,13 +250,13 @@ class InstallTest(Sandbox):
         reg = self.registered()
         for (event, script), (_module, args) in MODULE_OWNED.items():
             hit = [c for c in reg.get(event, []) if script in c]
-            want = " ".join(["python3", "-B", str(hooks_dir / script)] + args)
+            want = py_hook_command(hooks_dir / script, *args)
             self.assertEqual(hit, [want], "%s/%s: %s" % (event, script, reg.get(event)))
             self.assertTrue((hooks_dir / script).is_file(), script)
         self.assertFalse((self.cache() / "scripts" / "gt_watch.py").exists())
         self.assertFalse((self.cache() / "scripts" / "gt_report_card.py").exists())
         self.assertFalse((self.cache() / "templates" / "watch.md").exists())
-        w = self.run_cmd(["python3", self.src() / "scripts" / "gt_components.py", "wiring",
+        w = self.run_cmd([PYTHON, self.src() / "scripts" / "gt_components.py", "wiring",
                           self.src(), "--owner", "install.sh"])
         self.assertOk(w)
         self.assertIn("all %d declared hooks are wired" % (N_GT_HOOKS + N_MODULE_HOOKS), w.stdout)
@@ -600,8 +603,9 @@ class UpgradeLeavesOrderAndModesAsAFreshInstall(Sandbox):
         self.install()
         fresh_hooks, fresh_modes, fresh_orders = self.hooks(), self.modes(), self.key_orders()
 
-        # The rule, whatever the 0700 source said.
-        for rel, mode in fresh_modes.items():
+        # The rule, whatever the 0700 source said. (Mode bits: POSIX only -- Windows has none,
+        # _harness.WIN_MODE_BITS; the order half of this test runs everywhere.)
+        for rel, mode in (fresh_modes.items() if not IS_WINDOWS else ()):
             p = self.home / ".claude" / rel
             want = 0o755 if (p.is_dir() or rel.endswith((".sh", ".py"))) else 0o644
             self.assertEqual(oct(mode), oct(want), rel)
@@ -640,8 +644,10 @@ class UpgradeLeavesOrderAndModesAsAFreshInstall(Sandbox):
         self.assertEqual(self.key_orders(), fresh_orders, "JSON key order depends on history")
         now = self.modes()
         now.pop("golden-thread/hooks/users_own_tool.py", None)
-        self.assertEqual(now, fresh_modes, "file modes depend on history")
-        self.assertEqual(mine.stat().st_mode & 0o777, 0o600, "a user's file is not ours to chmod")
+        if not IS_WINDOWS:
+            self.assertEqual(now, fresh_modes, "file modes depend on history")
+            self.assertEqual(mine.stat().st_mode & 0o777, 0o600,
+                             "a user's file is not ours to chmod")
 
 
 class VaultIsPartOfTheInstall(Sandbox):
@@ -1026,15 +1032,34 @@ class AstgrepOfferIsDefaultOnButNeverUnattended(InstallTest):
         Nothing pinned it, and the mass install failures were nearly written off as a local
         process error. This asserts the end of the script is reached with a minimal PATH.
         """
+        minimal = "/usr/bin:/bin"
+        if IS_WINDOWS:
+            # Windows' minimal PATH: the Python install.sh requires (it refuses, correctly, when
+            # none is on PATH), Git Bash's own tools, and System32 -- still no brew, no npm.
+            minimal = os.pathsep.join([os.path.dirname(PYTHON),
+                                       os.path.dirname(shutil.which("tr")),
+                                       os.path.join(os.environ.get("SystemRoot", r"C:\Windows"),
+                                                    "System32")])
         p = self.sh(self.repo / "install.sh", "--no-vault",
-                    env={"PATH": "/usr/bin:/bin"}, timeout=300)
+                    env={"PATH": minimal}, timeout=300)
         self.assertEqual(p.returncode, 0,
                          "install.sh aborted with a minimal PATH:\n" + p.stdout[-800:]
                          + "\n" + p.stderr[-400:])
         self.assertIn("Restart Claude Code", p.stdout,
                       "the installer exited 0 but never reached its final line")
 
+    def with_a_package_manager(self):
+        """The offer is only made where brew or npm exists. A Windows VM has neither, so there a
+        stand-in npm goes first on PATH (Git Bash runs a "#!" file; it is never invoked here --
+        these installs are non-interactive). POSIX: the machine's own, unchanged."""
+        if IS_WINDOWS and not (shutil.which("npm") or shutil.which("brew")):
+            d = self.tmp / "pmbin"
+            d.mkdir(exist_ok=True)
+            (d / "npm").write_bytes(b"#!/bin/sh\nexit 99\n")
+            self.env["PATH"] = str(d) + os.pathsep + self.env["PATH"]
+
     def test_a_non_interactive_install_never_installs_anything(self):
+        self.with_a_package_manager()
         p = self.install()
         self.assertOk(p)
         self.assertIn("Not a terminal", p.stdout,
@@ -1044,6 +1069,7 @@ class AstgrepOfferIsDefaultOnButNeverUnattended(InstallTest):
 
     def test_it_names_both_install_routes(self):
         """The owner asked for both ways to be given, not one."""
+        self.with_a_package_manager()
         out = self.install().stdout
         self.assertTrue("brew install ast-grep" in out or "npm install -g @ast-grep/cli" in out,
                         "no install route was offered:\n" + out[-600:])
@@ -1074,7 +1100,7 @@ class AstgrepOfferIsDefaultOnButNeverUnattended(InstallTest):
         """
         d = self.fake_astgrep("0.30.0")
         p = self.sh(self.repo / "install.sh", "--no-vault",
-                    env={"PATH": "%s:%s" % (d, os.environ["PATH"])}, timeout=300)
+                    env={"PATH": "%s%s%s" % (d, os.pathsep, os.environ["PATH"])}, timeout=300)
         self.assertOk(p)
         self.assertIn("0.30.0", p.stdout)
         self.assertIn("tested against", p.stdout)
@@ -1084,7 +1110,7 @@ class AstgrepOfferIsDefaultOnButNeverUnattended(InstallTest):
     def test_a_newer_binary_is_accepted_so_a_floor_is_not_a_pin(self):
         d = self.fake_astgrep("1.2.0")
         p = self.sh(self.repo / "install.sh", "--no-vault",
-                    env={"PATH": "%s:%s" % (d, os.environ["PATH"])}, timeout=300)
+                    env={"PATH": "%s%s%s" % (d, os.pathsep, os.environ["PATH"])}, timeout=300)
         self.assertIn("structural code rules are available", p.stdout)
 
     def test_a_present_binary_is_reported_instead_of_offered(self):
@@ -1093,7 +1119,7 @@ class AstgrepOfferIsDefaultOnButNeverUnattended(InstallTest):
         (d / "ast-grep").write_text("#!/bin/sh\necho 'ast-grep 0.45.3'\n")
         (d / "ast-grep").chmod(0o755)
         p = self.sh(self.repo / "install.sh", "--no-vault",
-                    env={"PATH": "%s:%s" % (d, os.environ["PATH"])}, timeout=300)
+                    env={"PATH": "%s%s%s" % (d, os.pathsep, os.environ["PATH"])}, timeout=300)
         # The message carries the VERSION since the floor was added, so match on the stable
         # part rather than on a phrase that moves whenever the wording gains a detail.
         self.assertIn("structural code rules are available", p.stdout)
@@ -1122,7 +1148,9 @@ class ChecksumBeforeInstall(Sandbox):
                         and "__pycache__" not in p.parts):
             lines.append("%s  ./%s" % (hashlib.sha256(f.read_bytes()).hexdigest(),
                                        f.relative_to(self.root).as_posix()))
-        (self.root / "SHA256SUMS").write_text("\n".join(lines) + "\n")
+        # bytes: SHA256SUMS is LF as published (.gitattributes eol=lf); Windows text mode
+        # would write CRLF and every name would read back as "<name>\r"
+        (self.root / "SHA256SUMS").write_bytes(("\n".join(lines) + "\n").encode())
 
     def install(self, *args):
         return self.sh(self.repo / "install.sh", "--no-vault", *args, timeout=300)

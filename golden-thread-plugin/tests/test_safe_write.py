@@ -10,7 +10,7 @@ import stat
 import unittest
 from pathlib import Path
 
-from _harness import Sandbox, PYTHON
+from _harness import Sandbox, PYTHON, IS_WINDOWS, skip_on_windows, WIN_MODE_BITS, WIN_CHMOD_FAULT
 
 
 class SafeWriteTest(Sandbox):
@@ -85,6 +85,7 @@ class SafeWriteTest(Sandbox):
         self.assertEqual(leftovers, [], "atomic replace left its temp file behind")
         self.assertEqual(self.ledger(), [], "a clean write must not touch the ledger")
 
+    @skip_on_windows(WIN_MODE_BITS)
     def test_existing_permission_bits_survive_atomic_replace(self):
         for mode in (0o644, 0o640, 0o666):
             with self.subTest(mode=oct(mode)):
@@ -154,11 +155,22 @@ class SafeWriteTest(Sandbox):
         target.write_bytes(old)
         self.chmod(target, 0o444)
         path, strategy = self.write(target, "new\n", "a")
+        if IS_WINDOWS:
+            # Windows' read-only attribute forbids replacing the FILE (POSIX asks only that
+            # the directory be writable), so no replacing strategy can reach it. What must
+            # hold instead: the target untouched, and old + new bytes in a recorded sidecar.
+            self.assertEqual(strategy, "sidecar")
+            self.assertEqual(target.read_bytes(), old, "a read-only target was changed")
+            self.assertEqual(Path(path).read_bytes(), old + b"new\n",
+                             "the sidecar did not hold the resolved append")
+            self.assertEqual(len(self.ledger()), 1, "the sidecar's mv was not recorded")
+            return
         self.assertEqual(strategy, "atomic")
         self.assertEqual(target.read_bytes(), old + b"new\n",
                          "the fallback append re-encoded or dropped existing bytes")
         self.assertEqual(stat.S_IMODE(os.stat(target).st_mode), 0o444)
 
+    @skip_on_windows(WIN_CHMOD_FAULT)
     def test_append_refuses_when_target_cannot_be_read(self):
         sub = self.work / "locked"
         sub.mkdir()
@@ -179,6 +191,7 @@ class SafeWriteTest(Sandbox):
                          "overwrite the target with only the new bytes")
 
     # -- fallbacks and the ledger --------------------------------------------
+    @skip_on_windows(WIN_CHMOD_FAULT)
     def test_writable_file_in_readonly_directory_is_written_direct(self):
         # The atomic strategy needs a sibling temp file, so a read-only directory
         # defeats it; the write still lands, but by truncating the file in place.
@@ -194,6 +207,7 @@ class SafeWriteTest(Sandbox):
         self.assertIn("safe_write: atomic write to", proc.stderr)
         self.assertEqual(self.ledger(), [])
 
+    @skip_on_windows(WIN_CHMOD_FAULT)
     def test_unwritable_directory_lands_in_ledger_dir_and_replays(self):
         d = self.work / "rodir"
         d.mkdir()
@@ -279,6 +293,7 @@ class SafeWriteTest(Sandbox):
         self.assertNotIn("safe_write:", proc.stderr,
                          "a perfectly good atomic write warned about degrading")
 
+    @skip_on_windows(WIN_CHMOD_FAULT)
     def test_degraded_ledger_entry_records_why_the_atomic_write_failed(self):
         d = self.work / "rodir2"
         d.mkdir()
@@ -293,6 +308,7 @@ class SafeWriteTest(Sandbox):
         self.assertTrue(led[0]["why_not_atomic"],
                         "why_not_atomic is present but empty")
 
+    @skip_on_windows(WIN_CHMOD_FAULT)
     def test_append_protection_survives_a_failed_atomic_write(self):
         # _existing_bytes() refuses rather than letting a failed append become a
         # truncating write. Reporting degradation must not open that door: with the
@@ -329,7 +345,9 @@ class SafeWriteTest(Sandbox):
         self.assertEqual(strategy, "sidecar")
         self.assertIn("in-place write", proc.stderr,
                       "strategy 2 failed and said nothing at all")
-        self.assertIn("IsADirectoryError", proc.stderr,
+        # Windows refuses to open a directory for writing as EACCES, not EISDIR: the same
+        # defeat under its own name there.
+        self.assertIn("PermissionError" if IS_WINDOWS else "IsADirectoryError", proc.stderr,
                       "the exception that defeated the in-place write was swallowed")
         led = self.ledger()
         self.assertEqual(len(led), 1)
@@ -337,6 +355,7 @@ class SafeWriteTest(Sandbox):
                         "the sidecar entry does not say why the in-place write failed")
         self.assertTrue(led[0].get("why_not_atomic"))
 
+    @skip_on_windows(WIN_CHMOD_FAULT)
     def test_failed_sidecar_reports_its_reason_rather_than_swallowing_it(self):
         # A read-only directory defeats 1, 2 and 3; only the ledger directory is left.
         d = self.work / "rodir3"
@@ -355,6 +374,7 @@ class SafeWriteTest(Sandbox):
             self.assertTrue(led[0].get(field),
                             "ledger-dir entry is missing %s" % field)
 
+    @skip_on_windows(WIN_CHMOD_FAULT)
     def test_replay_never_overwrites_a_target_that_reappeared(self):
         # The documented promise: "Never deletes a target to make room." os.replace
         # overwrites an existing destination, so an outstanding entry replayed onto a

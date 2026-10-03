@@ -18,7 +18,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from _harness import GT
+from _harness import GT, skip_on_windows, WIN_FILENAME
 
 SCRIPT = GT / "scripts" / "gt_registry.py"
 
@@ -341,6 +341,7 @@ class RegistryTest(unittest.TestCase):
         self.assertNotIn("IGNORE ALL PREVIOUS", r.stdout)
         self.assertIn("field name #", r.stdout)
 
+    @skip_on_windows(WIN_FILENAME)
     def test_pack_filename_cannot_forge_an_output_row(self):
         """`name` was cleaned; the FILENAME was printed raw in every PROBLEM line, so a name
         carrying an ANSI erase-line forged a core row and blanked the real message."""

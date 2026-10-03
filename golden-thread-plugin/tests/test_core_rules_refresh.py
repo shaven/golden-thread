@@ -8,6 +8,8 @@ Now, by content (the vault-tool rule): a vault copy byte-identical to some text 
 is replaced; anything else is the owner's, kept and reported. Both paths that run it are
 pinned: gt_upgrade's core-rules-refresh step and install.sh's vault_refresh refresh.
 """
+import os
+
 from _harness import Sandbox, SCRIPTS, TEMPLATES, REPO, core_rules_dir
 
 UPGRADE = SCRIPTS / "gt_upgrade.py"
@@ -60,7 +62,8 @@ class UpgradeStep(Base):
         p = self.upgrade()
         self.assertEqual(self.rule1.read_bytes(), edited, "an owner-edited rule was overwritten")
         self.assertIn("%s edited locally, not refreshed; diff against" % RULE1, p.stdout)
-        self.assertIn("templates/core-rules/%s" % RULE1, p.stdout)
+        # an absolute path to the shipped template: native separators (C:\\... on Windows)
+        self.assertIn(os.path.join("templates", "core-rules", RULE1), p.stdout)
         # it must not hold the vault at "pending" forever
         st = self.py(UPGRADE, "status", "--vault", self.vault).stdout
         self.assertNotIn("core-rules-refresh", st)

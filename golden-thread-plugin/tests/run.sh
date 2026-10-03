@@ -23,6 +23,25 @@
 set -uo pipefail
 cd "$(dirname "$0")"
 
+# Native Windows (0.19.3): in Git Bash `python3` is the Microsoft Store stub. Resolve a real
+# interpreter the way the hooks do -- the newest release's hooks/gt_python.sh, which skips
+# anything under ...\WindowsApps\ and is a no-op on macOS and Linux.
+case "${OSTYPE:-}" in
+  msys*|cygwin*)
+    _gt_pysh=$(ls -d ../golden-thread/*/hooks/gt_python.sh 2>/dev/null | sort -V | tail -1)
+    HERE=/nonexistent
+    [ -n "$_gt_pysh" ] && . "$_gt_pysh"
+    if [ -z "${GT_PYTHON:-}" ]; then
+      echo "No usable Python found (the Microsoft Store Python does not count)." >&2
+      exit 1
+    fi
+    # Unpiped, unlike the hooks' version: `tr` would hold the suite's live progress back until
+    # it exited. Nothing here reads a value back from Python except digits, so \r is harmless.
+    python3() { "$GT_PYTHON" "$@"; }
+    export GT_PYTHON PYTHONUNBUFFERED=1
+    export -f python3 ;;
+esac
+
 # A PASSING run leaves a receipt, which is what core_test_before_commit reads before
 # letting a commit through. Only a FULL run counts: `tests/run.sh test_gt_lint` proves
 # one module, not the tree, and a receipt from it would wave through a commit nothing

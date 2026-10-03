@@ -39,12 +39,19 @@ where should the vault live? Re-run with `--vault` once you know.
 `install.sh` resolves its own paths, so it can be run from anywhere. Run
 `bash install.sh --help` for every option.
 
-**On Windows** (0.19.2) run the same installer from Git Bash, or run `install.cmd` from
+**On Windows** (0.19.2; complete in 0.19.3) run the same installer from Git Bash, or run `install.cmd` from
 cmd.exe, PowerShell or Explorer — it finds Git Bash and hands `install.sh` every argument
 unchanged (`install.cmd --vault C:\Users\you\Documents\GoldenThread`). Both need
 [Git for Windows](https://git-scm.com/download/win), which Claude Code on Windows needs anyway,
 and Python 3.8+ from [python.org](https://www.python.org/downloads/) with *Add python.exe to
 PATH* ticked. See *Windows* below.
+
+**A failed install is rolled back** (0.19.3). If the installer exits non-zero after it has
+started writing — any exit but 4, which means "installed, now choose a vault", and 9 under
+`--force-manifest-mismatch` — it puts back
+`~/.claude/settings.json`, the plugin registrations, the golden-thread-plugin marketplace and
+cache, `~/.claude/golden-thread` (its `backups/` are kept) and `vault-config.json` exactly as they
+were, and says `ROLLED BACK`. The vault is not rolled back; it has its own pre-write backup.
 
 ---
 
@@ -313,16 +320,38 @@ changed or not where the list puts it. **By default it then installs anyway, mar
 `GT_REQUIRE_CHECKSUM=1`) turns a mismatch into a refusal (exit 8, nothing copied); use it on the
 machine receiving a publish. A tree with no `SHA256SUMS` installs as it stands.
 
-**Windows** (native, 0.19.2; tested on Windows 11 with Git for Windows 2.56 and Python 3.12).
+**Windows** (native since 0.19.2, complete in 0.19.3; tested on Windows 11 with Git for Windows
+2.56 and Python 3.12).
 `install.sh` and the hooks are bash scripts and run under Git Bash; `install.cmd` is only a
 launcher for it. The installer resolves a real Python once — `python3`, then `python`, then
 `py -3` — and **the Microsoft Store Python does not count**: neither the "Python was not found"
 stub Windows puts on PATH as `python3`, nor a real Store install (its virtualised AppData makes
 writes under your profile unreliable). With no other Python 3.8+ it stops before installing
 anything and says what to install. The interpreter it found is written into the hook commands
-and to `~/.claude/golden-thread/python` for the hook wrappers. Scheduled jobs
-(`gt_schedule.py`) are launchd jobs and are refused on Windows; run them by hand or from Task
-Scheduler. The repository's `.gitattributes` forces LF on checkout (0.17.3) — except `*.cmd`,
+and to `~/.claude/golden-thread/python` for the hook wrappers.
+
+*`python3` in Claude's shell (0.19.3).* Skills tell Claude to run `python3 <tool>.py`, and in
+Git Bash `python3` is the Store stub. The installer writes a small `python3` shim — the Python
+it resolved, in UTF-8 mode, with `\r` stripped from piped output — to
+`~/.claude/golden-thread/bin/python3` and to `~/bin/python3` (Git for Windows puts `~/bin` first
+on PATH in every Git Bash login shell). At session start gt's component check adds the first
+to PATH and sets `PYTHONUTF8=1` through `$CLAUDE_ENV_FILE`, which Claude Code sources before every
+Bash command. A `~/bin/python3` that is not gt's is left alone. Claude Code's PowerShell tool
+does not read `$CLAUDE_ENV_FILE`; there `python` (python.org's name) works as it is.
+
+*Scheduled jobs (0.19.3).* `gt_schedule.py install|check|remove|list|reconcile` use Task
+Scheduler (`schtasks`), per user and without admin: the task runs
+`~/.claude/golden-thread/jobs/gt-<job>.cmd`, which appends to the same `<job>.out` / `.err` logs
+the macOS jobs write. `install` runs the task once and reads Task Scheduler's Last Result, as it
+reads launchd's exit code on macOS. Like a macOS job, a task runs only while you are logged on
+at the desktop — from an SSH session `install` registers it and says it is NOT PROVEN; prove it
+later with `gt_schedule.py check <job>`.
+
+*What does not run on Windows, and says so (0.19.3).* gt-lotr (a Unix-domain-socket gateway) is
+off on Windows whatever is chosen; `gt-watch`'s hourly cron fetch (`install-cron`) is POSIX-only —
+run `gt_watch.py fetch` by hand or from Task Scheduler; `gt_workers.py` reports NOT CHECKED (there
+is no POSIX process table); task priority windows need a time-zone database —
+`python -m pip install tzdata`. The repository's `.gitattributes` forces LF on checkout (0.17.3) — except `*.cmd`,
 which stays CRLF — so a Windows clone neither breaks the shell scripts nor fails the checksum
 check. Not yet exercised: the hooks as Claude Code for Windows itself runs them (they have been
 run directly, with the same payloads). WSL is Linux, and installs as Linux does.
@@ -346,8 +375,11 @@ for a module since the gt you had.
 ```bash
 rm -rf ~/.claude/plugins/cache/golden-thread-plugin \
        ~/.claude/plugins/marketplaces/golden-thread-plugin \
-       ~/.claude/golden-thread/hooks
+       ~/.claude/golden-thread/hooks ~/.claude/golden-thread/bin
 ```
+
+On Windows also delete `~/bin/python3` if its second line reads `gt-python3-shim`, and remove
+each scheduled job first: `python3 ~/.claude/golden-thread/hooks/gt_schedule.py remove <job>`.
 
 Then remove the `golden-thread-plugin` entries from `~/.claude/plugins/installed_plugins.json`
 and `~/.claude/plugins/known_marketplaces.json`, the `*@golden-thread-plugin` keys under

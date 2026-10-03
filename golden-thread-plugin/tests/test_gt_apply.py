@@ -42,6 +42,10 @@ ORIGINAL = "<html>\n<p>BAD-MARKER</p>\n<p>other</p>\n</html>\n"
 
 
 class ApplyBase(Sandbox):
+    # Fixture files are written as BYTES (write_bytes(... .encode())): write_text would make
+    # them CRLF on Windows, and the toy add-on below diffs a universal-newline read, so its
+    # LF diff would not apply -- a fixture artefact, not the case under test. (gt_apply
+    # refusing an LF diff against a CRLF file, file unchanged, is the correct outcome.)
     checkers = ((FIX, REMOVE),)
     first_party = True
     mode = "propose"
@@ -54,8 +58,8 @@ class ApplyBase(Sandbox):
                     manifest=self.first_party)
         self.repo = self.tmp / "repo"
         self.repo.mkdir()
-        (self.repo / "a.html").write_text(ORIGINAL)
-        (self.repo / "b.html").write_text("<p>clean</p>\n")
+        (self.repo / "a.html").write_bytes((ORIGINAL).encode())
+        (self.repo / "b.html").write_bytes(("<p>clean</p>\n").encode())
         self.git_init(self.repo)
         self.setmode(self.mode)
 
@@ -145,10 +149,10 @@ class ModesTest(ApplyBase):
     def test_each_outcome_records_one_event(self):
         _pid, p = self.propose_and_apply()
         self.assertOk(p)
-        (self.repo / "a.html").write_text(ORIGINAL)        # again, so a second proposal exists
+        (self.repo / "a.html").write_bytes((ORIGINAL).encode())        # again, so a second proposal exists
         self.check()
         pid2 = self.only_id()
-        (self.repo / "a.html").write_text(ORIGINAL + "<!-- edited -->\n")
+        (self.repo / "a.html").write_bytes((ORIGINAL + "<!-- edited -->\n").encode())
         self.assertEqual(self.apply("apply", pid2).returncode, 1)
         ev = self.events()
         self.assertEqual(len(ev), 2, ev)
@@ -161,7 +165,7 @@ class RefusalsTest(ApplyBase):
     def test_a_stale_repo_file_is_refused_and_left_alone(self):
         self.check()
         edited = ORIGINAL + "<!-- edited after the check -->\n"
-        (self.repo / "a.html").write_text(edited)
+        (self.repo / "a.html").write_bytes((edited).encode())
         p = self.apply("apply", self.only_id())
         self.assertEqual(p.returncode, 1)
         self.assertIn("changed since", p.stdout)
@@ -169,7 +173,7 @@ class RefusalsTest(ApplyBase):
 
     def test_a_protected_path_is_refused_even_when_granted(self):
         (self.repo / "core-rules").mkdir()
-        (self.repo / "core-rules" / "x.html").write_text(ORIGINAL)
+        (self.repo / "core-rules" / "x.html").write_bytes((ORIGINAL).encode())
         self.check("core-rules/x.html")
         p = self.apply("apply", self.only_id())
         self.assertEqual(p.returncode, 1)
@@ -179,7 +183,7 @@ class RefusalsTest(ApplyBase):
     def test_a_file_claimed_by_another_live_session_is_refused_by_name(self):
         notes = self.vault / "Notes"
         notes.mkdir()
-        (notes / "page.html").write_text(ORIGINAL)
+        (notes / "page.html").write_bytes((ORIGINAL).encode())
         tool = self.vault.joinpath(*VAULT_TOOLS) / "gt_session.py"
         self.assertOk(self.py(tool, "--vault", self.vault, "--id", "other-session", "register",
                               "--files", "Notes/page.html",
@@ -210,7 +214,7 @@ class VaultMarkdownTest(ApplyBase):
     def test_a_vault_markdown_fix_goes_through_the_queue(self):
         page = self.vault / "Notes" / "page.md"
         page.parent.mkdir()
-        page.write_text("# Page\n\nBAD-MARKER\n")
+        page.write_bytes(("# Page\n\nBAD-MARKER\n").encode())
         self.check("Notes/page.md", repo=self.vault)
         pid = self.only_id()
         p = self.apply("apply", pid)
@@ -318,7 +322,7 @@ class ContentRulesTest(ApplyBase):
 
     def test_scrub_term_is_refused_without_being_printed(self):
         terms = self.tmp / "terms.txt"
-        terms.write_text("zebrafrobnicator\n")
+        terms.write_bytes(("zebrafrobnicator\n").encode())
         p = self.refused({"replace": ["BAD-MARKER", "zebrafrobnicator"]}, "scrub term",
                          env={"GT_SCRUB_TERMS": str(terms)})
         self.assertNotIn("zebrafrobnicator", p.stdout + p.stderr)

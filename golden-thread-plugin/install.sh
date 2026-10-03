@@ -67,9 +67,22 @@ case "$(uname -s 2>/dev/null)" in
     # Unbuffered: stdout now goes through a pipe, and a block-buffered Python would hold a
     # progress line back until it exited.
     export PYTHONUNBUFFERED=1
-    python3() { "$GT_PYTHON" "$@" | tr -d '\r'; return "${PIPESTATUS[0]}"; }
+    # An argument holding an apostrophe ("/c/Users/x/Sam's Projects/...") is one MSYS does NOT
+    # convert to a Windows path for a native program (0.19.3), so Python was handed "/c/..."
+    # and could not open it: an install from such a folder stopped at the version check.
+    # cygpath converts exactly those; every other argument is MSYS's to convert, as before.
+    python3() {
+      local _a; local -a _v=()
+      for _a in "$@"; do
+        case "$_a" in /*\'*) _a=$(cygpath -m "$_a" 2>/dev/null || printf '%s' "$_a") ;; esac
+        _v+=("$_a")
+      done
+      "$GT_PYTHON" ${_v[@]+"${_v[@]}"} | tr -d '\r'; return "${PIPESTATUS[0]}"
+    }
     export -f python3
-    echo "Python: $GT_PYTHON"
+    # To stderr (0.19.3): a diagnostic, not output. On stdout it became the first line of
+    # --list-plugins / --list-modules, which are machine-readable ("<dir> <version> <name>").
+    echo "Python: $GT_PYTHON" >&2
     ;;
 esac
 
@@ -519,11 +532,13 @@ def cmd_resolve(a):
                 state = got["state"]
             if str(got.get("reason", "")).startswith("invalid"):
                 why, m["reason"] = "invalid", got["reason"]
+            elif str(got.get("reason", "")).startswith("POSIX-only"):   # 0.19.3: lotr on Windows
+                why, m["reason"] = "platform", got["reason"]
         elif got in ("on", "off"):
             state = got
         if m["admits"] is not True:
             state, why = "off", "requires"
-        elif why == "invalid":
+        elif why in ("invalid", "platform"):
             state = "off"
         m["state"], m["why"] = state, why
     atomic(out, mods)
@@ -580,6 +595,8 @@ def cmd_summary(a):
             s += " (needs gt %s)" % m["requires_gt"]
         elif m["why"] == "invalid":
             s += " (invalid module.json)"
+        elif m["why"] == "platform":
+            s += " (POSIX-only: not on Windows)"
         elif m["why"] in ("flag", "recorded") and m["state"] != m["default"]:
             s += " (by your choice)"
         elif m["why"] == "default" and m["state"] == "off":
@@ -830,7 +847,22 @@ CMDS = {"scan": cmd_scan, "resolve": cmd_resolve, "record": cmd_record, "list": 
 sys.exit(CMDS[sys.argv[1]](sys.argv[2:]))
 PYEOF
 )
-modpy() { python3 -c "$MODPY" "$@"; }
+if [ -n "${GT_PYTHON:-}" ]; then
+  # Windows (0.19.3): MODPY is ~28 KB, and MSYS escapes every quote in it on the way to a native
+  # process, so `-c "$MODPY"` plus a few long paths passed CreateProcess's 32767-character limit
+  # ("Argument list too long", exit 126). There the code goes in a file, which the -c stub execs:
+  # sys.argv and sys.path are what -c gives. $$ is the same in every subshell, so the one file
+  # serves the <(...) and $(...) calls too; gt_on_exit removes it.
+  _GT_MODPY_FILE="${TMPDIR:-/tmp}/gt-modpy.$$.py"
+  printf '%s\n' "$MODPY" > "$_GT_MODPY_FILE"
+  trap 'rm -f "$_GT_MODPY_FILE"' EXIT
+  modpy() {
+    python3 -c "import sys; exec(compile(open(sys.argv.pop(1), encoding='utf-8').read(), 'install.sh MODPY', 'exec'))" \
+      "$_GT_MODPY_FILE" "$@"
+  }
+else
+  modpy() { python3 -c "$MODPY" "$@"; }
+fi
 
 # The directory name decides what gets copied; plugin.json's version field is what
 # every consumer reads back afterwards. If they disagree one of them is lying, and
@@ -930,12 +962,17 @@ With no vault and no --vault:
     needs, rather than inventing a directory and claiming ~/.claude/vault-config.json.
 
 If the release ships machine migrations, they run after the plugin files and hooks are
-in place; a failed one stops the install with exit 7 (nothing is rolled back).
+in place; a failed one stops the install with exit 7.
+
+Any failure after the installer starts writing (every non-zero exit except 4) is ROLLED
+BACK (0.19.3): settings.json, the plugin registrations, marketplace and cache,
+~/.claude/golden-thread (not its backups/) and vault-config.json are put back as they were.
+The vault is not rolled back; it has its own pre-write backup.
 
 With a vault configured, the install ends by running the installed
 `gt_doctor.py post-install --stage install` (the release gate) and prints its table. Rows that
 cannot be true until /gt:gt-upgrade has run show PENDING. Any FAIL row stops with exit 9
-(nothing is rolled back); the full gate, after the upgrade and a restart, is
+(and is rolled back); the full gate, after the upgrade and a restart, is
   python3 ~/.claude/golden-thread/hooks/gt_doctor.py post-install --vault <vault>
 
 Environment: GT_VAULT (same as --vault), GT_VERSION (same as the version argument).
@@ -1130,7 +1167,36 @@ plugin_cache() { echo "$CACHE_ROOT/${PLUGIN_NAMES[$1]}/${PLUGIN_VERS[$1]}"; }
 # Nothing here writes: an unknown name or --without gt must leave the machine untouched,
 # and --list-modules exits at the end of this block.
 GT_TMP=$(mktemp -d "${TMPDIR:-/tmp}/gt-install.XXXXXX")
-trap 'rm -rf "$GT_TMP"' EXIT
+# The exit handler also rolls a failed install back (0.19.3) -- see snapshot_take below,
+# which arms it just before the first write.
+GT_SNAP="" GT_SNAP_READY=""
+gt_on_exit() {  # $1 = the exit status
+  local rc="$1"
+  trap - EXIT
+  # Exit 9 under --force-manifest-mismatch is kept, not rolled back: the tree was installed on
+  # purpose although it does not match its manifest, so the gate's components row fails by
+  # construction (dev/check_wiring_coverage.py installs tampered trees exactly this way).
+  if [ "$GT_SNAP_READY" = yes ] && [ "$rc" -ne 0 ] && [ "$rc" -ne 4 ] \
+     && ! { [ "$rc" -eq 9 ] && [ "${FORCE_MANIFEST:-no}" = yes ]; }; then
+    echo ""
+    if ( snapshot_restore ); then
+      echo "ROLLED BACK — the install exited $rc, so the machine is as it was before it started:"
+      echo "  settings.json, the plugin registrations, marketplace and cache, ~/.claude/golden-thread"
+      echo "  (its backups/ kept) and vault-config.json are restored. The vault is not rolled back."
+    else
+      echo "⚠ ROLLBACK INCOMPLETE — the install exited $rc and restoring the previous state failed."
+      echo "  The copy taken before the install is kept at: $GT_SNAP"
+      GT_SNAP=""                                # keep it: it is the only copy
+    fi
+  fi
+  rm -rf "$GT_TMP"
+  [ -n "$GT_SNAP" ] && rm -rf "$GT_SNAP"
+  [ -n "${_GT_MODPY_FILE:-}" ] && rm -f "$_GT_MODPY_FILE"
+  exit "$rc"
+}
+trap 'gt_on_exit $?' EXIT
+trap 'exit 130' INT
+trap 'exit 143' TERM
 MODJSON="$GT_TMP/modules.json"
 SCAN_ARGS=()
 i=1
@@ -1225,6 +1291,8 @@ while [ "$i" -lt "$PLUGIN_COUNT" ]; do
 "
       [ "$_why" = requires ] && SKIP_NOTES="${SKIP_NOTES}Skipping module $_m (${PLUGIN_NAMES[$i]} ${PLUGIN_VERS[$i]}): its requires_gt does not admit gt $VERSION — treated as off for this run, your recorded choice unchanged
 "
+      [ "$_why" = platform ] && SKIP_NOTES="${SKIP_NOTES}Skipping module $_m: it is POSIX-only (a Unix-domain-socket gateway) and does not run on Windows — your recorded choice unchanged
+"
     fi
   done < "$GT_TMP/states.tsv"
   if [ "$state" = on ]; then
@@ -1252,6 +1320,89 @@ fi
 checksum_block
 [ -n "$PICK_NOTES" ] && printf '%s' "$PICK_NOTES"
 [ -n "$SKIP_NOTES" ] && printf '%s' "$SKIP_NOTES"
+
+# ── Rollback: a failed install leaves the machine as it was (0.19.3) ─────────────
+#
+# Until 0.19.2 a failure after the first write left a half-installed machine ("nothing is
+# rolled back"): caches pruned, settings.json half-registered, hooks from two releases. Now
+# everything this installer may write under the user's home is copied aside before step 0 --
+# the first write -- and put back if the install then exits non-zero. The one exception is
+# exit 4: the plugin installed completely and only the vault decision is missing, which is a
+# question for the user, not a failure; and exit 9 under --force-manifest-mismatch, where the
+# gate fails by construction on a tree the user chose to install anyway.
+#
+# Covered: ~/.claude/settings.json, plugins/installed_plugins.json, known_marketplaces.json,
+# the golden-thread-plugin marketplace and cache, ~/.claude/golden-thread (hooks, recorded
+# interpreter, module choices, Windows job files -- but not backups/, which only grows),
+# vault-config.json, ~/.claude/CLAUDE.md, and the Windows python3 shim (~/bin/python3).
+# NOT covered: the vault (it has its own pre-write backup, named when it is taken) and loaded
+# launchd jobs.
+#
+# The snapshot dir is passed to the migration re-run (exec) below, so a failure there still
+# restores the state from before the FIRST run.
+GT_SNAP_PATHS=(.claude/settings.json .claude/plugins/installed_plugins.json
+               .claude/plugins/known_marketplaces.json
+               ".claude/plugins/marketplaces/$MARKET_NAME" ".claude/plugins/cache/$MARKET_NAME"
+               .claude/vault-config.json .claude/CLAUDE.md bin/python3)
+# Parent dirs the install may create; one that did not exist and is empty again goes too.
+GT_SNAP_DIRS=(.claude/plugins/cache .claude/plugins/marketplaces .claude/plugins bin)
+_gt_gtdir="$HOME/.claude/golden-thread"
+snapshot_take() {
+  local rel e
+  GT_SNAP=$(mktemp -d "${TMPDIR:-/tmp}/gt-install-snapshot.XXXXXX")
+  for rel in "${GT_SNAP_PATHS[@]}"; do
+    if [ -e "$HOME/$rel" ] || [ -L "$HOME/$rel" ]; then
+      mkdir -p "$GT_SNAP/home/$(dirname "$rel")"
+      cp -Rp "$HOME/$rel" "$GT_SNAP/home/$rel" || return 1
+    fi
+  done
+  for rel in "${GT_SNAP_DIRS[@]}"; do
+    [ -d "$HOME/$rel" ] && echo "$rel" >> "$GT_SNAP/dirs.existed"
+  done
+  mkdir -p "$GT_SNAP/gt"
+  if [ -d "$_gt_gtdir" ]; then
+    : > "$GT_SNAP/gt.existed"
+    for e in "$_gt_gtdir"/* "$_gt_gtdir"/.[!.]*; do
+      [ -e "$e" ] || [ -L "$e" ] || continue
+      [ "$(basename "$e")" = backups ] && continue
+      cp -Rp "$e" "$GT_SNAP/gt/" || return 1
+    done
+  fi
+  GT_SNAP_READY=yes
+}
+snapshot_restore() {
+  local rel e
+  for rel in "${GT_SNAP_PATHS[@]}"; do
+    rm -rf "${HOME:?}/$rel" || return 1
+    if [ -e "$GT_SNAP/home/$rel" ] || [ -L "$GT_SNAP/home/$rel" ]; then
+      mkdir -p "$HOME/$(dirname "$rel")"
+      cp -Rp "$GT_SNAP/home/$rel" "$HOME/$rel" || return 1
+    fi
+  done
+  if [ -d "$_gt_gtdir" ]; then
+    for e in "$_gt_gtdir"/* "$_gt_gtdir"/.[!.]*; do
+      [ -e "$e" ] || [ -L "$e" ] || continue
+      [ "$(basename "$e")" = backups ] && continue
+      rm -rf "$e" || return 1
+    done
+  fi
+  if [ -f "$GT_SNAP/gt.existed" ]; then
+    mkdir -p "$_gt_gtdir" || return 1
+    cp -Rp "$GT_SNAP/gt/." "$_gt_gtdir/" || return 1
+  elif [ -d "$_gt_gtdir" ] && [ -z "$(ls -A "$_gt_gtdir/backups" 2>/dev/null)" ]; then
+    rm -rf "$_gt_gtdir"                       # it did not exist, and holds no backup
+  fi
+  for rel in "${GT_SNAP_DIRS[@]}"; do
+    grep -qxF "$rel" "$GT_SNAP/dirs.existed" 2>/dev/null || rmdir "$HOME/$rel" 2>/dev/null || true
+  done
+}
+if [ -n "${GT_INSTALL_SNAPSHOT:-}" ] && [ -d "$GT_INSTALL_SNAPSHOT" ]; then
+  GT_SNAP="$GT_INSTALL_SNAPSHOT" GT_SNAP_READY=yes          # the re-run: keep the first copy
+elif ! snapshot_take; then
+  echo "✗ Could not copy the current state aside before installing (for a rollback); nothing was written."
+  GT_SNAP_READY=""
+  exit 1
+fi
 
 # 0. Remove superseded versions of EVERY plugin so old caches don't linger unreferenced.
 # The cache holds only what installed_plugins.json points at; rollback reads the SOURCE
@@ -1511,6 +1662,49 @@ while [ "$i" -lt "$PLUGIN_COUNT" ]; do
 done
 strip_gt_demo "$(plugin_cache 0)"
 
+# Windows (0.19.3): a `python3` the MODEL's shell finds. Skills and docs tell Claude to run
+# `python3 <tool>.py ...`; in Claude Code for Windows the Bash tool is Git Bash, where `python3`
+# is the Microsoft Store stub (python.org installs python.exe and py.exe, never python3.exe).
+# The shim runs the interpreter the preflight resolved, in UTF-8 mode, with \r stripped from
+# piped output; at a terminal it execs Python directly so the REPL still works. It is written
+# twice, identically, and marked so gt only ever replaces its own:
+#   * ~/.claude/golden-thread/bin/python3 -- gt's own bin dir. Claude Code is pointed at it by
+#     gt_components.py's SessionStart hook, which on Windows appends
+#     `export PATH="$HOME/.claude/golden-thread/bin:$PATH"` and PYTHONUTF8=1 to $CLAUDE_ENV_FILE
+#     -- the documented way for a SessionStart hook to set the environment of every later Bash
+#     command (code.claude.com/docs/en/hooks, "Persist environment variables").
+#   * ~/bin/python3 -- Git for Windows' per-user bin, which its /etc/profile.d/env.sh puts
+#     first on PATH in every login shell, so `python3` also works in a Git Bash terminal. A
+#     ~/bin/python3 that is not gt's is left alone, and said so.
+# Removed by deleting both files (INSTALL.md, Uninstall). macOS and Linux never get one.
+GT_SHIM_MARK="gt-python3-shim"
+write_python3_shim() {  # $1 = the file
+  {
+    echo '#!/usr/bin/env bash'
+    echo "# $GT_SHIM_MARK -- written by gt's install.sh (0.19.3). Delete this file to remove it."
+    echo "# Windows: \`python3\` is otherwise the Microsoft Store stub. This runs the Python gt resolved,"
+    echo "# in UTF-8 mode, with \\r stripped from piped output."
+    printf 'PY=%q\n' "$GT_PYTHON"
+    echo 'export PYTHONUTF8=1'
+    echo 'if [ -t 1 ]; then exec "$PY" "$@"; fi'
+    echo '"$PY" "$@" | tr -d '"'"'\r'"'"''
+    echo 'exit "${PIPESTATUS[0]}"'
+  } > "$1"
+  chmod 755 "$1"
+}
+install_python3_shim() {
+  local t="$HOME/bin/python3"
+  mkdir -p "$HOME/.claude/golden-thread/bin"
+  write_python3_shim "$HOME/.claude/golden-thread/bin/python3"
+  if { [ -e "$t" ] || [ -L "$t" ]; } && ! grep -q "$GT_SHIM_MARK" "$t" 2>/dev/null; then
+    echo "python3 shim → ~/.claude/golden-thread/bin/python3 (~/bin/python3 is not gt's; left as it is)"
+  else
+    mkdir -p "$HOME/bin"
+    write_python3_shim "$t"
+    echo "python3 shim → ~/bin/python3 and ~/.claude/golden-thread/bin/python3 (runs $GT_PYTHON)"
+  fi
+}
+
 # 1b. Install the Core-rule hooks to a STABLE location outside the vault.
 # settings.json references these by absolute path, so the path must survive project
 # renames, merges and vault moves. The scripts locate the rules at run time.
@@ -1556,14 +1750,19 @@ if [ -d "$SRC/hooks" ]; then
   # reads it). Their `python3` is otherwise the Store stub and every hook fails open, silently.
   if [ -n "${GT_PYTHON:-}" ]; then
     printf '%s\n' "$GT_PYTHON" > "$GT_HOOKS/../python"
+    install_python3_shim
   fi
-  # One interpreter for every scheduled job (0.19.1): record the python running this
-  # install, then rewrite any installed job on another one. A macOS privacy grant is per
-  # interpreter, so jobs on two pythons meant a grant that covered only some of them.
+  # One interpreter for every scheduled job (0.19.1), then rewrite any installed job on
+  # another one. A macOS privacy grant is per interpreter, so jobs on two pythons meant a
+  # grant that covered only some of them. 0.19.3: CHOSEN, not overwritten -- the recorded
+  # interpreter is kept (0.19.1/0.19.2 replaced it with the python running the install, and
+  # under launchd Homebrew's python could not write the vault: every install broke the jobs),
+  # and with a job installed the choice is proven by a write probe run under launchd.
   if [ -f "$GT_HOOKS/gt_schedule.py" ]; then
     _gt_py=$(python3 -c 'import sys; print(sys.executable)' 2>/dev/null) || _gt_py=""
     if [ -n "$_gt_py" ]; then
-      python3 -B "$GT_HOOKS/gt_schedule.py" record-interpreter "$_gt_py" || true
+      python3 -B "$GT_HOOKS/gt_schedule.py" choose-interpreter --candidate "$_gt_py" \
+        ${VAULT_ARG:+--vault "$VAULT_ARG"} || true
       python3 -B "$GT_HOOKS/gt_schedule.py" reconcile || true
     fi
   fi
@@ -2114,10 +2313,10 @@ run_machine_migrations() {
   if [ "$rc" -ne 0 ]; then
     echo ""
     echo "════════════════════════════════════════════════════════════════════════"
-    echo "INSTALL INCOMPLETE — machine migration failed; nothing was rolled back; fix and re-run install.sh"
+    echo "INSTALL INCOMPLETE — machine migration failed; the install is rolled back; fix and re-run install.sh"
     echo "════════════════════════════════════════════════════════════════════════"
     echo "The migrator exited $rc ($( [ "$rc" -eq 2 ] && echo "could not evaluate" || echo "a migration failed" ))."
-    echo "Plugin files and hooks for gt $VERSION are in place; the vault step did not run."
+    echo "The vault step did not run; what this install wrote is put back below."
     echo "  Status:  python3 \"$mig\" status --release \"$SRC\""
     exit 7
   fi
@@ -2138,7 +2337,9 @@ if [ "$(cut -f1,2 "$GT_TMP/states.tsv")" != "$(cut -f1,2 "$GT_TMP/after.tsv")" ]
     cut -f1,2 "$GT_TMP/after.tsv" | awk -F'\t' '{print "  " $1 " " $2}' || true
     echo ""
     rm -rf "$GT_TMP"
+    [ -n "${_GT_MODPY_FILE:-}" ] && rm -f "$_GT_MODPY_FILE"    # exec runs no EXIT trap
     export GT_INSTALL_RERUN=1
+    export GT_INSTALL_SNAPSHOT="$GT_SNAP"      # a failure in the re-run restores THIS run's start
     exec bash "$SCRIPT_DIR/install.sh" ${ORIG_ARGS[@]+"${ORIG_ARGS[@]}"}
   fi
   echo "⚠ Module choices changed again after a re-run; left as they are. Re-run install.sh to converge."
@@ -2833,7 +3034,7 @@ post_install_gate() {
   if [ "$rc" -eq 1 ]; then
     echo ""
     echo "════════════════════════════════════════════════════════════════════════"
-    echo "INSTALL FAILED VALIDATION — the FAIL row(s) above are real; nothing was rolled back."
+    echo "INSTALL FAILED VALIDATION — the FAIL row(s) above are real; the install is rolled back."
     echo "Fix each (its fix: line), then re-run install.sh. Exit 9 means exactly this."
     echo "════════════════════════════════════════════════════════════════════════"
     return 9

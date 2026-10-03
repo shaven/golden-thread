@@ -21,6 +21,7 @@ import unittest
 from pathlib import Path
 
 from _harness import REPO, latest_version_dir
+from _harness import LOTR_POSIX_ONLY, skip_on_windows
 
 
 def _gateway_dir():
@@ -55,6 +56,7 @@ def conn_entry(**over):
     return e
 
 
+@skip_on_windows(LOTR_POSIX_ONLY)
 class TmpBase(unittest.TestCase):
     def setUp(self):
         self._td = tempfile.TemporaryDirectory()

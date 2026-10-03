@@ -22,7 +22,7 @@ import unittest
 from pathlib import Path
 from unittest import mock
 
-from _harness import GT, HOOKS, REPO, SCRIPTS, Sandbox, load_module
+from _harness import GT, HOOKS, IS_WINDOWS, REPO, SCRIPTS, Sandbox, load_module
 
 INSTALL = REPO / "install.sh"
 INSTALL_CMD = REPO / "install.cmd"
@@ -35,6 +35,9 @@ class WindowsSandbox(Sandbox):
     """A PATH holding only what the preflight needs, plus the Windows conditions."""
 
     def setUp(self):
+        if IS_WINDOWS:
+            self.skipTest("POSIX-only: simulates Windows (fake uname, a shell-script Store stub, "
+                          "symlinked tools); on Windows the real install is what is tested")
         super().setUp()
         self.fake = self.tmp / "fakebin"
         self.fake.mkdir()
@@ -207,6 +210,11 @@ class ManifestSeparators(unittest.TestCase):
         self.gc = load_module(SCRIPTS / "gt_components.py", "gt_components_win")
 
     def windows_paths(self):
+        if IS_WINDOWS:
+            # The real thing: os.sep and relpath are already Windows'. Patching relpath with
+            # posixpath's would feed it "C:\\..." paths it cannot read ("../C:/..." keys).
+            import contextlib
+            return [contextlib.nullcontext(), contextlib.nullcontext()]
         real = posixpath.relpath
         return [mock.patch.object(os, "sep", "\\"),
                 mock.patch.object(os.path, "relpath",
@@ -231,7 +239,10 @@ class ManifestSeparators(unittest.TestCase):
         # _contained() compares realpath()s, which a POSIX runner cannot give Windows
         # separators; it is not what is under test, so it is held true.
         a, b = self.windows_paths()
-        with a, b, mock.patch.object(reg, "_contained", lambda *_: True):
+        import contextlib
+        held = contextlib.nullcontext() if IS_WINDOWS else \
+            mock.patch.object(reg, "_contained", lambda *_: True)
+        with a, b, held:
             packs, problems = reg.load_packs(vault=None)
         refused = [msg for _p, msg in problems if "MANIFEST" in msg]
         self.assertEqual(refused, [], "shipped packs refused on Windows separators")
@@ -283,7 +294,9 @@ class HookCommands(unittest.TestCase):
         self.assertEqual([r["state"] for r in bad], ["badpath"], rows)
 
     def test_posix_commands_are_unchanged(self):
-        rows = self.gc.hook_commands(str(GT), str(REPO), home="/nonexistent")
+        # On Windows, the POSIX branch is simulated the other way round (os.name "posix").
+        with mock.patch.object(self.gc.os, "name", "posix" if IS_WINDOWS else self.gc.os.name):
+            rows = self.gc.hook_commands(str(GT), str(REPO), home="/nonexistent")
         for r in rows:
             if r["script"].endswith(".py"):
                 self.assertTrue(r["command"].startswith("python3 -B "), r["command"])
@@ -361,15 +374,19 @@ class DoctorIsolation(unittest.TestCase):
 
 
 class ScheduleOnWindows(Sandbox):
-    def test_launchd_commands_are_refused_in_words(self):
+    def test_jobs_go_to_task_scheduler_not_launchd(self):
+        # 0.19.2 refused these in words; 0.19.3 runs them on Task Scheduler
+        # (tests/test_schedule_task_scheduler.py). Never launchctl, never os.getuid.
         sched = load_module(SCRIPTS / "gt_schedule.py", "gt_schedule_win")
+        seen = []
+        sched.run = lambda args, timeout=180: seen.append(list(args)) or mock.Mock(
+            returncode=1, stdout="", stderr="")
         with mock.patch.object(sched.os, "name", "nt"), \
-                mock.patch("sys.stderr") as err:
+                mock.patch.object(sched, "domain", side_effect=AssertionError("launchd")), \
+                mock.patch("sys.stdout"):
             rc = sched.main(["remove", "daily"])
-        self.assertEqual(rc, sched.PROBLEM)
-        said = "".join(c.args[0] for c in err.write.call_args_list)
-        self.assertIn("not available on Windows", said)
-        self.assertIn("Task Scheduler", said)
+        self.assertEqual(rc, sched.OK)
+        self.assertEqual([a[0] for a in seen], ["schtasks"])
 
 
 class InstallCmd(unittest.TestCase):

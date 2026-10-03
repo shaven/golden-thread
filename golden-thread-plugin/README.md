@@ -7,6 +7,13 @@ A Claude Code plugin that turns an Obsidian vault into the single source of trut
 
 
 > [!IMPORTANT]
+> **0.19.3: Windows, finished.** `python3` now works in Claude's shell on Windows (a shim gt
+> installs), every gt write is LF, scheduled jobs run on Task Scheduler, and the test suite runs
+> on Windows. On every platform a failed install now rolls back to the state before it, and the
+> scheduled jobs keep the interpreter that can write your vault instead of the one that ran the
+> install. See *Windows* in [`INSTALL.md`](INSTALL.md).
+
+> [!IMPORTANT]
 > **0.19.2: gt installs on native Windows.** Run `install.sh` from Git Bash, or the new
 > `install.cmd` from cmd.exe, PowerShell or Explorer. The installer finds a real Python 3.8+
 > (the Microsoft Store Python does not count, and it says what to install when that is all

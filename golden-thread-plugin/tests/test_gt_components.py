@@ -15,7 +15,10 @@ import shlex
 import shutil
 import unittest
 
-from _harness import Sandbox, SCRIPTS, load_module, ENFORCEMENT_HOOKS, GT
+from pathlib import Path
+
+from _harness import (Sandbox, SCRIPTS, load_module, ENFORCEMENT_HOOKS, GT, IS_WINDOWS,
+                      PY_HOOK_PREFIX, py_hook_command)
 
 TOOL = SCRIPTS / "gt_components.py"
 
@@ -37,6 +40,23 @@ HOOKDIR_SCRIPTS = tuple(
     n for n in load_module(SCRIPTS / "gt_components.py", "gt_components_hookdir")
     .HOOK_DIR_SCRIPTS if n != "gt_paths.py")
 MOVED_TO_MODULES = ("gt_watch.py", "gt_report_card.py")
+
+
+def cp(path):
+    """A path as a hook command carries it: "/"-separated on Windows (gt_components._cmd_path),
+    str() elsewhere -- the two are identical on POSIX."""
+    return Path(path).as_posix()
+
+
+def py_argv(command):
+    """shlex.split a .py hook command with this platform's interpreter prefix
+    (_harness.PY_HOOK_PREFIX) read back as the POSIX ["python3", "-B"], so one expectation
+    serves both platforms."""
+    argv = shlex.split(command)
+    n = len(PY_HOOK_PREFIX)
+    if argv[:n] == PY_HOOK_PREFIX:
+        return ["python3", "-B"] + argv[n:]
+    return argv
 
 
 class ComponentsBase(Sandbox):
@@ -154,27 +174,27 @@ class HookRegistrations(ComponentsBase):
         regs = self.registrations()
         self.assertEqual(len(regs), N_HOOKS)
         by = {(r["event"], r["script"]): r for r in regs}
-        argv = shlex.split(by[("SessionStart", "gt_components.py")]["command"])
+        argv = py_argv(by[("SessionStart", "gt_components.py")]["command"])
         # `-B` (0.19.1): these hooks are handed gt-src and must not write bytecode into it
-        self.assertEqual(argv, ["python3", "-B", str(self.installed / "gt_components.py"),
-                                "check", str(self.vdir), "--hook"])
-        argv = shlex.split(by[("SessionStart", "gt_version_check.py")]["command"])
-        self.assertEqual(argv[3:], ["check", str(self.root), "--hook"])
-        argv = shlex.split(by[("SessionStart", "gt_push_check.py")]["command"])
-        self.assertEqual(argv, ["python3", "-B", str(self.installed / "gt_push_check.py"),
+        self.assertEqual(argv, ["python3", "-B", cp(self.installed / "gt_components.py"),
+                                "check", cp(self.vdir), "--hook"])
+        argv = py_argv(by[("SessionStart", "gt_version_check.py")]["command"])
+        self.assertEqual(argv[3:], ["check", cp(self.root), "--hook"])
+        argv = py_argv(by[("SessionStart", "gt_push_check.py")]["command"])
+        self.assertEqual(argv, ["python3", "-B", cp(self.installed / "gt_push_check.py"),
                                 "check", "--hook"])
         self.assertFalse([r for r in regs if r["script"] in MOVED_TO_MODULES],
                          "gt itself registers a hook a module owns since 0.15.0")
         # shell hooks execute directly, not through python3
         argv = shlex.split(by[("Stop", "validate_response.sh")]["command"])
-        self.assertEqual(argv, [str(self.installed / "validate_response.sh")])
+        self.assertEqual(argv, [cp(self.installed / "validate_response.sh")])
 
     def test_explicit_plugin_root(self):
         other = self.tmp / "elsewhere"
         p = self.py(TOOL, "hook-registrations", self.vdir, other)
         self.assertOk(p)
         vc = [r for r in json.loads(p.stdout) if r["script"] == "gt_version_check.py"][0]
-        self.assertIn(str(other), shlex.split(vc["command"]))
+        self.assertIn(cp(other), shlex.split(vc["command"]))
 
 
 class Check(ComponentsBase):
@@ -248,12 +268,13 @@ class Check(ComponentsBase):
         self.full_setup()
         dst = self.installed / "alpha.sh"
         old_content = "#!/bin/sh\n# shipped by an earlier release\n"
-        dst.write_text(old_content)
+        # bytes, not write_text: Windows text mode would write CRLF and the hash below is of LF
+        dst.write_bytes(old_content.encode())
         self.set_mtime(dst, +3600)                       # newer, as cp always leaves it
         # A sibling release whose manifest records exactly that content.
         sibling = self.vdir.parent / "1.2.2"
         (sibling / "hooks").mkdir(parents=True)
-        (sibling / "hooks" / "alpha.sh").write_text(old_content)
+        (sibling / "hooks" / "alpha.sh").write_bytes(old_content.encode())
         import hashlib
         sha = hashlib.sha256(old_content.encode()).hexdigest()
         (sibling / "MANIFEST.json").write_text(json.dumps(
@@ -359,7 +380,7 @@ class Check(ComponentsBase):
         shutil.rmtree(old)                          # ...which a bump then deleted
         out = self.check()
         self.assertRegex(out, r"badpath\s+gt_components\.py")
-        self.assertIn(str(old), out)
+        self.assertIn(cp(old), out)
 
 
 class SourceMoved(ComponentsBase):
@@ -673,9 +694,9 @@ class ModuleHooks(ModuleBase):
         r = mine[0]
         self.assertEqual((r["event"], r["script"], r["owner"], r["module"]),
                          ("SessionStart", "zed_report.py", "install.sh", "zed"))
-        argv = shlex.split(r["command"])
-        self.assertEqual(argv[:3], ["python3", "-B", str(self.installed / "zed_report.py")])
-        self.assertEqual(argv[3:], ["check", str(self.zed), "--hook"],
+        argv = py_argv(r["command"])
+        self.assertEqual(argv[:3], ["python3", "-B", cp(self.installed / "zed_report.py")])
+        self.assertEqual(argv[3:], ["check", cp(self.zed), "--hook"],
                          "{src} in a module hook is the module's own version dir")
         self.assertFalse(any("module" in x for x in regs[:N_HOOKS]))
 
@@ -683,7 +704,7 @@ class ModuleHooks(ModuleBase):
         self.choose(zed="off", yak="on")
         mine = [r for r in self.registrations() if r.get("module")]
         self.assertEqual([(r["module"], r["script"]) for r in mine], [("yak", "yak_guard.sh")])
-        self.assertEqual(shlex.split(mine[0]["command"]), [str(self.installed / "yak_guard.sh")])
+        self.assertEqual(shlex.split(mine[0]["command"]), [cp(self.installed / "yak_guard.sh")])
 
     def test_home_flag_reads_that_homes_choices(self):
         other = self.tmp / "other-home"
@@ -812,7 +833,7 @@ class ExistingInstallEntriesBelongToTheModule(ModuleBase):
         # what an older gt wrote: exactly the command the module resolves to (with the `-B`
         # every python hook carries since 0.19.1; wiring is matched by script, so an entry
         # written without it still reads as wired)
-        old_cmd = "python3 -B %s --hook" % shlex.quote(str(self.installed / "gt_moved.py"))
+        old_cmd = py_hook_command(self.installed / "gt_moved.py", "--hook")
         mine = [r for r in self.registrations() if r.get("module") == "mover"]
         self.assertEqual([r["command"] for r in mine], [old_cmd])
         out = self.check()
@@ -847,7 +868,8 @@ class KeyOrderIsCanonical(Sandbox):
         self.hd.mkdir(parents=True)
 
     def block(self, script):
-        return {"hooks": [{"type": "command", "command": "%s/%s" % (self.hd, script)}]}
+        # cp(): gt writes hook commands "/"-separated on Windows; identical on POSIX
+        return {"hooks": [{"type": "command", "command": cp(self.hd / script)}]}
 
     def test_event_keys_follow_one_order_whatever_the_history(self):
         mine = {"hooks": [{"type": "command", "command": "echo mine"}]}
@@ -885,7 +907,9 @@ class HookOrderIsCanonical(Sandbox):
         self.order = [(r["event"], r["script"]) for r in self.mod.HOOK_REGISTRATIONS]
 
     def gt(self, script, py=False):
-        cmd = ("python3 %s --hook" if py else "%s") % (self.hd / script)
+        # as_posix: a hook command is read by Git Bash on Windows, where "\\" is an escape and
+        # gt itself writes "/" (gt_components._cmd_path). Identical on POSIX.
+        cmd = ("python3 %s --hook" if py else "%s") % (self.hd / script).as_posix()
         return {"hooks": [{"type": "command", "command": cmd}]}
 
     def test_upgrade_order_is_put_back_to_the_fresh_order(self):
@@ -905,7 +929,7 @@ class HookOrderIsCanonical(Sandbox):
     def test_users_blocks_first_in_their_own_order_then_gt_then_unknown_gt(self):
         mine1 = {"hooks": [{"type": "command", "command": "echo one"}]}
         mine2 = {"matcher": "Bash", "hooks": [{"type": "command", "command": "echo two"}]}
-        mixed = {"hooks": [{"type": "command", "command": str(self.hd / "guard_vault_writes.sh")},
+        mixed = {"hooks": [{"type": "command", "command": (self.hd / "guard_vault_writes.sh").as_posix()},
                            {"type": "command", "command": "echo three"}]}
         stray = self.gt("gt_ingest.py", py=True)
         hooks = {"PreToolUse": [self.gt("guard_vault_writes.sh"), mine1, stray,
@@ -937,9 +961,11 @@ class InstallChoicesAreWrittenOneWay(Sandbox):
         p = self.py(TOOL, "record-choice", self.home, "demo", "off")
         self.assertOk(p)
         f = self.home / ".claude" / "golden-thread" / "install-choices.json"
-        self.assertEqual(oct(f.stat().st_mode & 0o777), oct(0o600))
+        if not IS_WINDOWS:          # Windows has no mode bits (_harness.WIN_MODE_BITS)
+            self.assertEqual(oct(f.stat().st_mode & 0o777), oct(0o600))
         doc = {"version": 1, "choices": {"demo": "off"}}
-        self.assertEqual(f.read_text(), json.dumps(doc, indent=2, sort_keys=True) + "\n")
+        self.assertEqual(f.read_bytes(),
+                         (json.dumps(doc, indent=2, sort_keys=True) + "\n").encode())
         self.assertEqual([x.name for x in f.parent.iterdir() if x.name.endswith(".tmp")], [])
 
 

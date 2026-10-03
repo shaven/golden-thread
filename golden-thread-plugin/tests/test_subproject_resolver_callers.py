@@ -19,7 +19,7 @@ from _harness import Sandbox, SCRIPTS, TOOLS
 VI = SCRIPTS / "vault_init.py"
 
 
-class Fixture(Sandbox):
+class FixtureBase(Sandbox):
     def setUp(self):
         super().setUp()
         self.v = self.make_vault()
@@ -68,7 +68,7 @@ class Fixture(Sandbox):
         self.assertNoStray("ghost")
 
 
-class GtTask(Fixture):
+class GtTask(FixtureBase):
     def task(self, *args):
         return self.py(self.v / "Projects/golden-thread/tools/gt_task.py", *args,
                        env={"GT_TODAY": "2026-10-01"})
@@ -94,7 +94,7 @@ class GtTask(Fixture):
                                                        "--vault", self.v))
 
 
-class GtHandoff(Fixture):
+class GtHandoff(FixtureBase):
     def ho(self, name, *args):
         return self.py(SCRIPTS / "gt_handoff.py", "--vault", self.v, "--project", name, *args)
 
@@ -112,7 +112,7 @@ class GtHandoff(Fixture):
         self.unknown_and_ambiguous(lambda n: self.ho(n))
 
 
-class GtDemote(Fixture):
+class GtDemote(FixtureBase):
     def dem(self, name):
         return self.py(SCRIPTS / "gt_demote.py", "--vault", self.v, "--file",
                        "global-memory/kelvin.md", "--to", "project-memory", "--project", name,
@@ -131,7 +131,7 @@ class GtDemote(Fixture):
         self.unknown_and_ambiguous(self.dem)
 
 
-class GtClose(Fixture):
+class GtClose(FixtureBase):
     def test_reports_on_the_subproject(self):
         p = self.py(SCRIPTS / "gt_close.py", "project", "child", "--vault", self.v, "--json")
         self.assertOk(p)
@@ -148,7 +148,7 @@ class GtClose(Fixture):
                                                      "--vault", self.v))
 
 
-class VaultInitProjectOps(Fixture):
+class VaultInitProjectOps(FixtureBase):
     def vi(self, *args):
         return self.py(VI, *args, "--vault", self.v)
 
@@ -181,7 +181,7 @@ class VaultInitProjectOps(Fixture):
         self.assertIn("not found", p.stdout + p.stderr)
 
 
-class ReadOnlyCallers(Fixture):
+class ReadOnlyCallers(FixtureBase):
     """Tools that only read: a bare sub-project slug works, unknown/ambiguous refuse."""
 
     def run_tool(self, name, script, *args):

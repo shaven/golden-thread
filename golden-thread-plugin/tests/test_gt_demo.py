@@ -20,7 +20,7 @@ import shutil
 import unittest
 from pathlib import Path
 
-from _harness import Sandbox, GT, WIKI, REPO, PYTHON, latest_version_dir, needs_dev
+from _harness import IS_WINDOWS, Sandbox, GT, WIKI, REPO, PYTHON, latest_version_dir, needs_dev
 
 ACTS = 9  # core acts only; module acts (e.g. wiki's and watch's demo/act.md) are added by `tour-acts`
 DEMO_MODULE = latest_version_dir(REPO / "golden-thread-demo")
@@ -51,6 +51,12 @@ def install_demo_plugin(dest: Path):
         shutil.copy2(DEMO_MODULE / f, dest / f)
     return dest
 
+
+
+def shown(path):
+    """The demo vault as gt_demo.sh prints it: the path, or on Windows its "C:/..." form (what
+    bash, git and a native Claude Code all read)."""
+    return Path(path).as_posix() if IS_WINDOWS else str(path)
 
 class DemoTest(Sandbox):
     def setUp(self):
@@ -104,8 +110,9 @@ class DemoTest(Sandbox):
 
     def test_start_prints_the_pinned_launch_command(self):
         out = self.demo_cmd("start").stdout
-        self.assertIn(f'cd "{self.demo}" && GT_VAULT="{self.demo}" GT_WATCH=report '
-                      f'GT_WATCH_STATE="{self.demo}/.demo/watch" claude', out)
+        demo = shown(self.demo)
+        self.assertIn(f'cd "{demo}" && GT_VAULT="{demo}" GT_WATCH=report '
+                      f'GT_WATCH_STATE="{demo}/.demo/watch" claude', out)
         self.assertIn("/gt-demo:gt-demo tour", out)
         self.assertNotIn("/gt:gt-demo", out)
 
@@ -239,6 +246,7 @@ class DemoTest(Sandbox):
         self.assertTrue((alt / ".demo" / "secret-transcript.json").is_file(),
                         "act 1 reads $GT_VAULT/.demo/secret-transcript.json")
         self.assertFalse(self.demo.exists(), "GT_DEMO_VAULT was ignored")
+        alt = shown(alt)
         self.assertIn(f'GT_VAULT="{alt}" GT_WATCH=report GT_WATCH_STATE="{alt}/.demo/watch" claude', p.stdout)
 
     def test_tour_references_resolve_without_machine_paths(self):
@@ -264,7 +272,7 @@ class DemoTest(Sandbox):
         skill = (DEMO_MODULE / "skills" / "gt-demo" / "SKILL.md").read_text()
         printed = self.demo_cmd("start").stdout
         line = next(l.strip() for l in printed.splitlines() if l.strip().startswith("cd "))
-        self.assertIn(line.replace(str(self.demo), "<demo vault>"), skill)
+        self.assertIn(line.replace(shown(self.demo), "<demo vault>"), skill)
 
     def test_skill_invocation_is_namespaced_by_the_module_plugin(self):
         for p in [DEMO_MODULE / "skills" / "gt-demo" / "SKILL.md", DEMO_MODULE / "scripts" / "gt_demo.sh",

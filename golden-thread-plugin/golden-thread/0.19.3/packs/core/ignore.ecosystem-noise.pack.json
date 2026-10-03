@@ -1,0 +1,25 @@
+{
+  "schema": 1,
+  "slot": "ignore",
+  "name": "ecosystem-noise",
+  "tier": "A",
+  "spdx": "MIT",
+  "provenance": {
+    "origin": "original",
+    "contributor": "Golden Thread <noreply@example.com>",
+    "upstream": null
+  },
+  "dco": "Signed-off-by: Golden Thread <noreply@example.com>",
+  "entries": [
+    { "path": "node_modules/" },
+    { "path": ".venv/" },
+    { "path": "__pycache__/" },
+    { "path": "target/" },
+    { "path": "dist/" },
+    { "path": "build/" },
+    { "path": ".pytest_cache/" },
+    { "path": ".ruff_cache/" },
+    { "path": ".mypy_cache/" },
+    { "path": "vendor/" }
+  ]
+}

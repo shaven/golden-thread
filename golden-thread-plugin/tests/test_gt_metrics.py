@@ -22,7 +22,7 @@ import time
 import unittest
 from pathlib import Path
 
-from _harness import Sandbox, SCRIPTS, REPO
+from _harness import Sandbox, SCRIPTS, REPO, PYTHON
 
 TOOL = SCRIPTS / "gt_metrics.py"
 SECRET = "sk-live-" + "A1b2C3d4E5f6G7h8I9j0K1l2"          # credential-shaped, built at run time
@@ -133,7 +133,7 @@ class Instrumented(MetricsBase):
         env = dict(self.env, GT_METRICS_PROJECT="app", GT_VAULT=str(self.vault))
         empty = self.tmp / "empty"
         empty.mkdir()
-        self.run_cmd(["python3", SCRIPTS / "gt_allin.py", "--only", "secrets", "--repo", empty],
+        self.run_cmd([PYTHON, SCRIPTS / "gt_allin.py", "--only", "secrets", "--repo", empty],
                      env=env, timeout=300)
         procs = [r for r in self.rows("app") if r["process"] == "skill:gt-allin"]
         self.assertEqual(len(procs), 1)
@@ -142,7 +142,7 @@ class Instrumented(MetricsBase):
     def test_the_test_runner_records_a_row(self):
         env = dict(self.env, GT_METRICS_PROJECT="app", GT_VAULT=str(self.vault),
                    GT_TEST_VERSION=SCRIPTS.parent.name)
-        p = self.run_cmd(["python3", REPO / "tests" / "prun.py", "-j", "1",
+        p = self.run_cmd([PYTHON, REPO / "tests" / "prun.py", "-j", "1",
                           "test_gt_recipe.Refusals"], env=env, cwd=REPO / "tests", timeout=300)
         self.assertOk(p)
         rows = [r for r in self.rows("app") if r["process"] == "tests:suite"]

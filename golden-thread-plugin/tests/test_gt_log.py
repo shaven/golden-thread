@@ -13,7 +13,7 @@ import unittest
 import argparse
 import pathlib
 
-from _harness import Sandbox, TOOLS, SCRIPTS, PYTHON, load_module
+from _harness import Sandbox, TOOLS, SCRIPTS, PYTHON, load_module, skip_on_windows, WIN_MODE_BITS
 
 def _restore_mode(path, mode=0o644):
     """chmod back, ignoring a path the sandbox teardown has already removed."""
@@ -267,6 +267,7 @@ class SpoolWriteIfChanged(Sandbox):
         self.assertEqual(self.temps(), [], "a failed write left a .gt-tmp beside the vault file")
         self.assertFalse(self.target.exists())
 
+    @skip_on_windows(WIN_MODE_BITS)
     def test_the_target_keeps_its_own_permissions(self):
         self.target.write_text("old\n")
         os.chmod(self.target, 0o640)
@@ -337,10 +338,12 @@ class SpoolWriteIfChanged(Sandbox):
         self.assertEqual(self.temps(), [], "concurrent writers left scratch files behind")
 
     # -- (2) the read-decide-write window ----------------------------------------
+    # The fixtures write BYTES: these tests compare exact owner bytes, and write_text would
+    # turn "\n" into "\r\n" on Windows -- a different file than the one the test means.
     def test_a_target_changed_underneath_the_writer_is_refused(self):
-        self.target.write_text("one\n")
+        self.target.write_bytes(b"one\n")
         decided_on = self.S.content_digest(self.S.read_owner(self.target))
-        self.target.write_text("one\ntyped by hand\n")            # the human save
+        self.target.write_bytes(b"one\ntyped by hand\n")            # the human save
         r = self.S.write_if_changed(self.target, "one\nrendered\n", expect=decided_on)
         self.assertEqual(r, self.S.STALE, "a stale write was not refused: %r" % (r,))
         self.assertEqual(self.target.read_text(), "one\ntyped by hand\n",
@@ -352,7 +355,7 @@ class SpoolWriteIfChanged(Sandbox):
         self.assertEqual(self.target.read_text(), "one\nrendered\n")
 
     def test_expect_accepts_the_content_itself(self):
-        self.target.write_text("one\n")
+        self.target.write_bytes(b"one\n")
         self.assertIs(self.S.write_if_changed(self.target, "two\n", expect="one\n"), True)
         self.assertEqual(self.S.write_if_changed(self.target, "three\n", expect="one\n"),
                          self.S.STALE)
@@ -361,13 +364,13 @@ class SpoolWriteIfChanged(Sandbox):
     def test_expect_on_a_file_that_should_not_exist(self):
         """Absent digests as empty, so a file that appeared underneath the caller is stale."""
         self.assertIs(self.S.write_if_changed(self.target, "x\n", expect=""), True)
-        self.target.write_text("someone else\n")
+        self.target.write_bytes(b"someone else\n")
         self.assertEqual(self.S.write_if_changed(self.target, "y\n", expect=""), self.S.STALE)
         self.assertEqual(self.target.read_text(), "someone else\n")
 
     def test_expect_is_optional_and_stale_is_distinct_from_unchanged(self):
         """The callers this must not break pass two arguments and read True/False."""
-        self.target.write_text("same\n")
+        self.target.write_bytes(b"same\n")
         self.assertIs(self.S.write_if_changed(self.target, "same\n"), False)
         self.assertIs(self.S.write_if_changed(self.target, "same\n",
                                               expect=self.S.content_digest("same\n")), False)

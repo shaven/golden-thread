@@ -11,7 +11,7 @@ import os
 import time
 import unittest
 
-from _harness import Sandbox, SCRIPTS, ENFORCEMENT_HOOKS
+from _harness import Sandbox, SCRIPTS, ENFORCEMENT_HOOKS, skip_on_windows, WIN_CHMOD_FAULT
 
 WEEKLY = SCRIPTS / "gt_lint_weekly.py"
 
@@ -69,6 +69,7 @@ class WeeklyTest(WeeklyBase):
         self.run_weekly()
         self.assertEqual(len(self.inbox_lines(v)), 1)
 
+    @skip_on_windows(WIN_CHMOD_FAULT)
     def test_a_lint_that_cannot_read_the_vault_is_not_zero_findings(self):
         """2026-09-28: under launchd both linters died on PermissionError reading
         lint-declines.md, and the report said "Findings: **0**" -- a clean verdict built from

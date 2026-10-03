@@ -14,7 +14,7 @@ import subprocess
 import unittest
 from pathlib import Path
 
-from _harness import GT, Sandbox, load_module
+from _harness import GT, PY_HOOK_PREFIX, PYTHON, Sandbox, load_module
 
 
 def snapshot(root):
@@ -73,7 +73,8 @@ class NoBytecodeInSrc(Sandbox):
         self.assertTrue(rows)
         for r in rows:
             with self.subTest(script=r["script"], event=r["event"]):
-                self.assertEqual(shlex.split(r["command"])[:2], ["python3", "-B"], r["command"])
+                self.assertEqual(shlex.split(r["command"])[:len(PY_HOOK_PREFIX)], PY_HOOK_PREFIX,
+                                 r["command"])
 
     def test_hook_commands_leave_gt_src_and_the_hooks_dir_untouched(self):
         for r in self.hook_commands():
@@ -84,7 +85,7 @@ class NoBytecodeInSrc(Sandbox):
     def test_a_doctor_run_from_gt_src_writes_nothing_there(self):
         for args in ([], ["post-install"]):
             with self.subTest(args=args):
-                subprocess.run(["python3", str(self.release / "scripts" / "gt_doctor.py")] + args
+                subprocess.run([PYTHON, str(self.release / "scripts" / "gt_doctor.py")] + args
                                + ["--vault", str(self.vault)], env=self.env, cwd=str(self.tmp),
                                capture_output=True, text=True, timeout=300)
         self.assertSrcUnchanged()

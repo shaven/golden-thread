@@ -16,7 +16,7 @@ import shutil
 import subprocess
 import unittest
 
-from _harness import Sandbox, SCRIPTS, TOOLS, FARM, PYTHON
+from _harness import Sandbox, SCRIPTS, TOOLS, FARM, PYTHON, IS_WINDOWS
 
 QUEUE = SCRIPTS / "gt_write_queue.py"
 BROKER = SCRIPTS / "gt_broker.py"
@@ -449,6 +449,16 @@ class C8NoDaemon(BrokerBase):
                                 env=e, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
         proc.communicate(timeout=60)
         self.assertEqual(proc.returncode, 0)
+        if IS_WINDOWS:
+            # os.kill(pid, 0) is TerminateProcess on Windows, not a probe, and there is no
+            # `ps -ax`: ask the kernel for every command line instead (same assertion).
+            ps = subprocess.run(["powershell", "-NoProfile", "-Command",
+                                 "Get-CimInstance Win32_Process | ForEach-Object { $_.CommandLine }"],
+                                capture_output=True, text=True)
+            self.assertEqual(ps.returncode, 0, ps.stderr)
+            self.assertIn("powershell", ps.stdout.lower(), "the process listing read nothing")
+            self.assertNotIn(str(self.vault), ps.stdout, "a broker process outlived its drain")
+            return
         with self.assertRaises(ProcessLookupError):
             os.kill(proc.pid, 0)
         ps = subprocess.run(["ps", "-ax", "-o", "command="], capture_output=True, text=True)

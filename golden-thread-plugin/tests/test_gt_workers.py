@@ -13,7 +13,7 @@ import types
 import unittest
 from unittest import mock
 
-from _harness import Sandbox, SCRIPTS, load_module
+from _harness import Sandbox, SCRIPTS, load_module, IS_WINDOWS, skip_on_windows, WIN_FAKE_EXE
 
 TOOL = SCRIPTS / "gt_workers.py"
 SNAP = "/Users/x/.claude/shell-snapshots/snapshot-zsh-1.sh"
@@ -59,6 +59,7 @@ class WorkersOfALiveSession(Sandbox):
         ps.chmod(0o755)
         self.env["PATH"] = str(self.bin) + os.pathsep + self.env.get("PATH", "")
 
+    @skip_on_windows(WIN_FAKE_EXE)
     def test_live_session_shells_are_not_orphans(self):
         p = self.py(TOOL, "check")
         self.assertOk(p)
@@ -72,6 +73,7 @@ class WorkersOfALiveSession(Sandbox):
         self.assertIn('WAITING on: grep -q "test_install_vault_upgrade:" %s' % TASK, out)
         self.assertIn("pid 910003", out)
 
+    @skip_on_windows(WIN_FAKE_EXE)
     def test_reap_refuses_workers_of_a_live_session(self):
         p = self.py(TOOL, "reap", "--dry-run")
         self.assertOk(p)
@@ -98,6 +100,7 @@ class WorkersCli(Sandbox):
         self.assertOk(p, "worker check must never fail a session start")
         return p.stdout
 
+    @skip_on_windows(WIN_FAKE_EXE)
     def test_classifies_fixture_table(self):
         out = self.check()
         self.assertIn("CLAUDE WORKERS needing a decision (2)", out)
@@ -110,6 +113,7 @@ class WorkersCli(Sandbox):
         self.assertNotIn("900005", out)          # the claude session itself
         self.assertIn("reap the stalled ones", out)
 
+    @skip_on_windows(WIN_FAKE_EXE)
     def test_declared_worker_banner_and_declared_stalled_alert(self):
         p = self.py(TOOL, "declare", "900002", "crunching", "the", "numbers")
         self.assertOk(p)
@@ -131,6 +135,7 @@ class WorkersCli(Sandbox):
         self.assertIn("NOT happening", out)
         self.assertNotIn("UNDECLARED", out)
 
+    @skip_on_windows(WIN_FAKE_EXE)
     def test_a_declaration_survives_a_hostname_change(self):
         """2026-09-28: DHCP renamed the machine. Keyed on the hostname, every declaration
         made under the old name became someone else's -- the worker came back as an
@@ -143,6 +148,7 @@ class WorkersCli(Sandbox):
         self.assertNotIn("UNDECLARED", out)
         self.assertIn("900002", self.registry.read_text(), "the prune dropped a live declaration")
 
+    @skip_on_windows(WIN_FAKE_EXE)
     def test_a_declaration_from_another_machine_id_is_not_ours(self):
         row = {"pid": 900002, "host": "gt-test-host", "why": "theirs",
                "machine": "99999999-8888-4777-8666-555555555555"}
@@ -151,6 +157,7 @@ class WorkersCli(Sandbox):
         self.assertIn("UNDECLARED but ACTIVE — pid 900002", self.check(),
                       "the same hostname on another machine vouched for a pid here")
 
+    @skip_on_windows(WIN_FAKE_EXE)
     def test_clean_says_so_and_counts(self):
         self.ps_out.write_text(PS.splitlines()[0] + "\n")
         self.assertEqual(self.check().strip(),
@@ -159,6 +166,7 @@ class WorkersCli(Sandbox):
         self.ps_out.write_text(young_only + "\n")
         self.assertIn("1 alive, none orphaned (1 too new to judge)", self.check())
 
+    @skip_on_windows(WIN_FAKE_EXE)
     def test_registry_prunes_dead_pids_and_keeps_live(self):
         self.py(TOOL, "declare", "900002", "live")
         self.py(TOOL, "declare", "900099", "long gone")
@@ -166,6 +174,7 @@ class WorkersCli(Sandbox):
         pids = [json.loads(l)["pid"] for l in self.registry.read_text().splitlines()]
         self.assertEqual(pids, [900002])
 
+    @skip_on_windows(WIN_FAKE_EXE)
     def test_a_declaration_for_a_live_non_shell_pid_survives_the_prune(self):
         """`declare <pid>` accepts ANY pid; the prune must judge the same population.
 
@@ -182,6 +191,7 @@ class WorkersCli(Sandbox):
         self.assertEqual(pids, [900003, 900005],
                          "a declaration was dropped for a process that is plainly alive")
 
+    @skip_on_windows(WIN_FAKE_EXE)
     def test_other_hosts_declarations_do_not_count(self):
         self.registry.parent.mkdir(parents=True, exist_ok=True)
         self.registry.write_text(json.dumps({"pid": 900001, "host": "some-other-host",
@@ -193,17 +203,20 @@ class WorkersCli(Sandbox):
         self.config(vault_path=str(self.tmp), orphan_check="off")
         self.assertEqual(self.check(), "")
 
+    @skip_on_windows(WIN_FAKE_EXE)
     def test_hook_json(self):
         d = json.loads(self.check("--hook"))
         self.assertIn("ORPHAN — pid 900001", d["systemMessage"])
         self.assertEqual(d["hookSpecificOutput"]["hookEventName"], "SessionStart")
         self.assertEqual(d["hookSpecificOutput"]["additionalContext"], d["systemMessage"])
 
+    @skip_on_windows(WIN_FAKE_EXE)
     def test_reap_dry_run_names_only_stalled(self):
         p = self.py(TOOL, "reap", "--dry-run")
         self.assertOk(p)
         self.assertEqual(p.stdout.strip(), "would reap 1 stalled worker(s): 900001")
 
+    @skip_on_windows(WIN_FAKE_EXE)
     def test_list(self):
         p = self.py(TOOL, "list")
         self.assertOk(p)
@@ -212,7 +225,30 @@ class WorkersCli(Sandbox):
 
     def test_ps_failure_is_clean_not_crash(self):
         (self.bin / "ps").write_text("#!/bin/sh\nexit 1\n")
+        if IS_WINDOWS:
+            # Native Windows has no POSIX `ps -eo` at all (the fake above cannot run there
+            # either), so the table is never read -- and that must be SAID, never "clean".
+            out = self.check()
+            self.assertIn("NOT CHECKED", out.splitlines()[0])
+            self.assertNotIn("clean", out)
+            return
         self.assertIn("no background workers alive", self.check())
+
+    @unittest.skipUnless(IS_WINDOWS, "the unreadable-table wording is Windows-only")
+    def test_windows_without_a_process_table_says_not_checked_everywhere(self):
+        """0.19.3: an empty table on Windows is the norm, not a hiccup -- check, list and reap
+        each say the table was not read, and nothing is reaped or pruned."""
+        self.registry.parent.mkdir(parents=True, exist_ok=True)
+        self.registry.write_text(json.dumps({"pid": 900002, "host": "gt-test-host",
+                                             "why": "kept"}) + "\n")
+        d = json.loads(self.check("--hook"))
+        self.assertIn("NOT CHECKED", d["systemMessage"])
+        for args in (("list",), ("reap", "--dry-run"), ("reap",)):
+            with self.subTest(args=args):
+                p = self.py(TOOL, *args)
+                self.assertOk(p)
+                self.assertIn("NOT CHECKED", p.stdout)
+        self.assertIn("900002", self.registry.read_text(), "a declaration was pruned blind")
 
     def test_usage(self):
         p = self.py(TOOL, "bogus")

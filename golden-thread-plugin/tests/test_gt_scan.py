@@ -126,7 +126,7 @@ class ScanBase(unittest.TestCase):
     def write(self, rel, text):
         p = self.tree / rel
         p.parent.mkdir(parents=True, exist_ok=True)
-        p.write_text(text, encoding="utf-8")
+        p.write_bytes(text.encode("utf-8"))  # the bytes the test means: LF on every OS
 
     def run_agg(self, *args):
         return subprocess.run([sys.executable, str(self.release / "scripts" / "gt_scan.py"),

@@ -25,11 +25,13 @@ class StatusBase(Sandbox):
         (self.proj / "handoff").mkdir(parents=True)
         self.readme("")
         self.f = self.proj / "handoff" / "2026-09-28-handoff.md"
-        self.f.write_text("---\nstatus: open\n---\n# Handoff\n")
+        # Fixtures are written as LF bytes: write_text would make them CRLF on Windows, and
+        # gt writes handoffs LF (a CRLF handoff is a separate case, not this test's).
+        self.f.write_bytes(("---\nstatus: open\n---\n# Handoff\n").encode())
         self.rel = "Projects/alpha/handoff/2026-09-28-handoff.md"
 
     def readme(self, tasks):
-        (self.proj / "README.md").write_text("# alpha\n\n## Tasks\n\n" + tasks)
+        (self.proj / "README.md").write_bytes(("# alpha\n\n## Tasks\n\n" + tasks).encode())
 
     def tool(self, *args, today=TODAY):
         return self.py(TOOL, *args, env={"GT_TODAY": today})
@@ -96,19 +98,19 @@ class Deferral(StatusBase):
 
 class Legacy(StatusBase):
     def test_no_status_and_recent_is_open(self):
-        self.f.write_text("# Handoff by hand\n")
+        self.f.write_bytes(("# Handoff by hand\n").encode())
         (r,) = self.listed()
         self.assertIn("no status", r["note"])
 
     def test_no_status_and_old_is_history(self):
         import os, time
-        self.f.write_text("# old\n")
+        self.f.write_bytes(("# old\n").encode())
         t = time.time() - 20 * 86400
         os.utime(self.f, (t, t))
         self.assertEqual(self.listed(), [])
 
     def test_mark_adds_frontmatter_to_a_file_without_any(self):
-        self.f.write_text("# Handoff by hand\n\nbody\n")
+        self.f.write_bytes(("# Handoff by hand\n\nbody\n").encode())
         self.assertOk(self.tool("mark", self.rel, "--vault", self.vault, "--status", "handled"))
         text = self.f.read_text()
         self.assertTrue(text.startswith("---\nstatus: handled\n---\n"), text[:80])
@@ -118,7 +120,7 @@ class Legacy(StatusBase):
 class Safety(StatusBase):
     def test_it_refuses_a_file_outside_the_vault(self):
         outside = self.tmp / "elsewhere.md"
-        outside.write_text("# not in the vault\n")
+        outside.write_bytes(("# not in the vault\n").encode())
         p = self.tool("mark", str(outside), "--vault", self.vault, "--status", "handled")
         self.assertEqual(p.returncode, 3)
         self.assertEqual(outside.read_text(), "# not in the vault\n")
@@ -175,7 +177,7 @@ class ThroughTheQueue(StatusBase):
         return tools / "gt_session.py", env
 
     def test_a_handoff_without_frontmatter_is_one_replace_file_through_the_broker(self):
-        self.f.write_text("# Handoff by hand\n\nbody\n")
+        self.f.write_bytes(("# Handoff by hand\n\nbody\n").encode())
         self.assertOk(self.tool("mark", self.rel, "--vault", self.vault, "--status", "handled",
                                "--reason", "settled"))
         text = self.f.read_text()
@@ -187,7 +189,7 @@ class ThroughTheQueue(StatusBase):
         self.assertEqual(self.queued(), [])
 
     def test_an_edit_in_between_is_escalated_not_overwritten(self):
-        self.f.write_text("# Handoff by hand\n\nbody\n")
+        self.f.write_bytes(("# Handoff by hand\n\nbody\n").encode())
         sess, env = self.claim()                  # holds the request in the queue
         for t in ("gt_task.py", "gt_tasks.py"):   # the broker raises its #conflict task with these
             shutil.copy(TOOLS / t, sess.parent / t)
@@ -197,7 +199,7 @@ class ThroughTheQueue(StatusBase):
         (req_file,) = self.queued()
         req = json.loads(req_file.read_text())
         self.assertEqual((req["op"], req["target_existed"]), ("replace-file", True))
-        self.f.write_text("# Handoff by hand\n\nbody, edited by the holder\n")
+        self.f.write_bytes(("# Handoff by hand\n\nbody, edited by the holder\n").encode())
         self.assertOk(self.py(sess, "--vault", self.vault, "release", env=env))
         self.assertOk(self.py(SCRIPTS / "gt_broker.py", "drain", "--vault", self.vault))
         self.assertEqual(self.f.read_text(), "# Handoff by hand\n\nbody, edited by the holder\n")

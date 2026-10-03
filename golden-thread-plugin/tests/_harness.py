@@ -123,7 +123,93 @@ HOOKS = GT / "hooks"
 TEMPLATES = GT / "templates"
 TOOLS = TEMPLATES / "tools"
 WIKI_SCRIPTS = WIKI / "scripts"
-PYTHON = shutil.which("python3") or "python3"
+# The interpreter every test runs a script with. On native Windows `python3` on PATH is the
+# Microsoft Store stub (python.org installs python.exe and py.exe, never python3.exe), so the
+# suite uses the interpreter running it -- install.sh's rule, which refuses anything under
+# ...\WindowsApps\ (0.19.3). macOS and Linux are unchanged.
+IS_WINDOWS = os.name == "nt"
+if IS_WINDOWS:
+    if "\\windowsapps\\" in sys.executable.lower():
+        raise RuntimeError("the suite is running under a Microsoft Store Python (%s), which gt "
+                           "does not support; run it with a python.org Python"
+                           % sys.executable)
+    PYTHON = sys.executable
+else:
+    PYTHON = shutil.which("python3") or "python3"
+posix_only = unittest.skipIf(IS_WINDOWS, "POSIX-only")
+
+if IS_WINDOWS:
+    # In-process tests sandbox the home the POSIX way -- os.environ["HOME"] = <sandbox>, then
+    # load_module() -- and Windows Python's expanduser reads USERPROFILE instead, so the module
+    # under test would read the developer's real ~/.claude. In THIS process only, "~" follows
+    # HOME when it is set (subprocesses get USERPROFILE from Sandbox.env). Python 3.12's pathlib
+    # expands "~" through os.path.expanduser, so Path.home() follows too.
+    import ntpath as _ntpath
+    _real_expanduser = _ntpath.expanduser
+
+    def _expanduser(path):
+        p = os.fspath(path)
+        home = os.environ.get("HOME")
+        if home and isinstance(p, str) and (p == "~" or p.startswith(("~/", "~\\"))):
+            return home + p[1:]
+        return _real_expanduser(path)
+    _ntpath.expanduser = _expanduser
+
+# How gt writes a .py hook COMMAND on this platform (gt_components.hook_python): `python3 -B`
+# everywhere but native Windows, where `python3` is the Store stub and the command names the
+# interpreter by absolute "/" path, in UTF-8 mode.
+PY_HOOK_PREFIX = ([Path(PYTHON).as_posix(), "-X", "utf8", "-B"] if IS_WINDOWS
+                  else ["python3", "-B"])
+
+
+def py_hook_command(script, *args):
+    """The settings.json command gt writes for a .py hook at `script`, quoted as gt quotes it."""
+    import shlex
+    path = str(script).replace("\\", "/") if IS_WINDOWS else str(script)
+    return " ".join(shlex.quote(x) for x in PY_HOOK_PREFIX + [path] + list(args))
+
+
+# gt-lotr is POSIX-only by design and gt_components turns it off on Windows (0.19.3); its tests
+# that need a Unix-domain socket, peer-uid auth or 0600 permission bits skip there for that reason.
+LOTR_POSIX_ONLY = ("gt-lotr is a Unix-domain-socket gateway authenticated by peer uid and 0600 "
+                   "files; gt does not install it on Windows (gt_components.POSIX_ONLY_MODULES)")
+
+
+def _has_tzdb():
+    try:
+        from zoneinfo import ZoneInfo
+        ZoneInfo("America/Chicago")
+        return True
+    except Exception:
+        return False
+
+
+# Priority-window rules name IANA zones. macOS and Linux ship the database; native Windows has
+# none unless the `tzdata` package is installed, and gt_tasks then says so on stderr (0.19.3).
+HAS_TZDB = _has_tzdb()
+needs_tzdb = unittest.skipUnless(HAS_TZDB, "no IANA time-zone database on this machine (native "
+                                           "Windows without the tzdata package); gt_tasks "
+                                           "says so when a window rule needs it")
+
+
+# Reasons a test cannot run on native Windows that are about the TEST's mechanics or a POSIX
+# facility, never about a gt defect (owner, 2026-10-03: every skip names a genuinely POSIX-only
+# reason; a product bug is fixed, not skipped). Use these, or a specific reason of the same kind.
+WIN_FAKE_EXE = ("fakes an external command with a #! script on PATH; Windows runs only .exe files "
+                "found on PATH, so the fake cannot stand in for the real program there")
+WIN_MODE_BITS = ("asserts POSIX permission bits (chmod/st_mode); Windows has no mode bits -- "
+                 "st_mode always reads 0o666 or 0o444")
+WIN_CHMOD_FAULT = ("injects a failure with chmod (an unreadable file or unwritable directory); "
+                   "Windows has no permission bits, so chmod cannot make that failure happen")
+WIN_LAUNCHD = "macOS launchd / plist behaviour; Windows uses Task Scheduler (tested separately)"
+WIN_CRON = "crontab is POSIX; Windows has no cron"
+WIN_OSASCRIPT = "macOS osascript notification channel"
+WIN_FILENAME = ("needs a file name Windows forbids (control characters, or \\ : * ? \" < > |)")
+
+
+def skip_on_windows(reason):
+    """Mark a test that cannot run on native Windows, with the reason (counted in the report)."""
+    return unittest.skipIf(IS_WINDOWS, "POSIX-only: " + reason)
 GIT_ID = {"GIT_AUTHOR_NAME": "gt-test", "GIT_AUTHOR_EMAIL": "gt-test@example.invalid",
           "GIT_COMMITTER_NAME": "gt-test", "GIT_COMMITTER_EMAIL": "gt-test@example.invalid"}
 
@@ -166,6 +252,23 @@ def enforcement_hooks():
 ENFORCEMENT_HOOKS = enforcement_hooks()
 
 
+def rmtree(path):
+    """shutil.rmtree that also clears read-only files: Windows refuses to delete them, and git
+    writes its objects read-only, so every sandbox with a repo would otherwise stay in TEMP."""
+    import stat
+
+    def retry(func, p, _exc):
+        try:
+            os.chmod(p, stat.S_IWRITE | stat.S_IREAD)
+            func(p)
+        except OSError:
+            pass
+    if sys.version_info >= (3, 12):
+        shutil.rmtree(str(path), onexc=retry)
+    else:
+        shutil.rmtree(str(path), onerror=retry)
+
+
 class Sandbox(unittest.TestCase):
     """Base class: a temp dir with an empty HOME and an environment pointing at it."""
 
@@ -177,6 +280,20 @@ class Sandbox(unittest.TestCase):
                if not k.startswith(("CLAUDE", "GT_"))}
         env.update(GIT_ID)
         env["HOME"] = str(self.home)
+        if IS_WINDOWS:
+            # Windows Python's expanduser reads USERPROFILE, not HOME: without this every tool a
+            # test runs would read the developer's real ~/.claude (0.19.3).
+            env["USERPROFILE"] = str(self.home)
+            env["PYTHONUTF8"] = "1"
+            # What an installed Windows machine has (install.sh's python3 shim, first on PATH in
+            # Git Bash): a `python3` that bash -- hook wrappers, vault git hooks, pipeline steps,
+            # gt_demo.sh -- resolves to the real interpreter instead of the Store stub.
+            shim = self.tmp / "python3-shim"
+            shim.mkdir()
+            (shim / "python3").write_bytes(
+                ('#!/usr/bin/env bash\nexport PYTHONUTF8=1\n"%s" "$@" | tr -d \'\\r\'\n'
+                 'exit "${PIPESTATUS[0]}"\n' % Path(PYTHON).as_posix()).encode("utf-8"))
+            env["PATH"] = str(shim) + os.pathsep + env.get("PATH", "")
         # Point the pre-commit credential gate at the release UNDER TEST. Without this the
         # gate resolves nothing in a throwaway HOME (there is no plugin cache there), and
         # since it fails closed -- correctly -- every `git commit` in every sandbox refuses.
@@ -187,7 +304,7 @@ class Sandbox(unittest.TestCase):
         self.env = env
 
     def tearDown(self):
-        shutil.rmtree(self.tmp, ignore_errors=True)
+        rmtree(self.tmp)
 
     # -- running things ---------------------------------------------------------
     def run_cmd(self, args, input=None, cwd=None, env=None, timeout=120):
@@ -306,9 +423,25 @@ def source_fingerprint(*dirs):
     return h.hexdigest()[:16]
 
 
+def _path_variants(old, new):
+    """[(old form, new form)], longest first. On Windows a path is written three ways -- native
+    "C:\\x", "/"-separated (hook commands, git) and JSON-escaped "C:\\\\x" -- and each form
+    must be rewritten as itself (0.19.3)."""
+    pairs = {(old, new), (os.path.realpath(old), new)}
+    if IS_WINDOWS:
+        for o, n in list(pairs):
+            pairs.add((o.replace("\\", "/"), n.replace("\\", "/")))
+            pairs.add((o.replace("\\", "\\\\"), n.replace("\\", "\\\\")))
+            if len(o) > 2 and o[1] == ":" and len(n) > 2 and n[1] == ":":   # Git Bash: /c/...
+                pairs.add(("/" + o[0].lower() + o[2:].replace("\\", "/"),
+                           "/" + n[0].lower() + n[2:].replace("\\", "/")))
+    return sorted(pairs, key=lambda p: len(p[0]), reverse=True)
+
+
 def _rewrite_paths(root: Path, old: str, new: str):
     """Replace the cached sandbox's root path with this one in every UTF-8 text file."""
-    olds = {old, os.path.realpath(old)}
+    pairs = _path_variants(old, new)
+    olds = {o for o, _ in pairs}
     for dirpath, dirs, files in os.walk(str(root)):
         for f in files:
             p = os.path.join(dirpath, f)
@@ -322,8 +455,8 @@ def _rewrite_paths(root: Path, old: str, new: str):
                 continue
             if not any(o in text for o in olds):
                 continue
-            for o in sorted(olds, key=len, reverse=True):
-                text = text.replace(o, new)
+            for o, n in pairs:
+                text = text.replace(o, n)
             st = os.stat(p)
             with open(p, "w", encoding="utf-8", newline="") as fh:
                 fh.write(text)
@@ -335,7 +468,6 @@ def cached_sandbox(case, key, build):
 
     `build(case)` must build ONLY under case.tmp and return a JSON-serialisable dict (e.g. the
     install's returncode/stdout/stderr). Returns (that dict, "built" | "cached")."""
-    import fcntl
     import hashlib
     if os.environ.get("GT_TEST_NO_INSTALL_CACHE") == "1":     # measure the uncached cost
         return build(case), "built"
@@ -343,15 +475,15 @@ def cached_sandbox(case, key, build):
     slot = root / hashlib.sha256(key.encode()).hexdigest()[:20]
     lock = open(str(slot) + ".lock", "w")
     try:
-        fcntl.flock(lock, fcntl.LOCK_EX)
+        _lock(lock)
         meta = slot / "meta.json"
         if meta.is_file():
             m = json.loads(meta.read_text(encoding="utf-8"))
             shutil.copytree(str(slot / "tmp"), str(case.tmp), symlinks=True, dirs_exist_ok=True)
             _rewrite_paths(case.tmp, m["tmp"], str(case.tmp))
             raw = json.dumps(m["result"])
-            for o in sorted({m["tmp"], os.path.realpath(m["tmp"])}, key=len, reverse=True):
-                raw = raw.replace(json.dumps(o)[1:-1], json.dumps(str(case.tmp))[1:-1])
+            for o, n in _path_variants(m["tmp"], str(case.tmp)):
+                raw = raw.replace(json.dumps(o)[1:-1], json.dumps(n)[1:-1])
             return json.loads(raw), "cached"
         result = build(case)
         tmp_copy = slot / "tmp"
@@ -361,5 +493,31 @@ def cached_sandbox(case, key, build):
         meta.write_text(json.dumps({"tmp": str(case.tmp), "result": result}), encoding="utf-8")
         return result, "built"
     finally:
-        fcntl.flock(lock, fcntl.LOCK_UN)
+        _unlock(lock)
         lock.close()
+
+
+def _lock(fh):
+    """An exclusive lock across processes: flock on POSIX, msvcrt on Windows (no fcntl there)."""
+    if IS_WINDOWS:
+        import msvcrt
+        import time
+        while True:
+            try:
+                fh.seek(0)
+                msvcrt.locking(fh.fileno(), msvcrt.LK_LOCK, 1)
+                return
+            except OSError:              # LK_LOCK gives up after ~10 s; keep waiting
+                time.sleep(0.5)
+    import fcntl
+    fcntl.flock(fh, fcntl.LOCK_EX)
+
+
+def _unlock(fh):
+    if IS_WINDOWS:
+        import msvcrt
+        fh.seek(0)
+        msvcrt.locking(fh.fileno(), msvcrt.LK_UNLCK, 1)
+        return
+    import fcntl
+    fcntl.flock(fh, fcntl.LOCK_UN)

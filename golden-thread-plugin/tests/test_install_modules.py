@@ -47,8 +47,8 @@ import stat
 import unittest
 from pathlib import Path
 
-from _harness import (Sandbox, REPO, GT, WIKI, WATCH, REPORT_CARD, FARM, latest_version_dir,
-                      load_module)
+from _harness import (WIN_CRON, skip_on_windows, py_hook_command, Sandbox, REPO, GT, WIKI, WATCH, REPORT_CARD, FARM, latest_version_dir,
+                      load_module, PYTHON)
 
 INSTALL = REPO / "install.sh"
 IGNORE = shutil.ignore_patterns("__pycache__", "*.pyc", ".DS_Store")
@@ -164,7 +164,8 @@ class ModuleBase(Sandbox):
             self.assertTrue((self.hooks_dir / f).is_file(), f)
         if hook_script:
             hits = [c for ev, c in self.commands()
-                    if ev == "SessionStart" and c.endswith(str(self.hooks_dir / hook_script))]
+                    # as_posix: hook commands are "/" on Windows (gt_components._cmd_path)
+                    if ev == "SessionStart" and c.endswith((self.hooks_dir / hook_script).as_posix())]
             self.assertEqual(len(hits), 1, self.commands())
 
     def assert_absent(self, plugin, scripts=()):
@@ -191,7 +192,7 @@ class OnAndOff(ModuleBase):
         self.assertIn("Verified hook wiring", p.stdout)
         self.assertIn("/gt-beacon:beacon-hello", p.stdout)
         self.assertRegex(p.stdout, r"Modules: .*beacon on")
-        w = self.run_cmd(["python3", self.gt_src / "scripts" / "gt_components.py", "wiring",
+        w = self.run_cmd([PYTHON, self.gt_src / "scripts" / "gt_components.py", "wiring",
                           self.gt_src, "--owner", "install.sh"])
         self.assertOk(w, "the wiring check disagrees with what install.sh wired")
 
@@ -474,7 +475,7 @@ class RealModulesBase(Sandbox):
         (self.bin / "crontab").write_text(CRONTAB_STUB)
         (self.bin / "crontab").chmod(0o755)
         self.crontab = self.tmp / "crontab.txt"
-        self.env.update({"PATH": "%s:%s" % (self.bin, os.environ.get("PATH", "")),
+        self.env.update({"PATH": "%s%s%s" % (self.bin, os.pathsep, os.environ.get("PATH", "")),
                          "CRONTAB_FILE": str(self.crontab)})
         self.new = self.tmp / "new" / MARKET
         self.copy_tree(self.new)
@@ -512,9 +513,10 @@ class RealModulesBase(Sandbox):
         c = self.claude(home)
 
         def norm(text):
+            # both forms: hook commands carry "/" paths on Windows; identical on POSIX
             if vault is not None:
-                text = text.replace(str(vault), "<VAULT>")
-            return text.replace(str(home), "<HOME>")
+                text = text.replace(str(vault), "<VAULT>").replace(vault.as_posix(), "<VAULT>")
+            return text.replace(str(home), "<HOME>").replace(home.as_posix(), "<HOME>")
         entries = sorted((ev, norm(cmd)) for ev, cmd in self.commands(home)
                          if "golden-thread" in cmd)
         hooks = c / "golden-thread" / "hooks"
@@ -547,16 +549,17 @@ def _demo():
 
 
 class RealModulesOff(RealModulesBase):
+    @skip_on_windows(WIN_CRON)
     def test_without_watch_removes_hook_file_and_only_its_own_crontab_line(self):
         home = self.home
         self.run_install(self.new, home)
         hooks = self.claude(home) / "golden-thread" / "hooks"
         self.assertTrue((hooks / "gt_watch.py").is_file())
         self.assertEqual([c for e, c in self.commands(home) if "gt_watch.py" in c],
-                         ["python3 -B %s --hook" % (hooks / "gt_watch.py")])
+                         [py_hook_command(hooks / "gt_watch.py", "--hook")])
         # the real tool writes the tagged line, from the installed copy as the skill says
         self.crontab.write_text("0 5 * * * /usr/bin/true # users-own\n")
-        cron = self.run_cmd(["python3", hooks / "gt_watch.py", "install-cron", "--every", "1h"],
+        cron = self.run_cmd([PYTHON, hooks / "gt_watch.py", "install-cron", "--every", "1h"],
                             env={"HOME": str(home)})
         self.assertOk(cron, "fixture: gt_watch.py install-cron")
         self.assertIn(str(hooks / "gt_watch.py"), self.crontab.read_text())
@@ -730,11 +733,11 @@ class UpgradeFrom014Converges(RealModulesBase):
                         "an upgrade left an unknown hook-dir file: %s" % unknown)
         # the release's own checks agree with what the upgrade left
         src = self.new / "golden-thread" / GT.name
-        w = self.run_cmd(["python3", src / "scripts" / "gt_components.py", "wiring", src],
+        w = self.run_cmd([PYTHON, src / "scripts" / "gt_components.py", "wiring", src],
                          env={"HOME": str(up[0])})
         self.assertOk(w, "wiring check after the upgrade")
         (self.claude(up[0]) / "golden-thread" / "hooks" / "user_note.sh").unlink()
-        chk = self.run_cmd(["python3", src / "scripts" / "gt_components.py", "check", src],
+        chk = self.run_cmd([PYTHON, src / "scripts" / "gt_components.py", "check", src],
                            env={"HOME": str(up[0])})
         self.assertIn("components: clean", chk.stdout)
 
@@ -750,6 +753,14 @@ class UpgradeFrom014Converges(RealModulesBase):
                         "the 0.14.0 gt_watch.py was removed without a backup")
 
 
+# A rollback installs a gt older than 0.19.2 with that release's own gt_components.py, which keys
+# MANIFEST.json with os.sep: on native Windows every file reads as missing and extra, and the
+# install refuses (exit 6). Native Windows support began in 0.19.2; nothing older installs there.
+WIN_OLD_GT = ("rolls back to a gt older than 0.19.2, the first release that installs on native "
+              "Windows (its own gt_components.py keys MANIFEST.json with os.sep)")
+
+
+@skip_on_windows(WIN_OLD_GT)
 class RollbackTo014(RealModulesBase):
     def test_rollback_leaves_no_module_beside_a_gt_that_has_the_same_skills(self):
         old_gt = REPO / "golden-thread" / "0.14.0"
@@ -820,6 +831,7 @@ class RollbackTo014(RealModulesBase):
         self.assertEqual(sorted(d.name for d in (cache / "gt-wiki").iterdir()), [WIKI.name])
 
 
+@skip_on_windows(WIN_OLD_GT)
 class RollbackToPreModuleGt(RealModulesBase):
     """gt 0.13.0 predates module.json: its tree shipped gt-wiki 0.1.3 (no module.json) and
     the demo inside gt, honouring install_demo=no by stripping it. A rollback to it from a

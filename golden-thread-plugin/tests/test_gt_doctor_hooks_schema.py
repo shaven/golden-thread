@@ -31,7 +31,7 @@ class HooksSchema(DoctorBase):
     def real_hook(self, name="guard.sh"):
         f = self.hooks / name
         f.write_text("#!/bin/sh\n")
-        return str(f)
+        return f.as_posix()     # as gt writes a hook command; == str(f) on POSIX
 
     def row(self):
         p = self.doctor("--json", "--only", "hooks-schema")
@@ -55,7 +55,7 @@ class HooksSchema(DoctorBase):
         self.assertNotIn("no known tool is called Write", r["detail"])
 
     def test_missing_file(self):
-        self.settings({"Stop": [self.entry("bash %s" % (self.hooks / "missing.sh"))]})
+        self.settings({"Stop": [self.entry("bash %s" % (self.hooks / "missing.sh").as_posix())]})
         r = self.row()
         self.assertEqual("warn", r["state"])
         self.assertIn("hooks-missing-file Stop", r["detail"])

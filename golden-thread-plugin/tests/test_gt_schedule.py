@@ -12,6 +12,7 @@ reads launchd's own `last exit code` back, so the proof happens on the machine a
 where it means something. A terminal run proves nothing about a scheduled job on this Mac —
 that is the documented lesson the whole script is shaped around.
 """
+import os
 import plistlib
 import unittest
 
@@ -22,7 +23,11 @@ SCHED = SCRIPTS / "gt_schedule.py"
 
 class ScheduleTest(Sandbox):
     def mod(self):
-        return load_module(SCHED, "gt_schedule_under_test")
+        m = load_module(SCHED, "gt_schedule_under_test")
+        # These test the launchd backend (plists), which is plain Python on any platform; the
+        # Task Scheduler backend has its own tests (test_schedule_task_scheduler.py).
+        m.on_windows = lambda: False
+        return m
 
     def test_list_names_every_job_and_its_default_time(self):
         proc = self.py(SCHED, "list")
@@ -68,7 +73,7 @@ class ScheduleTest(Sandbox):
         self.assertNotIn("CloudStorage", target[0],
                          "the scheduled job points into CloudStorage, which is the documented "
                          "way for it to fail quietly")
-        self.assertIn(".claude/golden-thread/hooks", target[0])
+        self.assertIn(".claude/golden-thread/hooks", target[0].replace(os.sep, "/"))
 
     def test_install_refuses_when_the_script_is_not_installed(self):
         """Refusing is the point: scheduling a job whose script is absent creates a job that
@@ -168,6 +173,7 @@ class OneRecordedInterpreter(Sandbox):
     def setUp(self):
         super().setUp()
         self.m = load_module(SCHED, "gt_schedule_interp")
+        self.m.on_windows = lambda: False            # the launchd backend; see ScheduleTest.mod
         self.m.AGENTS = self.tmp / "LaunchAgents"
         self.m.HOOKS = self.tmp / "hooks"
         self.m.LOGS = self.tmp / "logs"

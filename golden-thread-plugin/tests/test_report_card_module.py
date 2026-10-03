@@ -20,7 +20,8 @@ import subprocess
 import sys
 import unittest
 
-from _harness import Sandbox, REPO, GT, WIKI, SCRIPTS, load_module, latest_version_dir, needs_dev
+from _harness import (IS_WINDOWS, PY_HOOK_PREFIX, Sandbox, REPO, GT, WIKI, SCRIPTS, load_module,
+                      latest_version_dir, needs_dev)
 
 MODULE = latest_version_dir(REPO / "golden-thread-report-card")
 INSTALL = REPO / "install.sh"
@@ -129,10 +130,13 @@ class ReportCardInstalled(Sandbox):
         p = self.install("--no-vault")
         self.assertRegex(p.stdout, r"Modules: .*report-card on")
         self.assertTrue((self.hooks_dir / SCRIPT).is_file())
-        got = sorted((ev, argv[3:]) for ev, argv in self.card_entries())
+        # PY_HOOK_PREFIX: "python3 -B", or on Windows the interpreter by "/" path, -X utf8 -B
+        n = len(PY_HOOK_PREFIX)
+        got = sorted((ev, argv[n + 1:]) for ev, argv in self.card_entries())
         self.assertEqual(got, sorted(EXPECTED_HOOKS))
+        script = (self.hooks_dir / SCRIPT).as_posix() if IS_WINDOWS else str(self.hooks_dir / SCRIPT)
         for _ev, argv in self.card_entries():
-            self.assertEqual(argv[1:3], ["-B", str(self.hooks_dir / SCRIPT)])  # -B: 0.19.1
+            self.assertEqual(argv[:n + 1], PY_HOOK_PREFIX + [script])  # -B: 0.19.1
 
     def test_declined_leaves_no_hook_and_no_hookdir_file(self):
         self.install("--no-vault")

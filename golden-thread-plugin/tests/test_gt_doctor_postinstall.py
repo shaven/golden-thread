@@ -26,7 +26,8 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from _harness import Sandbox, REPO, PYTHON, latest_version_dir, cached_sandbox, source_fingerprint
+from _harness import (Sandbox, REPO, PYTHON, IS_WINDOWS, latest_version_dir,
+                      cached_sandbox, source_fingerprint)
 import test_install as _ti   # module import only: its TestCases must not be collected here
 
 try:
@@ -35,6 +36,37 @@ except (RuntimeError, OSError):
     LOTR = None
 
 OLD_RULE1 = "Before writing a vault file, claim it with gt_session.py claim."
+
+
+def job_path(home, job):
+    """Where an installed gt job lives: a launchd plist, or on Windows (0.19.3) the Task
+    Scheduler spec gt_schedule keeps beside the job's .cmd wrapper (gt_schedule.job_file)."""
+    if IS_WINDOWS:
+        return home / ".claude" / "golden-thread" / "jobs" / ("gt-%s.json" % job)
+    return home / "Library" / "LaunchAgents" / ("com.markethaven.gt-%s.plist" % job)
+
+
+def write_job(path, data):
+    """Write a job description in the form job_path() names: plist bytes, or the spec JSON --
+    with the log paths every spec gt_schedule writes carries (its .cmd wrapper is built from
+    them when the job is rewritten)."""
+    path.parent.mkdir(parents=True, exist_ok=True)
+    if IS_WINDOWS:
+        logs = path.parent.parent
+        job = data["Label"].rsplit("gt-", 1)[-1]
+        data = dict({"StandardOutPath": str(logs / ("%s.out" % job)),
+                     "StandardErrorPath": str(logs / ("%s.err" % job))}, **data)
+        path.write_text(json.dumps(data, indent=1, sort_keys=True) + "\n", encoding="utf-8")
+    else:
+        with path.open("wb") as fh:
+            plistlib.dump(data, fh)
+
+
+def read_job(path):
+    if IS_WINDOWS:
+        return json.loads(path.read_text(encoding="utf-8"))
+    with path.open("rb") as fh:
+        return plistlib.load(fh)
 
 
 class InstalledMachine(Sandbox):
@@ -129,12 +161,11 @@ class InstalledMachine(Sandbox):
         self.break_file(f, "\n".join(lines) + "\n")
 
     def daily_plist(self, script):
-        path = self.home / "Library" / "LaunchAgents" / "com.markethaven.gt-daily.plist"
+        path = job_path(self.home, "daily")
         data = {"Label": "com.markethaven.gt-daily",
                 "ProgramArguments": [PYTHON, str(script), "--vault", str(self.vault)]}
         self.break_file(path, "")
-        with path.open("wb") as fh:
-            plistlib.dump(data, fh)
+        write_job(path, data)
         return path
 
     def session_hook(self):
@@ -221,15 +252,13 @@ class TheReleaseIsTheInstalledOneFromAnyPath(InstalledMachine):
 
 def _old_lint_weekly_job(case):
     """Before the install: a gt-lint-weekly job on another python, as on the publishing Mac."""
-    agents = case.home / "Library" / "LaunchAgents"
-    agents.mkdir(parents=True, exist_ok=True)
-    with (agents / "com.markethaven.gt-lint-weekly.plist").open("wb") as fh:
-        plistlib.dump({"Label": "com.markethaven.gt-lint-weekly",
-                       # a path no machine's install runs, so it always differs
-                       "ProgramArguments": ["/opt/gt-test-old/bin/python3",
-                                            str(case.home / ".claude/golden-thread/hooks/"
-                                                "gt_lint_weekly.py")],
-                       "StartCalendarInterval": {"Hour": 7, "Minute": 0, "Weekday": 1}}, fh)
+    write_job(job_path(case.home, "lint-weekly"),
+              {"Label": "com.markethaven.gt-lint-weekly",
+               # a path no machine's install runs, so it always differs
+               "ProgramArguments": ["/opt/gt-test-old/bin/python3",
+                                    str(case.home / ".claude/golden-thread/hooks/"
+                                        "gt_lint_weekly.py")],
+               "StartCalendarInterval": {"Hour": 7, "Minute": 0, "Weekday": 1}})
 
 
 class InstallRecordsOneInterpreterForEveryJob(InstalledMachine):
@@ -242,9 +271,8 @@ class InstallRecordsOneInterpreterForEveryJob(InstalledMachine):
         self.assertEqual(self.install_proc.returncode, 0, self.install_proc.stdout[-2000:])
         rec = json.loads((self.home / ".claude/golden-thread/interpreter.json").read_text())
         self.assertTrue(os.access(rec["python"], os.X_OK), rec)
-        plist = self.home / "Library/LaunchAgents/com.markethaven.gt-lint-weekly.plist"
-        with plist.open("rb") as fh:
-            self.assertEqual(plistlib.load(fh)["ProgramArguments"][0], rec["python"])
+        self.assertEqual(read_job(job_path(self.home, "lint-weekly"))["ProgramArguments"][0],
+                         rec["python"])
         self.assertIn("now runs %s" % rec["python"], self.install_proc.stdout)
         self.assertNotIn("reload of", self.install_proc.stdout + self.install_proc.stderr)
 
@@ -515,6 +543,14 @@ class LotrOnSmoke(InstalledMachine):
 
     def test_lotr_on_is_placed_and_smoke_tested(self):
         self.assertEqual(self.install_proc.returncode, 0, self.install_proc.stdout[-3000:])
+        if IS_WINDOWS:
+            # 0.19.3: --with lotr on Windows installs without it and the gate says why, as INFO.
+            rc, rows, _ = self.gate()
+            self.assertEqual(rows["lotr"]["state"], "INFO", rows["lotr"])
+            self.assertIn("POSIX-only", rows["lotr"]["summary"])
+            self.assertEqual(rows["smoke-lotr"]["state"], "INFO", rows["smoke-lotr"])
+            self.assertEqual(rc, 0)
+            return
         rc, rows, _ = self.gate()
         self.assertEqual(rows["lotr"]["state"], "PASS", rows["lotr"])
         self.assertEqual(rows["smoke-lotr"]["state"], "PASS", rows["smoke-lotr"])
@@ -564,11 +600,9 @@ class OldShippedRuleIsRefreshedByInstall(InstalledMachine):
 
 
 def _bad_daily_job_before_install(self):
-    path = self.home / "Library" / "LaunchAgents" / "com.markethaven.gt-daily.plist"
-    path.parent.mkdir(parents=True, exist_ok=True)
-    with path.open("wb") as fh:
-        plistlib.dump({"Label": "com.markethaven.gt-daily",
-                       "ProgramArguments": [PYTHON, "/elsewhere/gt_daily.py"]}, fh)
+    write_job(job_path(self.home, "daily"),
+              {"Label": "com.markethaven.gt-daily",
+               "ProgramArguments": [PYTHON, "/elsewhere/gt_daily.py"]})
 
 
 class InstallWithARealFailExitsNine(InstalledMachine):

@@ -21,13 +21,20 @@ import unittest
 from pathlib import Path
 
 from _harness import REPO, latest_version_dir
+from _harness import LOTR_POSIX_ONLY, skip_on_windows
 
 GW = latest_version_dir(REPO / "golden-thread-lotr")
 sys.path.insert(0, str(GW / "scripts"))
 
 from lotrlib import confirm as confirm_mod  # noqa: E402
 from lotrlib.errors import GatewayError  # noqa: E402
-from lotrlib.server import is_loopback, peer_uid, serve_http, serve_unix  # noqa: E402
+from _harness import IS_WINDOWS  # noqa: E402
+if IS_WINDOWS:
+    # lotrlib.server defines a Unix-domain socket server at import, which Windows' socketserver
+    # does not have; every class below is skipped there with LOTR_POSIX_ONLY.
+    is_loopback = peer_uid = serve_http = serve_unix = None
+else:
+    from lotrlib.server import is_loopback, peer_uid, serve_http, serve_unix  # noqa: E402
 
 
 class FakeConn:
@@ -69,6 +76,7 @@ def _engine(home, dialog=lambda t: True):
 MERGE = {"owner": "a", "repo": "b", "pull_number": 1}
 
 
+@skip_on_windows(LOTR_POSIX_ONLY)
 class PrivateFiles(unittest.TestCase):
     def setUp(self):
         self.home = _home()
@@ -90,6 +98,7 @@ class PrivateFiles(unittest.TestCase):
         self.assertTrue(_engine(self.home).find("")["ok"])
 
 
+@skip_on_windows(LOTR_POSIX_ONLY)
 class Socket(unittest.TestCase):
     def test_peer_uid_identifies_this_process(self):
         d = tempfile.mkdtemp(dir="/tmp")
@@ -129,6 +138,7 @@ class Socket(unittest.TestCase):
             t.join(5)
 
 
+@skip_on_windows(LOTR_POSIX_ONLY)
 class HubListen(unittest.TestCase):
     def test_non_loopback_without_tls_is_refused(self):
         with self.assertRaises(GatewayError) as c:
@@ -143,6 +153,7 @@ class HubListen(unittest.TestCase):
             self.assertFalse(is_loopback(h), h)
 
 
+@skip_on_windows(LOTR_POSIX_ONLY)
 class LocalPolicy(unittest.TestCase):
     def tearDown(self):
         shutil.rmtree(getattr(self, "home", ""), True) if hasattr(self, "home") else None
@@ -161,6 +172,7 @@ class LocalPolicy(unittest.TestCase):
         self.assertEqual(r["error"]["code"], "tier_ceiling")
 
 
+@skip_on_windows(LOTR_POSIX_ONLY)
 class ConsentConfirmation(unittest.TestCase):
     def setUp(self):
         FakeConn.calls = []

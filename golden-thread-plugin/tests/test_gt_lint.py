@@ -9,7 +9,7 @@ import re
 import shutil
 import unittest
 
-from _harness import Sandbox, SCRIPTS, ENFORCEMENT_HOOKS, CORE_RULES as CORE
+from _harness import Sandbox, SCRIPTS, ENFORCEMENT_HOOKS, IS_WINDOWS, CORE_RULES as CORE
 
 LINT = SCRIPTS / "gt_lint.py"
 VI = SCRIPTS / "vault_init.py"
@@ -418,7 +418,13 @@ class AttributionTest(LintBase):
         self.assertFinding(f, "attribution-unwired", ".git/config")
 
     def test_non_executable_hook(self):
-        (self.v / ".githooks" / "post-commit").chmod(0o644)
+        hook = self.v / ".githooks" / "post-commit"
+        if IS_WINDOWS:
+            # No execute bits on Windows: git there runs a hook that starts with "#!",
+            # so a hook without one is the Windows form of "git will skip it".
+            hook.write_bytes(hook.read_bytes().split(b"\n", 1)[1])
+        else:
+            hook.chmod(0o644)
         (self.v / ".githooks" / "prepare-commit-msg").unlink()
         proc, f = self.lint()
         self.assertFinding(f, "attribution-unwired", ".githooks/post-commit", proc)

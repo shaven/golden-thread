@@ -39,7 +39,8 @@ class AllInTest(unittest.TestCase):
         (self.repo / "a.py").write_text("def ok():\n    pass\n", encoding="utf-8")
 
     def run_allin(self, *args, home=None):
-        env = dict(os.environ, HOME=str(home)) if home else None
+        # USERPROFILE too: Windows' expanduser reads it and ignores HOME (no-op on POSIX).
+        env = dict(os.environ, HOME=str(home), USERPROFILE=str(home)) if home else None
         return subprocess.run([sys.executable, str(SCRIPT)] + list(args),
                               capture_output=True, text=True, env=env)
 

@@ -58,7 +58,7 @@ class GtEditsTest(Sandbox):
         target = self.vault / "Knowledge" / "page.md"
         self.ge("print(json.dumps(sw.write(%r, 'hi\\n')))" % str(target))
         (row,) = self.rows()
-        self.assertEqual(row["path"], os.path.join("Knowledge", "page.md"))
+        self.assertEqual(row["path"], "Knowledge/page.md")     # "/" on every platform
         self.assertEqual(row["session"], SID[:8])
         self.assertEqual(row["task"], "tidy the notes")
         self.assertEqual(row["strategy"], "atomic")
@@ -102,7 +102,7 @@ class GtEditsTest(Sandbox):
         target.parent.mkdir(parents=True, exist_ok=True)
         row = self.ge("print(json.dumps(ge.record(%r)))" % str(target), cwd=wt)
         self.assertIsNotNone(row, "a write inside a worktree was not recorded at all")
-        self.assertEqual(row["path"], os.path.join("Knowledge", "page.md"),
+        self.assertEqual(row["path"], "Knowledge/page.md",     # "/" on every platform
                          "the path was not made relative to the worktree")
 
     # -- trailers ------------------------------------------------------------

@@ -18,7 +18,8 @@ import shutil
 import subprocess
 import unittest
 
-from _harness import Sandbox, SCRIPTS, TEMPLATES, core_rules_dir, legacy_core_rules_dir
+from _harness import (Sandbox, SCRIPTS, TEMPLATES, WIN_FAKE_EXE, core_rules_dir,
+                      legacy_core_rules_dir, skip_on_windows)
 
 
 UP = SCRIPTS / "gt_upgrade.py"
@@ -26,6 +27,12 @@ VI = SCRIPTS / "vault_init.py"
 STAMP = "Projects/golden-thread/.vault-version.json"
 BASE = "Projects/golden-thread/.templates"
 
+
+
+def _lf(path, text):
+    """write_text, but LF on every platform: what gt itself writes into a vault. Windows text
+    mode would write CRLF and the merge fixtures would no longer be the POSIX scenario."""
+    path.write_bytes(text.encode("utf-8"))
 
 class UpgradeBase(Sandbox):
     def setUp(self):
@@ -257,7 +264,7 @@ class DocumentMerges(UpgradeBase):
         d = self.doc()
         d.parent.mkdir(parents=True, exist_ok=True)
         (self.v / BASE / "PROTOCOL.md").unlink()
-        d.write_text("# Mine\n\nlocal edits\n")
+        _lf(d, "# Mine\n\nlocal edits\n")
         before = d.read_bytes()
         for _ in range(2):
             p = self.up("run", "--allow-dirty")
@@ -274,7 +281,7 @@ class DocumentMerges(UpgradeBase):
     def test_record_base_is_explicit_and_records_the_shipped_template(self):
         d = self.doc()
         (self.v / BASE / "PROTOCOL.md").unlink()
-        d.write_text("# Mine\n\nlocal edits\n")
+        _lf(d, "# Mine\n\nlocal edits\n")
         before = d.read_bytes()
         p = self.up("run", "--allow-dirty", "--record-base", "PROTOCOL.md")
         self.assertOk(p)
@@ -290,8 +297,8 @@ class DocumentMerges(UpgradeBase):
         # base == shipped, and the vault adds a line of its own
         base = self.v / BASE / "PROTOCOL.md"
         base.parent.mkdir(parents=True, exist_ok=True)
-        base.write_text(shipped)
-        d.write_text(shipped + "\n## A section this vault added\n")
+        _lf(base, shipped)
+        _lf(d, shipped + "\n## A section this vault added\n")
         self.up("run", "--allow-dirty")
         after = d.read_text()
         self.assertIn("A section this vault added", after,
@@ -303,14 +310,15 @@ class DocumentMerges(UpgradeBase):
         shipped = (TEMPLATES / "PROTOCOL.md").read_text()
         base = self.v / BASE / "PROTOCOL.md"
         base.parent.mkdir(parents=True, exist_ok=True)
-        base.write_text(shipped)
+        _lf(base, shipped)
         d = self.doc()
-        d.write_text(shipped + "\n## A section this vault added\n")
+        _lf(d, shipped + "\n## A section this vault added\n")
         self.assertNotIn("doc-merge", self.up("status").stdout)
         # ...while a base the release has moved past still is.
-        base.write_text(shipped.replace("\n", "\n\n", 1))
+        _lf(base, shipped.replace("\n", "\n\n", 1))
         self.assertIn("doc-merge", self.up("status").stdout)
 
+    @skip_on_windows(WIN_FAKE_EXE)
     def test_a_dry_run_writes_no_working_copy_inside_the_vault(self):
         """A rehearsal must not write, not even for an instant.
 
@@ -327,10 +335,10 @@ class DocumentMerges(UpgradeBase):
         base = self.v / BASE / "PROTOCOL.md"
         base.parent.mkdir(parents=True, exist_ok=True)
         # A base the release has moved past, so a merge is genuinely pending.
-        base.write_text(shipped.replace("\n", "\n\n", 1))
+        _lf(base, shipped.replace("\n", "\n\n", 1))
         d = self.doc()
         d.parent.mkdir(parents=True, exist_ok=True)
-        d.write_text(shipped + "\n## A section this vault added\n")
+        _lf(d, shipped + "\n## A section this vault added\n")
         self.assertIn("doc-merge", self.up("status").stdout, "no merge to rehearse")
 
         seen = self.tmp / "seen.txt"
@@ -355,10 +363,10 @@ class DocumentMerges(UpgradeBase):
         base = self.v / BASE / "PROTOCOL.md"
         base.parent.mkdir(parents=True, exist_ok=True)
         # A base that shares no lines with either side forces a conflict.
-        base.write_text("\n".join("base line %d" % i for i in range(40)) + "\n")
+        _lf(base, "\n".join("base line %d" % i for i in range(40)) + "\n")
         d = self.doc()
         d.parent.mkdir(parents=True, exist_ok=True)
-        d.write_text("\n".join("vault line %d" % i for i in range(40)) + "\n")
+        _lf(d, "\n".join("vault line %d" % i for i in range(40)) + "\n")
         before = d.read_bytes()
         p = self.up("run", "--allow-dirty")
         self.assertEqual(d.read_bytes(), before, "a conflicting merge rewrote the document")
@@ -369,9 +377,9 @@ class DocumentMerges(UpgradeBase):
 
     def conflicting(self):
         base = self.v / BASE / "PROTOCOL.md"
-        base.write_text("\n".join("base line %d" % i for i in range(40)) + "\n")
+        _lf(base, "\n".join("base line %d" % i for i in range(40)) + "\n")
         d = self.doc()
-        d.write_text("\n".join("vault line %d" % i for i in range(40)) + "\n")
+        _lf(d, "\n".join("vault line %d" % i for i in range(40)) + "\n")
         return d
 
     def git_status(self):
@@ -401,7 +409,7 @@ class DocumentMerges(UpgradeBase):
         d = self.conflicting()
         self.up("run", "--allow-dirty")
         self.assertNotIn("doc-merge", self.up("status").stdout)
-        d.write_text(d.read_text() + "the owner is working on it\n")
+        _lf(d, d.read_text() + "the owner is working on it\n")
         st = self.up("status")
         self.assertIn("doc-merge", st.stdout, "new inputs must be merged again")
         self.assertNotIn("conflict awaiting you", st.stdout)
@@ -412,7 +420,7 @@ class DocumentMerges(UpgradeBase):
         conflict = d.with_suffix(".md.merge-conflict")
         p = self.up("run", "--allow-dirty", "--record-base", "PROTOCOL.md")
         self.assertIn("resolve it into", p.stdout, "record-base ignored an unresolved conflict")
-        d.write_text("the owner's resolution\n")
+        _lf(d, "the owner's resolution\n")
         conflict.unlink()
         resolved = d.read_bytes()
         p = self.up("run", "--allow-dirty", "--record-base", "PROTOCOL.md")
@@ -443,8 +451,8 @@ class MergesThatRemoveYourLines(UpgradeBase):
         return self.v / BASE / "PROTOCOL.md"
 
     def base_is_ours(self):
-        self.base().write_text(self.OWNER)
-        self.doc().write_text(self.OWNER)
+        _lf(self.base(), self.OWNER)
+        _lf(self.doc(), self.OWNER)
         return self.doc()
 
     def test_a_base_recorded_from_the_owners_file_never_replaces_the_document(self):
@@ -470,8 +478,8 @@ class MergesThatRemoveYourLines(UpgradeBase):
         cut = next(i for i in range(len(lines) // 2, len(lines)) if lines[i].startswith("#"))
         owner = "".join(lines[:cut])          # the owner removed everything from here on
         self.assertNotEqual(owner, shipped)
-        self.base().write_text(owner)
-        self.doc().write_text(owner)
+        _lf(self.base(), owner)
+        _lf(self.doc(), owner)
         before = self.doc().read_bytes()
         self.assertNotIn("doc-merge", self.up("status").stdout)
         p = self.up("run", "--allow-dirty")
@@ -495,10 +503,10 @@ class MergesThatRemoveYourLines(UpgradeBase):
 
     def test_a_release_removing_a_section_the_owner_kept_is_held(self):
         shipped = (TEMPLATES / "PROTOCOL.md").read_text()
-        self.base().write_text(shipped + "\n## A section the release dropped\n")
+        _lf(self.base(), shipped + "\n## A section the release dropped\n")
         d = self.doc()
         # the owner's edit at the top, far from the release's removal: a clean merge
-        d.write_text("<!-- mine -->\n" + shipped + "\n## A section the release dropped\n")
+        _lf(d, "<!-- mine -->\n" + shipped + "\n## A section the release dropped\n")
         before = d.read_bytes()
         self.assertNotIn("doc-merge", self.up("status").stdout)
         p = self.up("run", "--allow-dirty")
@@ -510,8 +518,8 @@ class MergesThatRemoveYourLines(UpgradeBase):
         idx = next(i for i in range(len(shipped) // 3, len(shipped))
                    if shipped[i].strip() and not shipped[i].startswith("#"))
         base = "".join(shipped[:idx] + shipped[idx + 1:])
-        self.base().write_text(base)
-        self.doc().write_text(base + "\n## Mine\n")
+        _lf(self.base(), base)
+        _lf(self.doc(), base + "\n## Mine\n")
         p = self.up("run", "--dry-run")
         self.assertIn("would merge cleanly (+1 added, -0 removed from your document)", p.stdout,
                       p.stdout)
@@ -533,8 +541,8 @@ class MergesThatRemoveYourLines(UpgradeBase):
     def test_record_base_still_keeps_a_base_that_merges_without_loss(self):
         shipped = (TEMPLATES / "PROTOCOL.md").read_text()
         kept = shipped.replace("\n", "\n\n", 1)
-        self.base().write_text(kept)
-        self.doc().write_text(shipped + "\n## Mine\n")
+        _lf(self.base(), kept)
+        _lf(self.doc(), shipped + "\n## Mine\n")
         p = self.up("run", "--allow-dirty", "--dry-run", "--record-base", "PROTOCOL.md")
         self.assertIn("already has a merge base", p.stdout)
         self.assertEqual(self.base().read_text(), kept)

@@ -45,8 +45,11 @@ def _files(root: Path):
 
 def _hooks(case):
     data = json.loads((case.home / ".claude" / "settings.json").read_text())
+    # Path(...).as_posix(): hook commands carry the "C:/..." form on Windows (identical to
+    # str() on POSIX, so a no-op there)
     return json.loads(json.dumps(data.get("hooks", {})).replace(str(case.tmp), "<ROOT>")
-                      .replace(os.path.realpath(str(case.tmp)), "<ROOT>"))
+                      .replace(os.path.realpath(str(case.tmp)), "<ROOT>")
+                      .replace(Path(case.tmp).as_posix(), "<ROOT>"))
 
 
 class CachedInstallIsAFreshInstall(unittest.TestCase):
@@ -99,7 +102,8 @@ class CachedInstallIsAFreshInstall(unittest.TestCase):
         for p in b.tmp.rglob("*"):
             if p.is_file() and not p.is_symlink() and ".git" not in p.parts:
                 try:
-                    if str(a.tmp) in p.read_text(encoding="utf-8"):
+                    text = p.read_text(encoding="utf-8")
+                    if str(a.tmp) in text or Path(a.tmp).as_posix() in text:
                         leaked.append(str(p.relative_to(b.tmp)))
                 except (UnicodeDecodeError, OSError):
                     pass

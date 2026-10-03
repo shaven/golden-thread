@@ -21,6 +21,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
 from _harness import REPO, latest_version_dir
+from _harness import LOTR_POSIX_ONLY, skip_on_windows
 
 GW = latest_version_dir(REPO / "golden-thread-lotr")
 sys.path.insert(0, str(GW / "scripts"))
@@ -92,6 +93,7 @@ def _makeFakeMcp():
     return FakeMcp
 
 
+@skip_on_windows(LOTR_POSIX_ONLY)
 class McpBase(unittest.TestCase):
     @classmethod
     def setUpClass(cls):

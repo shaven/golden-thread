@@ -3,9 +3,9 @@
 > **Reader:** a daily user — the deepest document, where the *why* lives
 > **Claims last checked against the code:** 2026-10-02 (gt 0.19.1) — see *The documents, and what belongs in each* in [`CLAUDE.md`](../CLAUDE.md).
 
-Complete reference for gt's thirty-six skills and its nine modules. Written against **gt v0.19.2**
-(gt-wiki 0.2.6; gt-usage 0.1.5; gt-demo, gt-watch, gt-report-card, gt-farm and gt-flow 0.19.2; gt-visualize 0.4.3;
-gt-lotr 0.2.0 — the five named with 0.19.2 are versioned with gt and move with every release, changed or not).
+Complete reference for gt's thirty-six skills and its nine modules. Written against **gt v0.19.3**
+(gt-wiki 0.2.6; gt-usage 0.1.5; gt-demo, gt-watch, gt-report-card, gt-farm and gt-flow 0.19.3; gt-visualize 0.4.3;
+gt-lotr 0.2.0 — the five named with 0.19.3 are versioned with gt and move with every release, changed or not).
 
 > **0.18.1 renamed the task and handoff skills to verbs** — `gt-create`, `gt-open`, `gt-list`,
 > `gt-handle`, `gt-close`, each taking the artifact as its argument. The old names (`gt-task`,

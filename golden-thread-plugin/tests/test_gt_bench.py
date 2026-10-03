@@ -14,6 +14,7 @@ Pinned (request 2026-09-28-gt-bench-measured-execution-profile):
 """
 import json
 import os
+import sys
 import unittest
 
 from _harness import Sandbox, SCRIPTS, load_module
@@ -111,7 +112,7 @@ class Doctor(BenchBase):
         self.addCleanup(os.environ.__setitem__, "HOME", old)
         os.environ["HOME"] = str(self.home)
         m = load_module(TOOL, "gt_bench_for_tests")
-        if os.uname().sysname != "Darwin":
+        if sys.platform != "darwin":
             self.assertFalse(m.rosetta_translated(), "only a Mac can be translated")
         else:
             self.assertIn(m.rosetta_translated(), (True, False))

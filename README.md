@@ -15,10 +15,17 @@ it at startup, look things up while working, and write back what they learn.
 Its distinguishing idea is the second problem, the one most memory systems never
 address: **writing a rule down does not mean it gets followed.**
 
-Plugin **v0.19.2**. Ten Core rules currently enforced, five of them *validated* — a
+Plugin **v0.19.3**. Ten Core rules currently enforced, five of them *validated* — a
 hook inspects the finished reply (`Stop`) or the tool call about to run (`PreToolUse`)
 and blocks it if the rule was broken.
 
+
+> [!IMPORTANT]
+> **0.19.3: Windows, finished.** `python3` now works in Claude's shell on Windows (a shim gt
+> installs), every gt write is LF, scheduled jobs run on Task Scheduler, and the test suite runs
+> on Windows. On every platform a failed install now rolls back to the state before it, and the
+> scheduled jobs keep the interpreter that can write your vault instead of the one that ran the
+> install. See *Windows* in [`INSTALL.md`](golden-thread-plugin/INSTALL.md).
 
 > [!IMPORTANT]
 > **0.19.2: gt installs on native Windows.** Run `install.sh` from Git Bash, or the new

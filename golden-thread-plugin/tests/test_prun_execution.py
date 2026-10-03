@@ -25,7 +25,7 @@ import shutil
 import unittest
 from pathlib import Path
 
-from _harness import Sandbox, SCRIPTS, GT, REPO, load_module
+from _harness import Sandbox, SCRIPTS, GT, REPO, PYTHON, load_module, skip_on_windows, WIN_FAKE_EXE
 
 PRUN = REPO / "tests" / "prun.py"
 FAKE_SSH = """#!/usr/bin/env bash
@@ -75,7 +75,7 @@ class FakeRepo(Sandbox):
     def prun(self, *args, env=None, timeout=300):
         e = dict(self.env)
         e.update(env or {})
-        return self.run_cmd(["python3", "tests/prun.py", *args], env=e, cwd=self.plugin,
+        return self.run_cmd([PYTHON, "tests/prun.py", *args], env=e, cwd=self.plugin,
                             timeout=timeout)
 
 
@@ -158,6 +158,7 @@ class Affected(FakeRepo):
 
 
 class Hosts(FakeRepo):
+    @skip_on_windows(WIN_FAKE_EXE)
     def test_split_attribute_and_skip_unreachable(self):
         ssh = self.tmp / "fake-ssh"
         ssh.write_text(FAKE_SSH)
@@ -176,6 +177,7 @@ class Hosts(FakeRepo):
         self.assertRegex(out, r"FAILED UNIT: test_beta\.Bad  \[host (good|local)\]")
         self.assertIn("boom from beta", out)
 
+    @skip_on_windows(WIN_FAKE_EXE)
     def test_no_reachable_runner_is_a_failure(self):
         ssh = self.tmp / "fake-ssh"
         ssh.write_text(FAKE_SSH)

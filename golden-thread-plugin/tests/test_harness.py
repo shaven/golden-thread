@@ -1,4 +1,5 @@
 """The harness itself: it must find the plugin and build an isolated vault."""
+import json
 import unittest
 from _harness import Sandbox, GT, WIKI, SCRIPTS
 
@@ -12,8 +13,8 @@ class HarnessTest(Sandbox):
         v = self.make_vault()
         self.assertTrue((v / "CLAUDE.md").is_file())
         self.assertTrue(str(v).startswith(str(self.tmp)))
-        cfg = (self.home / ".claude" / "vault-config.json").read_text()
-        self.assertIn(str(v.resolve()), cfg)
+        cfg = json.loads((self.home / ".claude" / "vault-config.json").read_text())
+        self.assertEqual(cfg["vault_path"], str(v.resolve()))
 
 
 if __name__ == "__main__":

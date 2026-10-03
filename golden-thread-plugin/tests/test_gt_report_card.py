@@ -266,7 +266,8 @@ class ReportCard(Sandbox):
         self.notice.chmod(0)                                 # unreadable
         try:
             p = self.surface()
-            if os.geteuid() != 0:
+            # chmod(0) makes a file unreadable only on POSIX, and not for root.
+            if os.name != "nt" and os.geteuid() != 0:
                 self.assertEqual(p.stdout, "")
         finally:
             self.notice.chmod(0o600)

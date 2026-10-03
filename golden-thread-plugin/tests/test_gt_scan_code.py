@@ -16,7 +16,7 @@ import re
 import subprocess
 import unittest
 
-from _harness import Sandbox, SCRIPTS
+from _harness import Sandbox, SCRIPTS, IS_WINDOWS
 
 SCAN = SCRIPTS / "gt_scan_code.py"
 
@@ -468,8 +468,18 @@ class TheVersionFloor(ScanBase):
     def fake(self, version):
         d = self.tmp / ("agbin-%s" % version.replace(".", "_"))
         d.mkdir(exist_ok=True)
+        return self._fake_bin(d, "ast-grep %s" % version)
+
+    @staticmethod
+    def _fake_bin(d, banner):
+        # GT_ASTGREP_BIN is run directly, the same call on every OS; Windows runs only real
+        # executables, so the fake there is a .cmd (CreateProcess runs those through cmd.exe).
+        if IS_WINDOWS:
+            p = d / "ast-grep.cmd"
+            p.write_text("@echo %s\n" % banner)
+            return str(p)
         p = d / "ast-grep"
-        p.write_text("#!/bin/sh\necho 'ast-grep %s'\n" % version)
+        p.write_text("#!/bin/sh\necho '%s'\n" % banner)
         p.chmod(0o755)
         return str(p)
 
@@ -509,10 +519,7 @@ class TheVersionFloor(ScanBase):
     def test_a_binary_with_no_parseable_version_is_refused_not_assumed_good(self):
         d = self.tmp / "weird"
         d.mkdir(exist_ok=True)
-        p = d / "ast-grep"
-        p.write_text("#!/bin/sh\necho 'ast-grep (nightly)'\n")
-        p.chmod(0o755)
-        _p, _v, problem = self.status(str(p))
+        _p, _v, problem = self.status(self._fake_bin(d, "ast-grep (nightly)"))
         self.assertTrue(problem, "an unparseable version was treated as new enough")
 
     def test_stale_and_absent_give_DIFFERENT_reasons(self):

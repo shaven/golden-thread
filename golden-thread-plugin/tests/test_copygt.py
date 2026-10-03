@@ -37,7 +37,7 @@ def publish_sums(src: Path, commit="c0ffee" * 6 + "abcd", **versions):
             continue
         rel = p.relative_to(src).as_posix()
         lines.append("%s  ./%s" % (hashlib.sha256(p.read_bytes()).hexdigest(), rel))
-    (src / "SHA256SUMS").write_text("\n".join(lines) + "\n")
+    (src / "SHA256SUMS").write_bytes(("\n".join(lines) + "\n").encode())  # LF, as sync-gt-src.sh writes it
     tree = hashlib.sha256((src / "SHA256SUMS").read_bytes()).hexdigest()
     data = {"commit": commit, "layout": "repository", "plugin_path": "golden-thread-plugin/"}
     data.update(versions or {"gt": "0.0.1"})
@@ -144,7 +144,7 @@ class MirrorTest(CopygtBase):
         sums = self.src / "SHA256SUMS"
         lines = sums.read_text().splitlines()
         lines[0] = ("0" * 64) + lines[0][64:]
-        sums.write_text("\n".join(lines) + "\n")
+        sums.write_bytes(("\n".join(lines) + "\n").encode())
         before = snapshot(self.dest)
         p = self.copygt("--dest", self.dest, "--report", self.report)
         self.assertEqual(p.returncode, 3, p.stdout + p.stderr)
