@@ -548,6 +548,21 @@ class LotrOnSmoke(InstalledMachine):
         rc, rows, _ = self.gate()
         self.assertEqual(rows["lotr"]["state"], "PASS", rows["lotr"])
         self.assertEqual(rows["smoke-lotr"]["state"], "PASS", rows["smoke-lotr"])
+        # 0.20.0: the smoke starts the CONFIGURED command (the installed manifest's), so the
+        # PASS above proves what Claude Code will run. On Windows that command is the
+        # interpreter install.sh resolved, never `python3` (the Store stub); elsewhere it is
+        # the manifest as shipped.
+        self.assertIn("the configured MCP command", rows["smoke-lotr"]["summary"])
+        cache = self.home / ".claude" / "plugins" / "cache" / "golden-thread-plugin" / "gt-lotr"
+        for man in list(cache.glob("*/.claude-plugin/plugin.json")) + [
+                self.home / ".claude" / "plugins" / "marketplaces" / "golden-thread-plugin"
+                / "plugins" / "gt-lotr" / ".claude-plugin" / "plugin.json"]:
+            cmd = json.loads(man.read_text(encoding="utf-8"))["mcpServers"]["gt-lotr"]["command"]
+            if IS_WINDOWS:
+                self.assertTrue(os.path.isabs(cmd) and os.path.isfile(cmd), (man, cmd))
+                self.assertNotIn("windowsapps", cmd.lower())
+            else:
+                self.assertEqual(cmd, "python3", man)
         self.assertEqual(rc, 0)
         if IS_WINDOWS:
             return                      # no pgrep; the smoke terminates its lotrd itself

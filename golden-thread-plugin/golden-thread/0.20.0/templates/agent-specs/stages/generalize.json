@@ -14,6 +14,7 @@
     "Remove project names, host names, paths and one-off figures that only the original project needs, and list what you removed. Keep every condition the claim depends on: a statement that drops a condition is broader than the evidence, and that is an overclaim.",
     "If the claim does not hold beyond its project, set generalizes to false and say why. That is a valid answer, not a failure."
   ],
+  "agent": {"tools": ["Read"], "max_turns": 10},
   "context_loading": {
     "strategy": "none",
     "load": [],

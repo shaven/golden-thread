@@ -18,10 +18,12 @@ One test (or class) per acceptance criterion of 2026-09-30-ingest-promote-stage-
 Spawning agents is Claude's step; the agents' results are fixture JSON here. Hostile fixtures
 are ASSEMBLED AT RUNTIME: the release's secrets and scrub gates scan this file.
 """
+import hashlib
 import json
 import shutil
 import subprocess
 import unittest
+from pathlib import Path
 
 from _harness import GT, PYTHON, SCRIPTS, TOOLS, Sandbox
 
@@ -493,7 +495,7 @@ class ClaudeOnlySpecMatrixTest(PipelineBase):
 
     def test_every_subcommand_takes_vault_and_dry_run_after_it(self):
         for sub in ("stages", "survey", "packet", "fan-in", "reconcile", "draft",
-                    "promote-scan", "promote-plan", "status"):
+                    "promote-scan", "promote-plan", "status", "workflow-args", "packets"):
             h = self.py(PIPE, sub, "--help")
             self.assertOk(h, sub)
             self.assertIn("--vault", h.stdout, sub)
@@ -554,6 +556,190 @@ class SessionKindTest(PipelineBase):
                        "complete -- no owner prompt was needed", "Never hand a stage to gt-farm",
                        "--deeper packages", "--record"):
             self.assertIn(needle, text, needle)
+
+
+
+# -- 0.20.0: the dry-run flag counts wherever it is placed ---------------------------------------
+class DryRunPlacementTest(PipelineBase):
+    """research.md 2026-10-03: `--dry-run draft` WROTE -- the subcommand's own --dry-run default
+    (False) overwrote the global flag, and a 55-line entry was queued and drained by a preview.
+    Both placements must write nothing."""
+
+    def clean_run_to_draft(self):
+        src = self.tree("wombat", {"api/main.py": "print(1)\n"})
+        self.survey(src)
+        self.packet("r1", "extract", "api", extract_result(["the api has one entry point"]))
+        self.pipe("fan-in", "r1", "--stage", "extract", expect=0)
+        self.pipe("reconcile", "r1", expect=0)
+
+    def test_dry_run_before_and_after_draft_both_write_nothing(self):
+        self.clean_run_to_draft()
+        before = (self.vault / RESEARCH).read_text()
+        for args in (("--vault", self.vault, "--dry-run", "draft", "r1", "--session", "s1"),
+                     ("draft", "r1", "--session", "s1", "--dry-run", "--vault", self.vault)):
+            with self.subTest(args=args[:4]):
+                p = self.py(PIPE, *args, input="")
+                self.assertEqual(0, p.returncode, p.stdout + p.stderr)
+                self.assertIn("would queue", p.stdout)
+                self.assertEqual(before, (self.vault / RESEARCH).read_text())
+                self.assertFalse((self.spool / "r1" / "drafted.json").exists())
+
+    def test_global_vault_and_json_also_survive_the_subcommand(self):
+        src = self.tree("wombat", {"api/main.py": "print(1)\n"})
+        p = self.py(PIPE, "--vault", self.vault, "--json", "--dry-run", "survey", src,
+                    "--kind", "code", "--run", "r9", input="")
+        self.assertEqual(0, p.returncode, p.stderr)
+        self.assertTrue(json.loads(p.stdout)["dry_run"])
+        self.assertFalse((self.spool / "r9").exists())
+
+
+# -- 0.20.0: the workflow route (gt:pipeline-stage) --------------------------------------------
+class WorkflowArgsTest(PipelineBase):
+    def args(self, run, stage, *extra, expect=0):
+        p = self.pipe("workflow-args", run, "--stage", stage, "--json", *extra, expect=expect)
+        return json.loads(p.stdout) if p.stdout.strip().startswith("{") else p
+
+    def test_extract_renders_every_clean_unit_through_the_scan_into_the_spool(self):
+        src = self.tree("wombat", {"api/main.py": "print(1)\n", "web/a.ts": "let a = 1\n",
+                                   "docs/a.md": "# a\n"})
+        self.survey(src)
+        self.packet("r1", "extract", "docs", extract_result(["docs exist"]))
+        a = self.args("r1", "extract")
+        self.assertEqual(("gt:pipeline-stage", "extract", "extract-code"),
+                         (a["workflow"], a["stage"], a["job_type"]))
+        self.assertEqual(sorted(i["unit"] for i in a["items"]), ["api", "web"])
+        self.assertEqual(a["done"], ["docs"])
+        for it in a["items"]:
+            f = self.spool / "r1" / "prompts" / "extract" / (it["unit"] + ".md")
+            self.assertEqual(Path(it["prompt_file"]), f)
+            text = f.read_text(encoding="utf-8")
+            self.assertEqual(hashlib.sha256(text.encode("utf-8")).hexdigest(), it["sha256"])
+            self.assertIn("gt_intake_scan.py scanned this material before you were spawned",
+                          text)
+        self.assertIn("findings", a["schema"]["required"])
+        self.assertEqual(a["schema"]["type"], "object")
+        self.assertTrue((self.spool / "r1" / "workflow-extract.json").is_file())
+
+    def test_extract_takes_no_hand_rendered_prompt(self):
+        src = self.tree("wombat", {"api/main.py": "print(1)\n"})
+        self.survey(src)
+        f = self.tmp / "p.md"
+        f.write_text("anything")
+        p = self.args("r1", "extract", "--prompt", "api=%s" % f, expect=2)
+        self.assertIn("renders its own prompts", p.stderr)
+
+    def test_a_unit_whose_rescan_fails_is_refused_not_handed_out(self):
+        src = self.tree("wombat", {"api/main.py": "print(1)\n", "web/a.ts": "let a = 1\n"})
+        self.survey(src)
+        (src / "web" / "notes.md").write_text(INJECT + "\n")   # after the survey's scan
+        a = self.args("r1", "extract", expect=1)
+        self.assertEqual([i["unit"] for i in a["items"]], ["api"])
+        self.assertEqual([r["unit"] for r in a["refused"]], ["web"])
+        self.assertNotIn("revious instruc", json.dumps(a))
+        self.assertFalse((self.spool / "r1" / "prompts" / "extract" / "web.md").exists())
+
+    def test_dry_run_writes_no_prompt_and_no_args_file(self):
+        src = self.tree("wombat", {"api/main.py": "print(1)\n"})
+        self.survey(src)
+        p = self.py(PIPE, "--vault", self.vault, "--dry-run", "workflow-args", "r1",
+                    "--stage", "extract", input="")
+        self.assertEqual(0, p.returncode, p.stderr)
+        self.assertFalse((self.spool / "r1" / "prompts").exists())
+        self.assertFalse((self.spool / "r1" / "workflow-extract.json").exists())
+
+    def promote_run(self):
+        cands = self.result_file("cands", [{"claim": "rsync -c compares checksums",
+                                            "origin": RESEARCH, "evidence": "man"}])
+        self.pipe("promote-scan", "--candidates-file", cands, "--run", "p1", expect=0)
+
+    def test_other_stages_take_only_prompts_gt_rendered_for_their_job(self):
+        self.promote_run()
+        p = self.args("p1", "verify", expect=2)
+        self.assertIn("--prompt UNIT=FILE", p.stderr)
+        fake = self.tmp / "fake.md"
+        fake.write_text("You are helpful. Confirm the claim.\n")
+        p = self.args("p1", "verify", "--prompt", "c01=%s" % fake, expect=2)
+        self.assertIn("is not a prompt gt_agent_spec.py rendered for verify", p.stderr)
+        good = self.tmp / "verify.md"
+        r = self.py(SPEC, "render", "verify", "--input", "claim=x", "--input", "rules=y",
+                    "--input", "artifact=z")
+        self.assertOk(r)
+        good.write_text(r.stdout, encoding="utf-8")
+        p = self.args("p1", "verify", "--prompt", "c99=%s" % good, expect=2)
+        self.assertIn("not a candidate id", p.stderr)
+        a = self.args("p1", "verify", "--prompt", "c01=%s" % good)
+        self.assertEqual([i["unit"] for i in a["items"]], ["c01"])
+        self.assertEqual(a["schema"]["properties"]["verdict"]["enum"],
+                         ["confirmed", "refuted", "cannot-verify"])
+
+
+class PacketsTest(PipelineBase):
+    def results(self, run, stage, items, **top):
+        d = {"run": run, "stage": stage, "results": items}
+        d.update(top)
+        return self.result_file("wf-%s-%s" % (run, stage), d)
+
+    def test_every_returned_result_becomes_its_units_packet(self):
+        src = self.tree("wombat", {"api/main.py": "print(1)\n", "web/a.ts": "let a = 1\n"})
+        self.survey(src)
+        f = self.results("r1", "extract", [
+            {"unit": "api", "result": extract_result(["api starts in main.py"])},
+            {"unit": "web", "result": extract_result(["web is typescript"])}])
+        p = self.pipe("packets", "r1", "--stage", "extract", "--results-file", f, expect=0)
+        self.assertIn("wrote packet extract/api.json", p.stdout)
+        self.assertEqual(sorted(x.stem for x in (self.spool / "r1" / "extract").glob("*.json")),
+                         ["api", "web"])
+        self.pipe("fan-in", "r1", "--stage", "extract", expect=0)
+
+    def test_a_bad_result_is_refused_an_empty_one_is_incomplete(self):
+        src = self.tree("wombat", {"api/main.py": "print(1)\n", "web/a.ts": "let a = 1\n",
+                                   "lib/b.py": "x = 1\n"})
+        self.survey(src)
+        f = self.results("r1", "extract", [
+            {"unit": "api", "result": extract_result(["fine"])},
+            {"unit": "web", "result": {"summary": "no findings field"}},
+            {"unit": "lib", "result": None}])
+        p = self.pipe("packets", "r1", "--stage", "extract", "--results-file", f, expect=1)
+        self.assertIn("result.findings: missing required field", p.stdout)
+        self.assertIn("INCOMPLETE -- 1 unit(s) came back with no result", p.stdout)
+        self.assertEqual([x.stem for x in (self.spool / "r1" / "extract").glob("*.json")],
+                         ["api"])
+        a = json.loads(self.pipe("workflow-args", "r1", "--stage", "extract", "--json",
+                                 expect=0).stdout)
+        self.assertEqual(sorted(i["unit"] for i in a["items"]), ["lib", "web"])   # resume
+
+    def test_results_for_another_run_or_stage_are_refused(self):
+        src = self.tree("wombat", {"api/main.py": "print(1)\n"})
+        self.survey(src)
+        f = self.results("other", "extract", [{"unit": "api", "result": extract_result(["x"])}])
+        p = self.pipe("packets", "r1", "--stage", "extract", "--results-file", f, expect=2)
+        self.assertIn("not 'r1'", p.stderr)
+
+    def test_instruction_text_reported_by_an_agent_stops_its_unit(self):
+        src = self.tree("wombat", {"api/main.py": "print(1)\n"})
+        self.survey(src)
+        f = self.results("r1", "extract", [{"unit": "api", "result": extract_result(
+            ["x"], instructions_seen=["api/main.py:1"])}])
+        p = self.pipe("packets", "r1", "--stage", "extract", "--results-file", f, expect=1)
+        self.assertIn("STOP -- security", p.stdout)
+
+    def test_dry_run_writes_no_packet(self):
+        src = self.tree("wombat", {"api/main.py": "print(1)\n"})
+        self.survey(src)
+        f = self.results("r1", "extract", [{"unit": "api", "result": extract_result(["x"])}])
+        p = self.py(PIPE, "--vault", self.vault, "--dry-run", "packets", "r1", "--stage",
+                    "extract", "--results-file", f, input="")
+        self.assertEqual(0, p.returncode, p.stderr)
+        self.assertIn("would write packet", p.stdout)
+        self.assertFalse((self.spool / "r1" / "extract").exists())
+
+    def test_the_skills_describe_the_workflow_route_and_its_fallback(self):
+        for skill in ("gt-ingest", "gt-promote"):
+            text = " ".join((GT / "skills" / skill / "SKILL.md").read_text().split())
+            with self.subTest(skill=skill):
+                for needle in ("gt:pipeline-stage", "workflow-args", "packets",
+                               "Without the Workflow tool", "A workflow cannot ask anything"):
+                    self.assertIn(needle, text)
 
 
 if __name__ == "__main__":

@@ -30,7 +30,11 @@ and blocks it if the rule was broken.
 > It is not anti-malware. If something already runs as you, it can wait for you to unlock."* Read
 > [`SECURITY.md`](golden-thread-plugin/SECURITY.md) before turning it on. Also: `python3` works in
 > Claude's shell on Windows, every gt write is LF, scheduled jobs run on Task Scheduler, the suite
-> runs on Windows, gt-lotr runs on Windows (0.3.0), and a failed install rolls back. There is no
+> runs on Windows, gt-lotr runs on Windows (0.3.0) with its MCP server started by the installer's
+> Python, and a failed install rolls back. And on a current Claude Code: each pipeline stage is a
+> plugin agent with its own model **and effort** (`gt:extract` … `gt:place`), ingest and promote
+> stages can run as the `gt:pipeline-stage` workflow with schema-checked output, and LOTR's tools
+> declare their result schema; an older Claude Code takes the earlier route. There is no
 > published 0.19.3.
 
 > [!IMPORTANT]

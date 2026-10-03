@@ -124,7 +124,10 @@ gt-lotr 0.3.0 — the five named with 0.20.0 are versioned with gt and move with
 <blockquote>
 <p><strong>0.20.0 adds gt unlock</strong>, off by default: agents need your presence (TOTP + Touch ID /
 Windows Hello, optionally Entra ID) for LOTR, credentials, publishing and gt's own guards.
-See <a href="#security-gt-unlock-0200">Security: gt unlock</a> and <a href="SECURITY.md"><code>SECURITY.md</code></a>.</p>
+See <a href="#security-gt-unlock-0200">Security: gt unlock</a> and <a href="SECURITY.md"><code>SECURITY.md</code></a>.
+It also ships each pipeline stage as a plugin agent carrying its own model and effort
+(<code>gt:extract</code> … <code>gt:place</code>), a <code>gt:pipeline-stage</code> workflow with schema-checked output, and
+typed LOTR results; each falls back to the earlier route on an older Claude Code.</p>
 <p><strong>0.18.1 renamed the task and handoff skills to verbs</strong> — <code>gt-create</code>, <code>gt-open</code>, <code>gt-list</code>,
 <code>gt-handle</code>, <code>gt-close</code>, each taking the artifact as its argument. The old names (<code>gt-task</code>,
 <code>gt-handoff</code>, <code>gt-task-list</code>, <code>gt-handoff-list</code>, <code>gt-task-handle</code>, <code>gt-handoff-handle</code>) still work
@@ -297,14 +300,85 @@ inherit. Choices live with the install choices and survive reinstalls. The docto
 them, so <code>/gt:gt-validate</code> names what actually runs.</p>
 <p><strong>Specialist agents are set by the task, not the profile.</strong> An agent's spec tier picks its model —
 classify and draft haiku, extract and place sonnet, reconcile, verify and generalize opus —
-whatever profile the skills use. <code>gt_agent_spec.py model &lt;job&gt;</code> prints the alias a skill passes as
-the Agent tool's <code>model</code> (<code>resolve</code> and <code>render --json</code> carry it too). The Agent tool takes no
-effort, so agents run at the session's effort, and an agent override is a model only, by stage or
-job type (the job type wins). The <code>agent_models</code> setting (<code>task</code> default, <code>session</code>) turns it off.</p>
+whatever profile the skills use. The <code>agent_models</code> setting (<code>task</code> default, <code>session</code>) turns it off.</p>
+<p><strong>Each stage is a plugin agent that carries its effort too (0.20.0).</strong> gt ships one agent
+definition per stage in <code>agents/&lt;stage&gt;.md</code>, run as <code>gt:extract</code>, <code>gt:classify</code>, <code>gt:reconcile</code>,
+<code>gt:draft</code>, <code>gt:verify</code>, <code>gt:generalize</code> and <code>gt:place</code>. Each is generated from its stage spec's
+<code>agent</code> block (<code>gt_agent_spec.py agents</code>) and holds:</p>
+<ul>
+<li>the <strong>model and effort</strong> for its tier: haiku with no effort (Haiku has no effort levels), sonnet
+  medium, opus high. The Agent tool's own <code>model</code> parameter has no effort, so until 0.20.0 every
+  agent ran at the session's effort;</li>
+<li>the <strong>tools</strong> the stage needs and no more: no stage agent can write, edit or spawn agents, and
+  extract, which reads untrusted material, gets only Read, Grep and Glob (no shell, no fetch);</li>
+<li>a <strong>turn limit</strong> (<code>maxTurns</code>);</li>
+<li><code>omitClaudeMd</code> for <strong>verify and reconcile</strong>, so the zero-context stages start without your
+  CLAUDE.md files as well as without the vault.</li>
+</ul>
+<p><code>gt_model_policy.py apply</code> writes model and effort into the installed definitions exactly as it
+does for skills, and changing <code>agent_models</code> rewrites them at once. <code>gt_agent_spec.py model &lt;job&gt;</code>
+(and <code>resolve</code>, <code>render --json</code>) names the agent type <strong>only when the installed definition is
+exactly what that job should run</strong>: the stage spec in effect rendered at the model and effort the
+policy resolves for it. Otherwise the skill spawns as before, through the Agent tool with the
+model alias on the first line. That covers a hand edit, a vault override of the stage, a
+job-type override (one definition serves every kind), and a Claude Code older than 2.1.78. A
+stage override may carry an effort; a job-type override is a model only.</p>
 <pre><code class="language-bash">python3 $SCRIPTS/gt_agent_spec.py model extract-docs                       # sonnet  (… task tier standard -&gt; balanced)
+                                                                            # agent type: gt:extract -- … effort medium
 python3 $SCRIPTS/gt_model_policy.py set --agent extract --model haiku       # every extract-&lt;kind&gt;
+python3 $SCRIPTS/gt_model_policy.py set --agent verify --model opus --effort xhigh
 python3 $SCRIPTS/gt_model_policy.py clear --agent extract
+python3 $SCRIPTS/gt_agent_spec.py features                                 # what this Claude Code supports
 </code></pre>
+<p><strong>What the running Claude Code supports.</strong> <code>gt_agent_spec.py features</code> reads the version from
+<code>claude --version</code>, asking only inside a Claude Code session, and gates each feature at the
+minimum the docs name:</p>
+<table>
+<thead>
+<tr>
+<th>Feature</th>
+<th>Needs</th>
+<th>Used for</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>plugin agents with effort and maxTurns</td>
+<td>2.1.78</td>
+<td>the <code>gt:&lt;stage&gt;</code> agents</td>
+</tr>
+<tr>
+<td><code>omitClaudeMd</code></td>
+<td>2.1.271</td>
+<td>verify and reconcile without CLAUDE.md</td>
+</tr>
+<tr>
+<td>workflows</td>
+<td>2.1.154</td>
+<td>the <code>gt:pipeline-stage</code> workflow</td>
+</tr>
+<tr>
+<td><code>context: fork</code></td>
+<td>2.1.0</td>
+<td>none of gt's skills, see below</td>
+</tr>
+</tbody>
+</table>
+<p>An older Claude Code ignores frontmatter it does not know, so nothing breaks: it takes the old
+route. When the version cannot be read, a skill relies on what its own tool list offers.</p>
+<p><strong>No skill forks (<code>context: fork</code>).</strong> A forked skill runs in a subagent that sees none of the
+conversation and, by default, in the background, so it cannot stop and ask you anything. The
+heavy skills were weighed for it in 0.20.0 and none forks:</p>
+<ul>
+<li>gt-ingest stops for you on a contradiction or a security issue, and asks for a missing slug;</li>
+<li>gt-lint has an approval loop;</li>
+<li>gt-optimize works its judgement list with you;</li>
+<li>gt-review routes each item with you;</li>
+<li>gt-validate takes its claim from the conversation, and already hands the checking to a fresh
+  agent.</li>
+</ul>
+<p><code>skill_lint.py</code> refuses a forked skill that asks the owner anything, so this cannot change by
+accident.</p>
 <h3 id="supersession-and-expiry-gt_supersedepy-0191">Supersession and expiry: <code>gt_supersede.py</code> (0.19.1)</h3>
 <p>A note can declare that it replaces an earlier one — <code>supersedes: &lt;path&gt;</code> in its frontmatter (a
 path relative to the note's folder or the vault). A note is <strong>expired</strong> when it carries
@@ -1604,6 +1678,33 @@ written. With no stop the ingest finishes with no prompt at all.</p>
 <code>--deeper packages</code> or <code>--unit-depth 2</code>; <code>--record --why "&lt;reason&gt;"</code> saves the split in
 <code>&lt;vault&gt;/Projects/golden-thread/ingest-units.json</code> (in the vault on purpose: a config file inside
 the ingested repo would be untrusted material).</p>
+<p><strong>The workflow route (0.20.0).</strong> On a Claude Code with workflows (the Workflow tool, 2.1.154+,
+not turned off), a stage with many units can run as gt's <code>gt:pipeline-stage</code> workflow instead of
+one Agent call per unit. The deterministic half stays in gt:</p>
+<pre><code class="language-bash">gt_ingest_pipeline.py workflow-args &lt;run&gt; --stage extract --json     # every clean unit, scanned, rendered
+gt_ingest_pipeline.py workflow-args &lt;run&gt; --stage verify --prompt c01=&lt;rendered file&gt; … --json
+gt_ingest_pipeline.py packets &lt;run&gt; --stage extract --results-file &lt;the workflow's result&gt;
+</code></pre>
+<p><code>workflow-args</code> writes each unit's prompt into the run's spool and prints the workflow's args:
+the stage's output schema as JSON Schema, and per unit still without a packet, the prompt file,
+its sha256, and the agent type (or model and effort) to run it at.</p>
+<ul>
+<li>Extract renders its own prompts, each through the intake scan of that unit; a unit that fails
+  the re-scan is <code>REFUSED</code> and never handed out.</li>
+<li>Every other stage takes the prompts the skill rendered, and refuses a file that is not a
+  <code>render</code> output for that job.</li>
+</ul>
+<p>The workflow gives each agent only the prompt file's path, so nothing from the material reaches
+its task message, and Claude Code validates each agent's output against the schema as it returns.
+<code>packets</code> checks every result against the spec again and writes the packets.</p>
+<p>A unit that came back empty is <code>INCOMPLETE</code>. Running <code>workflow-args</code> again hands out only the
+units still without a packet, so a stopped or failed run resumes. Inside one session, the
+workflow's own resume also works. A workflow cannot ask you anything, so every stop is handled
+after it returns, exactly as on the per-agent route. Without the Workflow tool, that per-agent
+route is the fallback and runs the same pipeline.</p>
+<p><strong><code>--dry-run</code> counts wherever it is placed (0.20.0).</strong> <code>gt_ingest_pipeline.py --dry-run draft …</code>
+used to write: the subcommand's own default overwrote the global flag, so a preview queued and
+drained a real entry. Now the flag means the same before or after the subcommand.</p>
 <p><strong>Promote runs the same way</strong> when there are several candidates: <code>promote-scan</code>, then one agent per
 candidate for <strong>verify</strong> (zero-context; refuted or unverifiable candidates are dropped),
 <strong>generalize</strong> and <strong>place</strong>, then <code>promote-plan</code>, which ends at <code>awaiting-owner</code>. No command
@@ -2524,6 +2625,14 @@ lotr status            # connections, whether each credential is present (never 
   <code>state/audit.jsonl</code> with a hash of its arguments, never the arguments.</li>
 <li><strong>On a work machine</strong> connections use that machine's own keychain, and employer hostnames stay
   in its local registry, never in the vault — vault notes use connection ids.</li>
+<li><strong>Typed results (lotr 0.3.0, gt 0.20.0):</strong> every tool declares an <code>outputSchema</code> for the
+  envelope it returns as <code>structuredContent</code> (<code>ok</code>, the error object, and for calls <code>data</code>,
+  <code>next_cursor</code>, <code>notes</code>, <code>withheld</code>). It is offered only to a client that negotiated MCP
+  2025-06-18 or later, the protocol that introduced it, so an older client sees the tool list as
+  before. <code>data</code> stays untyped: it is the downstream's own, and untrusted.</li>
+<li><strong>On Windows</strong> the installer points the installed manifest's MCP command at the Python it
+  resolved, because <code>python3</code> there is the Microsoft Store stub (see INSTALL.md). The
+  post-install gate starts that exact command.</li>
 </ul>
 <p>Design and decisions: vault <code>Projects/golden-thread/mcp-gateway/</code>, ADR-1..6.</p>
 <hr />
@@ -3539,7 +3648,7 @@ is registered here and can be switched off.</p>
 <td><code>agent_models</code></td>
 <td><code>task</code> · <code>session</code></td>
 <td><code>task</code></td>
-<td>Each specialist agent's model set by its task (haiku/sonnet/opus by tier), whatever the skill profile; <code>session</code> passes no model (0.19.1). See <a href="#model-and-effort-profiles-gt_model_policypy-0191">Model and effort profiles</a></td>
+<td>Each specialist agent's model set by its task (haiku/sonnet/opus by tier), whatever the skill profile; <code>session</code> passes no model (0.19.1). Since 0.20.0 the stage agent definitions carry model and effort, and changing this rewrites them at once. See <a href="#model-and-effort-profiles-gt_model_policypy-0191">Model and effort profiles</a></td>
 </tr>
 <tr>
 <td><code>vault_hints</code></td>

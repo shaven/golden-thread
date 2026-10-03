@@ -45,7 +45,10 @@ What was built, and why each piece is there:
 ```
 
 1. A session starts. gt registers it with the authority; the LOTR MCP connection Claude Code
-   starts registers itself as that session's one shim.
+   starts registers itself as that session's one shim. The authority accepts it only when the
+   kernel says its parent is `claude`. That is why, on Windows, the installer points the MCP
+   command at the Python interpreter itself rather than at a launcher script (0.20.0): a script
+   in between would be the parent, and every registration would be refused.
 2. The assistant calls a LOTR tool. LOTR asks the authority whether **this process** (named by
    the kernel) may use `lotr:<connection>:<tier>`. Locked: the authority asks you — a Touch ID
    or Windows Hello sheet, then a dialog for your authenticator code — naming the requester and

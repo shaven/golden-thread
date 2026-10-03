@@ -90,6 +90,82 @@ anti-malware. If something already runs as you, it can wait for you to unlock."*
   signed + notarized helper, Windows Hello on a machine with a PIN, an Entra app registration.
 
 
+### Claude Code integration: stage agents with their own effort, a pipeline workflow, typed LOTR results
+
+(Owner, 2026-10-03: the 0.20.0 / 0.21.0 split, items 0–4 and 6; plugin-shipped hooks wait for
+0.21.0.) Each feature was checked against code.claude.com/docs first, and each falls back to the
+0.19 route on a Claude Code that lacks it. `gt_agent_spec.py features` says which apply here.
+
+- **Each pipeline stage is a plugin agent** (`agents/<stage>.md`, run as `gt:extract`,
+  `gt:classify`, `gt:reconcile`, `gt:draft`, `gt:verify`, `gt:generalize`, `gt:place`).
+  - *Why:* the Agent tool's `model` parameter takes no effort, so every specialist ran at the
+    session's effort. A definition carries both (Claude Code 2.1.78+): haiku with no effort,
+    sonnet medium, opus high.
+  - *Generated, not hand-written:* from a new `agent` block in each stage spec (tools,
+    `max_turns`, `omit_claude_md`), by `gt_agent_spec.py agents`; a test fails when a shipped
+    file differs from what its spec renders.
+  - *Narrower than before:* no stage agent can write, edit or spawn agents. Extract, which reads
+    untrusted material, gets only Read, Grep and Glob. verify and reconcile also start without
+    the CLAUDE.md files (`omitClaudeMd`, 2.1.271+; an older Claude Code loads them, as the Agent
+    tool always did). The validator refuses a spec that loosens any of this, and a kind cannot
+    change it.
+  - *When it is used:* `gt_model_policy.py apply` writes model and effort into the installed
+    definitions, and changing `agent_models` rewrites them at once. `gt_agent_spec.py model`,
+    `resolve` and `render --json` name the agent type only when the installed file is exactly
+    what the job should run. Otherwise — a hand edit, a vault override of the stage, a job-type
+    model override, a Claude Code older than 2.1.78, or a session that does not offer the type —
+    the skill spawns as before, with `model`.
+  - *Changed on purpose:* `gt_model_policy.py set --agent <stage> --effort E` is now accepted
+    (until 0.20.0 every agent effort was refused, because nothing could carry one). A job-type
+    effort is still refused: one definition serves every kind.
+- **Ingest and promote stages can run as a workflow, `gt:pipeline-stage`** (Claude Code
+  workflows, 2.1.154+). `gt_ingest_pipeline.py workflow-args` writes each unit's prompt into the
+  run's spool and prints the workflow's args: the stage schema as JSON Schema, and per unit the
+  prompt file, its sha256, and the agent type or model and effort.
+  - Extract renders its own prompts, through the intake scan of each unit, so the workflow
+    cannot skip it; a unit that fails the re-scan is refused and never handed out.
+  - The workflow gives each agent only the prompt file's path, and Claude Code validates the
+    output against the schema.
+  - `gt_ingest_pipeline.py packets` checks every result again and writes the packets.
+  - Re-running `workflow-args` hands out only the units without a packet (resume).
+  - The workflow cannot ask anything, so every stop is still handled by the skill afterwards.
+  - Without the Workflow tool (an older Claude Code, `disableWorkflows`,
+    `CLAUDE_CODE_DISABLE_WORKFLOWS`), the per-agent pipeline runs as before.
+- **`gt_ingest_pipeline.py --dry-run draft` no longer writes** (found 2026-10-03). Every
+  subcommand redefined `--dry-run` with a default of False, and argparse let that default
+  overwrite a flag given before the subcommand. A "preview" queued and drained a 55-line
+  research entry that cannot be removed (research.md is append-only). The subcommands' copies now
+  have no default, so `--dry-run`, `--vault` and `--json` count wherever they are placed. A test
+  covers both orders.
+- **No skill forks (`context: fork`), and `skill_lint.py` now refuses a forked skill that asks
+  the owner anything.** gt-ingest, gt-lint, gt-validate, gt-optimize and gt-review were weighed for
+  it. A forked skill sees none of the conversation and runs in the background, so:
+  - four of them would lose their conversation with you (ingest's stops and slug question,
+    lint's approval loop, optimize's judgement list, review's routing);
+  - gt-validate takes its claim from the conversation, and already hands the checking to a fresh
+    agent.
+- **gt-lotr 0.3.0: typed results.** Each of the four tools declares an `outputSchema` for the
+  `structuredContent` envelope it already returned, to clients that negotiated MCP 2025-06-18 or
+  later (the protocol that added it). A 2025-03-26 client sees the list unchanged. Only what the
+  shim always produces is constrained; a downstream's `data` stays untyped and untrusted. An
+  envelope without `ok` gets one, so every result conforms.
+- **gt-lotr's MCP server starts on native Windows.** Its `plugin.json` launched `python3`, which
+  there is the Microsoft Store stub, so the server never started (an open item of this release;
+  INSTALL.md documented a manual `claude mcp add`).
+  - The fix: `install.sh` rewrites the installed manifests (cache and marketplace) to the
+    interpreter it resolved, as an absolute path with `PYTHONUTF8=1`
+    (`gt_components.py localize-mcp`).
+  - Not a launcher script, on purpose: the server must stay a direct child of `claude`, which gt
+    unlock's shim registration checks from the kernel.
+  - The post-install gate's `smoke-lotr` row now starts the configured command itself, not
+    `sys.executable`.
+  - macOS and Linux keep the manifest as shipped.
+- **Not covered:** that Claude Code for Windows starts a plugin MCP server directly rather than
+  through a shell is inferred from the docs' silence and from the configured command answering
+  when run as written (the VM proof). It was not observed under a logged-in Claude Code for
+  Windows, an owner step like the hooks. Plugin-shipped workflows (`workflows/` in a plugin) are
+  documented, but the docs name no minimum version: gt relies on the Workflow tool being offered.
+
 ### Windows, finished; a failed install rolls back; the scheduled jobs keep a working interpreter
 
 (Owner, 2026-10-03: "Finish the work for windows".) 0.19.2 made gt install on Windows; this

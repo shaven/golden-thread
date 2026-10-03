@@ -14,6 +14,7 @@
     "Read index.md first and open only the pages it points to for this topic. Name every page that overlaps, and say how much.",
     "Propose the wikilinks the placed text should carry and the one-line index.md entry. You propose; the owner approves every promotion, and nothing is written before they do."
   ],
+  "agent": {"tools": ["Read", "Grep", "Glob"], "max_turns": 25},
   "context_loading": {
     "strategy": "vault",
     "load": ["index.md"],

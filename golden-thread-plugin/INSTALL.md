@@ -127,6 +127,8 @@ It copies each plugin into Claude Code's plugin cache — gt's looks like this:
                       gt_components, gt_version_check, gt_workers, gt_push_check, …)
   templates/        ← vault scaffold templates, Core rules, git hooks, vault tools
   hooks/            ← Core-rule enforcement
+  agents/           ← the pipeline stage agents gt:extract … gt:place (0.20.0)
+  workflows/        ← the gt:pipeline-stage workflow (0.20.0)
 ```
 
 The enforcement hooks are **also** copied outside the cache, to
@@ -372,10 +374,13 @@ later with `gt_schedule.py check <job>`.
 
 *gt-lotr on Windows (0.20.0).* gt-lotr 0.3.0 serves its local front door on a named pipe
 (user-SID-only DACL, remote clients rejected, first instance only), so it installs on Windows;
-gt-lotr 0.2.0 and older stay off there. **Open item:** gt-lotr's `plugin.json` starts its MCP
-server with `python3`, which on Windows is the Microsoft Store stub; until a launcher ships,
-register the server yourself with the real interpreter
-(`claude mcp add gt-lotr -- "C:\Program Files\Python312\python.exe" <path to lotr_mcp.py>`). *What does not run on Windows, and says so (0.20.0).* gt-lotr before 0.3.0 (a Unix-domain-socket gateway) is
+gt-lotr 0.2.0 and older stay off there. Its `plugin.json` starts the MCP server with `python3`,
+which on Windows is the Microsoft Store stub, so the installer rewrites the INSTALLED copies of
+that manifest (plugin cache and marketplace) to the interpreter it resolved, as an absolute path
+with `PYTHONUTF8=1` (`gt_components.py localize-mcp`). Claude Code then starts the server
+directly, so it stays a direct child of `claude`, which gt unlock's shim registration checks.
+The post-install gate's `smoke-lotr` row starts exactly that configured command and asks it for
+its tools. macOS and Linux keep the manifest as shipped. *What does not run on Windows, and says so (0.20.0).* gt-lotr before 0.3.0 (a Unix-domain-socket gateway) is
 off on Windows whatever is chosen; `gt-watch`'s hourly cron fetch (`install-cron`) is POSIX-only —
 run `gt_watch.py fetch` by hand or from Task Scheduler; `gt_workers.py` reports NOT CHECKED (there
 is no POSIX process table); task priority windows need a time-zone database —

@@ -11,6 +11,8 @@ spool packets that hand work from one stage to the next.
     gt_ingest_pipeline.py promote-scan --candidates-file F [--run R] [--json] [--vault V] [--dry-run]
     gt_ingest_pipeline.py promote-plan <run> [--json] [--vault V] [--dry-run]
     gt_ingest_pipeline.py status <run> [--json] [--vault V] [--dry-run]
+    gt_ingest_pipeline.py workflow-args <run> --stage S [--prompt UNIT=FILE ...] [--json] [--vault V] [--dry-run]
+    gt_ingest_pipeline.py packets <run> --stage S --results-file F [--session ID] [--replace] [--json] [--vault V] [--dry-run]
 
 THE SHAPE (owner, 2026-09-30). Ingest and promote are pipelines of small STATELESS stages, so
 work can be handed off and run in parallel instead of one agent doing everything:
@@ -44,6 +46,16 @@ name, or --repo-key) in `<vault>/Projects/golden-thread/ingest-units.json`, so t
 that repo starts from it. For the session kind the units are the `## ` segments of the session
 notes file, each written to `<notes>.segments/seg-NN.md` beside it (never into the vault).
 
+THE WORKFLOW ROUTE (0.20.0). On a Claude Code with workflows, a stage's units can run as the
+plugin's `gt:pipeline-stage` workflow instead of one Agent call each. `workflow-args` is the
+deterministic half: it writes each unit's prompt to `<run>/prompts/<stage>/<unit>.md` and prints
+the workflow's args (the stage's JSON Schema; per unit the prompt file, its sha256, and the agent
+type -- or model and effort -- from gt_agent_spec.agent_route). Extract renders its own prompts,
+each through the intake scan, so that route cannot skip it; the other stages take prompts the
+skill rendered (`--prompt UNIT=FILE`, checked to be a `render` output for that job). `packets`
+records the workflow's result: each unit checked as `packet` checks it. Units still without a
+packet are what the next `workflow-args` hands out, which is the resume.
+
 PROMOTIONS STAY HUMAN-APPROVED. promote-plan ends at `awaiting-owner` and this tool has no command
 that applies a promotion: after the owner's yes, the skill queues the writes itself.
 
@@ -57,6 +69,7 @@ Exit: 0 ok | 1 STOP for the owner (or refused) | 2 usage | 3 incomplete -- not a
 """
 import argparse
 import datetime
+import hashlib
 import json
 import os
 import re
@@ -392,78 +405,281 @@ def verification_of(stage, result):
     return "unverified"
 
 
-def cmd_packet(a):
-    vault = need_vault(a)
-    if not vault:
-        return fail("no vault (pass --vault, set GT_VAULT, or run /gt:gt-init)")
-    run, err = load_run(vault, a.run)
-    if err:
-        return fail(err)
-    allowed = specs.AGENT_STAGES if run["pipeline"] == "ingest" and run.get("kind") == "wiki" \
-        else tuple(s for s in specs.PIPELINES[run["pipeline"]] if s in specs.AGENT_STAGES)
-    if a.stage not in allowed:
-        return fail("stage '%s' is not an agent stage of this %s run (%s)" % (
-            clean(a.stage, 40), run["pipeline"], ", ".join(allowed)))
-    d = spool_dir(vault, a.run)
-    unit = a.unit.strip("/") if a.unit not in (".",) else "."
-    if a.stage == "extract":
+def _stage_allowed(run):
+    if run["pipeline"] == "ingest" and run.get("kind") == "wiki":
+        return specs.AGENT_STAGES
+    return tuple(s for s in specs.PIPELINES[run["pipeline"]] if s in specs.AGENT_STAGES)
+
+
+def _unit_problem(vault, run_id, run, stage, unit):
+    """-> (message, exit code) when `unit` is not one this stage of this run may take."""
+    d = spool_dir(vault, run_id)
+    if stage == "extract":
         survey = read_json(os.path.join(d, "survey.json")) or {}
         u = next((x for x in survey.get("units", []) if x["unit"] == unit), None)
         if u is None:
-            return fail("unit '%s' is not in this run's survey" % clean(unit, 80))
+            return "unit '%s' is not in this run's survey" % clean(unit, 80), USAGE
         if u["status"] != "clean":
-            return fail("unit '%s' stopped at intake-scan (%s); no extract packet is taken for "
-                        "it" % (clean(unit, 80), u["status"]), STOP)
+            return ("unit '%s' stopped at intake-scan (%s); no extract packet is taken for "
+                    "it" % (clean(unit, 80), u["status"]), STOP)
     if run["pipeline"] == "promote":
         scan = read_json(os.path.join(d, "scan.json")) or {}
         if unit not in [c["id"] for c in scan.get("candidates", [])]:
-            return fail("'%s' is not a candidate id of this promote run" % clean(unit, 40))
-    job = job_for(run, a.stage)
+            return "'%s' is not a candidate id of this promote run" % clean(unit, 40), USAGE
+    return None, OK
+
+
+def take_packet(vault, run_id, run, stage, unit, raw, session, replace, dry_run, label=None):
+    """Check one agent result against its spec and write it as this stage's packet for `unit`.
+    -> (exit code, lines, packet or None). Nothing is written on a problem or under dry_run."""
+    unit = unit.strip("/") if unit not in (".",) else "."
+    msg, code = _unit_problem(vault, run_id, run, stage, unit)
+    if msg:
+        return code, ["gt_ingest_pipeline: %s" % msg], None
+    job = job_for(run, stage)
     try:
         entry = specs._spec_or_exit(job, vault, None)
     except SystemExit:
-        return fail("no valid spec for '%s'" % job, STOP)
-    raw = read_json(a.result_file)
+        return STOP, ["gt_ingest_pipeline: no valid spec for '%s'" % job], None
     if not isinstance(raw, dict):
-        return fail("%s is not a JSON object" % clean(a.result_file, 200))
+        return USAGE, ["gt_ingest_pipeline: the result for unit '%s' is not a JSON object"
+                       % clean(unit, 80)], None
     result = raw["result"] if isinstance(raw.get("result"), dict) and "job_type" in raw else raw
-    session = a.session or os.environ.get("CLAUDE_CODE_SESSION_ID") or "unknown"
     created = now_iso()
     record = {"job_type": job, "session_id": session, "created": created, "result": result}
     problems = specs.check_record(entry["data"], record, entry.get("names", ()))
     if problems:
-        for e in problems:
-            print("INVALID %s: %s" % (clean(a.result_file, 200), e))
-        return STOP
-    packet = {"packet_version": PACKET_VERSION, "run_id": a.run, "pipeline": run["pipeline"],
-              "kind": run.get("kind"), "stage": a.stage, "job_type": job, "unit": unit,
-              "refs": [run.get("path")] + ([unit] if a.stage == "extract" else []),
-              "input": STAGE_INPUT.get(a.stage), "output_schema": entry["data"]["output_schema"],
-              "verification": verification_of(a.stage, result), "session_id": session,
+        where = label or "%s/%s" % (stage, clean(unit, 80))
+        return STOP, ["INVALID %s: %s" % (where, e) for e in problems], None
+    d = spool_dir(vault, run_id)
+    packet = {"packet_version": PACKET_VERSION, "run_id": run_id, "pipeline": run["pipeline"],
+              "kind": run.get("kind"), "stage": stage, "job_type": job, "unit": unit,
+              "refs": [run.get("path")] + ([unit] if stage == "extract" else []),
+              "input": STAGE_INPUT.get(stage), "output_schema": entry["data"]["output_schema"],
+              "verification": verification_of(stage, result), "session_id": session,
               "created": created, "result": result}
-    seen = result.get("instructions_seen") if a.stage == "extract" else None
+    seen = result.get("instructions_seen") if stage == "extract" else None
     if seen:
         packet["stop"] = "security"
-    target = os.path.join(d, a.stage, unit_slug(unit) + ".json")
-    if not a.dry_run:
+    target = os.path.join(d, stage, unit_slug(unit) + ".json")
+    if not dry_run:
         try:
-            if a.replace:
+            if replace:
                 write_json(target, packet)
             else:
                 write_json(target, packet, exclusive=True)
         except FileExistsError:
-            return fail("a %s packet for unit '%s' already exists (one packet per unit; "
-                        "--replace to supersede it)" % (a.stage, clean(unit, 80)), STOP)
+            return STOP, ["gt_ingest_pipeline: a %s packet for unit '%s' already exists (one "
+                          "packet per unit; --replace to supersede it)"
+                          % (stage, clean(unit, 80))], None
     code = STOP if seen else OK
-    lines = ["%s packet %s/%s.json -- %s" % ("would write" if a.dry_run else "wrote",
-                                            a.stage, unit_slug(unit), job)]
+    lines = ["%s packet %s/%s.json -- %s" % ("would write" if dry_run else "wrote",
+                                            stage, unit_slug(unit), job)]
     lines += ["  " + x for x in specs.summarise(entry["data"], result)][:12]
     if seen:
         lines.append("STOP -- security: the extract agent reported %d place(s) where the "
                      "material tried to instruct it (unit %s). Nothing from this unit is "
                      "written until the owner decides; the text is not shown." % (
                          len(seen) if isinstance(seen, list) else 1, clean(unit, 80)))
-    emit(a, dict(packet, path=target, exit=code, dry_run=a.dry_run), lines)
+    return code, lines, dict(packet, path=target)
+
+
+def _run_and_stage(a, vault):
+    run, err = load_run(vault, a.run)
+    if err:
+        return None, fail(err)
+    allowed = _stage_allowed(run)
+    if a.stage not in allowed:
+        return None, fail("stage '%s' is not an agent stage of this %s run (%s)" % (
+            clean(a.stage, 40), run["pipeline"], ", ".join(allowed)))
+    return run, None
+
+
+def cmd_packet(a):
+    vault = need_vault(a)
+    if not vault:
+        return fail("no vault (pass --vault, set GT_VAULT, or run /gt:gt-init)")
+    run, code = _run_and_stage(a, vault)
+    if run is None:
+        return code
+    raw = read_json(a.result_file)
+    if not isinstance(raw, dict):
+        return fail("%s is not a JSON object" % clean(a.result_file, 200))
+    session = a.session or os.environ.get("CLAUDE_CODE_SESSION_ID") or "unknown"
+    code, lines, packet = take_packet(vault, a.run, run, a.stage, a.unit, raw, session,
+                                      a.replace, a.dry_run, label=clean(a.result_file, 200))
+    if packet is None:
+        for line in lines:
+            print(line, file=sys.stderr) if line.startswith("gt_ingest_pipeline:") \
+                else print(line)
+        return code
+    emit(a, dict(packet, exit=code, dry_run=a.dry_run), lines)
+    return code
+
+
+def cmd_packets(a):
+    """Every result a pipeline-stage workflow returned, each checked and written as its unit's
+    packet exactly as `packet` would. A unit whose agent returned nothing is reported, not
+    guessed: re-run workflow-args, which lists only the units still without a packet."""
+    vault = need_vault(a)
+    if not vault:
+        return fail("no vault (pass --vault, set GT_VAULT, or run /gt:gt-init)")
+    run, code = _run_and_stage(a, vault)
+    if run is None:
+        return code
+    raw = read_json(a.results_file)
+    items = raw.get("results") if isinstance(raw, dict) else raw
+    if not isinstance(items, list):
+        return fail("%s holds no results list (the JSON the pipeline-stage workflow returned)"
+                    % clean(a.results_file, 200))
+    if isinstance(raw, dict):
+        for k, want in (("run", a.run), ("stage", a.stage)):
+            if raw.get(k) not in (None, want):
+                return fail("the results are for %s '%s', not '%s'" % (
+                    k, clean(raw.get(k), 60), clean(want, 60)))
+    session = a.session or os.environ.get("CLAUDE_CODE_SESSION_ID") or "unknown"
+    worst, out, lines, missing = OK, [], [], []
+    for it in items:
+        unit = it.get("unit") if isinstance(it, dict) else None
+        if not isinstance(unit, str) or not unit:
+            worst = max(worst, USAGE)
+            lines.append("gt_ingest_pipeline: a result without a unit name; skipped")
+            continue
+        if it.get("result") is None:
+            missing.append(unit)
+            continue
+        code, ls, packet = take_packet(vault, a.run, run, a.stage, unit, it["result"], session,
+                                       a.replace, a.dry_run)
+        worst = STOP if STOP in (worst, code) else max(worst, code)
+        lines += ls
+        out.append({"unit": unit, "exit": code, "path": packet and packet["path"]})
+    if missing:
+        lines.append("INCOMPLETE -- %d unit(s) came back with no result (stopped or failed "
+                     "agents): %s. Re-run workflow-args to hand them out again."
+                     % (len(missing), ", ".join(clean(u, 60) for u in missing[:20])))
+        if worst == OK:
+            worst = INCOMPLETE
+    if a.dry_run:
+        lines.append("dry run: nothing written")
+    emit(a, {"run": a.run, "stage": a.stage, "packets": out, "missing": missing,
+             "exit": worst, "dry_run": a.dry_run}, lines)
+    return worst
+
+
+# -- the workflow route (0.20.0) ------------------------------------------------------------------
+WORKFLOW = "gt:pipeline-stage"
+MAX_PROMPT_BYTES = 512 * 1024
+
+
+def _rendered_by_gt(text, job):
+    """A prompt file must be what gt_agent_spec.py render printed for this job: it starts with
+    the base prompt and names the job. A cheap check, not a signature; it keeps a mistyped or
+    hand-written file from going to an agent as if gt had rendered it."""
+    return text.startswith(specs.BASE_PROMPT) and ("## Your job: %s\n" % job) in text
+
+
+def cmd_workflow_args(a):
+    """Everything a pipeline-stage workflow needs for one stage, as the JSON to pass it as
+    `args`: the stage's JSON Schema (each agent's output is validated against it as it
+    returns), and per unit still without a packet: the prompt file, its sha256, and the agent
+    type, model and effort to run it at. Extract renders its own prompts -- each through
+    gt_agent_spec.render, which runs the intake scan on the unit and refuses unless it is clean
+    -- so the scan cannot be skipped by the workflow route. Every other stage takes the prompts
+    the skill rendered (--prompt UNIT=FILE)."""
+    vault = need_vault(a)
+    if not vault:
+        return fail("no vault (pass --vault, set GT_VAULT, or run /gt:gt-init)")
+    run, code = _run_and_stage(a, vault)
+    if run is None:
+        return code
+    d = spool_dir(vault, a.run)
+    job = job_for(run, a.stage)
+    try:
+        entry = specs._spec_or_exit(job, vault, None)
+    except SystemExit:
+        return fail("no valid spec for '%s'" % job, STOP)
+    have = {p["unit"] for p in packets(d, a.stage)}
+    todo, refused = [], []
+    if a.stage == "extract":
+        if a.prompt:
+            return fail("extract renders its own prompts, so every unit passes the intake scan; "
+                        "--prompt is for the other stages")
+        survey = read_json(os.path.join(d, "survey.json")) or {}
+        for u in survey.get("units", []):
+            if u.get("status") != "clean" or u["unit"] in have:
+                continue
+            args = u.get("render") or []
+            inputs = {}
+            for i, tok in enumerate(args):
+                if tok == "--input" and i + 1 < len(args):
+                    k, _, v = args[i + 1].partition("=")
+                    inputs[k] = v
+            try:
+                text, _info = specs.render(entry["data"], inputs, vault)
+            except specs.IntakeRefused as exc:
+                refused.append({"unit": u["unit"], "why": clean(exc, 300)})
+                continue
+            except ValueError as exc:
+                refused.append({"unit": u["unit"], "why": clean(exc, 300)})
+                continue
+            todo.append((u["unit"], text))
+    else:
+        for raw in a.prompt or []:
+            unit, sep, f = raw.partition("=")
+            if not sep or not unit or not f:
+                return fail("--prompt takes UNIT=FILE, got %r" % clean(raw, 80))
+            msg, c = _unit_problem(vault, a.run, run, a.stage, unit)
+            if msg:
+                return fail(msg, c)
+            if unit in have:
+                continue
+            try:
+                if os.path.getsize(f) > MAX_PROMPT_BYTES:
+                    return fail("%s is larger than %d bytes" % (clean(f, 200), MAX_PROMPT_BYTES))
+                with open(f, encoding="utf-8") as fh:
+                    text = fh.read()
+            except (OSError, UnicodeDecodeError) as exc:
+                return fail("--prompt %s: %s" % (clean(unit, 60), clean(exc, 200)))
+            if not _rendered_by_gt(text, job):
+                return fail("%s is not a prompt gt_agent_spec.py rendered for %s (render it "
+                            "with `gt_agent_spec.py render %s ... > FILE`)"
+                            % (clean(f, 200), job, job))
+            todo.append((unit, text))
+        if not a.prompt:
+            return fail("the %s stage takes its prompts from the skill: --prompt UNIT=FILE per "
+                        "unit, each the output of gt_agent_spec.py render %s" % (a.stage, job))
+    atype, model, effort, why = specs.agent_route(entry, job, vault)
+    if atype:
+        model = effort = None            # the definition carries them; passing them is noise
+    items = []
+    for unit, text in todo:
+        pf = os.path.join(d, "prompts", a.stage, unit_slug(unit) + ".md")
+        if not a.dry_run:
+            os.makedirs(os.path.dirname(pf), exist_ok=True)
+            with open(pf, "w", encoding="utf-8", newline="\n") as fh:
+                fh.write(text)
+        items.append({"unit": unit, "label": "%s %s" % (job, unit_slug(unit)),
+                      "prompt_file": pf.replace(os.sep, "/"),
+                      "sha256": hashlib.sha256(text.encode("utf-8")).hexdigest(),
+                      "agent_type": atype, "model": model, "effort": effort})
+    out = {"workflow": WORKFLOW, "run": a.run, "stage": a.stage, "job_type": job,
+           "schema": specs.json_schema(entry["data"]), "items": items, "refused": refused,
+           "done": sorted(have), "agent_why": why}
+    if not a.dry_run:
+        write_json(os.path.join(d, "workflow-%s.json" % a.stage), out)
+    code = STOP if refused else OK
+    lines = ["workflow-args %s %s: %d unit(s) to run, %d already have a packet, %d refused"
+             % (a.run, a.stage, len(items), len(have), len(refused))]
+    lines.append("  agent: %s" % (atype or "the workflow's own agent at model %s, effort %s (%s)"
+                                  % (model or "session", effort or "session", why)))
+    for r in refused:
+        lines.append("  REFUSED %s: %s" % (clean(r["unit"], 60), r["why"]))
+    lines.append("run the %s workflow with args = the JSON this prints with --json "
+                 "(also saved as workflow-%s.json in the run), then `packets %s --stage %s "
+                 "--results-file <its result>`" % (WORKFLOW, a.stage, a.run, a.stage))
+    if a.dry_run:
+        lines.append("dry run: nothing written")
+    emit(a, dict(out, exit=code, dry_run=a.dry_run), lines)
     return code
 
 
@@ -1068,13 +1284,23 @@ def cmd_stages(a):
 
 
 # -- CLI ----------------------------------------------------------------------------------------
+def _common(defaults):
+    """The flags every command takes. The subcommands' copy has NO defaults (SUPPRESS): with
+    one, argparse let the subcommand's `--dry-run` default (False) overwrite a `--dry-run`
+    given BEFORE the subcommand, so `--dry-run draft` WROTE (2026-10-03, research.md: a 55-line
+    entry queued and drained by a "preview"). Now the flag counts wherever it is placed."""
+    kw = {} if defaults else {"default": argparse.SUPPRESS}
+    c = argparse.ArgumentParser(add_help=False)
+    c.add_argument("--vault", help="the vault (default: GT_VAULT, then vault-config.json)", **kw)
+    c.add_argument("--dry-run", action="store_true", help="show what would happen; "
+                   "write nothing", **kw)
+    c.add_argument("--json", action="store_true", **kw)
+    return c
+
+
 def build_parser():
-    common = argparse.ArgumentParser(add_help=False)
-    common.add_argument("--vault", help="the vault (default: GT_VAULT, then vault-config.json)")
-    common.add_argument("--dry-run", action="store_true", help="show what would happen; "
-                        "write nothing")
-    common.add_argument("--json", action="store_true")
-    ap = argparse.ArgumentParser(prog="gt_ingest_pipeline.py", parents=[common],
+    common = _common(defaults=False)
+    ap = argparse.ArgumentParser(prog="gt_ingest_pipeline.py", parents=[_common(defaults=True)],
                                  description="The deterministic stages of the ingest and "
                                              "promote pipelines, and their spool packets.")
     sub = ap.add_subparsers(dest="cmd")
@@ -1144,6 +1370,26 @@ def build_parser():
     p = sub.add_parser("status", parents=[common], help="where a run stands")
     p.add_argument("run")
     p.set_defaults(fn=cmd_status)
+
+    p = sub.add_parser("workflow-args", parents=[common],
+                       help="the args for the pipeline-stage workflow: one stage's schema and "
+                            "the units still without a packet")
+    p.add_argument("run")
+    p.add_argument("--stage", required=True)
+    p.add_argument("--prompt", action="append", metavar="UNIT=FILE",
+                   help="a prompt gt_agent_spec.py rendered for UNIT (every stage but extract, "
+                        "which renders its own after the intake scan)")
+    p.set_defaults(fn=cmd_workflow_args)
+
+    p = sub.add_parser("packets", parents=[common],
+                       help="write every result a pipeline-stage workflow returned as its "
+                            "unit's packet")
+    p.add_argument("run")
+    p.add_argument("--stage", required=True)
+    p.add_argument("--results-file", required=True, help="the JSON the workflow returned")
+    p.add_argument("--session", help="the session id")
+    p.add_argument("--replace", action="store_true", help="supersede existing packets")
+    p.set_defaults(fn=cmd_packets)
     return ap
 
 

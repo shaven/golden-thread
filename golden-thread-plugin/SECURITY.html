@@ -179,7 +179,10 @@ without slowing down ordinary work.</p>
 </code></pre>
 <ol>
 <li>A session starts. gt registers it with the authority; the LOTR MCP connection Claude Code
-   starts registers itself as that session's one shim.</li>
+   starts registers itself as that session's one shim. The authority accepts it only when the
+   kernel says its parent is <code>claude</code>. That is why, on Windows, the installer points the MCP
+   command at the Python interpreter itself rather than at a launcher script (0.20.0): a script
+   in between would be the parent, and every registration would be refused.</li>
 <li>The assistant calls a LOTR tool. LOTR asks the authority whether <strong>this process</strong> (named by
    the kernel) may use <code>lotr:&lt;connection&gt;:&lt;tier&gt;</code>. Locked: the authority asks you — a Touch ID
    or Windows Hello sheet, then a dialog for your authenticator code — naming the requester and

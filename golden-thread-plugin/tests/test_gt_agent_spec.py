@@ -467,5 +467,254 @@ class ClaudeOnlyAndIntakeScanTest(AgentSpecBase):
         self.assertLess(text.index("Step 0"), text.index("Step 2 — Scan"))
 
 
+
+# -- 0.20.0: plugin agent definitions (gt:<stage>) and what the running Claude Code supports ----
+AGENTS = GT / "agents"
+PINNED = {"GT_CLAUDE_CODE_VERSION": "2.1.288"}        # never ask a real `claude` in a test
+
+
+def frontmatter_of(path):
+    lines = path.read_text(encoding="utf-8").split("\n")
+    end = next(i for i in range(1, len(lines)) if lines[i].strip() == "---")
+    out = {}
+    for line in lines[1:end]:
+        if line.startswith("#"):
+            continue
+        k, _, v = line.partition(":")
+        out[k.strip()] = v.strip()
+    return out, "\n".join(lines[end + 1:])
+
+
+class PluginAgentDefinitions(AgentSpecBase):
+    """One plugin agent per stage, generated from the stage spec's `agent` block and carrying
+    model AND effort -- the Agent tool's own `model` parameter has no effort (0.20.0)."""
+
+    def test_the_shipped_definitions_are_exactly_what_the_specs_render(self):
+        p = self.py(TOOL, "agents", "--check", AGENTS)
+        self.assertOk(p)
+        self.assertEqual(sorted(x.stem for x in AGENTS.glob("*.md")), sorted(STAGES))
+
+    def test_the_release_ships_an_intent_and_never_a_model(self):
+        # As for skills: a model is never pinned in shipped frontmatter (test_gt_model);
+        # gt_model_policy.py apply writes model and effort into the INSTALLED copies.
+        want = {"extract": "balanced", "classify": "fast", "draft": "fast", "place": "balanced",
+                "reconcile": "deep", "verify": "deep", "generalize": "deep"}
+        for stage, intent in want.items():
+            with self.subTest(stage=stage):
+                fm, body = frontmatter_of(AGENTS / (stage + ".md"))
+                self.assertEqual(fm["name"], stage)
+                self.assertEqual(fm["model_intent"], intent)
+                self.assertNotIn("model", fm)
+                self.assertNotIn("effort", fm)
+                self.assertTrue(fm["maxTurns"].isdigit())
+                self.assertIn("Spawn it ONLY when a gt skill", fm["description"])
+                self.assertIn("Do not write, move or delete any file", body)
+
+    def test_no_stage_agent_can_write_and_extract_cannot_run_or_fetch(self):
+        for f in AGENTS.glob("*.md"):
+            fm, _ = frontmatter_of(f)
+            tools = {t.strip() for t in fm["tools"].split(",")}
+            with self.subTest(agent=f.stem):
+                self.assertFalse(tools & {"Write", "Edit", "NotebookEdit", "Agent", "Task"})
+                self.assertIn("Read", tools)
+        fm, _ = frontmatter_of(AGENTS / "extract.md")
+        self.assertEqual({t.strip() for t in fm["tools"].split(",")}, {"Read", "Grep", "Glob"})
+
+    def test_zero_context_stages_start_without_claude_md(self):
+        for stage in STAGES:
+            fm, body = frontmatter_of(AGENTS / (stage + ".md"))
+            with self.subTest(stage=stage):
+                if stage in ("verify", "reconcile"):
+                    self.assertEqual(fm.get("omitClaudeMd"), "true")
+                    self.assertIn("Load NOTHING from the knowledge vault", body)
+                else:
+                    self.assertNotIn("omitClaudeMd", fm)
+
+    def test_the_validator_refuses_unsafe_agent_blocks(self):
+        cases = {
+            "verify": ({"tools": ["Read"], "max_turns": 5}, "must load no prior context"),
+            "classify": ({"tools": ["Read", "Write"], "max_turns": 5}, "is not offered"),
+            "extract": ({"tools": ["Read", "Bash"], "max_turns": 5}, "no shell and no fetch"),
+            "draft": ({"tools": ["Grep"], "max_turns": 5}, "must include Read"),
+            "place": ({"tools": ["Read"], "max_turns": 0}, "max_turns"),
+        }
+        for stage, (block, needle) in cases.items():
+            with self.subTest(stage=stage):
+                data = json.loads(stage_file(stage).read_text())
+                data["agent"] = block
+                f = self.tmp / "stages" / (stage + ".json")
+                f.parent.mkdir(exist_ok=True)
+                f.write_text(json.dumps(data))
+                p = self.py(TOOL, "validate", f)
+                self.assertEqual(1, p.returncode, p.stdout)
+                self.assertIn(needle, p.stdout)
+
+    def test_a_kind_cannot_change_a_stage_agent(self):
+        k = json.loads((SPECS / "kinds" / "code.json").read_text())
+        k["stages"]["extract"]["agent"] = {"tools": ["Read", "Bash"], "max_turns": 9}
+        f = self.tmp / "kinds" / "code.json"
+        f.parent.mkdir()
+        f.write_text(json.dumps(k))
+        p = self.py(TOOL, "validate", f)
+        self.assertEqual(1, p.returncode, p.stdout)
+        self.assertIn("unknown key 'agent'", p.stdout)
+
+
+class AgentRoute(AgentSpecBase):
+    """resolve / model / render name the agent type only when the INSTALLED definition is what
+    the job should run; otherwise the old route (Agent tool + model). An install is simulated:
+    a copy of the release registered in the sandbox HOME's installed_plugins.json, with the
+    model policy applied to it, and the copy's own scripts run (as a skill runs them)."""
+
+    def setUp(self):
+        super().setUp()
+        self.settings(agent_specialization="on")
+        self.rel = self.tmp / "cache" / "gt" / GT.name
+        shutil.copytree(GT, self.rel, ignore=shutil.ignore_patterns("skills", "__pycache__"))
+        plugins = self.home / ".claude" / "plugins"
+        plugins.mkdir(parents=True, exist_ok=True)
+        (plugins / "installed_plugins.json").write_text(json.dumps({"version": 2, "plugins": {
+            "gt@golden-thread-plugin": [{"scope": "user", "installPath": str(self.rel),
+                                         "version": GT.name}]}}))
+        self.tool = self.rel / "scripts" / "gt_agent_spec.py"
+        self.apply()
+
+    def apply(self):
+        self.assertOk(self.py(self.rel / "scripts" / "gt_model_policy.py", "apply", "--home",
+                              self.home, "--vault", self.vault))
+
+    def model(self, job, **env):
+        e = dict(PINNED)
+        e.update(env)
+        p = self.py(self.tool, "model", job, "--json", "--vault", self.vault, env=e)
+        self.assertOk(p)
+        return json.loads(p.stdout)
+
+    def test_the_release_itself_is_not_an_installed_definition(self):
+        # the shipped file carries no model, so the policy has not been applied to it
+        p = self.py(TOOL, "model", "verify", "--json", "--vault", self.vault, env=PINNED)
+        r = json.loads(p.stdout)
+        self.assertIsNone(r["agent_type"])
+        self.assertIn("run gt_model_policy.py apply", r["agent_why"])
+
+    def test_the_installed_definition_carries_model_and_effort(self):
+        want = {"extract": ("sonnet", "medium"), "classify": ("haiku", None),
+                "draft": ("haiku", None), "place": ("sonnet", "medium"),
+                "reconcile": ("opus", "high"), "verify": ("opus", "high"),
+                "generalize": ("opus", "high")}
+        for stage, me in want.items():
+            fm, _ = frontmatter_of(self.rel / "agents" / (stage + ".md"))
+            self.assertEqual((fm.get("model"), fm.get("effort")), me, stage)
+
+    def test_every_stage_job_names_its_agent_type_with_model_and_effort(self):
+        for stage in STAGES:
+            job = stage + "-docs" if stage in ("extract", "classify", "draft", "reconcile") \
+                else stage
+            with self.subTest(job=job):
+                r = self.model(job)
+                self.assertEqual(r["agent_type"], "gt:" + stage)
+        r = self.model("verify")
+        self.assertEqual((r["model"], r["effort"]), ("opus", "high"))
+        text = self.py(self.tool, "model", "extract-code", env=PINNED)
+        self.assertTrue(text.stdout.startswith("sonnet "), text.stdout)   # first token: alias
+        self.assertIn("agent type: gt:extract", text.stdout)
+
+    def test_resolve_and_render_carry_the_route_and_the_json_schema(self):
+        p = self.py(self.tool, "resolve", "--skill", "gt-validate", "--json", env=PINNED)
+        self.assertOk(p)
+        r = json.loads(p.stdout)
+        self.assertEqual((r["action"], r["agent_type"], r["effort"]), ("spawn", "gt:verify", "high"))
+        p = self.py(self.tool, "render", "verify", "--template", "--json", env=PINNED)
+        info = json.loads(p.stdout)
+        self.assertEqual(info["agent_type"], "gt:verify")
+        js = info["json_schema"]
+        self.assertEqual(js["properties"]["verdict"]["enum"],
+                         ["confirmed", "refuted", "cannot-verify"])
+        self.assertEqual(sorted(js["required"]), ["derivation", "evidence", "verdict"])
+
+    def test_a_claude_code_older_than_plugin_agent_effort_takes_the_old_route(self):
+        r = self.model("verify", GT_CLAUDE_CODE_VERSION="2.1.77")
+        self.assertIsNone(r["agent_type"])
+        self.assertIn("predates plugin-agent effort", r["agent_why"])
+        self.assertEqual(r["model"], "opus")                     # the old route still has it
+        self.assertEqual(self.model("verify", GT_CLAUDE_CODE_VERSION="2.1.78")["agent_type"],
+                         "gt:verify")
+
+    def test_a_job_type_override_takes_the_old_route_with_its_model(self):
+        mp = self.rel / "scripts" / "gt_model_policy.py"
+        self.assertOk(self.py(mp, "set", "--agent", "extract-docs", "--model", "haiku",
+                              "--home", self.home, "--vault", self.vault))
+        r = self.model("extract-docs")
+        self.assertEqual((r["agent_type"], r["model"]), (None, "haiku"))
+        self.assertIn("job-type override", r["agent_why"])
+        self.assertEqual(self.model("extract-code")["agent_type"], "gt:extract")
+
+    def test_agent_models_session_follows_through_the_definition(self):
+        self.settings(agent_specialization="on", agent_models="session")
+        r = self.model("extract-docs")
+        # the installed definition still carries sonnet/medium: it does not match, so the old
+        # route runs, and with no model at all
+        self.assertEqual((r["agent_type"], r["model"], r["effort"]), (None, None, None))
+        self.apply()                       # what gt_settings set agent_models does at once
+        r = self.model("extract-docs")
+        self.assertEqual((r["agent_type"], r["model"], r["effort"]), ("gt:extract", None, None))
+        fm, _ = frontmatter_of(self.rel / "agents" / "extract.md")
+        self.assertNotIn("model", fm)
+
+    def test_a_definition_that_differs_from_the_spec_is_not_used(self):
+        f = self.rel / "agents" / "verify.md"
+        f.write_text(f.read_text().replace("tools: Read, Grep, Glob, Bash, WebFetch",
+                                           "tools: Read, Grep, Glob, Bash, WebFetch, Write"))
+        r = self.model("verify")
+        self.assertIsNone(r["agent_type"])
+        self.assertIn("not what the stage spec and the model policy say", r["agent_why"])
+        f.unlink()
+        self.assertIn("no agent definition", self.model("verify")["agent_why"])
+
+    def test_a_vault_override_of_a_stage_takes_the_old_route(self):
+        over = self.vault / "Projects" / "golden-thread" / "packs" / "agent-specs" / "stages"
+        over.mkdir(parents=True)
+        data = json.loads(stage_file("place").read_text())
+        data["agent"]["max_turns"] = 7
+        (over / "place.json").write_text(json.dumps(data))
+        r = self.model("place")
+        self.assertIsNone(r["agent_type"])
+        self.assertEqual(r["model"], "sonnet")
+
+
+class Features(AgentSpecBase):
+    """What the running Claude Code supports. Never starts a real `claude` in a test: the
+    version is pinned, or CLAUDECODE is absent (the sandbox strips CLAUDE*)."""
+
+    def features(self, **env):
+        p = self.py(TOOL, "features", "--json", env=env or None)
+        self.assertOk(p)
+        return json.loads(p.stdout)
+
+    def test_outside_claude_code_the_version_is_unknown_and_nothing_is_gated(self):
+        f = self.features()
+        self.assertIsNone(f["version"])
+        self.assertEqual(f["version_source"], "not running under Claude Code")
+        self.assertTrue(all(r["ok"] is None for n, r in f["features"].items()
+                            if n != "workflows" or not r.get("disabled")))
+
+    def test_versions_gate_each_feature_at_its_documented_minimum(self):
+        f = self.features(GT_CLAUDE_CODE_VERSION="2.1.100")
+        got = {n: r["ok"] for n, r in f["features"].items()}
+        self.assertEqual(got, {"plugin_agents": True, "omit_claude_md": False,
+                               "workflows": False, "context_fork": True})
+        self.assertEqual({n: r["needs"] for n, r in f["features"].items()},
+                         {"plugin_agents": "2.1.78", "omit_claude_md": "2.1.271",
+                          "workflows": "2.1.154", "context_fork": "2.1.0"})
+
+    def test_workflows_turned_off_are_reported(self):
+        f = self.features(GT_CLAUDE_CODE_VERSION="2.1.288", CLAUDE_CODE_DISABLE_WORKFLOWS="1")
+        self.assertFalse(f["features"]["workflows"]["ok"])
+        self.assertIn("CLAUDE_CODE_DISABLE_WORKFLOWS", f["features"]["workflows"]["disabled"])
+        (self.home / ".claude" / "settings.json").write_text('{"disableWorkflows": true}')
+        f = self.features(GT_CLAUDE_CODE_VERSION="2.1.288")
+        self.assertIn("disableWorkflows", f["features"]["workflows"]["disabled"])
+
+
 if __name__ == "__main__":
     unittest.main()

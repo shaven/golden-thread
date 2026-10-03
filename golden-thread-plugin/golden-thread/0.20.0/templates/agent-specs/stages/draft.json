@@ -14,6 +14,7 @@
     "Add no claim the findings do not make. Keep every finding's citation, and state its verification state (verified, inferred, assumed) in the entry; an inferred or assumed finding is marked `TODO - verify`.",
     "A research.md entry is a dated level-2 section, `## YYYY-MM-DD: <short title>`. A memory note is a short file body. A Knowledge page body cites its `Sources/` file. Group related findings into one entry rather than one entry per finding."
   ],
+  "agent": {"tools": ["Read"], "max_turns": 10},
   "context_loading": {
     "strategy": "none",
     "load": [],

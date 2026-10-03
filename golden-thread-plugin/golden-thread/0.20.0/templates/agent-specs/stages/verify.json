@@ -15,6 +15,7 @@
     "Report exactly one verdict: confirmed (you re-derived it and it matches), refuted (you re-derived it and it does not -- quantify the divergence), or cannot-verify (the inputs were insufficient -- name what was missing).",
     "cannot-verify is never a pass. If you could not check something, say so; staying quiet manufactures false assurance."
   ],
+  "agent": {"tools": ["Read", "Grep", "Glob", "Bash", "WebFetch"], "max_turns": 50, "omit_claude_md": true},
   "context_loading": {
     "strategy": "none",
     "load": [],

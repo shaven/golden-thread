@@ -1861,6 +1861,53 @@ SHELL_ENV_LINES = (
 )
 
 
+# -- MCP server commands on native Windows (0.20.0) ----------------------------------------------
+# A plugin's .claude-plugin/plugin.json starts its MCP server with `python3` (gt-lotr does). On
+# native Windows that is %LOCALAPPDATA%\Microsoft\WindowsApps\python3.exe, the Microsoft Store
+# stub: it prints "Python was not found" and exits, so the server never started (0.20.0 open
+# item). install.sh therefore rewrites the INSTALLED copies' command to the interpreter it
+# resolved and checked -- an absolute python.exe, which Claude Code starts directly, so the
+# server stays a DIRECT child of `claude` (gt unlock's register_shim checks exactly that, from
+# the kernel; a launcher script in between would make every registration fail). macOS and
+# Linux never get here: their `python3` is the real one and the manifest stays as shipped.
+MCP_PYTHON_NAMES = ("python3", "python")
+
+
+def localize_mcp(paths, python):
+    """Rewrite `command: python3|python` in each plugin.json's mcpServers to `python` (an
+    absolute path to an existing interpreter), with PYTHONUTF8=1 in that server's env.
+    -> [(path, server name)] changed. Raises ValueError for an unusable interpreter."""
+    if not (python and os.path.isabs(python.replace("/", os.sep)) and os.path.isfile(python)):
+        raise ValueError("not an absolute path to an interpreter: %r" % (python,))
+    changed = []
+    for p in paths:
+        try:
+            with open(p, encoding="utf-8") as fh:
+                data = json.load(fh)
+        except (OSError, ValueError):
+            continue
+        servers = data.get("mcpServers") if isinstance(data, dict) else None
+        if not isinstance(servers, dict):
+            continue
+        touched = False
+        for name, cfg in servers.items():
+            if not (isinstance(cfg, dict) and cfg.get("command") in MCP_PYTHON_NAMES):
+                continue
+            cfg["command"] = python
+            env = cfg.get("env") if isinstance(cfg.get("env"), dict) else {}
+            env.setdefault("PYTHONUTF8", "1")
+            cfg["env"] = env
+            changed.append((p, name))
+            touched = True
+        if touched:
+            tmp = p + ".tmp"
+            with open(tmp, "w", encoding="utf-8", newline="\n") as fh:
+                json.dump(data, fh, indent=2)
+                fh.write("\n")
+            os.replace(tmp, p)
+    return changed
+
+
 def export_shell_env(home=None):
     """Windows (0.20.0): put gt's python3 shim on PATH for the model's Bash commands.
 
@@ -1897,6 +1944,17 @@ def main():
     args = [x for x in sys.argv[1:] if x != "--hook"]   # see gt_settings.hook_args
     if args and args[0] in ("modules", "module-check", "module-states", "record-choice"):
         return module_main(args[0], args[1:])
+    if args and args[0] == "localize-mcp":
+        # localize-mcp --python <abs interpreter> <plugin.json>...   (install.sh, Windows only)
+        try:
+            rest, py = _take_opt(args[1:], "--python")
+            done = localize_mcp(rest, py)
+        except ValueError as e:
+            print("localize-mcp: %s" % e)
+            return 2
+        for p, name in done:
+            print("MCP server %s -> %s  (%s)" % (name, py, p))
+        return 0
     try:
         args, home_opt = _take_opt(args, "--home")
     except ValueError as e:
@@ -1907,7 +1965,8 @@ def main():
         print("usage: gt_components.py [manifest|check|apply|wiring] <version-dir>"
               "  |  verify-source <version-dir>"
               "  |  hook-registrations <version-dir> [plugin-root] [--home H]"
-              "  |  hookdir-scripts [plugin-root] [--home H]  |  " + MODULE_USAGE)
+              "  |  hookdir-scripts [plugin-root] [--home H]"
+              "  |  localize-mcp --python <interpreter> <plugin.json>...  |  " + MODULE_USAGE)
         return 2
     cmd = args[0]
     # Skip flags -- and --owner's value -- when locating the positional version dir,

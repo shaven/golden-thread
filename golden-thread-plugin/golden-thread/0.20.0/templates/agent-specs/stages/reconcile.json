@@ -16,6 +16,7 @@
     "Do not resolve a contradiction by picking a side, and do not soften it. The owner decides; a contradicted finding is not written until they do.",
     "When `facts` is empty or absent, you can still find duplicates among the findings, and you report no contradiction you cannot cite."
   ],
+  "agent": {"tools": ["Read"], "max_turns": 12, "omit_claude_md": true},
   "context_loading": {
     "strategy": "none",
     "load": [],

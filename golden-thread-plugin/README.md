@@ -16,7 +16,11 @@ A Claude Code plugin that turns an Obsidian vault into the single source of trut
 > It is not anti-malware. If something already runs as you, it can wait for you to unlock."* Read
 > [`SECURITY.md`](SECURITY.md) before turning it on. Also: `python3` works in Claude's shell on
 > Windows, every gt write is LF, scheduled jobs run on Task Scheduler, the suite runs on Windows,
-> gt-lotr runs on Windows (0.3.0), and a failed install rolls back. There is no published 0.19.3.
+> gt-lotr runs on Windows (0.3.0) with its MCP server started by the installer's Python, and a
+> failed install rolls back. On a current Claude Code each pipeline stage is a plugin agent with
+> its own model and effort (`gt:extract` … `gt:place`), ingest and promote stages can run as the
+> `gt:pipeline-stage` workflow with schema-checked output, and LOTR's tools declare their result
+> schema; an older Claude Code takes the earlier route. There is no published 0.19.3.
 
 > [!IMPORTANT]
 > **0.19.2: gt installs on native Windows.** Run `install.sh` from Git Bash, or the new

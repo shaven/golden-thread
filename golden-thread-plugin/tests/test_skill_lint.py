@@ -92,5 +92,39 @@ class SkillLintTest(Sandbox):
                          + proc.stdout)
 
 
+
+class ForkedSkills(Sandbox):
+    """0.20.0: `context: fork` runs a skill in a subagent with none of the conversation, in the
+    background by default -- it cannot ask the owner. A forked skill that asks is refused."""
+
+    def skill(self, name, front, body):
+        d = self.tmp / "p" / "skills" / name
+        d.mkdir(parents=True)
+        (d / "SKILL.md").write_text("---\nname: %s\ndescription: \"%s. Use when: %s now.\"\n"
+                                    "%s---\n\n%s\n" % (name, name, name, front, body))
+        return self.tmp / "p"
+
+    def test_a_forked_skill_that_asks_the_owner_is_refused(self):
+        r = self.skill("gt-alpha", "context: fork\nagent: general-purpose\n",
+                       "Run the report.\n\nAsk \"Apply it now?\" and wait.")
+        proc = self.py(SL, r)
+        self.assertEqual(proc.returncode, 2, proc.stdout)
+        self.assertIn("FORKED SKILLS THAT ASK THE OWNER", proc.stdout)
+        self.assertIn("SKILL.md:", proc.stdout)
+
+    def test_a_forked_skill_that_only_reports_and_an_unforked_one_that_asks_pass(self):
+        r = self.skill("gt-alpha", "context: fork\n", "Run the report and summarise it.")
+        self.skill("gt-beta", "", "Ask \"Apply it now?\"")
+        proc = self.py(SL, r)
+        self.assertEqual(proc.returncode, 0, proc.stdout)
+
+    def test_none_of_the_heavy_skills_forks_and_the_release_passes(self):
+        for name in ("gt-ingest", "gt-lint", "gt-validate", "gt-optimize", "gt-review"):
+            head = (GT / "skills" / name / "SKILL.md").read_text().split("\n---", 1)[0]
+            self.assertNotIn("context: fork", head, name)
+        proc = self.py(SL, GT)
+        self.assertNotIn("FORKED SKILLS THAT ASK THE OWNER", proc.stdout)
+
+
 if __name__ == "__main__":
     unittest.main()

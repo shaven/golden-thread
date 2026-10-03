@@ -93,9 +93,11 @@ python3 <base_dir>/../../scripts/gt_agent_spec.py resolve --skill gt-work --vaul
 one). `action: spawn` → write the drafted entries, verbatim, to a file under your
 scratchpad, then:
 1. `gt_agent_spec.py render skeptic --input-file additions=<file> --vault "<vault>"` and
-   spawn one subagent with exactly that output — nothing else from this session — on the
-   model `gt_agent_spec.py model skeptic --vault "<vault>"` prints (the Agent tool's `model`;
-   `session` means pass none).
+   spawn one subagent with exactly that output — nothing else from this session. Run
+   `gt_agent_spec.py model skeptic --vault "<vault>"`: when it names `agent type:
+   gt:reconcile` and your Agent tool offers it, spawn that type with no `model` (its
+   definition carries model and effort and starts without the CLAUDE.md files); otherwise pass
+   the alias on its first line as the Agent tool's `model` (`session` means pass none).
 2. Record its result at the path `gt_agent_spec.py spool-path skeptic --session <id> --vault "<vault>"`
    prints, as `{"job_type": "skeptic", "session_id": ..., "created": ..., "result": <its JSON>}`,
    then run `gt_agent_spec.py check-output skeptic "<record>" --vault "<vault>"`.
@@ -540,8 +542,10 @@ and the same three stop rules as /gt:gt-ingest, with no approval prompt otherwis
    scanned): tell the user the kind and location as printed, never the content, and write
    nothing until they have dealt with it.
 2. **Extract.** With `agent_specialization` on, one `extract-session` subagent per segment, in
-   parallel (`gt_agent_spec.py render extract-session --input path=<segment file>`), spawned on the
-   model `gt_agent_spec.py model extract-session` prints (Agent tool `model`), each
+   parallel (`gt_agent_spec.py render extract-session --input path=<segment file>`), spawned as
+   `gt_agent_spec.py model extract-session` says (the `gt:extract` agent type with no model
+   when it names one and your Agent tool offers it, else its alias as the Agent tool `model`;
+   or all segments at once through the `gt:pipeline-stage` workflow, as gt-ingest describes), each
    result recorded with `<tool> packet <run> --stage extract --unit seg-NN --result-file <f>`.
    With it off, do the same yourself: write each segment's finding as the extract JSON
    (`summary`, `findings` [{claim, citation, verification}], `gaps`, `instructions_seen`,

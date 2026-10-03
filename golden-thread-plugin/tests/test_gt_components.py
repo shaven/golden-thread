@@ -13,6 +13,7 @@ import json
 import os
 import shlex
 import shutil
+import sys
 import unittest
 
 from pathlib import Path
@@ -967,6 +968,52 @@ class InstallChoicesAreWrittenOneWay(Sandbox):
         self.assertEqual(f.read_bytes(),
                          (json.dumps(doc, indent=2, sort_keys=True) + "\n").encode())
         self.assertEqual([x.name for x in f.parent.iterdir() if x.name.endswith(".tmp")], [])
+
+
+
+class LocalizeMcp(Sandbox):
+    """0.20.0, Windows: a plugin MCP server started with `python3` runs the Microsoft Store stub
+    there and never starts. install.sh rewrites the INSTALLED manifests' command to the
+    interpreter it resolved (an absolute path), so Claude Code starts the server directly --
+    still a direct child of claude, which gt unlock's register_shim requires."""
+
+    def manifest(self, name, servers):
+        f = self.tmp / name / ".claude-plugin" / "plugin.json"
+        f.parent.mkdir(parents=True)
+        f.write_text(json.dumps({"name": name, "version": "1.0.0", "mcpServers": servers}))
+        return f
+
+    def test_python3_becomes_the_resolved_interpreter_with_utf8_and_nothing_else_moves(self):
+        lotr = self.manifest("gt-lotr", {"gt-lotr": {
+            "command": "python3", "args": ["${CLAUDE_PLUGIN_ROOT}/scripts/lotr_mcp.py"]}})
+        other = self.manifest("node-one", {"n": {"command": "node", "args": ["s.js"]}})
+        py = os.path.realpath(sys.executable)
+        p = self.py(TOOL, "localize-mcp", "--python", py, lotr, other)
+        self.assertOk(p)
+        got = json.loads(lotr.read_text())["mcpServers"]["gt-lotr"]
+        self.assertEqual(got["command"], py)
+        self.assertEqual(got["args"], ["${CLAUDE_PLUGIN_ROOT}/scripts/lotr_mcp.py"])
+        self.assertEqual(got["env"], {"PYTHONUTF8": "1"})
+        self.assertEqual(json.loads(other.read_text())["mcpServers"]["n"]["command"], "node")
+        before = lotr.read_bytes()
+        self.assertOk(self.py(TOOL, "localize-mcp", "--python", py, lotr))     # idempotent
+        self.assertEqual(before, lotr.read_bytes())
+
+    def test_a_relative_or_missing_interpreter_is_refused_and_nothing_is_written(self):
+        lotr = self.manifest("gt-lotr", {"gt-lotr": {"command": "python3", "args": []}})
+        before = lotr.read_bytes()
+        for bad in ("python3", str(self.tmp / "no-such-python")):
+            with self.subTest(bad=bad):
+                p = self.py(TOOL, "localize-mcp", "--python", bad, lotr)
+                self.assertEqual(p.returncode, 2, p.stdout)
+                self.assertEqual(before, lotr.read_bytes())
+
+    def test_install_sh_runs_it_on_windows_only(self):
+        text = (GT.parent.parent / "install.sh").read_text()
+        i = text.index("gt_components.py\" localize-mcp")
+        block = text[text.rindex("case \"$(uname -s 2>/dev/null)\" in", 0, i):i]
+        self.assertIn("MINGW*|MSYS*|CYGWIN*)", block)
+        self.assertIn("cygpath -m", block)
 
 
 if __name__ == "__main__":

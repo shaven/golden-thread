@@ -19,6 +19,11 @@ never exits until stdin closes.
     ITSELF ("unlock", reason naming the tool, connection and op). The AUTHORITY raises the
     prompts (Touch ID / Windows Hello / its own TOTP dialog); the shim never sees, carries or
     forwards a factor. Then the call is retried ONCE -- never a loop.
+
+0.3.0 (gt 0.20.0), always: tools/list carries an outputSchema per tool for a client that
+negotiated MCP 2025-06-18 or later (tools_for); results already carried the envelope as
+structuredContent. On native Windows install.sh points this server's command at the resolved
+interpreter (gt_components.localize_mcp), so it is still started directly by `claude`.
 """
 import argparse
 import json
@@ -113,6 +118,63 @@ TOOLS = [
 ]
 TOOL_NAMES = {t["name"] for t in TOOLS}
 
+# outputSchema (gt-lotr 0.3.0, gt 0.20.0). Every tools/call result already carries its envelope
+# as structuredContent; these schemas declare that envelope, so a client can validate it. MCP
+# added outputSchema in protocol 2025-06-18 (modelcontextprotocol.io/specification/2025-06-18/
+# server/tools, "Output Schema"; absent from 2025-03-26), so a client that negotiated an older
+# protocol gets the tool list exactly as before. The spec: "Servers MUST provide structured
+# results that conform to this schema" -- so only what the shim and the gateway ALWAYS produce is
+# constrained (ok, the error object); `data` is the downstream's own and stays untyped.
+OUTPUT_SCHEMA_SINCE = "2025-06-18"
+_ERROR_SCHEMA = {
+    "type": "object",
+    "properties": {
+        "code": {"type": "string", "description": "Machine-readable error code."},
+        "message": {"type": "string"},
+        "hints": {"type": "array", "description": "What to try next."},
+    },
+    "required": ["code", "message"],
+}
+OUTPUT_SCHEMAS = {
+    "find": {
+        "type": "object",
+        "properties": {
+            "ok": {"type": "boolean"},
+            "zone": {"description": "The gateway zone answering."},
+            "results": {"type": "array", "description": "Hits: connection, op, kind, summary, "
+                        "tier (params with detail=schema)."},
+            "notes": {"type": "array"},
+            "error": _ERROR_SCHEMA,
+        },
+        "required": ["ok"],
+    },
+}
+_CALL_OUTPUT = {
+    "type": "object",
+    "properties": {
+        "ok": {"type": "boolean"},
+        "connection": {"type": "string"},
+        "op": {"type": "string"},
+        "tier": {"type": "string"},
+        "data": {"description": "The downstream's result, shaped by select. Untrusted data."},
+        "next_cursor": {"description": "Pass as cursor to fetch the next page; null at the end."},
+        "notes": {"type": "array"},
+        "untrusted": {"type": "boolean"},
+        "withheld": {"type": "array", "description": "Credential-shaped values withheld."},
+        "error": _ERROR_SCHEMA,
+    },
+    "required": ["ok"],
+}
+for _n in ("call_read", "call_write", "call_consent"):
+    OUTPUT_SCHEMAS[_n] = _CALL_OUTPUT
+
+
+def tools_for(protocol):
+    """The tool list for a negotiated protocol: with outputSchema from 2025-06-18 on."""
+    if (protocol or DEFAULT_PROTOCOL) < OUTPUT_SCHEMA_SINCE:
+        return TOOLS
+    return [dict(t, outputSchema=OUTPUT_SCHEMAS[t["name"]]) for t in TOOLS]
+
 
 class Shim:
     def __init__(self, home, out=None, client_factory=None, unlock=None):
@@ -120,6 +182,7 @@ class Shim:
         self.out = out or sys.stdout
         self._client_factory = client_factory
         self._unlock = unlock
+        self.protocol = None                    # negotiated at initialize
 
     def unlock(self):
         if self._unlock is None:
@@ -188,7 +251,7 @@ class Shim:
             if method == "ping":
                 return self.reply(mid, {})
             if method == "tools/list":
-                return self.reply(mid, {"tools": TOOLS})
+                return self.reply(mid, {"tools": tools_for(self.protocol)})
             if method == "tools/call":
                 if not isinstance(params, dict) or params.get("name") not in TOOL_NAMES:
                     name = params.get("name") if isinstance(params, dict) else None
@@ -203,6 +266,7 @@ class Shim:
     def initialize(self, params):
         asked = params.get("protocolVersion") if isinstance(params, dict) else None
         version = asked if asked in PROTOCOLS else DEFAULT_PROTOCOL
+        self.protocol = version
         instructions = FALLBACK_INSTRUCTIONS
         try:
             res = self.client().request("catalog", {"max_chars": 1800})
@@ -271,6 +335,10 @@ class Shim:
                                              "hints": []}}
         if not isinstance(result, dict):
             result = {"ok": True, "result": result}
+        if not isinstance(result.get("ok"), bool):
+            # The declared outputSchema requires `ok`; an envelope without it would be a result
+            # a validating client rejects (0.3.0).
+            result = dict(result, ok="error" not in result)
         is_error = result.get("ok") is False
         return {"content": [{"type": "text", "text": json.dumps(result, indent=1)}],
                 "structuredContent": result, "isError": is_error}

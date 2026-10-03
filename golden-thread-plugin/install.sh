@@ -1644,7 +1644,10 @@ while [ "$i" -lt "$PLUGIN_COUNT" ]; do
   # packs/ holds the pluggable definitions gt_registry.py resolves at runtime.
   # Without it the registry finds nothing on an installed machine and every
   # contributed definition is inert (found by security review, 2026-09-16).
-  for dir in .claude-plugin skills scripts templates commands hooks demo packs; do
+  # agents/ and workflows/ (0.20.0): the stage agent definitions (gt:<stage>) and the pipeline
+  # workflow Claude Code loads from a plugin; replaced like every other dir, so a rollback to a
+  # release without them leaves none behind.
+  for dir in .claude-plugin skills scripts templates commands hooks demo packs agents workflows; do
     rm -rf "${p_cache:?}/$dir"
     [ -d "$p_src/$dir" ] && cp -r "$p_src/$dir" "$p_cache/"
   done
@@ -1949,7 +1952,7 @@ i=0
 while [ "$i" -lt "$PLUGIN_COUNT" ]; do
   p_src=$(plugin_src "$i"); p_market="$MARKETPLACE/plugins/${PLUGIN_NAMES[$i]}"
   cp "$p_src/.claude-plugin/plugin.json" "$p_market/.claude-plugin/plugin.json"
-  for dir in skills scripts templates commands hooks demo packs; do
+  for dir in skills scripts templates commands hooks demo packs agents workflows; do
     rm -rf "$p_market/$dir"
     [ -d "$p_src/$dir" ] && cp -r "$p_src/$dir" "$p_market/$dir"
   done
@@ -1962,6 +1965,31 @@ while [ "$i" -lt "$PLUGIN_COUNT" ]; do
 done
 strip_gt_demo "$MARKETPLACE/plugins/gt"
 echo "Populated marketplace plugin directories with skills/scripts/templates"
+
+# 2c. Windows: an MCP server a plugin starts with `python3` (gt-lotr) would run the Microsoft
+# Store stub and never start. Its INSTALLED manifests (cache and marketplace) get the
+# interpreter the preflight resolved, as an absolute Windows path, so Claude Code starts it
+# directly -- still a direct child of claude, which gt unlock's register_shim requires.
+# gt_components.localize_mcp says why at length. macOS and Linux: untouched.
+case "$(uname -s 2>/dev/null)" in
+  MINGW*|MSYS*|CYGWIN*)
+    if [ -n "${GT_PYTHON:-}" ]; then
+      _gt_pyw=$(cygpath -m "$GT_PYTHON" 2>/dev/null || printf '%s' "$GT_PYTHON")
+      _gt_mcp_files=()
+      i=0
+      while [ "$i" -lt "$PLUGIN_COUNT" ]; do
+        for _f in "$(plugin_cache "$i")/.claude-plugin/plugin.json" \
+                  "$MARKETPLACE/plugins/${PLUGIN_NAMES[$i]}/.claude-plugin/plugin.json"; do
+          [ -f "$_f" ] && _gt_mcp_files+=("$_f")
+        done
+        i=$((i + 1))
+      done
+      python3 -B "$SRC/scripts/gt_components.py" localize-mcp --python "$_gt_pyw" \
+        ${_gt_mcp_files[@]+"${_gt_mcp_files[@]}"} \
+        || echo "  ⚠ could not point the plugins' MCP servers at $_gt_pyw; gt-lotr's will not start"
+    fi
+    ;;
+esac
 
 echo "Created marketplace entries → $MARKETPLACE"
 

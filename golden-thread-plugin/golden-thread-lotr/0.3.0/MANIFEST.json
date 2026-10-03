@@ -5,8 +5,8 @@
    "sha256": "91f3453f5222cb45a75829570c3a788607c66be7017855c94a056136de843520"
   },
   "scripts/lotr_mcp.py": {
-   "bytes": 14173,
-   "sha256": "bc16c1e5d3a5b22af2c368c4971547c4f6914b143c9b02bc5514176199031639"
+   "bytes": 17383,
+   "sha256": "d88c8c0163cbb017c9f0e6a0715e7b126fe4df5582aa86ee4ada3a6eee0b2b71"
   },
   "scripts/lotrd.py": {
    "bytes": 4720,
@@ -109,6 +109,6 @@
    "sha256": "0a5dc06c80759b3c11ce748a9cfea2213d37f4138bb4e97010ee01db27b6ea66"
   }
  },
- "generated": "2026-10-03T11:57:15",
+ "generated": "2026-10-03T14:45:04",
  "version": "0.3.0"
 }

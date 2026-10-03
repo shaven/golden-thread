@@ -9,7 +9,10 @@
 > the tree was cut from.
 
 > **Not released yet.** 0.20.0 = the Windows completion (built as 0.19.3, never released) plus
-> gt unlock (security, off by default; `SECURITY.md`). Built on `feat/0.20.0` from `8078835`.
+> gt unlock (security, off by default; `SECURITY.md`) plus the Claude Code integration items 0–4
+> and 6 of `plan-0.20.0-claude-code-integration.md` (stage plugin agents with model and effort,
+> the `gt:pipeline-stage` workflow, LOTR `outputSchema`, gt-lotr's MCP server on Windows, the
+> `--dry-run` placement fix; no skill forks). Built on `feat/0.20.0` from `8078835`.
 > Nothing is pushed, tagged or synced to gt-src until the owner says release; then it goes straight
 > to main. The table below is 0.19.1's, with 0.19.2 and 0.20.0 on top. There is no published 0.19.3.
 
@@ -24,7 +27,7 @@
 | gt-demo, gt-farm, gt-flow, gt-report-card, gt-watch | **0.20.0** | they move with gt |
 | gt-visualize | **0.4.4** | `requires_gt >=0.20.0,<0.21.0` only |
 | gt-usage | **0.1.6** | `requires_gt >=0.20.0,<0.21.0` only |
-| gt-lotr | **0.3.0** | consumes gt unlock (grant check per call, grant ids in the audit, `mcp_only`, biometric consent option, `sealed:`/BYO secret refs); a Windows named-pipe front door; still off by default |
+| gt-lotr | **0.3.0** | consumes gt unlock (grant check per call, grant ids in the audit, `mcp_only`, biometric consent option, `sealed:`/BYO secret refs); a Windows named-pipe front door; `outputSchema` on its four tools (MCP 2025-06-18+); on Windows the installer starts its MCP server with the resolved Python; still off by default |
 
 Skills stay **36** (every one now declares a `model_intent`). gt_lint checks **24 → 25**
 (`supersedes-missing`). Settings: two new (`vault_hints`, `allin_timeout`); the model profile
@@ -274,6 +277,14 @@ Then, in a Claude Code session on that machine:
 - **When to release:** the owner says when. Then push straight to main, with no PR.
 
 ## 6. What will be misread if nobody says it
+
+- **`agent type: none` is not an error.** `gt_agent_spec.py model <job>` names `gt:<stage>`
+  only when the installed definition is exactly what the job should run; after a job-type
+  override, a vault override of a stage, a hand edit, or on a Claude Code older than 2.1.78 it
+  says why and the skill spawns the 0.19 way. A session started before `gt_model_policy.py apply`
+  or an `agent_models` change keeps the definitions it loaded until it is restarted.
+- **The installed gt-lotr `plugin.json` differs from the release on Windows, by design**: its
+  MCP command is the resolved interpreter, not `python3`.
 
 - **`repo-target` is never a problem.** It is an `i` row on every run where the working directory is
   the vault — that is gt's normal configuration. It exists so a code review is pointed at the

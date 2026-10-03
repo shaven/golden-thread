@@ -402,8 +402,13 @@ registry when its mtime changes.
   - Annotations: `find` and `call_read` are `readOnlyHint: true`; `call_write` is
     `destructiveHint: false`; `call_consent` is `destructiveHint: true` and also has
     `_meta["anthropic/requiresUserInteraction"] = true`.
+  - From 0.3.0 (gt 0.20.0), when the negotiated protocol is 2025-06-18 or later, each tool also
+    has an `outputSchema` describing its envelope (`ok` required; the error object; for calls
+    `data`, `next_cursor`, `notes`, `withheld`, with `data` untyped). A 2025-03-26 client gets
+    the list without it, since that protocol has no `outputSchema`.
 - `tools/call`: forwards to the daemon via `Client`. The result is
   `{"content":[{"type":"text","text": json}], "structuredContent": envelope, "isError": not ok}`.
+  An envelope without a boolean `ok` gets one, so every result conforms to the declared schema.
 - `ping`, and `notifications/*` (ignored). Unknown method → -32601.
 - **The shim never exits on a daemon error**; it returns a tool error instead.
 

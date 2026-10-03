@@ -231,14 +231,26 @@ class AgentsAreSetByTheTask(PolicyBase):
         self.assertOk(self.policy("clear", "--agent", "extract"))
         self.assertEqual(self.model("extract-docs"), "sonnet")
 
-    def test_an_agent_override_refuses_an_effort_and_a_non_alias(self):
-        for args, why in ((("--model", "opus", "--effort", "high"), "no effort parameter"),
-                          (("--model", "claude-opus-5-5"), "takes one of")):
+    def test_an_agent_override_refuses_a_job_type_effort_a_bad_effort_and_a_non_alias(self):
+        # 0.20.0 (changed deliberately): a STAGE override may now carry an effort, because each
+        # stage's agent definition holds one; until 0.20.0 every effort was refused ("the Agent
+        # tool has no effort parameter"). A job-type override still may not: one definition
+        # serves every kind, so that job runs through the Agent tool's model.
+        for args, why in ((("--agent", "extract-docs", "--model", "opus", "--effort", "high"),
+                           "an effort override is per STAGE"),
+                          (("--agent", "classify", "--model", "haiku", "--effort", "low"),
+                           "no effort levels"),
+                          (("--agent", "verify", "--model", "claude-opus-5-5"), "takes one of")):
             with self.subTest(args=args):
-                p = self.policy("set", "--agent", "verify", *args)
+                p = self.policy("set", *args)
                 self.assertEqual(p.returncode, 2, p.stdout + p.stderr)
                 self.assertIn(why, p.stderr)
         self.assertEqual(self.model("verify"), "opus")
+        self.assertOk(self.policy("set", "--agent", "verify", "--model", "sonnet",
+                                  "--effort", "low"))
+        d = json.loads(self.policy("show", "--json").stdout)
+        row = next(r for r in d["agents"] if r["stage"] == "verify")
+        self.assertEqual((row["model"], row["effort"]), ("sonnet", "low"))
 
     def test_an_old_job_name_resolves_like_its_target(self):
         self.assertOk(self.policy("set", "--agent", "verify", "--model", "sonnet"))
@@ -271,6 +283,60 @@ class DoctorRow(PolicyBase):
         self.assertEqual(r["state"], "warn", r)
         self.assertIn("gt-plan", r["detail"])
         self.assertIn("gt_model_policy.py apply", r["fix"])
+
+
+
+class AgentDefinitionFiles(PolicyBase):
+    """0.20.0: the installed stage agent definitions (agents/<stage>.md in the gt plugin's cache
+    and marketplace copies) get model AND effort from the policy, like skills, and follow the
+    agent_models setting at once."""
+
+    def setUp(self):
+        super().setUp()
+        for root in (self.cache, self.market):
+            shutil.copytree(GT / "agents", root / "agents")
+        (self.home / ".claude" / "vault-config.json").write_text(
+            json.dumps({"vault_path": str(self.vault)}))
+
+    def agent(self, root, stage):
+        fm = frontmatter(root / "agents" / (stage + ".md"))
+        return fm.get("model"), fm.get("effort")
+
+    def test_apply_writes_the_task_model_and_effort_whatever_the_profile(self):
+        self.assertOk(self.policy("apply", "--profile", "very-high"))
+        for root in (self.cache, self.market):
+            self.assertEqual(self.agent(root, "verify"), ("opus", "high"))
+            self.assertEqual(self.agent(root, "classify"), ("haiku", None))
+            self.assertEqual(self.agent(root, "extract"), ("sonnet", "medium"))
+        self.assertEqual(self.got(self.cache, "gt-list"), ("opus", "xhigh"))
+
+    def test_a_stage_override_with_effort_reaches_the_definition(self):
+        self.assertOk(self.policy("set", "--agent", "extract", "--model", "opus",
+                                  "--effort", "xhigh"))
+        self.assertEqual(self.agent(self.cache, "extract"), ("opus", "xhigh"))
+        self.assertOk(self.policy("clear", "--agent", "extract"))
+        self.assertEqual(self.agent(self.cache, "extract"), ("sonnet", "medium"))
+
+    def test_agent_models_session_rewrites_only_the_agent_files(self):
+        self.assertOk(self.policy("apply", "--profile", "average"))
+        skills = self.tree_hash(self.cache / "skills")
+        self.assertOk(self.py(SCRIPTS / "gt_settings.py", "set", "agent_models", "session"))
+        for root in (self.cache, self.market):
+            for stage in ("verify", "extract", "classify"):
+                self.assertEqual(self.agent(root, stage), (None, None))
+        self.assertEqual(skills, self.tree_hash(self.cache / "skills"))
+        self.assertOk(self.policy("verify"))
+        self.assertOk(self.py(SCRIPTS / "gt_settings.py", "set", "agent_models", "task"))
+        self.assertEqual(self.agent(self.cache, "verify"), ("opus", "high"))
+        self.assertOk(self.policy("verify"))
+
+    def test_a_hand_edit_to_an_agent_definition_is_drift(self):
+        self.assertOk(self.policy("apply", "--profile", "average"))
+        f = self.cache / "agents" / "reconcile.md"
+        f.write_text(f.read_text().replace("effort: high", "effort: low"))
+        p = self.policy("verify")
+        self.assertEqual(p.returncode, 1, p.stdout)
+        self.assertIn("agent:reconcile", p.stdout)
 
 
 if __name__ == "__main__":

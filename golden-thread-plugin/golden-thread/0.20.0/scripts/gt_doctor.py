@@ -1733,6 +1733,26 @@ def smoke_daily(base, rel):
     return PASS, "gt_daily.py --dry-run exits 0 against a temp vault"
 
 
+def _configured_mcp_command(plugin_root, server):
+    """-> (argv, None) for an installed plugin's MCP server as Claude Code would start it, or
+    (None, why not)."""
+    man = Path(plugin_root) / ".claude-plugin" / "plugin.json"
+    try:
+        cfg = json.loads(man.read_text(encoding="utf-8"))["mcpServers"][server]
+        command, args = cfg["command"], list(cfg.get("args") or [])
+    except Exception:                                    # noqa: BLE001
+        return None, "%s declares no usable mcpServers.%s" % (man, server)
+    root = str(plugin_root).replace("\\", "/") if os.name == "nt" else str(plugin_root)
+    argv = [str(x).replace("${CLAUDE_PLUGIN_ROOT}", root) for x in [command] + args]
+    if os.name == "nt" and os.path.basename(argv[0]).lower() in ("python3", "python3.exe",
+                                                                  "python", "python.exe") \
+            and not os.path.isabs(argv[0]):
+        return None, ("the configured MCP command is %r: on Windows that is the Microsoft "
+                      "Store stub, so Claude Code cannot start the server -- re-run install.sh"
+                      % argv[0])
+    return argv, None
+
+
 def smoke_lotr(base, rel, root):
     import shutil
     import tempfile
@@ -1796,8 +1816,14 @@ def smoke_lotr(base, rel, root):
                             "clientInfo": {"name": "gt-doctor", "version": "1"}}},
                 {"jsonrpc": "2.0", "method": "notifications/initialized"},
                 {"jsonrpc": "2.0", "id": 2, "method": "tools/list"}]
-        rc, out = _srun([sys.executable, scripts / "lotr_mcp.py", "--home", lhome], env,
-                        input="".join(json.dumps(m) + "\n" for m in msgs))
+        # The EXACT command Claude Code is configured to start (0.20.0): the installed
+        # manifest's mcpServers entry, ${CLAUDE_PLUGIN_ROOT} substituted the way Claude Code
+        # does (forward slashes on Windows). Until 0.20.0 this ran sys.executable, which proved
+        # the script and not the command -- on Windows the command was the Store stub.
+        cmd, why = _configured_mcp_command(scripts.parent, "gt-lotr")
+        if cmd is None:
+            return PFAIL, why
+        rc, out = _srun(cmd, env, input="".join(json.dumps(m) + "\n" for m in msgs))
         tools = None
         for line in out.splitlines():
             try:
@@ -1811,7 +1837,8 @@ def smoke_lotr(base, rel, root):
         if len(tools) != 4 or set(tools) != LOTR_TOOLS:
             return PFAIL, "lotr_mcp.py tools/list returned %s, not exactly %s" % (
                 sorted(tools), sorted(LOTR_TOOLS))
-        return PASS, "init, lotrd up, find \"\" ok, MCP tools/list = the 4 tools"
+        return PASS, ("init, lotrd up, find \"\" ok, the configured MCP command (%s) answers "
+                      "tools/list with the 4 tools" % os.path.basename(cmd[0]))
     finally:
         if daemon is not None and daemon.poll() is None:
             daemon.terminate()

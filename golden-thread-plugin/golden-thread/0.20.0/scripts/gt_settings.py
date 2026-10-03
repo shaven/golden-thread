@@ -83,8 +83,10 @@ SETTINGS = {
             "\n"
             "Whatever the skills' model profile, so a very-high machine still reads documents\n"
             "on sonnet (owner, 2026-10-02). Per-agent overrides, by stage or job type:\n"
-            "gt_model_policy.py set --agent extract --model haiku. The Agent tool takes no\n"
-            "effort, so agents run at the session's effort (0.19.1)."),
+            "gt_model_policy.py set --agent extract --model haiku [--effort low]. Since\n"
+            "0.20.0 each stage's agent definition (gt:<stage>) carries model AND effort --\n"
+            "classify and draft haiku (no effort), extract and place sonnet medium, the rest\n"
+            "opus high -- and changing this setting rewrites them at once."),
     },
     "vault_hints": {
         "default": "off",
@@ -1272,6 +1274,13 @@ def set_value(name, value, force=False):
     d[name] = value
     _save(d)
     print("%s: %s -> %s" % (name, was, value))
+    if name == "agent_models" and was != value:
+        # The stage agent definitions carry model and effort in their frontmatter (0.20.0), so
+        # they follow the setting now, not at the next install. Only the agent files change.
+        import subprocess
+        mp = os.path.join(os.path.dirname(os.path.abspath(__file__)), "gt_model_policy.py")
+        if os.path.isfile(mp):
+            subprocess.call([sys.executable, mp, "apply", "--agents-only"])
     if spec.get("orphaned"):
         print("  note: the %s module is off, so this is kept but not in effect until "
               "install.sh --with %s" % (spec["module"], spec["module"]))

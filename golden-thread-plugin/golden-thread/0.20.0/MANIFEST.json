@@ -133,8 +133,8 @@
    "sha256": "c55453de2b458a8eb00aa3e5ea057e4f62ecfbea9ee0c047528bc2af170d5ccc"
   },
   "scripts/gt_agent_spec.py": {
-   "bytes": 63033,
-   "sha256": "5fd8e889488f56a8253548130c71fa3f222146513ca340e5e8be011b8bd537bb"
+   "bytes": 85282,
+   "sha256": "e1cb6a55c626cf4898171d7f5e9733cd84cad49f0cf67231f392829c18c38645"
   },
   "scripts/gt_aggregate.py": {
    "bytes": 6535,
@@ -189,8 +189,8 @@
    "sha256": "8977a8959becdac7aa565eee5dd877752ebc0ddf3d8f807453f663819e214365"
   },
   "scripts/gt_components.py": {
-   "bytes": 101461,
-   "sha256": "4b15a9c3970f80949d628f68222fa7e07d90c20895394c20f371144234a87bd3"
+   "bytes": 104365,
+   "sha256": "fb5b21e9b4c6c9ba00f45df03fc65d417022007293754c2bcd2095bb8405f35a"
   },
   "scripts/gt_context.py": {
    "bytes": 10260,
@@ -209,8 +209,8 @@
    "sha256": "5e44883a367e6f4b50b8dd83428b20ffeaf2619a32a7cc9d2cda2343f92bec17"
   },
   "scripts/gt_doctor.py": {
-   "bytes": 114263,
-   "sha256": "a45fbe23845ee08de5fb1f498e8557d66c6baa828ebd77a896ed62417a430095"
+   "bytes": 115944,
+   "sha256": "0577d24acdeb2d58151d0444e756ae287776c788a74497955afc63cfd98367dd"
   },
   "scripts/gt_entities.py": {
    "bytes": 5423,
@@ -229,8 +229,8 @@
    "sha256": "137233f838ff5d5191a3a23df354990f74ba9774fb74fe74f4ee35c9ce5d9b71"
   },
   "scripts/gt_ingest_pipeline.py": {
-   "bytes": 55963,
-   "sha256": "13b85676a20636a4b54f4e090d6dd4cb1f0705396a4986939a24b901394fc93c"
+   "bytes": 68643,
+   "sha256": "608903f6d9faf6fcfbf980599f5c9252d52e3dd84e1ddf0b9b38530f404913bb"
   },
   "scripts/gt_intake_scan.py": {
    "bytes": 26017,
@@ -285,8 +285,8 @@
    "sha256": "1c11f50c09d590cd629b542a51efe3b59993671832f4a5d309da941159f88d0b"
   },
   "scripts/gt_model_policy.py": {
-   "bytes": 17748,
-   "sha256": "4f4473a3a1eb2d2b5593c29e3ccb67e8870ade6694851c3953f8bb2096b3037b"
+   "bytes": 23315,
+   "sha256": "a72e2c8123b8ae73f17fa51bf62c20d4a3445be2bc0f36a332f08ca1f4349f6b"
   },
   "scripts/gt_model_prices.json": {
    "bytes": 730,
@@ -357,8 +357,8 @@
    "sha256": "0e5f1bd28e62b594f65511828d9566fd25642c3800b5d701f36caaad4bf6c09d"
   },
   "scripts/gt_settings.py": {
-   "bytes": 71124,
-   "sha256": "7e0f338ae580ca584cf60c9ee5ed56c95469c358e39cd7a99b4c9b2a17798a7a"
+   "bytes": 71778,
+   "sha256": "b99d7868f6e7f171fa928b9f966c7af104e1ac1e41b8f28917960a9548528a9e"
   },
   "scripts/gt_staged.py": {
    "bytes": 3529,
@@ -477,8 +477,8 @@
    "sha256": "984ebba5ab6ea8b635b28fbdb3d260ad3310b4e5eeff1e1f7a68f90036a3c405"
   },
   "scripts/skill_lint.py": {
-   "bytes": 7041,
-   "sha256": "ab8c1ca20a9d9c955d7704342e7d4769035f06322737d13a28853a2e8927da99"
+   "bytes": 9257,
+   "sha256": "8dbce897da1c9c6e2959b3bc91d27da35170bd08159f41e39b011233026f700b"
   },
   "scripts/vault_init.py": {
    "bytes": 100672,
@@ -553,32 +553,32 @@
    "sha256": "2291c3079c959f03030e476fe6bd68b1b59394370d45ecba995aaba489bfb83b"
   },
   "templates/agent-specs/stages/classify.json": {
-   "bytes": 2397,
-   "sha256": "ae7bf8c97027ce9ead03a2fca8e029a2acd4d010b2c6b3389f4b6f5d026a12c6"
+   "bytes": 2446,
+   "sha256": "343acdc490b8341f115f54dab89b7f2b938b9f7626796ef2649a291980c54ca6"
   },
   "templates/agent-specs/stages/draft.json": {
-   "bytes": 2034,
-   "sha256": "6cb89a0184d6a4707886f3a593674f80e3a8742422e802a0760c2fab3fb5947c"
+   "bytes": 2083,
+   "sha256": "020584e90371f4e99024cdeb300243d991a374d59329f3c6c46ab3577f88a4a9"
   },
   "templates/agent-specs/stages/extract.json": {
-   "bytes": 3505,
-   "sha256": "3f786f6886c20bd160e9081f463bf7d1f68f53664e4ac4f988675d51699f5994"
+   "bytes": 3570,
+   "sha256": "08546dc510c8792fdea5cef9946294c80a61a58e4e58db0dc77ee41a14744425"
   },
   "templates/agent-specs/stages/generalize.json": {
-   "bytes": 2071,
-   "sha256": "e731276ca694f8bb214e50017a1d2f99da60f1fbad2688eaf3146b6f450fbdeb"
+   "bytes": 2120,
+   "sha256": "e4a68f40a3fba6f0acec8ea7b988b028451578b2e0ac5a725d9dbd1d31de3b9d"
   },
   "templates/agent-specs/stages/place.json": {
-   "bytes": 2308,
-   "sha256": "c20668ea7f76490e1327b0a70b9a44505737a473b86ad715cdad33da9904500f"
+   "bytes": 2373,
+   "sha256": "8ca480da27245a8f75c3d4c2de7b8c46d1456c7082f48666ffed27ccfa86f471"
   },
   "templates/agent-specs/stages/reconcile.json": {
-   "bytes": 2808,
-   "sha256": "7c6f2211731f65fb0df4f72cee823dcba7a4758a51a53b474792cb7f5ec4a794"
+   "bytes": 2881,
+   "sha256": "776cfb189915adf411f378521ceff2089ef7d631b602fbecb9232c85b3efb012"
   },
   "templates/agent-specs/stages/verify.json": {
-   "bytes": 2673,
-   "sha256": "18a4e8072aed9d196804448ba83b110c3ae98ad0d30ec27a922adc04995f306f"
+   "bytes": 2782,
+   "sha256": "fd832fdb9bf0575d26813c8b14e468ca59eeecb80d0c00f3feb5cd5ab880a643"
   },
   "templates/agent-specs/validate.json": {
    "bytes": 2629,
@@ -729,7 +729,7 @@
    "sha256": "05a5e61333b0ba5d6f97866735268f7f99ff354d9502b2b05e0e512a86f82a6b"
   }
  },
- "generated": "2026-10-03T12:29:24",
+ "generated": "2026-10-03T14:49:56",
  "hooks": [
   {
    "args": [
