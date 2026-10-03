@@ -543,18 +543,14 @@ class LotrOnSmoke(InstalledMachine):
 
     def test_lotr_on_is_placed_and_smoke_tested(self):
         self.assertEqual(self.install_proc.returncode, 0, self.install_proc.stdout[-3000:])
-        if IS_WINDOWS:
-            # 0.20.0: --with lotr on Windows installs without it and the gate says why, as INFO.
-            rc, rows, _ = self.gate()
-            self.assertEqual(rows["lotr"]["state"], "INFO", rows["lotr"])
-            self.assertIn("POSIX-only", rows["lotr"]["summary"])
-            self.assertEqual(rows["smoke-lotr"]["state"], "INFO", rows["smoke-lotr"])
-            self.assertEqual(rc, 0)
-            return
+        # 0.20.0: gt-lotr 0.3.0 runs on Windows too (named pipe), so the gate places and
+        # smoke-tests it there exactly as on POSIX.
         rc, rows, _ = self.gate()
         self.assertEqual(rows["lotr"]["state"], "PASS", rows["lotr"])
         self.assertEqual(rows["smoke-lotr"]["state"], "PASS", rows["smoke-lotr"])
         self.assertEqual(rc, 0)
+        if IS_WINDOWS:
+            return                      # no pgrep; the smoke terminates its lotrd itself
         left = subprocess.run(["pgrep", "-f", "[l]otrd.py --home /tmp/gtl-"],
                               capture_output=True, text=True)
         self.assertEqual(left.stdout.strip(), "", "the smoke left lotrd running")
