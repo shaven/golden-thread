@@ -72,6 +72,20 @@ SETTINGS = {
             "run 12 times this. Until 0.19.1 it was a fixed 300 s, and gt's own repo (29\n"
             "release folders) could never pass the gate."),
     },
+    "agent_models": {
+        "default": "task",
+        "values": ["task", "session"],
+        "summary": "Pick each specialist agent's model by its task, not the session's.",
+        "detail": (
+            "task     each agent stage runs at its spec's tier: classify and draft haiku,\n"
+            "         extract and place sonnet, reconcile, verify and generalize opus  (default)\n"
+            "session  no model is passed; every agent runs on the session's model\n"
+            "\n"
+            "Whatever the skills' model profile, so a very-high machine still reads documents\n"
+            "on sonnet (owner, 2026-10-02). Per-agent overrides, by stage or job type:\n"
+            "gt_model_policy.py set --agent extract --model haiku. The Agent tool takes no\n"
+            "effort, so agents run at the session's effort (0.19.1)."),
+    },
     "vault_hints": {
         "default": "off",
         "values": ["off", "on"],

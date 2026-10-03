@@ -137,6 +137,21 @@ through the profile, then inherit. An effort the model does not accept is refuse
 naming the allowed values (Haiku has none) — never lowered quietly. Choices survive a
 reinstall. Hooks have no model or effort in Claude Code, so they are not covered.
 
+**Specialist agents are set by the task, not the profile.** Each agent stage runs at its
+spec's tier through the intent pack — classify and draft haiku, extract and place sonnet,
+reconcile, verify and generalize opus — even on a very-high machine ("doc reading doesn't
+need opus"). **`agent_models`** (default `task`) is the switch: `session` passes no model and
+every agent runs on the session's model (`gt_settings.py set agent_models session`). The Agent
+tool takes a model alias and no effort, so an agent runs at the session's effort and an agent
+override (used when `agent_models` is `task`) is a model only, by stage or job type (the job
+type wins):
+
+```bash
+python3 <base_dir>/../../scripts/gt_model_policy.py set --agent extract --model haiku
+python3 <base_dir>/../../scripts/gt_model_policy.py set --agent extract-code --model opus
+python3 <base_dir>/../../scripts/gt_model_policy.py clear --agent extract
+```
+
 ## Adding a setting later
 
 Append one entry to `SETTINGS` in `gt_settings.py` with `default`, `values`,

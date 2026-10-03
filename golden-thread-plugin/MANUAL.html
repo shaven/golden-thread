@@ -292,6 +292,16 @@ inherit. Choices live with the install choices and survive reinstalls. The docto
 <code>model-policy</code> row names the active profile and WARNs when an installed field was edited by hand.
 <code>gt_model.py skill</code> reports the installed frontmatter's model and effort when the policy wrote
 them, so <code>/gt:gt-validate</code> names what actually runs.</p>
+<p><strong>Specialist agents are set by the task, not the profile.</strong> An agent's spec tier picks its model —
+classify and draft haiku, extract and place sonnet, reconcile, verify and generalize opus —
+whatever profile the skills use. <code>gt_agent_spec.py model &lt;job&gt;</code> prints the alias a skill passes as
+the Agent tool's <code>model</code> (<code>resolve</code> and <code>render --json</code> carry it too). The Agent tool takes no
+effort, so agents run at the session's effort, and an agent override is a model only, by stage or
+job type (the job type wins). The <code>agent_models</code> setting (<code>task</code> default, <code>session</code>) turns it off.</p>
+<pre><code class="language-bash">python3 $SCRIPTS/gt_agent_spec.py model extract-docs                       # sonnet  (… task tier standard -&gt; balanced)
+python3 $SCRIPTS/gt_model_policy.py set --agent extract --model haiku       # every extract-&lt;kind&gt;
+python3 $SCRIPTS/gt_model_policy.py clear --agent extract
+</code></pre>
 <h3 id="supersession-and-expiry-gt_supersedepy-0191">Supersession and expiry: <code>gt_supersede.py</code> (0.19.1)</h3>
 <p>A note can declare that it replaces an earlier one — <code>supersedes: &lt;path&gt;</code> in its frontmatter (a
 path relative to the note's folder or the vault). A note is <strong>expired</strong> when it carries
@@ -3321,6 +3331,12 @@ is registered here and can be switched off.</p>
 <td><code>off</code> · <code>noindex</code></td>
 <td><code>off</code></td>
 <td>Where the test runner puts throwaway files; <code>noindex</code> = <code>~/Library/Caches/gt-tests.noindex</code> on macOS, <code>$XDG_CACHE_HOME/gt-tests</code> elsewhere (0.18.1)</td>
+</tr>
+<tr>
+<td><code>agent_models</code></td>
+<td><code>task</code> · <code>session</code></td>
+<td><code>task</code></td>
+<td>Each specialist agent's model set by its task (haiku/sonnet/opus by tier), whatever the skill profile; <code>session</code> passes no model (0.19.1). See <a href="#model-and-effort-profiles-gt_model_policypy-0191">Model and effort profiles</a></td>
 </tr>
 <tr>
 <td><code>vault_hints</code></td>

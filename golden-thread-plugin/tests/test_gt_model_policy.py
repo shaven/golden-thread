@@ -184,6 +184,67 @@ class Overrides(PolicyBase):
         self.assertIn("very-high", p.stdout)
 
 
+
+class AgentsAreSetByTheTask(PolicyBase):
+    """Owner 2026-10-02: "doc reading doesn't need opus". A specialist agent runs at its spec's
+    tier (fast haiku, standard sonnet, careful opus) whatever the skills' profile; a per-agent
+    override is a model alias only (the Agent tool has no effort), job type before stage."""
+
+    def agents(self):
+        d = json.loads(self.policy("show", "--json").stdout)
+        return {r["stage"]: r for r in d["agents"]}
+
+    def model(self, job):
+        p = self.py(SCRIPTS / "gt_agent_spec.py", "model", job, "--json", "--vault", self.vault)
+        self.assertOk(p)
+        return json.loads(p.stdout)["model"]
+
+    def test_the_tier_decides_even_on_a_very_high_machine(self):
+        self.assertOk(self.policy("choose", "very-high"))
+        rows = self.agents()
+        self.assertEqual({s: r["model"] for s, r in rows.items()},
+                         {"extract": "sonnet", "classify": "haiku", "draft": "haiku",
+                          "place": "sonnet", "reconcile": "opus", "verify": "opus",
+                          "generalize": "opus"})
+        self.assertEqual(self.model("extract-docs"), "sonnet")
+
+    def test_agent_models_session_passes_no_model_whatever_the_overrides(self):
+        self.assertOk(self.policy("set", "--agent", "verify", "--model", "sonnet"))
+        (self.home / ".claude" / "vault-config.json").write_text(
+            json.dumps({"vault_path": str(self.vault)}))
+        self.assertOk(self.py(SCRIPTS / "gt_settings.py", "set", "agent_models", "session"))
+        self.assertIsNone(self.model("verify"))
+        self.assertTrue(all(r["model"] is None for r in self.agents().values()))
+        self.assertOk(self.py(SCRIPTS / "gt_settings.py", "set", "agent_models", "task"))
+        self.assertEqual(self.model("verify"), "sonnet")
+
+    def test_an_inherit_profile_does_not_change_agents(self):
+        self.assertOk(self.policy("choose", "inherit"))
+        self.assertEqual(self.model("draft-docs"), "haiku")
+
+    def test_a_job_type_override_beats_its_stage_which_beats_the_tier(self):
+        self.assertOk(self.policy("set", "--agent", "extract", "--model", "haiku"))
+        self.assertEqual(self.model("extract-docs"), "haiku")
+        self.assertOk(self.policy("set", "--agent", "extract-code", "--model", "opus"))
+        self.assertEqual(self.model("extract-code"), "opus")
+        self.assertEqual(self.model("extract-docs"), "haiku")
+        self.assertOk(self.policy("clear", "--agent", "extract"))
+        self.assertEqual(self.model("extract-docs"), "sonnet")
+
+    def test_an_agent_override_refuses_an_effort_and_a_non_alias(self):
+        for args, why in ((("--model", "opus", "--effort", "high"), "no effort parameter"),
+                          (("--model", "claude-opus-5-5"), "takes one of")):
+            with self.subTest(args=args):
+                p = self.policy("set", "--agent", "verify", *args)
+                self.assertEqual(p.returncode, 2, p.stdout + p.stderr)
+                self.assertIn(why, p.stderr)
+        self.assertEqual(self.model("verify"), "opus")
+
+    def test_an_old_job_name_resolves_like_its_target(self):
+        self.assertOk(self.policy("set", "--agent", "verify", "--model", "sonnet"))
+        self.assertEqual(self.model("validate"), "sonnet")
+
+
 class DoctorRow(PolicyBase):
     """6e: the doctor names the active profile, and a hand edit to a field the policy wrote is
     drift (WARN, with the fix) while the policy's own fields are not."""

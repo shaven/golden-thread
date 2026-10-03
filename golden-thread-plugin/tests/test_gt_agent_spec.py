@@ -272,6 +272,30 @@ class AgentSpecTest(AgentSpecBase):
         self.assertIn("no valid spec for job type 'wombat'", p.stderr)
 
     # -- spool records ------------------------------------------------------------------------
+    def test_spawn_names_the_model_the_task_sets(self):
+        self.settings(agent_specialization="on")
+        r = self.resolve("--skill", "gt-validate")
+        self.assertEqual((r["action"], r["model"]), ("spawn", "opus"))
+        p = self.py(TOOL, "resolve", "--skill", "gt-validate")
+        self.assertIn("model:   opus", p.stdout)
+        self.assertNotIn("advisory", p.stdout)
+
+    def test_model_prints_the_alias_for_every_stage(self):
+        want = {"extract": "sonnet", "classify": "haiku", "draft": "haiku", "reconcile": "opus",
+                "verify": "opus", "generalize": "opus", "place": "sonnet"}
+        for stage, model in want.items():
+            job = stage + "-docs" if stage in ("extract", "classify", "draft", "reconcile") \
+                else stage
+            with self.subTest(job=job):
+                p = self.py(TOOL, "model", job)
+                self.assertOk(p)
+                self.assertTrue(p.stdout.startswith(model + " "), p.stdout)
+
+    def test_render_json_carries_the_model(self):
+        p = self.py(TOOL, "render", "place", "--template", "--json")
+        self.assertOk(p)
+        self.assertEqual(json.loads(p.stdout)["model"], "sonnet")
+
     def test_spool_path_is_under_the_vault_spool_and_creates_nothing(self):
         p = self.py(TOOL, "spool-path", "validate", "--session", "abc-123",
                     "--vault", str(self.vault))

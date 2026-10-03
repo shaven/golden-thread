@@ -11,7 +11,8 @@ A Claude Code plugin that turns an Obsidian vault into the single source of trut
 > published 0.19.0.) **Model and effort per skill:** every skill declares fast/balanced/deep, and the
 > installer writes a profile into the installed copies — `average` (haiku with no effort setting,
 > sonnet·medium, opus·high; a new install's default), `very-high` (opus·xhigh) or `inherit` —
-> with per-skill and per-plugin overrides (`gt_model_policy.py`) and a doctor `model-policy` row.
+> with per-skill and per-plugin overrides (`gt_model_policy.py`) and a doctor `model-policy` row;
+> specialist agents run on the model their task needs (`agent_models`, haiku/sonnet/opus by tier).
 > **LOTR handles SSO:** `lotr add-mcp` fronts an SSO/OAuth MCP endpoint by reusing its client's
 > token by reference, refreshing on 401 (gt-lotr 0.2.0). **Recall:** `gt_bench.py recall` measures
 > how often lookup finds the right page; optional prompt hints (`vault_hints`, off by default).

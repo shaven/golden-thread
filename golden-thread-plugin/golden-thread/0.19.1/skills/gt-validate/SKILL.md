@@ -126,7 +126,9 @@ python3 <base_dir>/../../scripts/gt_agent_spec.py render validate --vault "<vaul
   --input-file claim=<f> --input-file rules=<f> --input-file artifact=<f> \
   --input-file method=<base_dir>/prompts/<class>.md
 ```
-Spawn the subagent with exactly that output — the spec loads **no** vault context, and you
+Spawn the subagent with exactly that output, on the model the resolver's `model:` line
+names (the task sets it: `gt_agent_spec.py model validate`; it replaces the skill-intent model
+above; `session` means pass none) — the spec loads **no** vault context, and you
 must not add any. For each result, write the record to the path
 `gt_agent_spec.py spool-path validate --session <id> --vault "<vault>"` prints, as
 `{"job_type": "validate", "session_id": ..., "created": ..., "result": <its JSON>}`, run

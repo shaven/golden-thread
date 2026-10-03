@@ -7,7 +7,8 @@
     gt_model_policy.py apply   [--profile P] [--home H] [--vault V]
     gt_model_policy.py verify  [--home H]                      # exit 1 on a hand edit
     gt_model_policy.py set     (--skill S | --plugin P) --model M [--effort E] [--home H]
-    gt_model_policy.py clear   (--skill S | --plugin P) [--home H]
+    gt_model_policy.py set     --agent A --model M [--home H]      # A: a stage or a job type
+    gt_model_policy.py clear   (--skill S | --plugin P | --agent A) [--home H]
     gt_model_policy.py show    [--home H] [--vault V] [--json]
 
 Claude Code honours `model:` and `effort:` in a skill's frontmatter. gt writes them into the
@@ -24,6 +25,15 @@ Profiles (owner, 2026-10-02):
 Resolution for one skill, highest first: the user's per-skill override, the per-plugin override,
 the skill's model_intent through the profile, else inherit. An effort the model does not accept
 is refused, never written (gt_model.effort_problem) -- Claude Code would lower it silently.
+
+AGENTS ARE SET BY THE TASK, NOT THE PROFILE (owner, 2026-10-02: "doc reading doesn't need
+opus"). A specialist agent (gt_agent_spec.py) runs at its spec's model_tier through the intent
+pack -- fast haiku, standard sonnet, careful opus -- whichever profile the skills use, so a
+very-high machine still reads documents on sonnet. The `agent_models` setting (task, the
+default, or session) turns it off: session passes no model at all. Highest first: a per-agent override for the job type
+(extract-docs), then for its stage (extract), then the tier. The model is passed as the Agent
+tool's `model`, which takes an alias only and has no effort parameter, so an agent override is
+a model alias and nothing else.
 Exit: 0 ok, 1 a problem (refused combination, verify drift), 2 usage.
 """
 import argparse
@@ -42,6 +52,7 @@ OK, PROBLEM, USAGE = 0, 1, 2
 MARKET = "golden-thread-plugin"
 PROFILES = ("average", "very-high", "inherit")
 VERY_HIGH = ("opus", "xhigh")
+AGENT_MODELS = ("haiku", "sonnet", "opus", "fable")   # what the Agent tool's `model` accepts
 FIELDS = ("model", "effort")
 
 
@@ -74,7 +85,7 @@ def model_choices(P):
     m = d.get("model") if isinstance(d, dict) else None
     m = m if isinstance(m, dict) else {}
     return {"profile": m.get("profile"), "plugins": m.get("plugins") or {},
-            "skills": m.get("skills") or {}}
+            "skills": m.get("skills") or {}, "agents": m.get("agents") or {}}
 
 
 def installed_skills(P):
@@ -115,6 +126,48 @@ def resolve_one(plugin, skill, path, profile, choices, vault):
     if not res.get("model"):
         return None, None, "inherit (intent unmapped)"
     return res["model"], res.get("effort"), "intent %s (average profile)" % intent
+
+
+def agent_model(job, stage, tier, home=None, vault=None):
+    """-> (model alias or None, source) for a specialist agent. None means the session's model.
+    Raises ValueError for a tier that is not one."""
+    if _agent_setting() == "session":
+        return None, "agent_models is session"
+    choices = model_choices(paths(home))
+    for key in (job, stage):
+        o = choices["agents"].get(key) if key else None
+        if isinstance(o, dict) and o.get("model") in AGENT_MODELS:
+            return o["model"], "agent override (%s)" % key
+    intent = gt_model.intent_for_tier(tier)
+    res = gt_model.resolve(intent, vault)
+    model = (res.get("model") or "").lower()
+    alias = next((a for a in AGENT_MODELS if a in model), None)
+    if not alias:
+        return None, "task tier %s -> %s, unmapped" % (tier, intent)
+    return alias, "task tier %s -> %s" % (tier, intent)
+
+
+def _agent_setting():
+    try:
+        import gt_settings                                # noqa: E402
+        return gt_settings.get("agent_models") or "task"
+    except Exception:                                     # noqa: BLE001 - the default, never fail
+        return "task"
+
+
+def agent_rows(home=None, vault=None):
+    """-> [{stage, tier, model, source}] for every shipped agent stage."""
+    import gt_agent_spec                                  # noqa: E402 -- only `show` needs it
+    specs, _ = gt_agent_spec.load_specs(vault)
+    rows = []
+    for stage in gt_agent_spec.AGENT_STAGES:
+        e = specs.get(stage)
+        if not e:
+            continue
+        tier = e["data"]["model_tier"]
+        model, source = agent_model(stage, stage, tier, home, vault)
+        rows.append({"stage": stage, "tier": tier, "model": model, "source": source})
+    return rows
 
 
 def rewrite(path, model, effort):
@@ -261,7 +314,8 @@ def _edit_override(a, value):
     d = d if isinstance(d, dict) else {}
     d.setdefault("version", 1)
     d.setdefault("choices", {})
-    scope, key = ("skills", a.skill) if a.skill else ("plugins", a.plugin)
+    scope, key = (("skills", a.skill) if a.skill else ("agents", a.agent)
+                  if getattr(a, "agent", None) else ("plugins", a.plugin))
     bucket = d.setdefault("model", {}).setdefault(scope, {})
     if value is None:
         bucket.pop(key, None)
@@ -273,6 +327,17 @@ def _edit_override(a, value):
 
 
 def cmd_set(a):
+    if a.agent:
+        if a.model not in AGENT_MODELS:
+            print("gt_model_policy: refused -- an agent's model is passed to the Agent tool, "
+                  "which takes one of %s, got %r" % (", ".join(AGENT_MODELS), a.model),
+                  file=sys.stderr)
+            return USAGE
+        if a.effort:
+            print("gt_model_policy: refused -- the Agent tool has no effort parameter, so an "
+                  "agent runs at the session's effort; set --model only", file=sys.stderr)
+            return USAGE
+        return _edit_override(a, {"model": a.model})
     bad = gt_model.effort_problem(a.model, a.effort)
     if bad:
         print("gt_model_policy: refused -- %s" % bad, file=sys.stderr)
@@ -289,13 +354,19 @@ def cmd_clear(a):
 
 def cmd_show(a):
     profile, rows, refused = plan(paths(a.home), None, a.vault)
+    agents = agent_rows(a.home, a.vault)
     if a.json:
-        print(json.dumps({"profile": profile, "skills": rows, "refused": refused}, indent=2))
+        print(json.dumps({"profile": profile, "skills": rows, "agents": agents,
+                          "refused": refused}, indent=2))
         return PROBLEM if refused else OK
-    print("Model profile: %s" % profile)
+    print("Model profile: %s (skills)" % profile)
     for r in rows:
         print("  %-14s %-22s %-8s %-8s %s" % (r["plugin"], r["skill"], r["model"] or "session",
                                              r["effort"] or "-", r["source"]))
+    print("Agents (by task; effort is the session's):")
+    for r in agents:
+        print("  %-14s %-22s %-8s %-8s %s" % ("agent", r["stage"], r["model"] or "session", "-",
+                                             r["source"]))
     for r in refused:
         print("  REFUSED %s" % r)
     return PROBLEM if refused else OK
@@ -327,6 +398,8 @@ def main(argv=None):
         who = p.add_mutually_exclusive_group(required=True)
         who.add_argument("--skill")
         who.add_argument("--plugin")
+        who.add_argument("--agent", help="a specialist agent: a stage (extract) or a job type "
+                         "(extract-docs)")
         if name == "set":
             p.add_argument("--model", required=True)
             p.add_argument("--effort")

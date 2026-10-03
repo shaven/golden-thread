@@ -35,6 +35,13 @@ timestamp alert. Version directories copied from 0.18.1; gt-lotr 0.2.0 (new feat
   `inherit`. Per-skill and per-plugin overrides (`set`/`clear`, re-applied at once); an effort a
   model does not accept is refused, naming the allowed values. Doctor `model-policy` row;
   `gt_model.py skill` reports the installed frontmatter.
+- **Specialist agents run on the model their task needs.** An agent's `model_tier` is no longer
+  advisory: `gt_agent_spec.py model <job>` (and `resolve`, `render --json`) names the alias the
+  skill passes as the Agent tool's `model` — classify and draft haiku, extract and place sonnet,
+  reconcile, verify and generalize opus — whatever profile the skills use, so a very-high machine
+  still reads documents on sonnet. New setting `agent_models` (`task`, the default, or
+  `session` to pass no model). `gt_model_policy.py set|clear --agent <stage or job type>` overrides one (a
+  model alias only: the Agent tool has no effort parameter); `show` lists every stage.
 - **Prompt hints, off by default.** `vault_hints` adds a UserPromptSubmit hook naming at most
   three `index.md` titles relevant to the prompt — never a page body, nothing past 0.8 s.
 - **Supersession and expiry at read time.** `gt_supersede.py listing|rank|dangling`; gt-open lists

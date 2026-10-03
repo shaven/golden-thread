@@ -71,6 +71,12 @@ gt_intake_scan.py over that path (just the `unit`, when one is given) and REFUSE
 unless the scan is clean. The later stages read packets, never material, and may not take a
 `path` input at all. `--template` renders no real input and scans nothing.
 
+THE MODEL IS SET BY THE TASK (0.19.1, owner 2026-10-02). Each spec's `model_tier` is no longer
+advisory: `model JOB` prints the model alias to pass as the Agent tool's `model` (fast haiku,
+standard sonnet, careful opus, or a per-agent override), whatever profile the skills run at --
+see gt_model_policy.agent_model. `session` means pass none. `resolve` and `render --json` carry
+the same answer.
+
 `resolve` NEVER FAILS A SKILL. A missing spec, an invalid spec, or a path no heuristic matches
 all answer `action: inline` with a `notice:` line for the session to show. Exit 2 is kept for
 usage errors (an unknown subcommand, `--skill gt-ingest` with no `--path`).
@@ -706,6 +712,7 @@ def resolve(skill, path=None, vault=None, specs_dir=None):
     """-> dict {skill, job, why, spec, source, tier, action, notice}. Never raises for a
     missing or bad spec: the answer is then `inline`, with a notice."""
     out = {"skill": skill, "job": None, "why": "", "spec": None, "source": None, "tier": None,
+           "model": None, "model_source": None,
            "agent_specialization": setting("agent_specialization"),
            "skeptic_pass": setting("skeptic_pass"), "action": "inline",
            "notice": None, "stage": None, "kind": None,
@@ -762,7 +769,20 @@ def resolve(skill, path=None, vault=None, specs_dir=None):
             return out
     out.update(spec=spec["path"], source=spec["source"], tier=spec["data"]["model_tier"],
                action="spawn")
+    out["model"], out["model_source"] = agent_model(spec, out["job"], vault)
     return out
+
+
+def agent_model(entry, job, vault=None):
+    """-> (model alias or None, why) for a spec entry: what the Agent tool's `model` gets."""
+    try:
+        if HERE not in sys.path:
+            sys.path.insert(0, HERE)
+        import gt_model_policy                           # noqa: E402
+        return gt_model_policy.agent_model(canonical(entry, job), entry.get("stage"),
+                                           entry["data"]["model_tier"], vault=vault)
+    except Exception as exc:                             # noqa: BLE001 - never fail a skill
+        return None, "the session's model (%s)" % _clean(exc, 120)
 
 
 # -- render -------------------------------------------------------------------------------------
@@ -1083,7 +1103,9 @@ def cmd_resolve(a):
                                                                 r["skeptic_pass"]))
     if r["spec"]:
         print("spec:    %s (%s)" % (_clean(r["spec"], 300), r["source"]))
-        print("tier:    %s (advisory: the session's model configuration decides)" % r["tier"])
+        print("tier:    %s" % r["tier"])
+        print("model:   %s (%s; pass it as the Agent tool's model)"
+              % (r["model"] or "session", r["model_source"]))
     print("action:  %s" % r["action"])
     if r["notice"]:
         print("notice:  %s" % r["notice"])
@@ -1133,9 +1155,22 @@ def cmd_render(a):
         info["spec"], info["source"] = spec["path"], spec["source"]
         info["stage"], info["kind"] = spec.get("stage"), spec.get("kind")
         info["alias_of"] = spec.get("alias_of")
+        info["model"], info["model_source"] = agent_model(spec, a.job_type, a.vault)
         print(json.dumps(info, indent=2))
     else:
         sys.stdout.write(text)
+    return 0
+
+
+def cmd_model(a):
+    spec = _spec_or_exit(a.job_type, a.vault, a.specs_dir)
+    model, why = agent_model(spec, a.job_type, a.vault)
+    if a.json:
+        print(json.dumps({"job_type": a.job_type, "tier": spec["data"]["model_tier"],
+                          "model": model, "source": why}))
+    else:
+        print("%s  (%s %s: %s)" % (model or "session", a.job_type,
+                                   spec["data"]["model_tier"], why))
     return 0
 
 
@@ -1188,8 +1223,8 @@ def build_parser():
     ap = argparse.ArgumentParser(
         prog="gt_agent_spec.py",
         description="Stage x kind specs for specialist agents. Every subcommand only reads.")
-    sub = ap.add_subparsers(dest="cmd", metavar="{list,validate,resolve,render,check-output,"
-                                               "spool-path}")
+    sub = ap.add_subparsers(dest="cmd", metavar="{list,validate,resolve,render,model,"
+                                               "check-output,spool-path}")
     sub.required = True
 
     p = sub.add_parser("list", parents=[common], help="the installed specs and their skills")
@@ -1219,6 +1254,12 @@ def build_parser():
     p.add_argument("--json", action="store_true",
                    help="the prompt plus tier, context list and output schema, as JSON")
     p.set_defaults(fn=cmd_render)
+
+    p = sub.add_parser("model", parents=[common],
+                       help="the model to spawn a job type's agent on (the task decides)")
+    p.add_argument("job_type")
+    p.add_argument("--json", action="store_true")
+    p.set_defaults(fn=cmd_model)
 
     p = sub.add_parser("check-output", parents=[common],
                        help="check a spool record against the spec's output schema")

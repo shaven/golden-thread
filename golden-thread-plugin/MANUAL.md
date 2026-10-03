@@ -189,6 +189,19 @@ inherit. Choices live with the install choices and survive reinstalls. The docto
 `gt_model.py skill` reports the installed frontmatter's model and effort when the policy wrote
 them, so `/gt:gt-validate` names what actually runs.
 
+**Specialist agents are set by the task, not the profile.** An agent's spec tier picks its model —
+classify and draft haiku, extract and place sonnet, reconcile, verify and generalize opus —
+whatever profile the skills use. `gt_agent_spec.py model <job>` prints the alias a skill passes as
+the Agent tool's `model` (`resolve` and `render --json` carry it too). The Agent tool takes no
+effort, so agents run at the session's effort, and an agent override is a model only, by stage or
+job type (the job type wins). The `agent_models` setting (`task` default, `session`) turns it off.
+
+```bash
+python3 $SCRIPTS/gt_agent_spec.py model extract-docs                       # sonnet  (… task tier standard -> balanced)
+python3 $SCRIPTS/gt_model_policy.py set --agent extract --model haiku       # every extract-<kind>
+python3 $SCRIPTS/gt_model_policy.py clear --agent extract
+```
+
 ### Supersession and expiry: `gt_supersede.py` (0.19.1)
 
 A note can declare that it replaces an earlier one — `supersedes: <path>` in its frontmatter (a
@@ -2630,6 +2643,7 @@ is registered here and can be switched off.
 | `execution_metrics` | `off` · `on` | `on` | Record one row per execution of tests, release-pipeline steps and gt skills (`gt_metrics.py`); `off` records nothing anywhere (0.18.1) |
 | `scoped_receipts` | `off` · `on` | `on` | On a feature branch, a commit may rely on a scoped receipt from `tests/run.sh --affected`; the default branch and release gates always need a full-suite receipt (0.18.1) |
 | `test_tmpdir` | `off` · `noindex` | `off` | Where the test runner puts throwaway files; `noindex` = `~/Library/Caches/gt-tests.noindex` on macOS, `$XDG_CACHE_HOME/gt-tests` elsewhere (0.18.1) |
+| `agent_models` | `task` · `session` | `task` | Each specialist agent's model set by its task (haiku/sonnet/opus by tier), whatever the skill profile; `session` passes no model (0.19.1). See [Model and effort profiles](#model-and-effort-profiles-gt_model_policypy-0191) |
 | `vault_hints` | `off` · `on` | `off` | Up to three vault page titles relevant to each prompt, from `index.md` only, never a page body (0.19.1). See [Recall benchmark and prompt hints](#recall-benchmark-and-prompt-hints-gt_keyword_recallpy-0191) |
 | `allin_timeout` | `300` · `600` · `1200` · `1800` · `3600` | `300` | Seconds each all-in check may take, in `/gt:gt-allin` and the commit gate (0.19.1); the gate gives the whole run twelve times this |
 | `runners` | empty · comma-separated ssh aliases | empty | Remote hosts that may run tests and calibration: `dev/remote-test.sh`, `prun.py --hosts`, `gt_bench.py --hosts` (0.18.1) |
