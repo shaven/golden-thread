@@ -11,7 +11,7 @@ release's own summary line, kept short rather than reconstructed after the fact.
 
 ---
 
-## gt 0.19.2 — unreleased
+## gt 0.19.2 — 2026-10-03
 
 **gt installs on native Windows** (owner, 2026-10-03). Proven on a Windows 11 VM (Git for
 Windows 2.56.0, Python 3.12.10 from python.org): `install.sh` from Git Bash and the new
