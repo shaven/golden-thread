@@ -26,8 +26,8 @@ import unittest
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
-from _harness import REPO, latest_version_dir
-from _harness import LOTR_POSIX_ONLY, skip_on_windows
+from _harness import IS_WINDOWS, REPO, latest_version_dir
+from _harness import SCRIPTS as GT_SCRIPTS
 
 GW = latest_version_dir(REPO / "golden-thread-lotr")
 SCRIPTS = GW / "scripts"
@@ -93,8 +93,9 @@ def _conn(cid, port, desc="GitHub repos, issues and pull requests"):
             "policy": {"deny": [], "consent": [], "write": [], "read": []}, "enabled": True}
 
 
-@skip_on_windows(LOTR_POSIX_ONLY)
 class GatewayE2E(unittest.TestCase):
+    """Runs on native Windows too (0.3.0): there lotrd serves gt core's named pipe, which the
+    daemon and the CLI / shim find through GT_HOOKS_DIR (gt core of the release under test)."""
     @classmethod
     def setUpClass(cls):
         cls.httpd = ThreadingHTTPServer(("127.0.0.1", 0), FakeGitHub)
@@ -108,7 +109,9 @@ class GatewayE2E(unittest.TestCase):
     def setUp(self):
         os.environ["LOTR_ALLOW_ENV_SECRETS"] = "1"
         os.environ["LOTR_E2E_TOKEN"] = TOKEN
-        self.home = Path(tempfile.mkdtemp(dir="/tmp", prefix="gw"))
+        self._hooks = os.environ.get("GT_HOOKS_DIR")
+        os.environ["GT_HOOKS_DIR"] = str(GT_SCRIPTS)
+        self.home = Path(tempfile.mkdtemp(dir=None if IS_WINDOWS else "/tmp", prefix="gw"))
         # confirm "dialog" uses the injected dialog on every platform; the default "auto" refuses
         # consent off macOS, which is right for the daemon and wrong for a test that injects one.
         (self.home / "gateway.json").write_text(json.dumps(
@@ -125,6 +128,10 @@ class GatewayE2E(unittest.TestCase):
 
     def tearDown(self):
         shutil.rmtree(self.home, ignore_errors=True)
+        if self._hooks is None:
+            os.environ.pop("GT_HOOKS_DIR", None)
+        else:
+            os.environ["GT_HOOKS_DIR"] = self._hooks
 
     # -- engine --------------------------------------------------------------------------
 
@@ -183,7 +190,8 @@ class GatewayE2E(unittest.TestCase):
         self.assertIn("args_sha256", line)
         self.assertNotIn("widgets", log)
         self.assertNotIn(TOKEN, log)
-        self.assertEqual(os.stat(self.home / "state" / "audit.jsonl").st_mode & 0o077, 0)
+        if not IS_WINDOWS:          # no mode bits on Windows; the profile's ACL guards it
+            self.assertEqual(os.stat(self.home / "state" / "audit.jsonl").st_mode & 0o077, 0)
 
     def test_recipe_runs_and_selects(self):
         r = self.engine.call("call_read", "github@personal", "github.my_open_prs", {})
@@ -214,6 +222,16 @@ class GatewayE2E(unittest.TestCase):
         p = subprocess.Popen([PY, str(SCRIPTS / "lotrd.py"), "--home", str(self.home)],
                              env=env, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE)
         sock = self.home / "lotrd.sock"
+        if IS_WINDOWS:                     # the named pipe: wait until the daemon answers
+            from lotrlib.client import Client
+            for _ in range(100):
+                try:
+                    Client.from_home(self.home, timeout=2).request("ping")
+                    break
+                except Exception:          # noqa: BLE001
+                    time.sleep(0.05)
+            self.addCleanup(lambda: (p.terminate(), p.wait(5)))
+            return p
         for _ in range(100):
             if sock.exists():
                 try:

@@ -20,7 +20,7 @@ import sys
 import unittest
 
 from _harness import REPO, latest_version_dir, needs_dev
-from _harness import LOTR_POSIX_ONLY, skip_on_windows
+from _harness import IS_WINDOWS
 
 GW = latest_version_dir(REPO / "golden-thread-lotr")
 SCRIPTS = GW / "scripts"
@@ -29,6 +29,7 @@ SCRIPTS = GW / "scripts"
 STDLIB = {
     "__future__", "argparse", "ast", "base64", "binascii", "collections", "contextlib", "copy", "dataclasses",
     "datetime", "difflib", "errno", "fnmatch", "functools", "getpass", "hashlib", "hmac", "ipaddress", "ipaddress",
+    "importlib", "winreg",
     "http", "io", "itertools", "json", "logging", "math", "os", "pathlib", "platform", "queue",
     "re", "runpy", "secrets", "select", "selectors", "shlex", "shutil", "signal", "socket",
     "socketserver", "ssl", "stat", "string", "struct", "subprocess", "sys", "tempfile",
@@ -36,7 +37,6 @@ STDLIB = {
 }
 
 
-@skip_on_windows(LOTR_POSIX_ONLY)
 class GatewayModule(unittest.TestCase):
     @needs_dev
     def test_valid_module_admits_this_gt_and_is_off_by_default(self):
@@ -75,7 +75,7 @@ class GatewayModule(unittest.TestCase):
     def test_stdlib_only(self):
         offenders = []
         for f in sorted(SCRIPTS.rglob("*.py")):
-            tree = ast.parse(f.read_text(), str(f))
+            tree = ast.parse(f.read_text(encoding="utf-8"), str(f))
             for node in ast.walk(tree):
                 names = []
                 if isinstance(node, ast.Import):
@@ -91,7 +91,7 @@ class GatewayModule(unittest.TestCase):
     def test_mcp_is_the_same_cli_as_lotr(self):
         # Owner, 2026-10-01: "both names work". `mcp` forwards to `lotr`; same output, same exit.
         import tempfile
-        home = tempfile.mkdtemp(dir="/tmp", prefix="lm")
+        home = tempfile.mkdtemp(dir=None if IS_WINDOWS else "/tmp", prefix="lm")
         try:
             outs = []
             for name in ("lotr.py", "mcp.py"):

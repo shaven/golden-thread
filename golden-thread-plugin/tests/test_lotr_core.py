@@ -21,7 +21,7 @@ import unittest
 from pathlib import Path
 
 from _harness import REPO, latest_version_dir
-from _harness import LOTR_POSIX_ONLY, skip_on_windows
+from _harness import IS_WINDOWS, WIN_MODE_BITS, skip_on_windows
 
 
 def _gateway_dir():
@@ -56,7 +56,6 @@ def conn_entry(**over):
     return e
 
 
-@skip_on_windows(LOTR_POSIX_ONLY)
 class TmpBase(unittest.TestCase):
     def setUp(self):
         self._td = tempfile.TemporaryDirectory()
@@ -72,7 +71,7 @@ class TmpBase(unittest.TestCase):
 
     def secret_file(self, name="tok", value=FAKE_VALUE, mode=0o600, newline=True):
         p = self.tmp / name
-        p.write_text(value + ("\n" if newline else ""))
+        p.write_bytes((value + ("\n" if newline else "")).encode("utf-8"))
         os.chmod(p, mode)
         return p
 
@@ -80,6 +79,22 @@ class TmpBase(unittest.TestCase):
         """A stand-in for /usr/bin/security that records its argv and prints `value`."""
         log = self.tmp / "security.argv"
         script = self.tmp / "security"
+        if IS_WINDOWS:
+            # A #! script cannot be exec'd here: the same fake as Python behind a .cmd, which
+            # subprocess runs directly (secrets.py calls SECURITY_BIN with an argv, no shell).
+            py = self.tmp / "security_fake.py"
+            py.write_bytes((
+                "import sys\n"
+                f"open({str(log)!r}, 'w', encoding='utf-8', newline='\\n')"
+                ".write('\\n'.join(sys.argv[1:]) + '\\n')\n"
+                "sys.stderr.write('security: some diagnostic\\n')\n"
+                + (f"sys.stdout.buffer.write(({value!r} + '\\n').encode())\n"
+                   if value is not None else "")
+                + f"sys.exit({exit_code})\n").encode("utf-8"))
+            cmd = self.tmp / "security.cmd"
+            cmd.write_bytes(('@"%s" "%s" %%*\r\n' % (sys.executable, py)).encode("utf-8"))
+            secrets.SECURITY_BIN = str(cmd)
+            return log
         out = f"printf '%s\\n' '{value}'" if value is not None else ":"
         script.write_text("#!/bin/sh\n"
                           f"printf '%s\\n' \"$@\" > '{log}'\n"
@@ -109,6 +124,7 @@ class TestNoSecretLeaks(TmpBase):
                 exc = e
         return exc, out.getvalue(), err.getvalue()
 
+    @skip_on_windows(WIN_MODE_BITS)
     def test_file_perms_error_names_ref_not_value(self):
         p = self.secret_file(mode=0o644)
         ref = f"file:{p}"
@@ -186,10 +202,11 @@ class TestNoSecretLeaks(TmpBase):
 class TestSecrets(TmpBase):
     def test_file_strips_one_trailing_newline(self):
         p = self.tmp / "t"
-        p.write_text("abc\n\n")
+        p.write_bytes(b"abc\n\n")
         os.chmod(p, 0o600)
         self.assertEqual(secrets.resolve(f"file:{p}"), "abc\n")
 
+    @skip_on_windows(WIN_MODE_BITS)
     def test_file_group_or_world_readable_refused(self):
         for mode in (0o640, 0o604, 0o660, 0o606):
             p = self.secret_file(name=f"t{mode:o}", mode=mode)
@@ -208,7 +225,7 @@ class TestSecrets(TmpBase):
     def test_store_uses_store_dir_and_env(self):
         store = self.tmp / "store"
         store.mkdir()
-        (store / "jira").write_text("v1\n")
+        (store / "jira").write_bytes(b"v1\n")
         os.chmod(store / "jira", 0o600)
         self.assertEqual(secrets.resolve("store:jira", store_dir=store), "v1")
         os.environ["LOTR_STORE_DIR"] = str(store)
@@ -250,8 +267,11 @@ class TestSecrets(TmpBase):
 
     def test_unknown_scheme(self):
         with self.assertRaises(GatewayError) as cm:
-            secrets.resolve("vault:x")
+            secrets.resolve("nosuch:x")
         self.assertEqual(cm.exception.code, "secret_ref_invalid")
+        # 0.3.0: vault: (and sealed: sops: op: bw: wincred:) became brokered schemes, resolved
+        # only by gt core's unlock authority (tests/test_lotr_unlock.py).
+        self.assertTrue(secrets.brokered("vault:x"))
 
     def test_describe_file_is_stat_only(self):
         p = self.secret_file()
@@ -349,7 +369,8 @@ class TestRegistry(TmpBase):
         self.assertNotIn("secret", {k for k in c if k != "secret_sha256"})
         path = self.tmp / "r.json"
         reg.save(path)
-        self.assertEqual(stat.S_IMODE(path.stat().st_mode), 0o600)
+        if not IS_WINDOWS:                                   # WIN_MODE_BITS
+            self.assertEqual(stat.S_IMODE(path.stat().st_mode), 0o600)
         reg2 = registry.Registry.load(path)
         self.assertEqual(reg2.authenticate("mbp-shaven", s)["id"], "mbp-shaven")
         with self.assertRaises(GatewayError) as cm:
@@ -470,7 +491,8 @@ class TestAudit(TmpBase):
                      tier="write", tool="call_write", verdict="error", status=500,
                      duration_ms=12)
         path = home / "state" / "audit.jsonl"
-        self.assertEqual(stat.S_IMODE(path.stat().st_mode), 0o600)
+        if not IS_WINDOWS:                                   # WIN_MODE_BITS
+            self.assertEqual(stat.S_IMODE(path.stat().st_mode), 0o600)
         lines = path.read_text().splitlines()
         self.assertEqual(len(lines), 2)
         first, second = (json.loads(l) for l in lines)
@@ -480,6 +502,7 @@ class TestAudit(TmpBase):
         self.assertIsNone(second["args_sha256"])
         self.assertEqual(second["duration_ms"], 12)
 
+    @skip_on_windows(WIN_MODE_BITS)
     def test_tightens_existing_loose_file(self):
         home = self.tmp / "home"
         (home / "state").mkdir(parents=True)

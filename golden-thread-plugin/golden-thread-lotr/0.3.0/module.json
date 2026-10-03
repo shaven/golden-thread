@@ -1,0 +1,24 @@
+{
+  "schema": 1,
+  "name": "lotr",
+  "plugin": "gt-lotr",
+  "version": "0.3.0",
+  "requires_gt": ">=0.20.0,<0.21.0",
+  "summary": "LOTR, one gateway to rule them all: a fixed four-tool MCP surface in front of any number of downstream connections, with a registry of who talks to whom, as whom, from which machine",
+  "default": "off",
+  "skills": [
+    "gt-lotr"
+  ],
+  "scripts": [
+    "lotr.py",
+    "lotrd.py",
+    "lotr_mcp.py",
+    "mcp.py"
+  ],
+  "templates": [],
+  "hooks": [],
+  "hookdir_scripts": [],
+  "settings": [],
+  "requires_modules": [],
+  "replaces_core": []
+}

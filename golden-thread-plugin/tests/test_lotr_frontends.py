@@ -20,7 +20,8 @@ import unittest
 from pathlib import Path
 
 from _harness import REPO, latest_version_dir
-from _harness import LOTR_POSIX_ONLY, skip_on_windows
+from _harness import skip_on_windows
+from _harness import SCRIPTS as GT_SCRIPTS
 
 
 def _gateway_dir():
@@ -36,14 +37,32 @@ SCRIPTS = _gateway_dir() / "scripts"
 sys.path.insert(0, str(SCRIPTS))
 
 from _harness import IS_WINDOWS                 # noqa: E402
-if IS_WINDOWS:
-    # lotrlib.server defines a Unix-domain socket server at import, which Windows' socketserver
-    # does not have; every class below is skipped there with LOTR_POSIX_ONLY.
-    server = Client = None
-else:
-    from lotrlib import server                  # noqa: E402
-    from lotrlib.client import Client           # noqa: E402
+from lotrlib import server                      # noqa: E402
+from lotrlib.client import Client               # noqa: E402
 from lotrlib.errors import GatewayError         # noqa: E402
+
+# 0.3.0: on native Windows lotrd's local door is gt core's named pipe (gt_ipc), found through
+# GT_HOOKS_DIR -- gt core of the release under test. The runner below serves the pipe for the
+# home there, so the CLI and MCP-shim tests run unchanged; the tests of the unix socket's own
+# mechanics skip with this reason.
+WIN_UNIX_SOCKET = ("Unix-domain socket mechanics (raw AF_UNIX clients, a 600 socket file, "
+                   "SIGTERM cleanup); the Windows door is gt_ipc's named pipe, exercised by the "
+                   "CLI / shim tests here and test_lotr_unlock.WindowsPipe")
+_SAVED_HOOKS = []
+
+
+def setUpModule():
+    if IS_WINDOWS:
+        _SAVED_HOOKS.append(os.environ.get("GT_HOOKS_DIR"))
+        os.environ["GT_HOOKS_DIR"] = str(GT_SCRIPTS)
+
+
+def tearDownModule():
+    if IS_WINDOWS and _SAVED_HOOKS:
+        if _SAVED_HOOKS[0] is None:
+            os.environ.pop("GT_HOOKS_DIR", None)
+        else:
+            os.environ["GT_HOOKS_DIR"] = _SAVED_HOOKS[0]
 
 SECRET = "s3cr3t-value-ABCDEFGHIJKLMNOP"
 
@@ -95,7 +114,7 @@ class FakeRegistry:
 
 
 def _sockdir():
-    return tempfile.mkdtemp(prefix="gw", dir="/tmp")
+    return tempfile.mkdtemp(prefix="gw", dir=None if IS_WINDOWS else "/tmp")
 
 
 class _UnixRunner:
@@ -109,6 +128,10 @@ class _UnixRunner:
 
     def _run(self):
         try:
+            if IS_WINDOWS:     # the pipe for the home the socket would have lived in
+                server.serve_pipe(lambda: self.engine, os.path.dirname(self.sock),
+                                  stop_event=self.stop, on_ready=lambda p: self.ready.set())
+                return
             server.serve_unix(lambda: self.engine, self.sock, stop_event=self.stop,
                               on_ready=lambda p: self.ready.set())
         except Exception as e:                # noqa: BLE001
@@ -167,7 +190,7 @@ def _auth(cid="mbp", secret=SECRET):
             "Content-Type": "application/json"}
 
 
-@skip_on_windows(LOTR_POSIX_ONLY)
+@skip_on_windows(WIN_UNIX_SOCKET)
 class UnixServerTests(unittest.TestCase):
     def setUp(self):
         self.dir = _sockdir()
@@ -272,7 +295,6 @@ class UnixServerTests(unittest.TestCase):
             t.join(5)
 
 
-@skip_on_windows(LOTR_POSIX_ONLY)
 class HttpServerTests(unittest.TestCase):
     def test_auth_codes(self):
         with _HttpRunner() as h:
@@ -352,7 +374,6 @@ class HttpServerTests(unittest.TestCase):
         self.assertNotIn(SECRET, str(cm.exception.to_dict()))
 
 
-@skip_on_windows(LOTR_POSIX_ONLY)
 class ClientTests(unittest.TestCase):
     def test_daemon_down_is_daemon_unreachable(self):
         home = Path(_sockdir())
@@ -383,7 +404,6 @@ def _run(script, *args, inp=None, env=None, timeout=30):
                           capture_output=True, text=True, timeout=timeout, env=e)
 
 
-@skip_on_windows(LOTR_POSIX_ONLY)
 class CliTests(unittest.TestCase):
     def setUp(self):
         self.home = Path(_sockdir())
@@ -434,7 +454,8 @@ class CliTests(unittest.TestCase):
         p = _run("lotr.py", "--home", str(home), "init", "--zone", "work", "--mode", "hub")
         self.assertEqual(p.returncode, 0, p.stdout + p.stderr)
         for name in ("gateway.json", "registry.json"):
-            self.assertEqual(stat.S_IMODE((home / name).stat().st_mode), 0o600, name)
+            if not IS_WINDOWS:                                       # WIN_MODE_BITS
+                self.assertEqual(stat.S_IMODE((home / name).stat().st_mode), 0o600, name)
         cfg = json.loads((home / "gateway.json").read_text())
         self.assertEqual((cfg["zone"], cfg["mode"]), ("work", "hub"))
         reg = json.loads((home / "registry.json").read_text())
@@ -444,7 +465,8 @@ class CliTests(unittest.TestCase):
         self.assertEqual(json.loads(p.stdout)["error"]["code"], "not_implemented")
 
     def _registry_available(self):
-        return (SCRIPTS / "lotr" / "registry.py").is_file()
+        # 0.3.0: the path said lotr/ (never existed), so this test always skipped; lotrlib/.
+        return (SCRIPTS / "lotrlib" / "registry.py").is_file()
 
     def test_enroll_never_prints_secret(self):
         if not self._registry_available():
@@ -457,7 +479,8 @@ class CliTests(unittest.TestCase):
         self.assertEqual(p.returncode, 0, p.stdout + p.stderr)
         secret = out.read_text().strip()
         self.assertGreaterEqual(len(secret), 20)
-        self.assertEqual(stat.S_IMODE(out.stat().st_mode), 0o600)
+        if not IS_WINDOWS:                                           # WIN_MODE_BITS
+            self.assertEqual(stat.S_IMODE(out.stat().st_mode), 0o600)
         self.assertNotIn(secret, p.stdout)
         self.assertNotIn(secret, p.stderr)
         self.assertNotIn(secret, (home / "registry.json").read_text())
@@ -487,7 +510,6 @@ class CliTests(unittest.TestCase):
         self.assertFalse((self.home / "x.secret").exists())
 
 
-@skip_on_windows(LOTR_POSIX_ONLY)
 class DaemonTests(unittest.TestCase):
     def test_refuses_client_and_hybrid_modes(self):
         home = Path(_sockdir())
@@ -498,6 +520,7 @@ class DaemonTests(unittest.TestCase):
             self.assertEqual(p.returncode, 1)
             self.assertEqual(json.loads(p.stderr)["error"]["code"], code)
 
+    @skip_on_windows(WIN_UNIX_SOCKET)
     def test_sigterm_removes_socket(self):
         home = Path(_sockdir())
         self.addCleanup(shutil.rmtree, home, True)
@@ -522,7 +545,6 @@ class DaemonTests(unittest.TestCase):
             proc.stderr.close()
 
 
-@skip_on_windows(LOTR_POSIX_ONLY)
 class McpShimTests(unittest.TestCase):
     def setUp(self):
         self.home = Path(_sockdir())
@@ -565,7 +587,7 @@ class McpShimTests(unittest.TestCase):
         self.assertEqual(sorted(by_id), [1, 2, 3, 4, 5, 6], "a notification got a reply")
         init = by_id[1]["result"]
         self.assertEqual(init["protocolVersion"], "2025-11-25")
-        self.assertEqual(init["serverInfo"], {"name": "gt-lotr", "version": "0.1.0"})
+        self.assertEqual(init["serverInfo"], {"name": "gt-lotr", "version": "0.3.0"})
         self.assertEqual(init["capabilities"], {"tools": {"listChanged": False}})
         self.assertIn("CATALOG", init["instructions"])
 

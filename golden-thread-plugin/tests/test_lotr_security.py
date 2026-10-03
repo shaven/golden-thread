@@ -21,7 +21,7 @@ import unittest
 from pathlib import Path
 
 from _harness import REPO, latest_version_dir
-from _harness import LOTR_POSIX_ONLY, skip_on_windows
+from _harness import WIN_MODE_BITS, skip_on_windows
 
 GW = latest_version_dir(REPO / "golden-thread-lotr")
 sys.path.insert(0, str(GW / "scripts"))
@@ -29,12 +29,13 @@ sys.path.insert(0, str(GW / "scripts"))
 from lotrlib import confirm as confirm_mod  # noqa: E402
 from lotrlib.errors import GatewayError  # noqa: E402
 from _harness import IS_WINDOWS  # noqa: E402
-if IS_WINDOWS:
-    # lotrlib.server defines a Unix-domain socket server at import, which Windows' socketserver
-    # does not have; every class below is skipped there with LOTR_POSIX_ONLY.
-    is_loopback = peer_uid = serve_http = serve_unix = None
-else:
-    from lotrlib.server import is_loopback, peer_uid, serve_http, serve_unix  # noqa: E402
+from lotrlib.server import is_loopback, peer_uid, serve_http, serve_unix  # noqa: E402
+
+# The unix socket's own mechanics. On native Windows lotrd's door is gt core's named pipe
+# (user-SID DACL, remote clients rejected, first instance only), pinned in
+# test_lotr_unlock.WindowsPipe and the e2e tests, which run there.
+WIN_UNIX_SOCKET = ("Unix-domain socket mechanics (peer uid, a 600 socket in a 700 dir); the "
+                   "Windows door is gt_ipc's named pipe, tested in test_lotr_unlock.WindowsPipe")
 
 
 class FakeConn:
@@ -49,7 +50,7 @@ class FakeConn:
 
 
 def _home(local=None):
-    home = Path(tempfile.mkdtemp(dir="/tmp", prefix="gws"))
+    home = Path(tempfile.mkdtemp(dir=None if IS_WINDOWS else "/tmp", prefix="gws"))
     g = {"schema": 1, "zone": "personal", "mode": "local"}
     if local is not None:
         g["local"] = local
@@ -76,18 +77,19 @@ def _engine(home, dialog=lambda t: True):
 MERGE = {"owner": "a", "repo": "b", "pull_number": 1}
 
 
-@skip_on_windows(LOTR_POSIX_ONLY)
 class PrivateFiles(unittest.TestCase):
     def setUp(self):
         self.home = _home()
         self.addCleanup(shutil.rmtree, self.home, True)
 
+    @skip_on_windows(WIN_MODE_BITS)
     def test_world_readable_registry_is_refused(self):
         os.chmod(self.home / "registry.json", 0o644)
         with self.assertRaises(GatewayError) as c:
             _engine(self.home)
         self.assertEqual(c.exception.code, "insecure_perms")
 
+    @skip_on_windows(WIN_MODE_BITS)
     def test_group_readable_home_is_refused(self):
         os.chmod(self.home, 0o750)
         with self.assertRaises(GatewayError) as c:
@@ -98,7 +100,7 @@ class PrivateFiles(unittest.TestCase):
         self.assertTrue(_engine(self.home).find("")["ok"])
 
 
-@skip_on_windows(LOTR_POSIX_ONLY)
+@skip_on_windows(WIN_UNIX_SOCKET)
 class Socket(unittest.TestCase):
     def test_peer_uid_identifies_this_process(self):
         d = tempfile.mkdtemp(dir="/tmp")
@@ -138,7 +140,6 @@ class Socket(unittest.TestCase):
             t.join(5)
 
 
-@skip_on_windows(LOTR_POSIX_ONLY)
 class HubListen(unittest.TestCase):
     def test_non_loopback_without_tls_is_refused(self):
         with self.assertRaises(GatewayError) as c:
@@ -153,7 +154,6 @@ class HubListen(unittest.TestCase):
             self.assertFalse(is_loopback(h), h)
 
 
-@skip_on_windows(LOTR_POSIX_ONLY)
 class LocalPolicy(unittest.TestCase):
     def tearDown(self):
         shutil.rmtree(getattr(self, "home", ""), True) if hasattr(self, "home") else None
@@ -172,7 +172,6 @@ class LocalPolicy(unittest.TestCase):
         self.assertEqual(r["error"]["code"], "tier_ceiling")
 
 
-@skip_on_windows(LOTR_POSIX_ONLY)
 class ConsentConfirmation(unittest.TestCase):
     def setUp(self):
         FakeConn.calls = []

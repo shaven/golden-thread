@@ -21,7 +21,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
 from _harness import REPO, latest_version_dir
-from _harness import LOTR_POSIX_ONLY, skip_on_windows
+from _harness import IS_WINDOWS, WIN_MODE_BITS, skip_on_windows
 
 GW = latest_version_dir(REPO / "golden-thread-lotr")
 sys.path.insert(0, str(GW / "scripts"))
@@ -93,7 +93,6 @@ def _makeFakeMcp():
     return FakeMcp
 
 
-@skip_on_windows(LOTR_POSIX_ONLY)
 class McpBase(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
@@ -107,7 +106,7 @@ class McpBase(unittest.TestCase):
         cls.httpd.server_close()
 
     def setUp(self):
-        self.tmp = Path(tempfile.mkdtemp(dir="/tmp", prefix="lotrmcp"))
+        self.tmp = Path(tempfile.mkdtemp(dir=None if IS_WINDOWS else "/tmp", prefix="lotrmcp"))
         self.tokens = self.tmp / "client-tokens.json"
         self.write_tokens(FRESH)
         self.httpd.valid, self.httpd.sse, self.httpd.seen = FRESH, False, []
@@ -155,6 +154,7 @@ class FileJsonFieldRef(McpBase):
         self.assertEqual(cm.exception.code, "secret_missing")
         self.assertNoToken(json.dumps(cm.exception.to_dict()))
 
+    @skip_on_windows(WIN_MODE_BITS)
     def test_a_group_readable_token_file_is_refused(self):
         os.chmod(self.tokens, 0o640)
         with self.assertRaises(GatewayError) as cm:
@@ -309,8 +309,8 @@ class AddMcpCommand(McpBase):
                             "--endpoint", "http://127.0.0.1:%d/mcp" % self.port,
                             "--identity", "me @ fake",
                             "--auth-ref", "file:%s#access_token" % self.tokens,
-                            "--refresh-cmd", "%s %s %s" % (sys.executable, self.refresh,
-                                                           self.tokens))
+                            "--refresh-cmd", _cmdline([sys.executable, str(self.refresh),
+                                                       str(self.tokens)]))
         self.assertEqual(p.returncode, 0, p.stdout + p.stderr)
         reg = json.loads((home / "registry.json").read_text())
         (c,) = reg["connections"]
@@ -325,6 +325,14 @@ class AddMcpCommand(McpBase):
                             "--identity", "me", "--auth-ref", FRESH)
         self.assertNotEqual(p.returncode, 0)
         self.assertNoToken(p.stdout + p.stderr + (home / "registry.json").read_text())
+
+
+def _cmdline(argv):
+    """One command line, quoted the way this platform's lotr parses --refresh-cmd."""
+    if IS_WINDOWS:
+        return subprocess.list2cmdline(argv)
+    import shlex
+    return " ".join(shlex.quote(a) for a in argv)
 
 
 if __name__ == "__main__":
