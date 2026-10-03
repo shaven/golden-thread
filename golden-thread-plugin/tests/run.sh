@@ -23,7 +23,7 @@
 set -uo pipefail
 cd "$(dirname "$0")"
 
-# Native Windows (0.19.3): in Git Bash `python3` is the Microsoft Store stub. Resolve a real
+# Native Windows (0.20.0): in Git Bash `python3` is the Microsoft Store stub. Resolve a real
 # interpreter the way the hooks do -- the newest release's hooks/gt_python.sh, which skips
 # anything under ...\WindowsApps\ and is a no-op on macOS and Linux.
 case "${OSTYPE:-}" in

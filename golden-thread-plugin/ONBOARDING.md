@@ -5,7 +5,7 @@
 
 A guided walkthrough for your first session. Six steps, ~15 minutes.
 
-**Requirements:** Python 3.8+, Claude Code installed. Written against **gt v0.19.3**.
+**Requirements:** Python 3.8+, Claude Code installed. Written against **gt v0.20.0**.
 
 ---
 
@@ -212,6 +212,25 @@ they just stop outranking live work.
 ```
 
 ---
+
+## Optional: require your presence (gt unlock)
+
+gt unlock ships **off**, and the installer says so once. Turned on, the assistant needs you —
+TOTP from your phone plus Touch ID (macOS) or Windows Hello — before it uses LOTR connections,
+credentials, publishing or gt's own guards; ordinary vault work is never gated. In your own
+terminal:
+
+```bash
+U=~/.claude/golden-thread/hooks/gt_unlock.py
+python3 $U enroll touchid      # macOS (Windows: hello; Linux: skip)
+python3 $U enroll totp         # scan the QR code, type one code
+python3 $U recovery            # ten one-time codes: store them offline
+python3 $U policy enable       # proves the factors work, then turns it on
+python3 $U verify              # the level this machine runs at, check by check
+```
+
+It is not anti-malware: something already running as you can wait for you to unlock.
+[`SECURITY.md`](SECURITY.md) says exactly what it stops and what it does not.
 
 ## Adding a knowledge base (gt-wiki)
 

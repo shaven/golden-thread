@@ -118,10 +118,13 @@ th, td { border:1px solid #ddd; padding:3px 5px; text-align:left; vertical-align
 <p><strong>Reader:</strong> a daily user — the deepest document, where the <em>why</em> lives
 <strong>Claims last checked against the code:</strong> 2026-10-02 (gt 0.19.1) — see <em>The documents, and what belongs in each</em> in <a href="../CLAUDE.md"><code>CLAUDE.md</code></a>.</p>
 </blockquote>
-<p>Complete reference for gt's thirty-six skills and its nine modules. Written against <strong>gt v0.19.3</strong>
-(gt-wiki 0.2.6; gt-usage 0.1.5; gt-demo, gt-watch, gt-report-card, gt-farm and gt-flow 0.19.3; gt-visualize 0.4.3;
-gt-lotr 0.2.0 — the five named with 0.19.3 are versioned with gt and move with every release, changed or not).</p>
+<p>Complete reference for gt's thirty-six skills and its nine modules. Written against <strong>gt v0.20.0</strong>
+(gt-wiki 0.2.7; gt-usage 0.1.6; gt-demo, gt-watch, gt-report-card, gt-farm and gt-flow 0.20.0; gt-visualize 0.4.4;
+gt-lotr 0.3.0 — the five named with 0.20.0 are versioned with gt and move with every release, changed or not).</p>
 <blockquote>
+<p><strong>0.20.0 adds gt unlock</strong>, off by default: agents need your presence (TOTP + Touch ID /
+Windows Hello, optionally Entra ID) for LOTR, credentials, publishing and gt's own guards.
+See <a href="#security-gt-unlock-0200">Security: gt unlock</a> and <a href="SECURITY.md"><code>SECURITY.md</code></a>.</p>
 <p><strong>0.18.1 renamed the task and handoff skills to verbs</strong> — <code>gt-create</code>, <code>gt-open</code>, <code>gt-list</code>,
 <code>gt-handle</code>, <code>gt-close</code>, each taking the artifact as its argument. The old names (<code>gt-task</code>,
 <code>gt-handoff</code>, <code>gt-task-list</code>, <code>gt-handoff-list</code>, <code>gt-task-handle</code>, <code>gt-handoff-handle</code>) still work
@@ -2262,6 +2265,200 @@ configuration (<code>farm_services</code> in <code>vault-config.json</code> name
 packet uses whichever clipboard tool the machine has — <code>pbcopy</code>, <code>wl-copy</code>, <code>xclip</code> or
 <code>clip.exe</code> — and with none, you are given the packet file's path instead.</p>
 <hr />
+<h2 id="security-gt-unlock-0200">Security: gt unlock (0.20.0)</h2>
+<p><strong>Off by default.</strong> Turned on, gt's unlock authority (<code>gt_unlockd.py</code>, one per user, started on
+demand) decides which processes may use LOTR connections, sealed and brokered credentials,
+publish credentials and gt's own guards, after you prove you are present. <code>SECURITY.md</code> is the
+full guide — setup per platform, the threat model, what each level does <strong>not</strong> protect, the
+enterprise admin floor, recovery. This section is the reference.</p>
+<blockquote>
+<p><em>"Unlock proves a person was present and limits what agents can do on their own. It is not
+anti-malware. If something already runs as you, it can wait for you to unlock."</em></p>
+</blockquote>
+<h3 id="levels">Levels</h3>
+<table>
+<thead>
+<tr>
+<th>Level</th>
+<th>Means</th>
+<th><code>gt_unlock.py status</code> says</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>off</td>
+<td>nothing gated (default)</td>
+<td><code>unlock: off</code></td>
+</tr>
+<tr>
+<td>L1</td>
+<td>TOTP / SSO only: stops agents and accidents, not malware running as you</td>
+<td><code>level L1</code></td>
+</tr>
+<tr>
+<td>L2</td>
+<td>Touch ID or Windows Hello required in every unlock; credentials sealed under that key</td>
+<td><code>level L2</code></td>
+</tr>
+<tr>
+<td>L3</td>
+<td>authority as a service account, admin-owned code and policy</td>
+<td>not shipped in 0.20.0</td>
+</tr>
+</tbody>
+</table>
+<h3 id="gt_unlockpy"><code>gt_unlock.py</code></h3>
+<table>
+<thead>
+<tr>
+<th>Command</th>
+<th>Does</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>enroll touchid\|hello\|totp\|sso</code></td>
+<td>Adds a factor. The first factor on a Mac or Windows machine must be the platform one (it needs your finger or PIN); every later enrolment change needs your current factors ("step-up + K"). <code>totp</code> shows a terminal QR code and the secret once, then asks for one valid code before saving</td>
+</tr>
+<tr>
+<td><code>unenroll FACTOR</code>, <code>recovery</code></td>
+<td>Removes a factor; prints ten new one-time recovery codes (shown once)</td>
+</tr>
+<tr>
+<td><code>policy show\|enable\|disable\|set FILE\|approve</code></td>
+<td>Reads or changes the policy through the authority, which asks for your factors first. <code>approve</code> re-trusts a <code>policy.json</code> edited outside gt (until then everything gated is locked)</td>
+</tr>
+<tr>
+<td><code>policy consent none\|platform [--window S]</code></td>
+<td>Consent-tier LOTR operations: LOTR's own confirmation (<code>none</code>), or a Touch ID / Hello approval valid for S seconds (<code>platform</code>)</td>
+</tr>
+<tr>
+<td><code>policy unattended add\|remove JOB SCOPE</code></td>
+<td>The allow-list for scheduled jobs: one narrow read scope (<code>lotr:&lt;conn&gt;:read</code>) or one credential (<code>secret:&lt;ref&gt;</code>) per entry; write, consent, publish and gt scopes are refused</td>
+</tr>
+<tr>
+<td><code>policy sso --client-id ID [--tenant T] [--pin-subject OID]</code></td>
+<td>Points Entra sign-in at your app registration</td>
+</tr>
+<tr>
+<td><code>unlock [--scope S] [--recovery]</code>, <code>lock</code></td>
+<td>Grants this session (or <code>--session PID</code>) after the factors; revokes every grant</td>
+</tr>
+<tr>
+<td><code>check --scope S [--request]</code></td>
+<td>Exit 0 allowed, 10 locked, 11 needs a fresh confirmation, 12 refused — for your own scripts (convenience only: it stops nothing on its own)</td>
+</tr>
+<tr>
+<td><code>run --scope S [--secret-file VAR=REF] [--env VAR=REF] -- CMD</code></td>
+<td>Runs CMD after a grant; secrets by a 600 file deleted afterwards (<code>--env</code> is weaker and says so)</td>
+</tr>
+<tr>
+<td><code>seal put\|list\|rm NAME</code>, <code>seal migrate REF --name N [--remove-source]</code></td>
+<td>The sealed store (<code>sealed:</code> refs); values on stdin, never argv</td>
+</tr>
+<tr>
+<td><code>secret get REF [--out FILE]</code></td>
+<td>One secret to a pipe or a 600 file; refuses a terminal</td>
+</tr>
+<tr>
+<td><code>git-credential get</code>, <code>aws-credential --ref REF</code></td>
+<td>git's credential helper and AWS <code>credential_process</code>, under <code>gt:publish</code></td>
+</tr>
+<tr>
+<td><code>status</code>, <code>verify</code>, <code>audit [-n N]</code>, <code>daemon start\|stop\|status</code></td>
+<td>State and level; the self-check (PASS / FAIL / NOT-CHECKED, never "secure"); the audit log; the authority</td>
+</tr>
+<tr>
+<td><code>register</code>, <code>revoke</code>, <code>hook session-start\|session-end</code></td>
+<td>Used by the SessionStart / SessionEnd hooks and the LOTR shim</td>
+</tr>
+</tbody>
+</table>
+<h3 id="what-is-gated">What is gated</h3>
+<table>
+<thead>
+<tr>
+<th>Action</th>
+<th>Scope</th>
+<th>Default level</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>LOTR read / write / consent</td>
+<td><code>lotr:&lt;conn&gt;:read\|write\|consent</code></td>
+<td>reads open (<code>read_without_unlock</code>), writes and consent need the grant; LOTR's consent confirmation still runs</td>
+</tr>
+<tr>
+<td>Editing <code>~/.claude/settings.json</code>, <code>vault-config.json</code>, <code>~/.claude/golden-thread/</code></td>
+<td><code>gt:settings:hooks</code></td>
+<td>fresh confirmation (<code>guard_protected_paths</code>, before the <code>protected_paths</code> switch)</td>
+</tr>
+<tr>
+<td><code>gt_settings.py set</code> of <code>protected_paths</code>, <code>test_gate</code>, <code>foreign_checkout_guard</code>, <code>component_updates</code>, <code>commit_checks</code>, <code>addon_fixes</code>, <code>unlock</code></td>
+<td><code>gt:settings:security</code></td>
+<td>fresh confirmation</td>
+</tr>
+<tr>
+<td>Policy and enrolment changes</td>
+<td><code>gt:unlock:*</code></td>
+<td>your K factors, fresh</td>
+</tr>
+<tr>
+<td>Reading a secret ref through the broker</td>
+<td><code>gt:secrets</code></td>
+<td>the grant</td>
+</tr>
+<tr>
+<td>Publishing credentials (git helper, AWS)</td>
+<td><code>gt:publish</code></td>
+<td>the grant</td>
+</tr>
+<tr>
+<td>LOTR hub client enrol / revoke</td>
+<td><code>gt:hub:enroll</code></td>
+<td>fresh confirmation</td>
+</tr>
+<tr>
+<td>Opening a locked vault file</td>
+<td><code>gt:lock:&lt;folder&gt;</code></td>
+<td>the grant</td>
+</tr>
+<tr>
+<td>Ordinary vault work, lint, daily notes, model settings</td>
+<td>—</td>
+<td>never gated</td>
+</tr>
+</tbody>
+</table>
+<p>With unlock on and the authority unreachable, these <strong>fail closed</strong> — the one deliberate
+exception to gt's fail-open hooks. With unlock off nothing here runs beyond two <code>stat()</code> calls.</p>
+<h3 id="factors-grants-files">Factors, grants, files</h3>
+<p>Factors: <code>totp</code> (RFC 6238; each code once; lockouts 1/5/15 min; typed into a dialog the
+authority raises), <code>touchid</code> (<code>gt-presence</code>, Secure Enclave, ES256 checked in Python),
+<code>hello</code> (<code>gt_unlock_hello.ps1</code>, TPM, RS256 checked in Python), <code>sso</code> (Entra ID, PKCE +
+loopback, ID token checked in Python), <code>recovery</code> (one code = one factor, forces re-enrolment).
+Defaults when on: 2 factors including Touch ID (macOS) / Hello (Windows); 1 (TOTP) on Linux.
+A grant is held in memory, bound to the session's <code>claude</code> process (LOTR scopes only to its
+registered MCP shim: <code>door: mcp_only</code>), and ends after 15 min idle, 8 h, the shim or session
+ending, screen lock, sleep, clock rollback, <code>lock</code> or an authority restart.</p>
+<p>State lives in <code>~/.claude/golden-thread/unlock/</code> (700): <code>policy.json</code>, <code>enrolment.json</code> (public
+keys only), <code>state.json</code> (TOTP replay/lockout, policy approval), <code>totp.seed</code>, <code>recovery.json</code>
+(hashes), <code>sealed/</code>, <code>audit.jsonl</code>. The administrator floor: <code>/Library/Application Support/gt/
+unlock-policy.json</code>, <code>%ProgramData%\gt\unlock-policy.json</code> or <code>HKLM\SOFTWARE\Policies\gt
+\UnlockPolicy</code>, <code>/etc/gt/unlock-policy.json</code> — it only tightens, and an unverifiable one
+locks everything.</p>
+<h3 id="folder-locks-gt_lockpy">Folder locks: <code>gt_lock.py</code></h3>
+<p><code>gt_lock.py add|open|restore|status --vault V</code> locks chosen vault files with age (<code>.age</code> +
+a <code>.gt-locked</code> note), opens them to a pipe under <code>gt:lock:&lt;folder&gt;</code>, and reports each lock's
+real level (L1 with a plaintext age identity, L2 with a hardware one). <code>core-rules/</code> and
+<code>global-memory/</code> are refused in code. Lint, tasks, recall and vault hints treat a locked folder
+as absent and say so once.</p>
+<h3 id="helpers">Helpers</h3>
+<p><code>gt_unlock_touchid.py build --dest DIR</code> compiles the Touch ID helper (<code>install.sh</code> runs it on
+macOS when the Xcode Command Line Tools are present). <code>gt_unlock_hello.py available|selftest</code>
+checks Windows Hello at the console. Doctor rows <code>unlock</code> and <code>security</code> report the state and
+run <code>verify</code>.</p>
 <h2 id="reaching-other-systems">Reaching other systems</h2>
 <p>A session that needs GitHub, Jira, Microsoft 365 or another REST API would otherwise carry one
 MCP server per system, hundreds of operations in its context, and a token per server. The <code>lotr</code>
@@ -3169,6 +3366,12 @@ is registered here and can be switched off.</p>
 <td><code>off</code> · <code>on</code></td>
 <td><code>on</code></td>
 <td>At session start, one line counting <code>p:: 1</code> tasks waiting on you — how many overdue, how many open over a week — with the commands to list and work them (0.17.2). A count, never the tasks; deferred tasks are not counted until their date</td>
+</tr>
+<tr>
+<td><code>unlock</code></td>
+<td><code>off</code> · <code>on</code></td>
+<td><code>off</code></td>
+<td>gt unlock (0.20.0): agents need your presence for LOTR, credentials, publishing and gt's guards. The source of truth is the unlock policy, not vault-config.json: <code>set unlock on\|off</code> runs <code>gt_unlock.py policy enable\|disable</code>, which needs your enrolled factors. See <a href="#security-gt-unlock-0200">Security: gt unlock</a></td>
 </tr>
 <tr>
 <td><code>protected_paths</code></td>

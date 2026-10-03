@@ -20,6 +20,8 @@ from _harness import Sandbox, SCRIPTS, load_module, WATCH, REPORT_CARD
 
 TOOL = SCRIPTS / "gt_settings.py"
 EXPECTED = {
+    # 0.20.0: gt unlock, off by default; its source of truth is the unlock policy file.
+    "unlock": ("off", ["off", "on"]),
     "component_updates": ("report", ["off", "report", "confirm", "auto"]),
     "version_check": ("report", ["off", "report"]),
     "orphan_check": ("report", ["off", "report", "reap"]),

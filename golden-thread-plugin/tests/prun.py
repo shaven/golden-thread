@@ -123,7 +123,7 @@ def run_unit(unit):
     out = (p.stdout or "") + (p.stderr or "")
     m = COUNT.search(out)
     rc = p.returncode
-    # (0.19.3) Python 3.12+ exits 5 when a unit ran no tests; a helper base class (WatchTest,
+    # (0.20.0) Python 3.12+ exits 5 when a unit ran no tests; a helper base class (WatchTest,
     # ChooseCase...) is exactly that, and older Pythons exit 0 for it, as the note in
     # classes_in() assumes. Only the "no tests" exit is forgiven, never a real failure.
     if rc == 5 and "NO TESTS RAN" in out and not (m and int(m.group(1))):

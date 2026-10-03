@@ -1,7 +1,7 @@
-"""Modules that cannot run on native Windows are off there, said in words (0.19.3).
+"""Modules that cannot run on native Windows are off there, said in words (0.20.0).
 
 gt-lotr is a gateway served on a Unix-domain socket, its clients authenticated by peer uid and
-its secrets protected by 0600 permission bits; Windows has none of the three. Before 0.19.3
+its secrets protected by 0600 permission bits; Windows has none of the three. Before 0.20.0
 `install.sh --with lotr` on Windows installed it, and the first command died on os.fchmod. Now
 gt_components.module_detail (which install.sh and gt_doctor both read) turns it off on Windows,
 whatever was chosen, and leaves the recorded choice alone. The lotr tests skip on Windows for
@@ -21,11 +21,26 @@ class PosixOnlyModules(Sandbox):
         self.m._native_windows = lambda: windows
         return self.m.module_detail(str(REPO), home=str(self.home), **kw)
 
-    def test_lotr_is_off_on_windows_even_when_chosen(self):
+    def test_lotr_before_0_3_0_is_off_on_windows_even_when_chosen(self):
+        self.assertTrue(self.m.posix_only("lotr", "0.2.0"))
+        real = self.m.discover_modules
+
+        def old_lotr(root):
+            mods = real(root)
+            for m in mods:
+                if m["name"] == "lotr":
+                    m["data"] = dict(m["data"], version="0.2.0")
+            return mods
+        self.m.discover_modules = old_lotr
         d = self.detail(True, with_=("lotr",))["lotr"]
         self.assertEqual(d["state"], "off")
         self.assertTrue(d["reason"].startswith("POSIX-only"), d["reason"])
         self.assertIn("Unix-domain-socket", d["reason"])
+
+    def test_lotr_0_3_0_runs_on_windows_over_the_named_pipe(self):
+        """0.20.0: gt-lotr 0.3.0 has a Windows front door (gt_ipc named pipe)."""
+        self.assertFalse(self.m.posix_only("lotr", "0.3.0"))
+        self.assertEqual(self.detail(True, with_=("lotr",))["lotr"]["state"], "on")
 
     def test_off_windows_the_choice_stands(self):
         self.assertEqual(self.detail(False, with_=("lotr",))["lotr"]["state"], "on")

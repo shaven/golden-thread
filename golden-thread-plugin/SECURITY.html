@@ -1,0 +1,523 @@
+<!DOCTYPE html><html lang='en'><head><meta charset='utf-8'><title>Golden Thread — Security guide (gt unlock)</title><style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
+    font-size: 13.5px;
+    line-height: 1.65;
+    color: #1a1a1a;
+    background: #fff;
+  }
+
+  /* ── Cover ── */
+  .cover {
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: flex-start;
+    padding: 72px 80px;
+    background: #0f1117;
+    color: #fff;
+    page-break-after: always;
+  }
+  .cover .kicker {
+    font-size: 11px; font-weight: 600; letter-spacing: .15em;
+    text-transform: uppercase; color: #7c8cff; margin-bottom: 28px;
+  }
+  .cover h1 { font-size: 46px; font-weight: 700; line-height: 1.1; max-width: 600px; margin-bottom: 20px; }
+  .cover .subtitle { font-size: 18px; color: #9ba0b4; max-width: 500px; margin-bottom: 56px; line-height: 1.5; }
+  .cover .meta { font-size: 12px; color: #555d7a; border-top: 1px solid #1e2236; padding-top: 20px; width: 100%; }
+
+  /* ── Page body ── */
+  .page { max-width: 760px; margin: 0 auto; padding: 64px 64px 80px; }
+  .toc-page { page-break-after: always; }
+
+  /* ── TOC ── */
+  .toc h2 { font-size: 11px; font-weight: 600; letter-spacing: .12em; text-transform: uppercase; color: #7c8cff; margin-bottom: 28px; }
+  .toc ol { list-style: none; counter-reset: toc; }
+  .toc > ol > li { counter-increment: toc; border-bottom: 1px solid #f0f0f0; padding: 10px 0; }
+  .toc > ol > li::before { content: counter(toc, decimal-leading-zero); font-size: 11px; font-weight: 600; color: #9ba0b4; margin-right: 14px; font-variant-numeric: tabular-nums; }
+  .toc > ol > li > a { font-size: 14px; font-weight: 600; color: #1a1a1a; text-decoration: none; }
+  .toc-sub { list-style: none; padding-left: 30px; margin-top: 4px; }
+  .toc-sub li { font-size: 12.5px; color: #555; padding: 2px 0; }
+  .toc-sub li::before { content: "—  "; color: #ccc; }
+
+  /* ── Typography ── */
+  h1.section-title { font-size: 28px; font-weight: 700; color: #0f1117; margin-bottom: 8px; padding-top: 8px; }
+  .section-rule { border: none; border-top: 2px solid #7c8cff; width: 48px; margin-bottom: 28px; }
+  h2 { font-size: 17px; font-weight: 700; color: #0f1117; margin-top: 36px; margin-bottom: 10px; }
+  h3 { font-size: 13.5px; font-weight: 700; color: #0f1117; margin-top: 24px; margin-bottom: 6px; text-transform: uppercase; letter-spacing: .06em; }
+  p { margin-bottom: 14px; }
+  ul, ol { padding-left: 22px; margin-bottom: 14px; }
+  li { margin-bottom: 5px; }
+  strong { font-weight: 600; }
+  em { font-style: italic; }
+
+  /* ── Code ── */
+  code { font-family: "SF Mono","Fira Mono","Menlo",monospace; font-size: 12px; background: #f4f5f8; border-radius: 3px; padding: 1px 5px; }
+  pre { background: #0f1117; color: #c8d3f5; border-radius: 6px; padding: 18px 20px; overflow-x: auto; margin: 16px 0 20px; font-size: 12px; line-height: 1.6; }
+  pre code { background: none; padding: 0; color: inherit; font-size: inherit; }
+  .comment { color: #5c6370; }
+  .kw { color: #c792ea; }
+  .str { color: #c3e88d; }
+  .cmd { color: #82aaff; }
+
+  /* ── Tables ── */
+  table { width: 100%; border-collapse: collapse; margin: 16px 0 20px; font-size: 13px; }
+  th { background: #f4f5f8; text-align: left; padding: 8px 12px; font-weight: 600; font-size: 11.5px; text-transform: uppercase; letter-spacing: .06em; color: #555; border-bottom: 2px solid #e0e2ea; }
+  td { padding: 8px 12px; border-bottom: 1px solid #f0f0f4; vertical-align: top; }
+  tr:last-child td { border-bottom: none; }
+  td code { font-size: 11.5px; }
+
+  /* ── Callouts ── */
+  .callout { border-left: 3px solid #7c8cff; background: #f7f8ff; padding: 12px 16px; border-radius: 0 6px 6px 0; margin: 16px 0 20px; font-size: 13px; }
+  .callout.warning { border-color: #f5a623; background: #fffdf4; }
+  .callout.tip { border-color: #3ecf8e; background: #f4fdf9; }
+  .callout.danger { border-color: #e5534b; background: #fff5f5; }
+  .callout-label { font-size: 10.5px; font-weight: 700; text-transform: uppercase; letter-spacing: .1em; color: #7c8cff; margin-bottom: 4px; }
+  .callout.warning .callout-label { color: #f5a623; }
+  .callout.tip .callout-label { color: #3ecf8e; }
+  .callout.danger .callout-label { color: #e5534b; }
+
+  /* ── Skill badges ── */
+  .skill { display: inline-block; font-family: "SF Mono","Fira Mono","Menlo",monospace; font-size: 11.5px; font-weight: 600; background: #0f1117; color: #7c8cff; border-radius: 4px; padding: 2px 7px; white-space: nowrap; }
+
+  /* ── Diagram ── */
+  .diagram { background: #0f1117; color: #c8d3f5; border-radius: 6px; padding: 20px 24px; font-family: "SF Mono","Fira Mono","Menlo",monospace; font-size: 12px; line-height: 1.7; margin: 16px 0 20px; }
+  .diagram .dim { color: #5c6370; }
+  .diagram .hi { color: #82aaff; }
+
+  /* ── Print ── */
+  .page-break { page-break-after: always; }
+  h1.section-title { page-break-before: always; }
+  h1.section-title.no-break { page-break-before: avoid; }
+  @media print {
+    body { font-size: 12.5px; }
+    .cover { min-height: auto; padding: 56px 64px; }
+    pre, table { page-break-inside: avoid; }
+    h2 { page-break-after: avoid; }
+  }
+
+  body{max-width:52rem;margin:0 auto;padding:2.2rem 2rem;}
+  h1,h2,h3{break-after:avoid;} table{break-inside:avoid;}
+</style></head><body><h1 id="gt-security-guide-gt-unlock">gt security guide — gt unlock</h1>
+<p>Written against <strong>gt v0.20.0</strong> (gt-lotr 0.3.0). Unlock ships <strong>off</strong>. This guide says what it
+does when you turn it on, what it needs, how to set it up on macOS, Windows and Linux, and —
+just as plainly — what it does not protect.</p>
+<blockquote>
+<p><em>"Unlock proves a person was present and limits what agents can do on their own. It is not
+anti-malware. If something already runs as you, it can wait for you to unlock."</em></p>
+</blockquote>
+<h2 id="1-the-goal-and-what-was-done-to-get-there">1. The goal, and what was done to get there</h2>
+<p>gt aims to make everything it touches as secure as it can, and to tell you exactly how secure
+that is on your machine. An AI agent working for you runs as you: it can call tools, run shell
+commands and read your files. gt unlock puts a person back in the loop for the things that
+matter — your connected systems (LOTR), your credentials, publishing, and gt's own guards —
+without slowing down ordinary work.</p>
+<p>What was built, and why each piece is there:</p>
+<table>
+<thead>
+<tr>
+<th>Measure</th>
+<th>What it stops</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>Kernel peer identity.</strong> Every caller is identified by the operating system (macOS audit token with the process version, Linux <code>SO_PEERCRED</code> + start time, Windows named-pipe client pid + creation time + user SID) — never by anything the caller says</td>
+<td>A process pretending to be another one</td>
+</tr>
+<tr>
+<td><strong>Signatures, not booleans.</strong> Touch ID and Windows Hello sign a fresh challenge with a hardware key (Secure Enclave / TPM); gt verifies the signature itself in Python</td>
+<td>A fake helper that just answers "ok"; a replayed old approval</td>
+</tr>
+<tr>
+<td><strong>Sealed credentials</strong> (<code>sealed:</code> refs). Encrypted at rest under a key that only opens after your finger or PIN</td>
+<td>Credential theft from disk while you are away or locked</td>
+</tr>
+<tr>
+<td><strong>The <code>mcp_only</code> door.</strong> With unlock on, LOTR serves only the MCP connection Claude Code started — not a command the assistant runs in its shell</td>
+<td>The assistant using LOTR through Bash, around your approvals</td>
+</tr>
+<tr>
+<td><strong>Only the authority asks.</strong> Every prompt is raised by gt's unlock authority, naming who is asking and for what. A client can request an unlock; it can never claim one</td>
+<td>An agent typing "approved" on your behalf</td>
+</tr>
+<tr>
+<td><strong>Grants in memory only</strong>, bound to one session and revoked on idle (15 min), TTL (8 h), screen lock, sleep, clock rollback, the session or MCP shim ending, and <code>gt_unlock.py lock</code></td>
+<td>A forgotten unlocked session staying open</td>
+</tr>
+<tr>
+<td><strong>Admin policy floor.</strong> An administrator-owned file that can only tighten</td>
+<td>A user or agent loosening an organisation's policy</td>
+</tr>
+<tr>
+<td><strong>Fail closed.</strong> With unlock on, an unreadable policy, a missing factor, an authority that is down, or a policy edited behind gt's back locks every gated action — never the reverse</td>
+<td>"Broken" quietly meaning "open"</td>
+</tr>
+<tr>
+<td><strong>No gt crypto store.</strong> gt brokers proven stores (1Password, sops+age, Vault, the OS keychains) and uses CryptoKit / DPAPI for sealing; it ships no cipher of its own</td>
+<td>Home-made cryptography</td>
+</tr>
+<tr>
+<td><strong>Every grant audited.</strong> Each unlock, check, secret read and revocation is one line in <code>~/.claude/golden-thread/unlock/audit.jsonl</code>, with its grant id — never a code or a secret value</td>
+<td>"What happened while I was unlocked?"</td>
+</tr>
+</tbody>
+</table>
+<h2 id="2-how-it-works">2. How it works</h2>
+<pre><code> you ──finger / PIN / code──▶ ┌─────────────────────────┐
+                              │  gt unlock authority     │  ◀── policy (yours, tightened
+ Claude Code                  │  (gt_unlockd, per user)  │       by an admin floor)
+ ├─ MCP shim (lotr_mcp) ─────▶│  • who is asking? kernel │
+ │       │                    │  • grants (in memory)    │──▶ audit.jsonl
+ │       ▼                    │  • raises every prompt   │
+ │   LOTR daemon ──check────▶ └─────────────────────────┘
+ │       │ allowed? then call GitHub / Jira / Microsoft 365 …
+ └─ Bash (the assistant's shell) ──▶ LOTR? refused (mcp_only)
+</code></pre>
+<ol>
+<li>A session starts. gt registers it with the authority; the LOTR MCP connection Claude Code
+   starts registers itself as that session's one shim.</li>
+<li>The assistant calls a LOTR tool. LOTR asks the authority whether <strong>this process</strong> (named by
+   the kernel) may use <code>lotr:&lt;connection&gt;:&lt;tier&gt;</code>. Locked: the authority asks you — a Touch ID
+   or Windows Hello sheet, then a dialog for your authenticator code — naming the requester and
+   the scope.</li>
+<li>You approve. The authority checks the signature and the code, grants the session, and LOTR
+   proceeds. The grant id is written into LOTR's audit line for that call.</li>
+<li>Fifteen idle minutes, eight hours, your screen locking, the lid closing, or the session
+   ending: the grant is gone and the next call asks again.</li>
+</ol>
+<p>Reads of LOTR connections can stay open (<code>read_without_unlock</code>, on by default); writes and
+anything gated need the grant. Consent-tier operations (send, merge, delete) still get LOTR's
+own confirmation, and you can require a Touch ID / Hello approval per operation instead
+(<code>gt_unlock.py policy consent platform --window 300</code> approves consent operations for five
+minutes, then asks again).</p>
+<h2 id="3-what-it-needs-and-how-to-set-it-up">3. What it needs, and how to set it up</h2>
+<p>Everything below runs from your own terminal. <code>gt_unlock.py</code> lives at
+<code>~/.claude/golden-thread/hooks/gt_unlock.py</code> (written <code>gt_unlock.py</code> below).</p>
+<h3 id="macos-totp-touch-id-l2">macOS — TOTP + Touch ID (L2)</h3>
+<p>Needs: a Mac with Touch ID, the Xcode Command Line Tools (<code>xcode-select --install</code>, so
+<code>install.sh</code> can build the Touch ID helper), and an authenticator app on your phone.</p>
+<ol>
+<li>Re-run <code>install.sh</code>. It builds <code>~/.claude/golden-thread/bin/gt-presence</code> from the shipped
+   Swift source and ad-hoc signs it (a Developer ID signed build is provided with releases).</li>
+<li><code>gt_unlock.py enroll touchid</code> — touch the sensor once. This creates two Secure Enclave keys
+   that only work with your current fingerprints (adding or removing a fingerprint retires
+   them, by design).</li>
+<li><code>gt_unlock.py enroll totp</code> — scan the QR code, type the code your app shows. The screen is
+   cleared afterwards; the seed is shown only now.</li>
+<li><code>gt_unlock.py recovery</code> — print ten one-time recovery codes and store them offline.</li>
+<li><code>gt_unlock.py policy enable</code> — proves your factors work (touch + code), then turns unlock on.</li>
+<li><code>gt_unlock.py status</code> should say <code>level L2</code>. <code>gt_unlock.py verify</code> runs the self-check.</li>
+</ol>
+<h3 id="windows-totp-windows-hello-l2">Windows — TOTP + Windows Hello (L2)</h3>
+<p>Needs: Windows 10/11 with Windows Hello set up (Settings › Accounts › Sign-in options › PIN
+(Windows Hello); a fingerprint or face reader is optional), and an authenticator app.</p>
+<ol>
+<li><code>gt_unlock.py enroll hello</code> — Windows Security asks for your PIN or biometric a few times
+   (key creation, a check that the key signs deterministically, which sealing relies on, and a
+   final proof). The Hello dialog shows its own wording ("Making sure it's you"); gt shows the
+   requester and scope in its own prompt.</li>
+<li><code>gt_unlock.py enroll totp</code>, <code>gt_unlock.py recovery</code>, <code>gt_unlock.py policy enable</code> as above.</li>
+</ol>
+<p>The Hello helper is a Windows PowerShell 5.1 script run with <code>-ExecutionPolicy Bypass</code> for its
+own process only; nothing about your machine's execution policy changes. It is not
+code-signed: the security rests on the TPM signature gt verifies, not on who signed the script.
+Organisations that block unsigned scripts sign it with their own certificate. Sealing on
+Windows needs a desktop logon (user-scope DPAPI is unavailable in an SSH key logon).</p>
+<h3 id="linux-totp-l1-optionally-entra">Linux — TOTP (L1), optionally Entra</h3>
+<p>Linux has no platform authenticator gt can use, so unlock there is <strong>L1</strong>: it stops agents and
+accidents, not malware running as you. <code>gt_unlock.py enroll totp</code>, <code>gt_unlock.py recovery</code>,
+<code>gt_unlock.py policy enable</code>. Without a desktop, codes are typed in the terminal that asked.</p>
+<h3 id="microsoft-entra-id-sign-in-any-platform-optional">Microsoft Entra ID sign-in (any platform, optional)</h3>
+<p>A fresh browser sign-in (<code>prompt=login</code>) can be one of your factors: authorization code + PKCE
+on a <code>http://localhost</code> redirect, the ID token's signature and claims checked by gt (issuer,
+tenant, audience, nonce bound to the request, sign-in time). You register an app once:</p>
+<ol>
+<li>Entra admin center › App registrations › New registration. Account types: your
+   organisation only (strongest), any organisation (<code>organizations</code>), or work and personal
+   accounts (<code>common</code>).</li>
+<li>Redirect URI: platform <em>Public client/native (mobile &amp; desktop)</em>, value <code>http://localhost</code>.</li>
+<li>No client secret. API permissions: Microsoft Graph delegated <code>openid</code>, <code>profile</code>, <code>email</code>
+   only. Leave <em>Allow public client flows</em> off.</li>
+<li>Record the Application (client) ID and Directory (tenant) ID, then:
+   <code>gt_unlock.py policy sso --client-id &lt;app id&gt; --tenant &lt;tenant id|organizations|common&gt;</code>
+   and <code>gt_unlock.py enroll sso</code>.</li>
+<li>Enforce MFA in Entra with Conditional Access (authentication strength) on the app; v2 ID
+   tokens do not always say how you signed in. Sign in with Apple is not supported (it cannot
+   redirect to a local address and carries no tenant or MFA claims).</li>
+</ol>
+<h2 id="4-what-each-level-protects-and-what-it-does-not">4. What each level protects — and what it does not</h2>
+<p><code>gt_unlock.py status</code> and <code>/gt:gt-doctor</code> (rows <code>unlock</code> and <code>security</code>) name the level this
+machine runs at. Nothing here says "secure"; each check passes, fails, or says it could not be
+checked.</p>
+<table>
+<thead>
+<tr>
+<th>Level</th>
+<th>What it is</th>
+<th>Stops</th>
+<th>Does not stop</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>off</strong> (default)</td>
+<td>Nothing gated</td>
+<td>—</td>
+<td>Anything</td>
+</tr>
+<tr>
+<td><strong>L1 Gate</strong></td>
+<td>TOTP (and SSO), no platform factor</td>
+<td>The assistant via Bash or other tools, other local agents and scripts, use after the session ends or the screen locks; full audit</td>
+<td>Malware running as you: it can read the TOTP seed, the credentials and gt's code</td>
+</tr>
+<tr>
+<td><strong>L2 Sealed</strong></td>
+<td>Touch ID / Windows Hello required in every unlock; credentials sealed</td>
+<td>Credential theft at rest; screen-control agents clicking approve (they cannot touch the sensor)</td>
+<td>Malware inside an unlocked window; code patched to capture your next unlock</td>
+</tr>
+<tr>
+<td><strong>L3 Separated</strong></td>
+<td>Authority and LOTR as a service account, code and policy admin-owned</td>
+<td>Use before unlock, policy downgrade, seed and credential reads</td>
+<td>An attacker inside your session after you unlock. <strong>gt 0.20.0 does not ship L3.</strong></td>
+</tr>
+</tbody>
+</table>
+<table>
+<thead>
+<tr>
+<th>Threat</th>
+<th>L1</th>
+<th>L2</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>The assistant calling LOTR or the authority from Bash</td>
+<td>Stopped (<code>mcp_only</code> + grant)</td>
+<td>Stopped</td>
+</tr>
+<tr>
+<td>Another local agent or script, while locked</td>
+<td>Gated, but can read credentials directly</td>
+<td>Stopped</td>
+</tr>
+<tr>
+<td>Malware running as you, before you unlock</td>
+<td>Not stopped</td>
+<td>Partly: it cannot decrypt sealed credentials, but can change gt's code for your next unlock</td>
+</tr>
+<tr>
+<td>Malware running as you, after you unlock</td>
+<td>Not stopped</td>
+<td>Not stopped (short idle and TTL limit the window)</td>
+</tr>
+<tr>
+<td>A screen-control / accessibility agent</td>
+<td>Can click dialogs</td>
+<td>Cannot touch the sensor</td>
+</tr>
+<tr>
+<td>A keylogger reading your TOTP code</td>
+<td>First use wins (each code works once)</td>
+<td>Same; use TOTP with a platform factor</td>
+</tr>
+<tr>
+<td>A fake prompt racing gt's</td>
+<td>Possible</td>
+<td>Possible: gt's prompts name the requester and scope</td>
+</tr>
+<tr>
+<td>Stolen laptop, locked</td>
+<td>Disk encryption + revoke on lock</td>
+<td>The Secure Enclave / TPM needs your finger or PIN</td>
+</tr>
+<tr>
+<td>Stolen laptop, unlocked and unattended</td>
+<td>Until idle / TTL (15 min idle by default)</td>
+<td>Same</td>
+</tr>
+<tr>
+<td>Identity provider compromise</td>
+<td>SSO forged; two factors including a local one mitigate</td>
+<td>Same</td>
+</tr>
+<tr>
+<td>Root / administrator compromise</td>
+<td>Out of scope</td>
+<td>Out of scope</td>
+</tr>
+</tbody>
+</table>
+<p>Honest limits, in one place:</p>
+<ul>
+<li>At L1 and L2 the authority runs as you, from files you can change. The admin floor and the
+  policy integrity check stop agents and accidents, not someone with your account.</li>
+<li>The settings guard sees Claude Code's Write/Edit tools. A shell command writing
+  <code>settings.json</code> is not stopped by the hook; at L2 the credentials it would want are still
+  sealed.</li>
+<li>A brokered secret is only as locked as the weakest of the store, gt's grant, and the way it
+  reaches the program. Environment variables are readable by any process of yours (<code>ps eww</code>).</li>
+<li>Unattended jobs name themselves (<code>GT_JOB</code>); a process of yours outside a session can claim a
+  job's name. That is why a job may hold only narrow, read-only scopes (below).</li>
+</ul>
+<h2 id="5-locking-down-more-with-gt-unlock">5. Locking down more with gt unlock</h2>
+<h3 id="51-the-vault-lock-chosen-folders-not-the-vault">5.1 The vault: lock chosen folders, not the vault</h3>
+<p><code>gt_lock.py add Secrets/aws.md --vault &lt;vault&gt;</code> encrypts a file with
+<a href="https://age-encryption.org">age</a> to <code>aws.md.age</code> and removes the plaintext; a <code>.gt-locked</code>
+note in the folder says what is locked and how to open it. <code>gt_lock.py open Secrets/aws.md.age
+--vault &lt;vault&gt; | less</code> decrypts to a pipe only (a terminal needs <code>--show</code>; a file is always
+refused) after a <code>gt:lock:&lt;folder&gt;</code> grant; <code>gt_lock.py restore</code> puts the plaintext back (mode
+600); <code>gt_lock.py status</code> lists what is locked and how strong each lock is. The identity comes
+from <code>--identity</code>, <code>$GT_AGE_IDENTITY</code>, <code>SOPS_AGE_KEY_FILE</code>, or <code>~/.config/sops/age/keys.txt</code>.
+Lock before the first commit or sync: plaintext already in git history, sync version history
+or backups stays there.</p>
+<ul>
+<li><strong>Strength:</strong> L2 only when every recipient is hardware-held (<code>age1se1…</code> Secure Enclave via
+  <code>age-plugin-se</code>, <code>age1yubikey1…</code>); <strong>L1 when any recipient or the identity is a plaintext
+  key</strong> such as <code>~/.config/sops/age/keys.txt</code> — the usual setup. Never L3: once opened, any
+  process of yours can read the plaintext.</li>
+<li><code>core-rules/</code> and <code>global-memory/</code> can never be locked (enforced in code): gt reads them on
+  every turn, and locking them would silently switch Core-rule injection off.</li>
+<li>Why not the whole vault: Obsidian keeps it open, gt's hooks read it on every prompt, and an
+  encrypted volume synced by Dropbox and mounted on two machines can corrupt.</li>
+<li>What others see: Obsidian shows links into a locked file as unresolved; Dropbox, iCloud and
+  git see only <code>.age</code> ciphertext (commit only ciphertext); gt's lint, tasks and recall treat a
+  locked folder as absent and say so once.</li>
+<li>An encrypted disk image (macOS sparse bundle) or BitLocker VHDX is a bring-your-own option;
+  once mounted, any process of yours can read it.</li>
+</ul>
+<h3 id="52-other-apps-credentials-through-the-broker">5.2 Other apps' credentials, through the broker</h3>
+<p>Credentials are released only under a grant, and handed over by pipe or a short-lived 600
+file, never by environment variable unless you ask for it.</p>
+<ul>
+<li><strong>git / GitHub publishing:</strong> store the token sealed (<code>gt_unlock.py seal put github</code>, value on
+  stdin), map the host in <code>~/.claude/golden-thread/unlock/credentials.json</code>
+  (<code>{"git": [{"protocol": "https", "host": "github.com", "username": "x-access-token",
+  "ref": "sealed:github"}]}</code>), and set
+  <code>git config --global credential.https://github.com.helper "!python3 ~/.claude/golden-thread/hooks/gt_unlock.py git-credential"</code>.
+  Every push then needs a <code>gt:publish</code> grant. It is real only if the token exists nowhere else
+  (no plaintext <code>~/.config/gh/hosts.yml</code>, no unencrypted SSH key with the same reach).</li>
+<li><strong>AWS:</strong> <code>credential_process = python3 ~/.claude/golden-thread/hooks/gt_unlock.py aws-credential --ref sealed:aws</code>
+  (the sealed value is the JSON AWS expects).</li>
+<li><strong>Any command:</strong> <code>gt_unlock.py run --scope gt:publish --secret-file GH_TOKEN_FILE=sealed:github -- &lt;cmd&gt;</code>
+  hands the command a path to a 600 file deleted when it exits. <code>--env VAR=REF</code> puts the value
+  in the environment instead, which is weaker, and gt says so each time.</li>
+<li>kubectl exec plugins and docker credential helpers can call <code>gt_unlock.py secret get REF</code> the
+  same way (it refuses to print to a terminal).</li>
+<li>Moving an existing credential in: <code>gt_unlock.py seal migrate file:/abs/path --name github
+  --remove-source</code> (also <code>store:</code> and <code>keychain:</code>).</li>
+</ul>
+<h3 id="53-ssh-keys">5.3 SSH keys</h3>
+<p>Keep SSH keys in hardware and use them per signature: Secure Enclave keys through an agent such
+as Secretive (macOS) or a FIDO2 security key (<code>ssh-keygen -t ed25519-sk</code>). gt does not hold SSH
+keys; an unencrypted key file in <code>~/.ssh</code> is readable by any process of yours whatever gt does.</p>
+<h3 id="54-bring-your-own-secret-store">5.4 Bring your own secret store</h3>
+<p>Refs <code>sops:</code>, <code>op:</code>, <code>bw:</code>, <code>vault:</code> and <code>wincred:</code> are resolved by the authority under a
+grant, and <code>gt_unlock.py status</code> / doctor label each with its real level:</p>
+<table>
+<thead>
+<tr>
+<th>Store</th>
+<th>Level against processes running as you</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Keychain via <code>/usr/bin/security</code> (LOTR's <code>keychain:</code> refs)</td>
+<td><strong>L1</strong></td>
+</tr>
+<tr>
+<td>Windows Credential Manager / DPAPI (<code>wincred:</code>)</td>
+<td><strong>L1</strong></td>
+</tr>
+<tr>
+<td>sops + age, identity in a plaintext file</td>
+<td><strong>L1</strong></td>
+</tr>
+<tr>
+<td>sops + age, identity in the Secure Enclave or a YubiKey</td>
+<td><strong>L2</strong></td>
+</tr>
+<tr>
+<td>1Password CLI (<code>op:</code>)</td>
+<td><strong>L2</strong> (its own biometric unlock and idle limit)</td>
+</tr>
+<tr>
+<td>Bitwarden CLI (<code>bw:</code>)</td>
+<td><strong>L1</strong> after unlock (the session key sits in the environment or a file)</td>
+</tr>
+<tr>
+<td>HashiCorp Vault (<code>vault:</code>)</td>
+<td><strong>L1</strong> (0.20.0 does not hold Vault tokens in the authority)</td>
+</tr>
+<tr>
+<td>gt's sealed store (<code>sealed:</code>)</td>
+<td><strong>L2</strong></td>
+</tr>
+</tbody>
+</table>
+<h3 id="55-scheduled-jobs">5.5 Scheduled jobs</h3>
+<p>Nothing is allowed unattended by default. Each job may be given one narrow scope:
+<code>gt_unlock.py policy unattended add &lt;job&gt; lotr:&lt;connection&gt;:read</code> (or <code>secret:&lt;ref&gt;</code> for one
+credential), and the job's definition sets <code>GT_JOB=&lt;job&gt;</code>. Write, consent, publish, wildcard
+and gt's own scopes can never be allowed unattended; jobs are never prompted.</p>
+<h3 id="56-what-gt-unlock-cannot-lock">5.6 What gt unlock cannot lock</h3>
+<ul>
+<li>Applications that never ask gt: a browser, an editor, any program reading its own config.</li>
+<li>Anything after you unlock, inside the unlocked window, from software already running as you.</li>
+<li>Credentials that also exist somewhere else in plaintext.</li>
+<li>Files outside the folders you lock.</li>
+</ul>
+<h3 id="worked-example-macos">Worked example (macOS)</h3>
+<pre><code class="language-bash">gt_unlock.py enroll touchid &amp;&amp; gt_unlock.py enroll totp &amp;&amp; gt_unlock.py recovery
+gt_unlock.py policy enable
+printf %s &quot;$GITHUB_TOKEN&quot; | gt_unlock.py seal put github     # then delete the plaintext copy
+lotr --home ~/.config/gt-lotr/personal add-http github@personal --profile github \
+  --base-url https://api.github.com --identity me --auth bearer --token-ref sealed:github
+gt_lock.py add Secrets/aws.md --vault ~/Vault
+gt_unlock.py verify
+</code></pre>
+<h3 id="worked-example-windows-powershell">Worked example (Windows, PowerShell)</h3>
+<pre><code class="language-powershell">$u = &quot;$env:USERPROFILE\.claude\golden-thread\hooks\gt_unlock.py&quot;
+python $u enroll hello; python $u enroll totp; python $u recovery
+python $u policy enable
+python $u seal put github          # type the token at the hidden prompt
+python $u verify
+</code></pre>
+<h2 id="6-enterprise">6. Enterprise</h2>
+<ul>
+<li><strong>Admin policy floor:</strong> <code>/Library/Application Support/gt/unlock-policy.json</code> (macOS, root-owned
+  with root-owned parents, or delivered by an MDM profile that writes it),
+  <code>%ProgramData%\gt\unlock-policy.json</code> (Windows, owned by Administrators/SYSTEM with no user
+  write access) or <code>HKLM\SOFTWARE\Policies\gt\UnlockPolicy</code> (a JSON string, for GPO/Intune),
+  <code>/etc/gt/unlock-policy.json</code> (Linux). Its existence turns unlock on. It only tightens: more
+  factors, fewer allowed factors, shorter TTL and idle, stricter scopes, <code>locked_keys</code> the user
+  cannot change, a pinned Entra tenant. A floor file gt cannot verify locks everything.</li>
+<li>The floor is <strong>binding only at L3</strong>, when the enforcing code is also administrator-owned;
+  0.20.0 runs the authority as the user. Say so in your own policy documents.</li>
+<li><strong>Signing:</strong> release builds of the macOS helper are Developer ID signed and notarized. The
+  Windows Hello script is unsigned by design; sign it with your own certificate where policy
+  requires signed scripts.</li>
+<li><strong>Recovery for managed fleets:</strong> keep <code>admin_only</code> recovery in your process: reset an
+  enrolment by removing <code>~/.claude/golden-thread/unlock/</code> (which also discards sealed
+  credentials) under your own controls.</li>
+</ul>
+<h2 id="7-recovery-and-turning-it-off">7. Recovery, and turning it off</h2>
+<ul>
+<li><strong>Lost phone or changed fingerprints:</strong> <code>gt_unlock.py unlock --recovery</code> accepts one recovery
+  code as one factor; you then re-enrol (<code>gt_unlock.py enroll …</code>). Each code works once.</li>
+<li><strong>Lost every factor:</strong> remove <code>~/.claude/golden-thread/unlock/</code> and enrol again. Sealed
+  credentials are lost with it — that is what sealed means; keep their originals in your store.</li>
+<li><strong>Turn it off:</strong> <code>gt_unlock.py policy disable</code> (needs your factors) or
+  <code>gt_settings.py set unlock off</code>. Off, every hook behaves exactly as before 0.20.0.</li>
+<li><strong>Check it:</strong> <code>gt_unlock.py status</code>, <code>gt_unlock.py verify</code>, <code>gt_unlock.py audit -n 50</code>.</li>
+</ul>
+</body>
+</html>

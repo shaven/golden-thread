@@ -35,6 +35,16 @@ REPO = Path(__file__).resolve().parent.parent
 # method) with @needs_dev so the published suite skips it, with the reason, instead of failing.
 # tests/test_sync_gt_src.py asserts every test module that reaches into dev/ uses this.
 HAS_DEV = (REPO / "dev").is_dir()
+
+# gt unlock (0.20.0): the suite must NEVER raise a real prompt -- no code dialog, no Touch ID
+# sheet, no Windows Hello prompt, no browser -- and never leave an unlock daemon behind. On
+# 2026-10-03 a test run put a real "enter 6-digit code" dialog on the owner's screen. Every
+# test process, and every process a test starts (Sandbox.env re-adds both below), carries:
+#   GT_UNLOCK_NO_UI=1     gt_unlock_factors refuses real UI (fail closed: "unavailable")
+#   GT_UNLOCK_NO_START=1  gt_unlock_client never auto-starts a daemon; a test that needs a
+#                         real daemon starts and stops it itself, and asserts it is gone
+UNLOCK_TEST_ENV = {"GT_UNLOCK_NO_UI": "1", "GT_UNLOCK_NO_START": "1"}
+os.environ.update(UNLOCK_TEST_ENV)
 needs_dev = unittest.skipUnless(HAS_DEV, "dev-only: needs dev/, which the published tree "
                                          "does not carry")
 
@@ -126,7 +136,7 @@ WIKI_SCRIPTS = WIKI / "scripts"
 # The interpreter every test runs a script with. On native Windows `python3` on PATH is the
 # Microsoft Store stub (python.org installs python.exe and py.exe, never python3.exe), so the
 # suite uses the interpreter running it -- install.sh's rule, which refuses anything under
-# ...\WindowsApps\ (0.19.3). macOS and Linux are unchanged.
+# ...\WindowsApps\ (0.20.0). macOS and Linux are unchanged.
 IS_WINDOWS = os.name == "nt"
 if IS_WINDOWS:
     if "\\windowsapps\\" in sys.executable.lower():
@@ -169,10 +179,9 @@ def py_hook_command(script, *args):
     return " ".join(shlex.quote(x) for x in PY_HOOK_PREFIX + [path] + list(args))
 
 
-# gt-lotr is POSIX-only by design and gt_components turns it off on Windows (0.19.3); its tests
-# that need a Unix-domain socket, peer-uid auth or 0600 permission bits skip there for that reason.
-LOTR_POSIX_ONLY = ("gt-lotr is a Unix-domain-socket gateway authenticated by peer uid and 0600 "
-                   "files; gt does not install it on Windows (gt_components.POSIX_ONLY_MODULES)")
+# gt-lotr 0.3.0 runs on native Windows (its local door is gt core's named pipe, gt_ipc), so the
+# blanket LOTR_POSIX_ONLY skip is gone (0.20.0). A lotr test that still cannot run there skips
+# with its specific reason: WIN_MODE_BITS below, or the unix-socket-mechanics reason in the test.
 
 
 def _has_tzdb():
@@ -185,7 +194,7 @@ def _has_tzdb():
 
 
 # Priority-window rules name IANA zones. macOS and Linux ship the database; native Windows has
-# none unless the `tzdata` package is installed, and gt_tasks then says so on stderr (0.19.3).
+# none unless the `tzdata` package is installed, and gt_tasks then says so on stderr (0.20.0).
 HAS_TZDB = _has_tzdb()
 needs_tzdb = unittest.skipUnless(HAS_TZDB, "no IANA time-zone database on this machine (native "
                                            "Windows without the tzdata package); gt_tasks "
@@ -195,8 +204,9 @@ needs_tzdb = unittest.skipUnless(HAS_TZDB, "no IANA time-zone database on this m
 # Reasons a test cannot run on native Windows that are about the TEST's mechanics or a POSIX
 # facility, never about a gt defect (owner, 2026-10-03: every skip names a genuinely POSIX-only
 # reason; a product bug is fixed, not skipped). Use these, or a specific reason of the same kind.
-WIN_FAKE_EXE = ("fakes an external command with a #! script on PATH; Windows runs only .exe files "
-                "found on PATH, so the fake cannot stand in for the real program there")
+# A fake external program (gh, ps, git, ssh ...) is NOT such a reason: write it with
+# tests/_fakes.install_fake(), which makes the same `#!` script runnable on native Windows
+# (0.20.0; it replaced WIN_FAKE_EXE, which skipped 31 tests there).
 WIN_MODE_BITS = ("asserts POSIX permission bits (chmod/st_mode); Windows has no mode bits -- "
                  "st_mode always reads 0o666 or 0o444")
 WIN_CHMOD_FAULT = ("injects a failure with chmod (an unreadable file or unwritable directory); "
@@ -279,10 +289,11 @@ class Sandbox(unittest.TestCase):
         env = {k: v for k, v in os.environ.items()
                if not k.startswith(("CLAUDE", "GT_"))}
         env.update(GIT_ID)
+        env.update(UNLOCK_TEST_ENV)            # no real prompt, no stray daemon (0.20.0)
         env["HOME"] = str(self.home)
         if IS_WINDOWS:
             # Windows Python's expanduser reads USERPROFILE, not HOME: without this every tool a
-            # test runs would read the developer's real ~/.claude (0.19.3).
+            # test runs would read the developer's real ~/.claude (0.20.0).
             env["USERPROFILE"] = str(self.home)
             env["PYTHONUTF8"] = "1"
             # What an installed Windows machine has (install.sh's python3 shim, first on PATH in
@@ -426,7 +437,7 @@ def source_fingerprint(*dirs):
 def _path_variants(old, new):
     """[(old form, new form)], longest first. On Windows a path is written three ways -- native
     "C:\\x", "/"-separated (hook commands, git) and JSON-escaped "C:\\\\x" -- and each form
-    must be rewritten as itself (0.19.3)."""
+    must be rewritten as itself (0.20.0)."""
     pairs = {(old, new), (os.path.realpath(old), new)}
     if IS_WINDOWS:
         for o, n in list(pairs):

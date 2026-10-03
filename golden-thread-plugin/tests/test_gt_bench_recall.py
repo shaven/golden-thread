@@ -93,5 +93,26 @@ class RecallBench(Sandbox):
         self.assertIn('"recall@3"', rows)
 
 
+class KeywordRecallSkipsLockedFolders(Sandbox):
+    """0.20.0: a folder holding gt_lock.py's .gt-locked stub is absent to recall -- never
+    searched, never surfaced (not even a plaintext page left beside the lock), one notice."""
+
+    def test_a_locked_folder_is_never_surfaced(self):
+        v = self.tmp / "vault"
+        (v / "Knowledge").mkdir(parents=True)
+        (v / "Projects" / "vaulted" / "memory").mkdir(parents=True)
+        (v / "Knowledge" / "Backup Rotation.md").write_bytes(b"nightly backup rotation\n")
+        (v / "Projects" / "vaulted" / "notes.md").write_bytes(b"backup rotation backup\n")
+        (v / "Projects" / "vaulted" / "memory" / "m.md").write_bytes(b"backup rotation\n")
+        (v / "Projects" / "vaulted" / "keys.md.age").write_bytes(b"age-encryption.org/v1\n")
+        (v / "Projects" / "vaulted" / ".gt-locked").write_bytes(b"scope: gt:lock:x\n")
+        p = self.py(SCRIPTS / "gt_keyword_recall.py", "backup rotation", "--vault", v, "--json")
+        self.assertEqual(p.returncode, 0, p.stderr)
+        d = json.loads(p.stdout)
+        self.assertEqual(d["results"], ["Knowledge/Backup Rotation.md"])
+        self.assertEqual(d["locked"], ["Projects/vaulted"])
+        self.assertEqual(p.stderr.count("locked folder"), 1, p.stderr)
+
+
 if __name__ == "__main__":
     unittest.main()

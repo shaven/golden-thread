@@ -11,13 +11,90 @@ release's own summary line, kept short rather than reconstructed after the fact.
 
 ---
 
-## gt 0.19.3 — unreleased
+## gt 0.20.0 — unreleased
 
-**Windows, finished; a failed install rolls back; the scheduled jobs keep a working
-interpreter** (owner, 2026-10-03: "Finish the work for windows"). 0.19.2 made gt install on
-Windows; 0.19.3 makes it usable there. Version directories copied from 0.19.2 (gt, demo, farm,
-flow, report-card, watch; lockstep modules `requires_gt >=0.19.3,<0.20.0`); gt-lotr 0.2.0,
-gt-usage 0.1.5, gt-visualize 0.4.3 and gt-wiki 0.2.6 already admit 0.19.3 and are unchanged.
+> **There is no published 0.19.3.** The Windows completion was built as 0.19.3 and never
+> released; the owner moved it into 0.20.0 together with the unlock layer (2026-10-03), so the
+> 0.19.3 directories were re-cut as 0.20.0, as 0.19.0 was re-cut as 0.19.1. The rollback target
+> is 0.19.2, the last release published.
+
+### gt unlock: agents need your presence for what matters (off by default)
+
+(Owner, 2026-10-03: "I want to be able to sleep at night that I am not putting out something
+that can be hacked easily"; minimum bar L2.) A new gt-core authority, `gt_unlockd.py`, decides
+which processes may use LOTR connections, credentials, publishing and gt's own guards, after
+you prove presence. **Unlock ships off**; with it off every hook's path is unchanged. The full
+account of what it stops and what it does not is the new `SECURITY.md` (with HTML and PDF):
+*"Unlock proves a person was present and limits what agents can do on their own. It is not
+anti-malware. If something already runs as you, it can wait for you to unlock."*
+
+- **The authority** (`gt_unlockd.py`, `gt_unlockd_methods.py`, client `gt_unlock_client.py`,
+  CLI `gt_unlock.py {enroll,unenroll,recovery,unlock,lock,status,check,run,register,revoke,
+  policy,seal,secret,git-credential,aws-credential,audit,daemon,verify}`). One per user, started
+  on demand, over `gt_ipc.py`: a 600 unix socket (macOS/Linux) or a named pipe whose DACL holds
+  only the user's SID, `PIPE_REJECT_REMOTE_CLIENTS` and `FILE_FLAG_FIRST_PIPE_INSTANCE`
+  (Windows). Every caller is identified by the kernel (macOS audit token with pid version,
+  Linux `SO_PEERCRED` + start time, Windows pipe client pid + creation time + SID), never by
+  what it says. Grants live in memory, bound to a session, and are revoked on TTL (8 h), idle
+  (15 min), MCP shim exit, session end, screen lock, sleep, clock rollback, `lock` and restart.
+  Every decision is audited with its grant id.
+- **Factors.** TOTP (RFC 6238, stdlib; replay refused; lockouts of 1/5/15 min persisted; codes
+  typed into a dialog the authority raises, or the asking terminal — never a tool argument;
+  terminal QR code from the vendored MIT `qrcodegen.py`, licence kept beside it); **Touch ID**
+  (`gt-presence.swift`, built by `install.sh` with the Xcode tools and ad-hoc signed;
+  Secure Enclave P-256 keys gated by biometry; gt verifies the ES256 signature itself in pure
+  Python, `gt_unlock_crypto.py`); **Windows Hello** (`gt_unlock_hello.ps1` via PowerShell 5.1
+  KeyCredentialManager, TPM-backed RSA; strict RS256 verification, full-encoding compare);
+  **Microsoft Entra ID** (`gt_unlock_sso.py`: PKCE + loopback, `prompt=login`, nonce bound to
+  the request, pure-Python RS256 with pinned algorithms, issuer/tenant/audience/time/auth_time
+  checks); ten one-time **recovery codes** (scrypt, or PBKDF2 where the Python lacks scrypt).
+  Defaults when on: TOTP + Touch ID (macOS), TOTP + Hello (Windows), TOTP (Linux).
+- **Policy** (`gt_unlock_policy.py`): yours in `~/.claude/golden-thread/unlock/policy.json`,
+  changed only through the authority with fresh factors; an administrator floor
+  (`/Library/Application Support/gt/`, `%ProgramData%\gt\` or `HKLM\SOFTWARE\Policies\gt`,
+  `/etc/gt/`) that only tightens. Fail closed when on: an unverifiable admin file, more factors
+  required than usable (never lowered), an unreadable policy, or one edited behind gt's back
+  (an `unlock_on` marker keeps a file edited to "disabled" from switching anything off).
+- **Sealed credentials** (`sealed:` refs, `gt_unlock_seal.py`): encrypted under the Secure
+  Enclave (CryptoKit ECIES/AES-GCM in the helper) or a Hello-derived DPAPI entropy; opened only
+  under a grant; `seal migrate` moves `file:`/`store:`/`keychain:` refs in. **Bring-your-own
+  stores** (`gt_unlock_brokers.py`): `sops:`, `op:`, `bw:`, `vault:`, `wincred:`, each labelled
+  with its real level. A git credential helper and AWS `credential_process` release tokens
+  only under a `gt:publish` grant.
+- **Gating across gt:** edits to `~/.claude/settings.json`, `vault-config.json` and
+  `~/.claude/golden-thread/` need a fresh confirmation (`guard_protected_paths`, checked before
+  the `protected_paths` switch); `gt_settings.py set` of a guard (`protected_paths`,
+  `test_gate`, `foreign_checkout_guard`, `component_updates`, `commit_checks`, `addon_fixes`,
+  `unlock`) likewise; hooks fail CLOSED for these when the authority is down — the one
+  deliberate exception to gt's fail-open hooks, and only when unlock is on. New setting
+  `unlock` (off). Unattended jobs get only allow-listed narrow read scopes, never a prompt.
+- **Folder locks** (`gt_lock.py add|open|restore|status`): per-file age encryption for chosen
+  vault folders, a `.gt-locked` note, readers (lint, tasks, recall, vault hints) treat a locked
+  folder as absent; `core-rules/` and `global-memory/` can never be locked.
+- **Self-check:** `gt_unlock.py verify` and doctor rows `unlock` and `security` print the level
+  this machine runs at (off / L1 / L2; L3 is not shipped) and each check PASS, FAIL or
+  NOT-CHECKED — never "secure". `install.sh` ends by saying unlock is off and how to turn it on.
+- **gt-lotr 0.3.0** consumes it: `engine.call` checks `lotr:<connection>:<tier>` for local
+  callers, the grant id is in every audit line, the `mcp_only` door refuses LOTR to the
+  assistant's shell, biometric consent is an option (`consent_window_s`), the new secret
+  schemes resolve through the authority, hub enrol/revoke need a step-up, and LOTR runs on
+  native Windows over the named pipe. gt-usage 0.1.6, gt-visualize 0.4.4 and gt-wiki 0.2.7 only
+  move `requires_gt` to `>=0.20.0,<0.21.0`.
+- **Tests:** `test_gt_ipc`, `test_unlock_core`, `test_unlock_redteam` (every bypass route in
+  the design, each attempted and refused), `test_unlock_cli`, `test_unlock_touchid` (a real
+  Secure Enclave signature checked by the Python verifier), `test_unlock_hello`,
+  `test_unlock_sso` (a local fake identity provider), `test_unlock_brokers`, `test_gt_lock`,
+  `test_lotr_unlock`. The 31 Windows tests that faked a program with a `#!` script now run on
+  Windows (`tests/_fakes.py`).
+- **Not yet proven live** (owner steps): a Touch ID prompt from the helper, a Developer ID
+  signed + notarized helper, Windows Hello on a machine with a PIN, an Entra app registration.
+
+
+### Windows, finished; a failed install rolls back; the scheduled jobs keep a working interpreter
+
+(Owner, 2026-10-03: "Finish the work for windows".) 0.19.2 made gt install on Windows; this
+makes it usable there. Version directories re-cut from 0.19.3 (gt, demo, farm, flow,
+report-card, watch; lockstep modules `requires_gt >=0.20.0,<0.21.0`).
 
 - **`python3` works in Claude's shell on Windows.** Skills tell Claude to run `python3 <tool>.py`;
   in Git Bash that was the Microsoft Store stub. `install.sh` writes a `python3` shim (the Python

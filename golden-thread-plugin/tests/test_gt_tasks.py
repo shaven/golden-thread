@@ -114,6 +114,22 @@ class GtTasksTest(Sandbox):
         text = self.run_rollup()
         self.assertIn("| nested task | `parent/child` |", text)
 
+    def test_a_locked_project_folder_is_skipped_with_one_notice(self):
+        """0.20.0: a project folder holding gt_lock.py's .gt-locked stub is absent -- its tasks
+        (and its sub-projects') are not rolled up, one stderr notice says so, never an error."""
+        self.project("alpha", tasks=["- [ ] visible task [p:: 2]"])
+        self.project("vaulted", tasks=["- [ ] hidden task [p:: 1]"])
+        self.project("inner", parent="vaulted", tasks=["- [ ] hidden child [p:: 1]"])
+        (self.vault / "Projects" / "vaulted" / ".gt-locked").write_bytes(b"scope: gt:lock:x\n")
+        proc = self.py(self.tool, "--vault", self.vault)
+        self.assertOk(proc, "gt_tasks.py failed")
+        text = (self.vault / "TASKS.md").read_text()
+        self.assertIn("visible task", text)
+        self.assertNotIn("hidden task", text)
+        self.assertNotIn("hidden child", text)
+        self.assertEqual(proc.stderr.count("locked project folder"), 1, proc.stderr)
+        self.assertIn("vaulted", proc.stderr)
+
     def test_review_section_lists_closeout_candidates(self):
         self.project("finished", tasks=["- [x] a", "- [x] b"])
         text = self.run_rollup()

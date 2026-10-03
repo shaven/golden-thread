@@ -1,4 +1,4 @@
-# Build note — gt 0.19.3
+# Build note — gt 0.20.0
 
 **Read this first if you are the person taking this tree into the other repository.**
 
@@ -8,11 +8,10 @@
 > content reaches you from the owner. `SOURCE.json`, at the root of gt-src, names the exact commit
 > the tree was cut from.
 
-> **Not released yet.** 0.19.3 (Windows, complete: python3 for the model, LF writes, Task
-> Scheduler, the suite on Windows; installer rollback; the macOS job interpreter) is being built on
-> `feat/windows-finish` from v0.19.2. Nothing is pushed, tagged or synced to gt-src until the owner
-> says release; then it goes straight to main. The table below is 0.19.1's, with 0.19.2 and 0.19.3
-> on top.
+> **Not released yet.** 0.20.0 = the Windows completion (built as 0.19.3, never released) plus
+> gt unlock (security, off by default; `SECURITY.md`). Built on `feat/0.20.0` from `8078835`.
+> Nothing is pushed, tagged or synced to gt-src until the owner says release; then it goes straight
+> to main. The table below is 0.19.1's, with 0.19.2 and 0.20.0 on top. There is no published 0.19.3.
 
 ---
 
@@ -20,12 +19,12 @@
 
 | Plugin | Version | Note |
 |---|---|---|
-| gt (core) | **0.19.3** | 0.19.3: Windows completed (a `python3` shim for the model's shell, LF for every gt write, scheduled jobs on Task Scheduler, the test suite runs on Windows), installer rollback on failure, the scheduled jobs' interpreter chosen and proven rather than overwritten. 0.19.2: native Windows install (`install.cmd`, interpreter resolution, hooks under Git Bash, `/` manifest keys, LF vault writes, UTF-8 output). 0.19.1: model and effort profiles, recall benchmark, prompt hints (off), supersession and expiry at read time, queue-guard tokens, no bytecode in gt-src, post-install release resolution and receipt, one launchd interpreter, commit-gate timeout, Stop-validator install fix (no published 0.19.0) |
-| gt-wiki | **0.2.6** | every skill declares a model_intent; `requires_gt` admits 0.19 |
-| gt-demo, gt-farm, gt-flow, gt-report-card, gt-watch | **0.19.3** | they move with gt |
-| gt-visualize | **0.4.3** | model_intent on every skill; `requires_gt` admits 0.19 |
-| gt-usage | **0.1.5** | model_intent; `requires_gt` admits 0.19 |
-| gt-lotr | **0.2.0** | `add-mcp`: SSO/OAuth MCP endpoints by token reference, refresh on 401; still off by default |
+| gt (core) | **0.20.0** | 0.20.0: gt unlock (an authority daemon, TOTP + Touch ID / Windows Hello / Entra ID factors, sealed and brokered credentials, gated settings and publishing, folder locks, `verify` and doctor rows `unlock`/`security`; off by default) + the Windows completion: Windows completed (a `python3` shim for the model's shell, LF for every gt write, scheduled jobs on Task Scheduler, the test suite runs on Windows), installer rollback on failure, the scheduled jobs' interpreter chosen and proven rather than overwritten. 0.19.2: native Windows install (`install.cmd`, interpreter resolution, hooks under Git Bash, `/` manifest keys, LF vault writes, UTF-8 output). 0.19.1: model and effort profiles, recall benchmark, prompt hints (off), supersession and expiry at read time, queue-guard tokens, no bytecode in gt-src, post-install release resolution and receipt, one launchd interpreter, commit-gate timeout, Stop-validator install fix (no published 0.19.0) |
+| gt-wiki | **0.2.7** | `requires_gt >=0.20.0,<0.21.0` only |
+| gt-demo, gt-farm, gt-flow, gt-report-card, gt-watch | **0.20.0** | they move with gt |
+| gt-visualize | **0.4.4** | `requires_gt >=0.20.0,<0.21.0` only |
+| gt-usage | **0.1.6** | `requires_gt >=0.20.0,<0.21.0` only |
+| gt-lotr | **0.3.0** | consumes gt unlock (grant check per call, grant ids in the audit, `mcp_only`, biometric consent option, `sealed:`/BYO secret refs); a Windows named-pipe front door; still off by default |
 
 Skills stay **36** (every one now declares a `model_intent`). gt_lint checks **24 → 25**
 (`supersedes-missing`). Settings: two new (`vault_hints`, `allin_timeout`); the model profile

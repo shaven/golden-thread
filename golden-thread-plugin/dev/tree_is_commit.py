@@ -78,7 +78,7 @@ def main(argv=None):
     dropped = []
     for dirpath, dirnames, _files in os.walk(root):
         rel = os.path.relpath(dirpath, root)
-        # (0.19.3) git names ignored dirs with "/"; normpath gives "\\" on Windows, so an
+        # (0.20.0) git names ignored dirs with "/"; normpath gives "\\" on Windows, so an
         # ignored __pycache__ there read as a dropped directory. Compared in git's form.
         dirnames[:] = [d for d in dirnames if d != ".git"
                        and os.path.normpath(os.path.join(rel, d)).replace(os.sep, "/").lstrip("./")

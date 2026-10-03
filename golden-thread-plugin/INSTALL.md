@@ -39,14 +39,14 @@ where should the vault live? Re-run with `--vault` once you know.
 `install.sh` resolves its own paths, so it can be run from anywhere. Run
 `bash install.sh --help` for every option.
 
-**On Windows** (0.19.2; complete in 0.19.3) run the same installer from Git Bash, or run `install.cmd` from
+**On Windows** (0.19.2; complete in 0.20.0) run the same installer from Git Bash, or run `install.cmd` from
 cmd.exe, PowerShell or Explorer — it finds Git Bash and hands `install.sh` every argument
 unchanged (`install.cmd --vault C:\Users\you\Documents\GoldenThread`). Both need
 [Git for Windows](https://git-scm.com/download/win), which Claude Code on Windows needs anyway,
 and Python 3.8+ from [python.org](https://www.python.org/downloads/) with *Add python.exe to
 PATH* ticked. See *Windows* below.
 
-**A failed install is rolled back** (0.19.3). If the installer exits non-zero after it has
+**A failed install is rolled back** (0.20.0). If the installer exits non-zero after it has
 started writing — any exit but 4, which means "installed, now choose a vault", and 9 under
 `--force-manifest-mismatch` — it puts back
 `~/.claude/settings.json`, the plugin registrations, the golden-thread-plugin marketplace and
@@ -196,6 +196,29 @@ python3 "<plugin-repo>/golden-thread/<version>/scripts/gt_upgrade.py" --vault <v
 
 ---
 
+## gt unlock: security, off by default (0.20.0)
+
+The installer does not turn it on; it ends by saying it is off and how to turn it on. What it
+touches when you do:
+
+* `~/.claude/golden-thread/hooks/gt_unlock*.py`, `gt_unlockd*.py`, `gt_ipc.py`, `gt_lock.py`,
+  `qrcodegen.py` (+ its MIT licence) — copied on every install, run only when unlock is on or
+  you call them. Two hook registrations (`gt_unlock.py hook session-start|session-end`) return
+  at once when unlock is off.
+* **macOS:** `~/.claude/golden-thread/bin/gt-presence`, the Touch ID helper, built from the
+  shipped Swift source with the Xcode Command Line Tools and ad-hoc signed (skipped, and said
+  so, without them; a Developer ID signed release binary with a `gt-presence.release` marker
+  beside it is never rebuilt over).
+* **Windows:** nothing extra; Windows Hello is reached through `gt_unlock_hello.ps1`, run by
+  Windows PowerShell 5.1 with `-ExecutionPolicy Bypass` for its own process only.
+* State, once you enrol: `~/.claude/golden-thread/unlock/` (700; files 600). An administrator
+  floor, if your organisation sets one, lives in `/Library/Application Support/gt/`,
+  `%ProgramData%\gt\` (or `HKLM\SOFTWARE\Policies\gt`) or `/etc/gt/`.
+
+Turn it on with `gt_unlock.py enroll …` then `gt_unlock.py policy enable`; verify with
+`gt_unlock.py verify` or `/gt:gt-doctor` (rows `unlock` and `security`). Step-by-step per
+platform, and what each level does and does not protect: [`SECURITY.md`](SECURITY.md).
+
 ## Using it with Obsidian (optional)
 
 Nothing requires Obsidian — the vault is plain markdown and git, and Claude Code reads
@@ -320,7 +343,7 @@ changed or not where the list puts it. **By default it then installs anyway, mar
 `GT_REQUIRE_CHECKSUM=1`) turns a mismatch into a refusal (exit 8, nothing copied); use it on the
 machine receiving a publish. A tree with no `SHA256SUMS` installs as it stands.
 
-**Windows** (native since 0.19.2, complete in 0.19.3; tested on Windows 11 with Git for Windows
+**Windows** (native since 0.19.2, complete in 0.20.0; tested on Windows 11 with Git for Windows
 2.56 and Python 3.12).
 `install.sh` and the hooks are bash scripts and run under Git Bash; `install.cmd` is only a
 launcher for it. The installer resolves a real Python once — `python3`, then `python`, then
@@ -330,7 +353,7 @@ writes under your profile unreliable). With no other Python 3.8+ it stops before
 anything and says what to install. The interpreter it found is written into the hook commands
 and to `~/.claude/golden-thread/python` for the hook wrappers.
 
-*`python3` in Claude's shell (0.19.3).* Skills tell Claude to run `python3 <tool>.py`, and in
+*`python3` in Claude's shell (0.20.0).* Skills tell Claude to run `python3 <tool>.py`, and in
 Git Bash `python3` is the Store stub. The installer writes a small `python3` shim — the Python
 it resolved, in UTF-8 mode, with `\r` stripped from piped output — to
 `~/.claude/golden-thread/bin/python3` and to `~/bin/python3` (Git for Windows puts `~/bin` first
@@ -339,7 +362,7 @@ to PATH and sets `PYTHONUTF8=1` through `$CLAUDE_ENV_FILE`, which Claude Code so
 Bash command. A `~/bin/python3` that is not gt's is left alone. Claude Code's PowerShell tool
 does not read `$CLAUDE_ENV_FILE`; there `python` (python.org's name) works as it is.
 
-*Scheduled jobs (0.19.3).* `gt_schedule.py install|check|remove|list|reconcile` use Task
+*Scheduled jobs (0.20.0).* `gt_schedule.py install|check|remove|list|reconcile` use Task
 Scheduler (`schtasks`), per user and without admin: the task runs
 `~/.claude/golden-thread/jobs/gt-<job>.cmd`, which appends to the same `<job>.out` / `.err` logs
 the macOS jobs write. `install` runs the task once and reads Task Scheduler's Last Result, as it
@@ -347,7 +370,12 @@ reads launchd's exit code on macOS. Like a macOS job, a task runs only while you
 at the desktop — from an SSH session `install` registers it and says it is NOT PROVEN; prove it
 later with `gt_schedule.py check <job>`.
 
-*What does not run on Windows, and says so (0.19.3).* gt-lotr (a Unix-domain-socket gateway) is
+*gt-lotr on Windows (0.20.0).* gt-lotr 0.3.0 serves its local front door on a named pipe
+(user-SID-only DACL, remote clients rejected, first instance only), so it installs on Windows;
+gt-lotr 0.2.0 and older stay off there. **Open item:** gt-lotr's `plugin.json` starts its MCP
+server with `python3`, which on Windows is the Microsoft Store stub; until a launcher ships,
+register the server yourself with the real interpreter
+(`claude mcp add gt-lotr -- "C:\Program Files\Python312\python.exe" <path to lotr_mcp.py>`). *What does not run on Windows, and says so (0.20.0).* gt-lotr before 0.3.0 (a Unix-domain-socket gateway) is
 off on Windows whatever is chosen; `gt-watch`'s hourly cron fetch (`install-cron`) is POSIX-only —
 run `gt_watch.py fetch` by hand or from Task Scheduler; `gt_workers.py` reports NOT CHECKED (there
 is no POSIX process table); task priority windows need a time-zone database —

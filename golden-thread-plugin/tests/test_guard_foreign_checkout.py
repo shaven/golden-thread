@@ -97,7 +97,7 @@ class Denials(ForeignGuardBase):
         f = self.foreign.as_posix()
         self.assertDenied(self.run_guard("git -C %s commit -m x" % f, cwd=self.mine))
         self.assertDenied(self.run_guard("cd %s && git push" % f, cwd=self.mine))
-        if IS_WINDOWS:          # Git Bash's own /c/... spelling of the same directory (0.19.3)
+        if IS_WINDOWS:          # Git Bash's own /c/... spelling of the same directory (0.20.0)
             msys = "/" + f[0].lower() + f[2:]
             self.assertDenied(self.run_guard("git -C %s commit -m x" % msys, cwd=self.mine))
             self.assertDenied(self.run_guard("cd %s && git push" % msys, cwd=self.mine))

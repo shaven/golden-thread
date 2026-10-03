@@ -19,13 +19,14 @@ Every case runs in a throwaway git repo shaped like this one (golden-thread-plug
 golden-thread/<release>/scripts), so nothing here depends on this repository's history.
 """
 import json
-import os
 import re
+import shlex
 import shutil
 import unittest
 from pathlib import Path
 
-from _harness import Sandbox, SCRIPTS, GT, REPO, PYTHON, load_module, skip_on_windows, WIN_FAKE_EXE
+from _harness import Sandbox, SCRIPTS, GT, REPO, PYTHON, load_module
+from _fakes import install_fake
 
 PRUN = REPO / "tests" / "prun.py"
 FAKE_SSH = """#!/usr/bin/env bash
@@ -68,6 +69,12 @@ class FakeRepo(Sandbox):
         base = REPO / "tests" / "secrets-baseline.json"
         if base.is_file():
             shutil.copy2(base, tests / "secrets-baseline.json")
+        # And the code-scan baseline (0.20.0: the owner's accepted findings in the vendored
+        # qrcodegen.py), at the path run.sh's code gate reads: <plugin>/.gt/code-baseline.json.
+        cbase = REPO / ".gt" / "code-baseline.json"
+        if cbase.is_file():
+            (self.plugin / ".gt").mkdir()
+            shutil.copy2(cbase, self.plugin / ".gt" / "code-baseline.json")
         self.git_init(self.root)
         self.run_cmd(["git", "-C", self.root, "checkout", "-q", "-b", "feature"])
         self.env.update({"GT_TEST_VERSION": GT.name, "PYTHONDONTWRITEBYTECODE": "1"})
@@ -158,13 +165,16 @@ class Affected(FakeRepo):
 
 
 class Hosts(FakeRepo):
-    @skip_on_windows(WIN_FAKE_EXE)
+    def fake_ssh(self):
+        """GT_PRUN_SSH for a local stand-in for ssh. prun shlex-splits the value, so it is the
+        "/" form of the path, quoted: a Windows path's backslashes would be eaten (0.20.0)."""
+        ssh = install_fake(self, self.tmp / "fake-ssh", FAKE_SSH)
+        return shlex.quote(ssh.as_posix())
+
     def test_split_attribute_and_skip_unreachable(self):
-        ssh = self.tmp / "fake-ssh"
-        ssh.write_text(FAKE_SSH)
-        os.chmod(ssh, 0o755)
+        ssh = self.fake_ssh()
         p = self.prun("--hosts", "good,unreachable,local", "-j", "2",
-                      env={"GT_PRUN_SSH": str(ssh), "GT_TEST_LOAD_AWARE": "0"})
+                      env={"GT_PRUN_SSH": ssh, "GT_TEST_LOAD_AWARE": "0"})
         self.assertEqual(p.returncode, 1, p.stdout + p.stderr)
         out = p.stdout
         self.assertIn("SKIPPED runner unreachable", out)
@@ -177,12 +187,9 @@ class Hosts(FakeRepo):
         self.assertRegex(out, r"FAILED UNIT: test_beta\.Bad  \[host (good|local)\]")
         self.assertIn("boom from beta", out)
 
-    @skip_on_windows(WIN_FAKE_EXE)
     def test_no_reachable_runner_is_a_failure(self):
-        ssh = self.tmp / "fake-ssh"
-        ssh.write_text(FAKE_SSH)
-        os.chmod(ssh, 0o755)
-        p = self.prun("--hosts", "unreachable", "test_alpha", env={"GT_PRUN_SSH": str(ssh)})
+        ssh = self.fake_ssh()
+        p = self.prun("--hosts", "unreachable", "test_alpha", env={"GT_PRUN_SSH": ssh})
         self.assertEqual(p.returncode, 1)
         self.assertIn("no runner reachable", p.stdout)
 

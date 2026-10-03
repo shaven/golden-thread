@@ -1,4 +1,4 @@
-"""A `python3` the model's shell finds on Windows (0.19.3).
+"""A `python3` the model's shell finds on Windows (0.20.0).
 
 Skills and docs tell Claude to run `python3 <tool>.py ...`. In Claude Code for Windows the Bash
 tool is Git Bash, where `python3` is the Microsoft Store stub, so every such command failed with

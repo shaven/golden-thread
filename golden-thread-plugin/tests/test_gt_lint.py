@@ -178,6 +178,21 @@ class KnowledgeChecksTest(LintBase):
         proc, f = self.lint()
         self.assertNoFinding(f, "broken-link", "Knowledge/Table.md")
 
+    def test_a_link_to_a_locked_page_is_locked_not_broken(self):
+        """0.20.0: a page locked by gt_lock.py exists only as <page>.md.age. The link is right;
+        the page is unreadable while locked -- skipped with ONE notice, never broken-link."""
+        self.index("Links")
+        self.w("Knowledge/Links.md", "[[Vault Keys]] [[Secrets/Vault Keys]] [[Truly Gone]]\n")
+        (self.v / "Secrets").mkdir()
+        (self.v / "Secrets" / "Vault Keys.md.age").write_bytes(b"age-encryption.org/v1\nx")
+        (self.v / "Secrets" / ".gt-locked").write_bytes(b"scope: gt:lock:Secrets\n")
+        proc, f = self.lint()
+        self.assertEqual(proc.stdout.count("[broken-link]"), 1, proc.stdout)
+        self.assertIn("[[Truly Gone]]", proc.stdout)
+        self.assertNotIn("[[Vault Keys]]", proc.stdout)
+        self.assertEqual(proc.stderr.count("locked pages"), 1, proc.stderr)
+        self.assertNotIn("Traceback", proc.stderr)
+
     def test_superseded_cited(self):
         self.index("Cites")
         self.w("Sources/2026-01-01 old.md", "old\n")

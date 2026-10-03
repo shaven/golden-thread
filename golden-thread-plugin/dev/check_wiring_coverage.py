@@ -267,7 +267,7 @@ INSTALLED = (0, 9)
 
 
 def _sandbox_env(home):
-    """The environment for an install into the throwaway `home`. Windows (0.19.3): Python's
+    """The environment for an install into the throwaway `home`. Windows (0.20.0): Python's
     expanduser reads USERPROFILE, not HOME, so with HOME alone every Python step of the install
     wrote the REAL user's ~/.claude and the sandbox's settings.json was never wired."""
     env = dict(os.environ, HOME=str(home))

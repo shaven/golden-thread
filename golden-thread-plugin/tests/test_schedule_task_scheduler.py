@@ -1,6 +1,6 @@
-"""gt_schedule.py on Windows: the job table on Task Scheduler (0.19.3).
+"""gt_schedule.py on Windows: the job table on Task Scheduler (0.20.0).
 
-0.19.2 refused install/check/remove on Windows in words (there is no launchd). 0.19.3 runs the
+0.19.2 refused install/check/remove on Windows in words (there is no launchd). 0.20.0 runs the
 same jobs through `schtasks`, per user and without admin, with the same proof: run the task once
 and read Task Scheduler's own Last Result back.
 
@@ -8,7 +8,7 @@ No test may touch a real Task Scheduler, so `schtasks` here is a STUB -- a scrip
 pointed at whenever it is asked for `schtasks` -- that keeps the registered tasks in a JSON file and answers /Create, /Query /V /FO LIST, /Run and
 /Delete in the shape Windows 11's schtasks does (the field names were read off a Windows 11 VM).
 /Run does not execute the wrapper (a .cmd cannot run here); it records the Last Result the test
-chose. The real Task Scheduler is proven on the VM -- see the 0.19.3 CHANGELOG entry.
+chose. The real Task Scheduler is proven on the VM -- see the 0.20.0 CHANGELOG entry.
 
 The platform switch is gt_schedule.on_windows(), patched per test. os.name itself is NOT patched:
 pathlib picks WindowsPath from os.name and cannot instantiate it on POSIX.

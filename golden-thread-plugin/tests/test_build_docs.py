@@ -19,7 +19,7 @@ import unittest
 from _harness import Sandbox, REPO, PYTHON
 
 SCRIPT = REPO / "build-docs.py"
-DOCS = ("MANUAL", "ONBOARDING", "OBSIDIAN-WORKFLOW", "golden-thread-docs")
+DOCS = ("MANUAL", "ONBOARDING", "OBSIDIAN-WORKFLOW", "golden-thread-docs", "SECURITY")  # SECURITY: 0.20.0
 
 MD = """# {title}
 

@@ -3,9 +3,13 @@
 > **Reader:** a daily user — the deepest document, where the *why* lives
 > **Claims last checked against the code:** 2026-10-02 (gt 0.19.1) — see *The documents, and what belongs in each* in [`CLAUDE.md`](../CLAUDE.md).
 
-Complete reference for gt's thirty-six skills and its nine modules. Written against **gt v0.19.3**
-(gt-wiki 0.2.6; gt-usage 0.1.5; gt-demo, gt-watch, gt-report-card, gt-farm and gt-flow 0.19.3; gt-visualize 0.4.3;
-gt-lotr 0.2.0 — the five named with 0.19.3 are versioned with gt and move with every release, changed or not).
+Complete reference for gt's thirty-six skills and its nine modules. Written against **gt v0.20.0**
+(gt-wiki 0.2.7; gt-usage 0.1.6; gt-demo, gt-watch, gt-report-card, gt-farm and gt-flow 0.20.0; gt-visualize 0.4.4;
+gt-lotr 0.3.0 — the five named with 0.20.0 are versioned with gt and move with every release, changed or not).
+
+> **0.20.0 adds gt unlock**, off by default: agents need your presence (TOTP + Touch ID /
+> Windows Hello, optionally Entra ID) for LOTR, credentials, publishing and gt's own guards.
+> See [Security: gt unlock](#security-gt-unlock-0200) and [`SECURITY.md`](SECURITY.md).
 
 > **0.18.1 renamed the task and handoff skills to verbs** — `gt-create`, `gt-open`, `gt-list`,
 > `gt-handle`, `gt-close`, each taking the artifact as its argument. The old names (`gt-task`,
@@ -1941,6 +1945,95 @@ packet uses whichever clipboard tool the machine has — `pbcopy`, `wl-copy`, `x
 
 ---
 
+## Security: gt unlock (0.20.0)
+
+**Off by default.** Turned on, gt's unlock authority (`gt_unlockd.py`, one per user, started on
+demand) decides which processes may use LOTR connections, sealed and brokered credentials,
+publish credentials and gt's own guards, after you prove you are present. `SECURITY.md` is the
+full guide — setup per platform, the threat model, what each level does **not** protect, the
+enterprise admin floor, recovery. This section is the reference.
+
+> *"Unlock proves a person was present and limits what agents can do on their own. It is not
+> anti-malware. If something already runs as you, it can wait for you to unlock."*
+
+### Levels
+
+| Level | Means | `gt_unlock.py status` says |
+|---|---|---|
+| off | nothing gated (default) | `unlock: off` |
+| L1 | TOTP / SSO only: stops agents and accidents, not malware running as you | `level L1` |
+| L2 | Touch ID or Windows Hello required in every unlock; credentials sealed under that key | `level L2` |
+| L3 | authority as a service account, admin-owned code and policy | not shipped in 0.20.0 |
+
+### `gt_unlock.py`
+
+| Command | Does |
+|---|---|
+| `enroll touchid\|hello\|totp\|sso` | Adds a factor. The first factor on a Mac or Windows machine must be the platform one (it needs your finger or PIN); every later enrolment change needs your current factors ("step-up + K"). `totp` shows a terminal QR code and the secret once, then asks for one valid code before saving |
+| `unenroll FACTOR`, `recovery` | Removes a factor; prints ten new one-time recovery codes (shown once) |
+| `policy show\|enable\|disable\|set FILE\|approve` | Reads or changes the policy through the authority, which asks for your factors first. `approve` re-trusts a `policy.json` edited outside gt (until then everything gated is locked) |
+| `policy consent none\|platform [--window S]` | Consent-tier LOTR operations: LOTR's own confirmation (`none`), or a Touch ID / Hello approval valid for S seconds (`platform`) |
+| `policy unattended add\|remove JOB SCOPE` | The allow-list for scheduled jobs: one narrow read scope (`lotr:<conn>:read`) or one credential (`secret:<ref>`) per entry; write, consent, publish and gt scopes are refused |
+| `policy sso --client-id ID [--tenant T] [--pin-subject OID]` | Points Entra sign-in at your app registration |
+| `unlock [--scope S] [--recovery]`, `lock` | Grants this session (or `--session PID`) after the factors; revokes every grant |
+| `check --scope S [--request]` | Exit 0 allowed, 10 locked, 11 needs a fresh confirmation, 12 refused — for your own scripts (convenience only: it stops nothing on its own) |
+| `run --scope S [--secret-file VAR=REF] [--env VAR=REF] -- CMD` | Runs CMD after a grant; secrets by a 600 file deleted afterwards (`--env` is weaker and says so) |
+| `seal put\|list\|rm NAME`, `seal migrate REF --name N [--remove-source]` | The sealed store (`sealed:` refs); values on stdin, never argv |
+| `secret get REF [--out FILE]` | One secret to a pipe or a 600 file; refuses a terminal |
+| `git-credential get`, `aws-credential --ref REF` | git's credential helper and AWS `credential_process`, under `gt:publish` |
+| `status`, `verify`, `audit [-n N]`, `daemon start\|stop\|status` | State and level; the self-check (PASS / FAIL / NOT-CHECKED, never "secure"); the audit log; the authority |
+| `register`, `revoke`, `hook session-start\|session-end` | Used by the SessionStart / SessionEnd hooks and the LOTR shim |
+
+### What is gated
+
+| Action | Scope | Default level |
+|---|---|---|
+| LOTR read / write / consent | `lotr:<conn>:read\|write\|consent` | reads open (`read_without_unlock`), writes and consent need the grant; LOTR's consent confirmation still runs |
+| Editing `~/.claude/settings.json`, `vault-config.json`, `~/.claude/golden-thread/` | `gt:settings:hooks` | fresh confirmation (`guard_protected_paths`, before the `protected_paths` switch) |
+| `gt_settings.py set` of `protected_paths`, `test_gate`, `foreign_checkout_guard`, `component_updates`, `commit_checks`, `addon_fixes`, `unlock` | `gt:settings:security` | fresh confirmation |
+| Policy and enrolment changes | `gt:unlock:*` | your K factors, fresh |
+| Reading a secret ref through the broker | `gt:secrets` | the grant |
+| Publishing credentials (git helper, AWS) | `gt:publish` | the grant |
+| LOTR hub client enrol / revoke | `gt:hub:enroll` | fresh confirmation |
+| Opening a locked vault file | `gt:lock:<folder>` | the grant |
+| Ordinary vault work, lint, daily notes, model settings | — | never gated |
+
+With unlock on and the authority unreachable, these **fail closed** — the one deliberate
+exception to gt's fail-open hooks. With unlock off nothing here runs beyond two `stat()` calls.
+
+### Factors, grants, files
+
+Factors: `totp` (RFC 6238; each code once; lockouts 1/5/15 min; typed into a dialog the
+authority raises), `touchid` (`gt-presence`, Secure Enclave, ES256 checked in Python),
+`hello` (`gt_unlock_hello.ps1`, TPM, RS256 checked in Python), `sso` (Entra ID, PKCE +
+loopback, ID token checked in Python), `recovery` (one code = one factor, forces re-enrolment).
+Defaults when on: 2 factors including Touch ID (macOS) / Hello (Windows); 1 (TOTP) on Linux.
+A grant is held in memory, bound to the session's `claude` process (LOTR scopes only to its
+registered MCP shim: `door: mcp_only`), and ends after 15 min idle, 8 h, the shim or session
+ending, screen lock, sleep, clock rollback, `lock` or an authority restart.
+
+State lives in `~/.claude/golden-thread/unlock/` (700): `policy.json`, `enrolment.json` (public
+keys only), `state.json` (TOTP replay/lockout, policy approval), `totp.seed`, `recovery.json`
+(hashes), `sealed/`, `audit.jsonl`. The administrator floor: `/Library/Application Support/gt/
+unlock-policy.json`, `%ProgramData%\gt\unlock-policy.json` or `HKLM\SOFTWARE\Policies\gt
+\UnlockPolicy`, `/etc/gt/unlock-policy.json` — it only tightens, and an unverifiable one
+locks everything.
+
+### Folder locks: `gt_lock.py`
+
+`gt_lock.py add|open|restore|status --vault V` locks chosen vault files with age (`.age` +
+a `.gt-locked` note), opens them to a pipe under `gt:lock:<folder>`, and reports each lock's
+real level (L1 with a plaintext age identity, L2 with a hardware one). `core-rules/` and
+`global-memory/` are refused in code. Lint, tasks, recall and vault hints treat a locked folder
+as absent and say so once.
+
+### Helpers
+
+`gt_unlock_touchid.py build --dest DIR` compiles the Touch ID helper (`install.sh` runs it on
+macOS when the Xcode Command Line Tools are present). `gt_unlock_hello.py available|selftest`
+checks Windows Hello at the console. Doctor rows `unlock` and `security` report the state and
+run `verify`.
+
 ## Reaching other systems
 
 A session that needs GitHub, Jira, Microsoft 365 or another REST API would otherwise carry one
@@ -2616,6 +2709,7 @@ is registered here and can be switched off.
 | `surface` | `off` · `on` | `on` | At session start, shows the MUST DO block from `<vault>/deadlines.md` and every waiting handoff each session, and pre-compaction state files once each (0.17.2). Never writes the vault. See [`gt_surface.py`](#gt_surfacepy-what-the-last-session-left-shown-to-the-next) |
 | `handoff_surface` | `any` · `project` · `manual` | `any` | Where a handoff that has not been handled is shown (0.17.2): `any` every session start, whatever project is opened; `project` only when `/gt:gt-open` opens the handoff's own project; `manual` only in `/gt:gt-handle handoff`. `project` needs `/gt:gt-open` — a session that never opens the project never sees it, which is why `any` is the default |
 | `task_surface` | `off` · `on` | `on` | At session start, one line counting `p:: 1` tasks waiting on you — how many overdue, how many open over a week — with the commands to list and work them (0.17.2). A count, never the tasks; deferred tasks are not counted until their date |
+| `unlock` | `off` · `on` | `off` | gt unlock (0.20.0): agents need your presence for LOTR, credentials, publishing and gt's guards. The source of truth is the unlock policy, not vault-config.json: `set unlock on\|off` runs `gt_unlock.py policy enable\|disable`, which needs your enrolled factors. See [Security: gt unlock](#security-gt-unlock-0200) |
 | `protected_paths` | `off` · `ask` | `ask` | A Write or Edit to the vault's `core-rules/` or `global-memory/`, to `~/.claude/golden-thread/`, or to `~/.claude/settings.json` always shows the permission prompt; editing an existing file in `Sources/` is refused (supersede it with a new file). Shell commands that write those files are not seen |
 | `test_gate` | `off` · `warn` · `auto` · `block` | `auto` | Refuse a `git commit` of code whose tests have not been seen to pass; `auto` blocks only where the repo has a test command |
 | `parallel_work` | `off` · `on` | `on` | Whether divisible work runs in parallel at all; `off` also stops the Core rule being injected |

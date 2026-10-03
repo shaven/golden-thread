@@ -39,7 +39,7 @@ OLD_RULE1 = "Before writing a vault file, claim it with gt_session.py claim."
 
 
 def job_path(home, job):
-    """Where an installed gt job lives: a launchd plist, or on Windows (0.19.3) the Task
+    """Where an installed gt job lives: a launchd plist, or on Windows (0.20.0) the Task
     Scheduler spec gt_schedule keeps beside the job's .cmd wrapper (gt_schedule.job_file)."""
     if IS_WINDOWS:
         return home / ".claude" / "golden-thread" / "jobs" / ("gt-%s.json" % job)
@@ -544,7 +544,7 @@ class LotrOnSmoke(InstalledMachine):
     def test_lotr_on_is_placed_and_smoke_tested(self):
         self.assertEqual(self.install_proc.returncode, 0, self.install_proc.stdout[-3000:])
         if IS_WINDOWS:
-            # 0.19.3: --with lotr on Windows installs without it and the gate says why, as INFO.
+            # 0.20.0: --with lotr on Windows installs without it and the gate says why, as INFO.
             rc, rows, _ = self.gate()
             self.assertEqual(rows["lotr"]["state"], "INFO", rows["lotr"])
             self.assertIn("POSIX-only", rows["lotr"]["summary"])

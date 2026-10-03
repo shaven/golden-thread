@@ -68,7 +68,7 @@ case "$(uname -s 2>/dev/null)" in
     # progress line back until it exited.
     export PYTHONUNBUFFERED=1
     # An argument holding an apostrophe ("/c/Users/x/Sam's Projects/...") is one MSYS does NOT
-    # convert to a Windows path for a native program (0.19.3), so Python was handed "/c/..."
+    # convert to a Windows path for a native program (0.20.0), so Python was handed "/c/..."
     # and could not open it: an install from such a folder stopped at the version check.
     # cygpath converts exactly those; every other argument is MSYS's to convert, as before.
     python3() {
@@ -80,7 +80,7 @@ case "$(uname -s 2>/dev/null)" in
       "$GT_PYTHON" ${_v[@]+"${_v[@]}"} | tr -d '\r'; return "${PIPESTATUS[0]}"
     }
     export -f python3
-    # To stderr (0.19.3): a diagnostic, not output. On stdout it became the first line of
+    # To stderr (0.20.0): a diagnostic, not output. On stdout it became the first line of
     # --list-plugins / --list-modules, which are machine-readable ("<dir> <version> <name>").
     echo "Python: $GT_PYTHON" >&2
     ;;
@@ -532,7 +532,7 @@ def cmd_resolve(a):
                 state = got["state"]
             if str(got.get("reason", "")).startswith("invalid"):
                 why, m["reason"] = "invalid", got["reason"]
-            elif str(got.get("reason", "")).startswith("POSIX-only"):   # 0.19.3: lotr on Windows
+            elif str(got.get("reason", "")).startswith("POSIX-only"):   # 0.20.0: lotr on Windows
                 why, m["reason"] = "platform", got["reason"]
         elif got in ("on", "off"):
             state = got
@@ -848,7 +848,7 @@ sys.exit(CMDS[sys.argv[1]](sys.argv[2:]))
 PYEOF
 )
 if [ -n "${GT_PYTHON:-}" ]; then
-  # Windows (0.19.3): MODPY is ~28 KB, and MSYS escapes every quote in it on the way to a native
+  # Windows (0.20.0): MODPY is ~28 KB, and MSYS escapes every quote in it on the way to a native
   # process, so `-c "$MODPY"` plus a few long paths passed CreateProcess's 32767-character limit
   # ("Argument list too long", exit 126). There the code goes in a file, which the -c stub execs:
   # sys.argv and sys.path are what -c gives. $$ is the same in every subshell, so the one file
@@ -965,7 +965,7 @@ If the release ships machine migrations, they run after the plugin files and hoo
 in place; a failed one stops the install with exit 7.
 
 Any failure after the installer starts writing (every non-zero exit except 4) is ROLLED
-BACK (0.19.3): settings.json, the plugin registrations, marketplace and cache,
+BACK (0.20.0): settings.json, the plugin registrations, marketplace and cache,
 ~/.claude/golden-thread (not its backups/) and vault-config.json are put back as they were.
 The vault is not rolled back; it has its own pre-write backup.
 
@@ -1167,7 +1167,7 @@ plugin_cache() { echo "$CACHE_ROOT/${PLUGIN_NAMES[$1]}/${PLUGIN_VERS[$1]}"; }
 # Nothing here writes: an unknown name or --without gt must leave the machine untouched,
 # and --list-modules exits at the end of this block.
 GT_TMP=$(mktemp -d "${TMPDIR:-/tmp}/gt-install.XXXXXX")
-# The exit handler also rolls a failed install back (0.19.3) -- see snapshot_take below,
+# The exit handler also rolls a failed install back (0.20.0) -- see snapshot_take below,
 # which arms it just before the first write.
 GT_SNAP="" GT_SNAP_READY=""
 gt_on_exit() {  # $1 = the exit status
@@ -1321,7 +1321,7 @@ checksum_block
 [ -n "$PICK_NOTES" ] && printf '%s' "$PICK_NOTES"
 [ -n "$SKIP_NOTES" ] && printf '%s' "$SKIP_NOTES"
 
-# ── Rollback: a failed install leaves the machine as it was (0.19.3) ─────────────
+# ── Rollback: a failed install leaves the machine as it was (0.20.0) ─────────────
 #
 # Until 0.19.2 a failure after the first write left a half-installed machine ("nothing is
 # rolled back"): caches pruned, settings.json half-registered, hooks from two releases. Now
@@ -1662,7 +1662,7 @@ while [ "$i" -lt "$PLUGIN_COUNT" ]; do
 done
 strip_gt_demo "$(plugin_cache 0)"
 
-# Windows (0.19.3): a `python3` the MODEL's shell finds. Skills and docs tell Claude to run
+# Windows (0.20.0): a `python3` the MODEL's shell finds. Skills and docs tell Claude to run
 # `python3 <tool>.py ...`; in Claude Code for Windows the Bash tool is Git Bash, where `python3`
 # is the Microsoft Store stub (python.org installs python.exe and py.exe, never python3.exe).
 # The shim runs the interpreter the preflight resolved, in UTF-8 mode, with \r stripped from
@@ -1681,7 +1681,7 @@ GT_SHIM_MARK="gt-python3-shim"
 write_python3_shim() {  # $1 = the file
   {
     echo '#!/usr/bin/env bash'
-    echo "# $GT_SHIM_MARK -- written by gt's install.sh (0.19.3). Delete this file to remove it."
+    echo "# $GT_SHIM_MARK -- written by gt's install.sh (0.20.0). Delete this file to remove it."
     echo "# Windows: \`python3\` is otherwise the Microsoft Store stub. This runs the Python gt resolved,"
     echo "# in UTF-8 mode, with \\r stripped from piped output."
     printf 'PY=%q\n' "$GT_PYTHON"
@@ -1746,6 +1746,27 @@ if [ -d "$SRC/hooks" ]; then
   done < <(modpy onfiles "$MODJSON")
   set_modes ${GT_HOOK_FILES[@]+"${GT_HOOK_FILES[@]}"}
   echo "Installed Core-rule hooks → $GT_HOOKS"
+  # gt unlock's Touch ID helper (0.20.0, macOS). Built HERE from the shipped Swift source
+  # (scripts/gt-presence.swift) with the Xcode Command Line Tools and ad-hoc signed, unless an
+  # identical build is already in place. A Developer ID signed release binary installed with a
+  # `gt-presence.release` marker beside it is never rebuilt over.
+  # Without swiftc nothing fails: gt unlock still offers TOTP and says Touch ID is unavailable.
+  if [ "$(uname -s)" = Darwin ] && [ -f "$GT_HOOKS/gt_unlock_touchid.py" ] \
+     && [ -f "$GT_HOOKS/gt-presence.swift" ]; then
+    _gtp_bin="$HOME/.claude/golden-thread/bin"
+    _gtp_sum=$(shasum -a 256 "$GT_HOOKS/gt-presence.swift" 2>/dev/null | cut -d' ' -f1)
+    if [ -x "$_gtp_bin/gt-presence" ] && [ -f "$_gtp_bin/gt-presence.release" ]; then
+      echo "Touch ID helper → $_gtp_bin/gt-presence (signed release binary, kept)"
+    elif [ -x "$_gtp_bin/gt-presence" ] && [ "$(cat "$_gtp_bin/gt-presence.source-sha256" 2>/dev/null)" = "$_gtp_sum" ]; then
+      echo "Touch ID helper → $_gtp_bin/gt-presence (unchanged)"
+    elif python3 -B "$GT_HOOKS/gt_unlock_touchid.py" build --dest "$_gtp_bin" >/dev/null 2>&1; then
+      printf '%s\n' "$_gtp_sum" > "$_gtp_bin/gt-presence.source-sha256"
+      echo "Touch ID helper → $_gtp_bin/gt-presence (built here, ad-hoc signed)"
+    else
+      echo "Touch ID helper not built (needs the Xcode Command Line Tools: xcode-select --install);"
+      echo "  gt unlock can still use TOTP. It is off by default either way."
+    fi
+  fi
   # Windows: the interpreter the preflight resolved, for the hook wrappers (hooks/gt_python.sh
   # reads it). Their `python3` is otherwise the Store stub and every hook fails open, silently.
   if [ -n "${GT_PYTHON:-}" ]; then
@@ -1754,7 +1775,7 @@ if [ -d "$SRC/hooks" ]; then
   fi
   # One interpreter for every scheduled job (0.19.1), then rewrite any installed job on
   # another one. A macOS privacy grant is per interpreter, so jobs on two pythons meant a
-  # grant that covered only some of them. 0.19.3: CHOSEN, not overwritten -- the recorded
+  # grant that covered only some of them. 0.20.0: CHOSEN, not overwritten -- the recorded
   # interpreter is kept (0.19.1/0.19.2 replaced it with the python running the install, and
   # under launchd Homebrew's python could not write the vault: every install broke the jobs),
   # and with a job installed the choice is proven by a write probe run under launchd.
@@ -3047,6 +3068,14 @@ PI_RC=0
 post_install_gate || PI_RC=$?
 if [ "$PI_RC" -ne 0 ]; then
   exit "$PI_RC"
+fi
+
+# gt unlock (0.20.0) ships OFF. Say so once, here -- what it is and how to turn it on -- and
+# never again per session (no nagging). When it is on, the same command reports its level.
+if [ -f "$HOME/.claude/golden-thread/hooks/gt_unlock.py" ]; then
+  echo ""
+  python3 -B "$HOME/.claude/golden-thread/hooks/gt_unlock.py" status 2>/dev/null \
+    | sed 's/^/  /' || true
 fi
 
 echo "Restart Claude Code to load the plugins."

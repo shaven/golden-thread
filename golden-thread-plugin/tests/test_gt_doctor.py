@@ -239,7 +239,7 @@ class DoctorVaultCheck(DoctorBase):
 @unittest.skipUnless(os.name == "nt", "Windows-only: the Task Scheduler backend (macOS has "
                                       "DoctorScheduleCheck; Linux has no scheduler backend)")
 class DoctorScheduleCheckOnWindows(DoctorBase):
-    """`schedule` on Windows (0.19.3): an installed job is a spec + wrapper under
+    """`schedule` on Windows (0.20.0): an installed job is a spec + wrapper under
     ~/.claude/golden-thread/jobs, judged by Task Scheduler's Last Result. schtasks is the stub
     from test_schedule_task_scheduler, reached through GT_SCHTASKS_STUB -- never the real one."""
 
@@ -465,7 +465,7 @@ class DoctorWorkersAndLint(DoctorBase):
         self.install_hook_scripts(["gt_workers.py"])
         row = [c for c in json.loads(self.doctor("--json").stdout)["checks"]
                if c["check"] == "workers"][0]
-        # unknown on native Windows: no `ps -eo`, so gt_workers says NOT CHECKED (0.19.3)
+        # unknown on native Windows: no `ps -eo`, so gt_workers says NOT CHECKED (0.20.0)
         self.assertIn(row["state"], ("ok", "warn", "unknown") if IS_WINDOWS else ("ok", "warn"))
 
     def test_lint_findings_are_summarised_not_dumped(self):
@@ -841,7 +841,7 @@ class DoctorUnderlyingCheckCrashes(DoctorBase):
         self.assertEqual(row["state"], "unknown", str(row))
 
     def test_a_worker_check_that_could_not_look_is_unknown_not_clean(self):
-        # 0.19.3: gt_workers prints NOT CHECKED when it cannot read the process table (native
+        # 0.20.0: gt_workers prints NOT CHECKED when it cannot read the process table (native
         # Windows); that is neither "clean" nor a stray to reap.
         (self.hooks / "gt_workers.py").write_text(
             "print('GT workers: NOT CHECKED — the process table could not be read')\n",

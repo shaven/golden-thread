@@ -54,6 +54,7 @@ DOCS = [
     ("ONBOARDING.md",          "ONBOARDING.html",          "ONBOARDING.pdf",          "chrome"),
     ("OBSIDIAN-WORKFLOW.md",   "OBSIDIAN-WORKFLOW.html",   "OBSIDIAN-WORKFLOW.pdf",   "chrome"),
     ("golden-thread-docs.md",  "golden-thread-docs.html",  "golden-thread-docs.pdf",  "chrome"),
+    ("SECURITY.md",            "SECURITY.html",            "SECURITY.pdf",            "chrome"),
 ]
 
 # HTML with no markdown source. Never rebuilt -- there is nothing to rebuild from.

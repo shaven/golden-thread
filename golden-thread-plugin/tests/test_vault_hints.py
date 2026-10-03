@@ -72,6 +72,16 @@ class VaultHints(HintsBase):
         self.assertNotIn(SENTINEL, out)
         self.assertNotIn("nightly snapshots are kept", out)
 
+    def test_a_locked_knowledge_folder_is_never_surfaced(self):
+        """0.20.0: Knowledge/ holding gt_lock.py's stub is absent: no entry pointing into it is
+        hinted, neither a plaintext page left beside the lock nor a locked <page>.md.age."""
+        self.config(vault_hints="on")
+        k = self.vault / "Knowledge"
+        (k / "Log Retention.md").replace(k / "Log Retention.md.age")
+        (k / ".gt-locked").write_bytes(b"scope: gt:lock:Knowledge\n")
+        self.assertIsNone(self.hook("how long are logs kept, and when are production "
+                                    "deploys allowed"))
+
     def test_no_match_above_the_threshold_adds_nothing(self):
         self.config(vault_hints="on")
         self.assertIsNone(self.hook("please refactor the parser to use a generator"))

@@ -117,7 +117,7 @@ step: destination | gate | the destination is a clean git repository root, outsi
   STATE="$HOME/.claude/golden-thread/copygt"
   [ -n "$REPORT" ] || REPORT="$STATE/report-$STAMP.md"
   REPORT=$("$PY" -c "import os,sys; print(os.path.realpath(os.path.expanduser(sys.argv[1])))" "$REPORT")
-  # (0.19.3) Compared by Python, not as bash strings: under Git Bash `pwd -P` gives DEST as
+  # (0.20.0) Compared by Python, not as bash strings: under Git Bash `pwd -P` gives DEST as
   # /tmp/... while Python's realpath gives REPORT as C:\...\Temp\..., so the old `case` never
   # matched there and a report inside the destination was written into the mirror.
   INSIDE=$("$PY" -c "import os,sys; n=lambda p: os.path.normcase(os.path.realpath(p)); print('yes' if n(sys.argv[2]).startswith(n(sys.argv[1]) + os.sep) else 'no')" "$DEST" "$REPORT")

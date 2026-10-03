@@ -467,7 +467,7 @@ class QueueFirstTest(GuardTestBase):
                 f"cd {v} && cp /tmp/a.md INBOX.md",
                 f'cd "{v}/Projects/alpha"; tee -a research.md < /tmp/x']
         if IS_WINDOWS:
-            # Git Bash's own form of a drive path, /c/Users/..., is the same directory (0.19.3).
+            # Git Bash's own form of a drive path, /c/Users/..., is the same directory (0.20.0).
             msys = "/" + v[0].lower() + v[2:]
             cmds += [f"cd {msys}/Projects && echo x >> alpha/research.md",
                      f'echo x >> "{msys}/INBOX.md"']

@@ -28,7 +28,7 @@ CHROME="${CHROME:-/Applications/Google Chrome.app/Contents/MacOS/Google Chrome}"
 MAJOR=$("$CHROME" --version 2>/dev/null | grep -oE '[0-9]+' | head -1)
 [ "${MAJOR:-0}" -ge 131 ] || { echo "Chrome $MAJOR is too old: @page margin boxes (MANUAL page numbers) need 131+"; exit 2; }
 
-DOCS=(MANUAL ONBOARDING OBSIDIAN-WORKFLOW golden-thread-docs golden-thread-developer-guide)
+DOCS=(MANUAL ONBOARDING OBSIDIAN-WORKFLOW golden-thread-docs golden-thread-developer-guide SECURITY)
 [ $# -gt 0 ] && DOCS=("$@")
 for d in "${DOCS[@]}"; do [ -f "$d.html" ] || { echo "no $d.html"; exit 2; }; done
 

@@ -132,6 +132,10 @@ while IFS= read -r cmd; do
       # a fresh one included, so silence from these is a real failure.
       speaks "$out" systemMessage && ok "SessionStart $name emits systemMessage" \
                                   || bad "SessionStart $name said nothing: $out" ;;
+    gt_unlock.py)
+      # gt unlock (0.20.0) ships OFF, and off it must say nothing and start nothing.
+      [ -z "$out" ] && ok "SessionStart $name silent while unlock is off" \
+                    || bad "SessionStart $name spoke while unlock is off: $out" ;;
     gt_report_card.py|gt_usage_brief.py)
       # Both report on HISTORY -- a prior session's card, a usage record. A throwaway
       # home has neither, so silence is the correct answer here and speaking is also

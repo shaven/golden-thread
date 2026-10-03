@@ -25,7 +25,7 @@ from _harness import PYTHON, SCRIPTS, Sandbox, load_module, IS_WINDOWS, skip_on_
 TS_FMT = "%Y-%m-%d %H:%M:%S %Z"
 # Windows spells the local %Z as a phrase ("Central Daylight Time") that no gt ever wrote:
 # zone-name heartbeats are a POSIX-era legacy, and gt_session.py writes a numeric %z. So a
-# local heartbeat set by a test on Windows is spelled the way gt spells one (0.19.3).
+# local heartbeat set by a test on Windows is spelled the way gt spells one (0.20.0).
 LOCAL_TS_FMT = "%Y-%m-%d %H:%M:%S %z" if IS_WINDOWS else TS_FMT
 LIVE_PID = str(os.getpid())
 
@@ -708,7 +708,7 @@ class NoFlockIsAnnouncedTest(SessionToolsBase):
         mod = load_module(self.tool, "gt_session_noflock")
         mod.use_vault(self.vault)
         mod.fcntl = None                 # the platform this module's fallback is for
-        mod.msvcrt = None                # and no Windows lock either (0.19.3; None on POSIX)
+        mod.msvcrt = None                # and no Windows lock either (0.20.0; None on POSIX)
         return mod
 
     def claim_args(self, sid, *files):

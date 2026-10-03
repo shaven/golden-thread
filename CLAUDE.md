@@ -61,7 +61,7 @@ a block cannot loop, and test the allow cases before the block case.
 
 ## The documents, and what belongs in each
 
-Nine documents, each with a different reader. The release gate checks that every skill is
+Ten documents, each with a different reader (SECURITY.md joined in 0.20.0). The release gate checks that every skill is
 *named* in three of them and that no PDF is older than its source — it cannot check whether
 what a document **says** is still true, which is the failure that actually happens.
 
@@ -94,6 +94,12 @@ python3 dev/plugins.py manifest golden-thread/<version>
 | **`README.md`** (plugin) | **Reader:** someone who has installed it and wants the reference. **Must carry:** what it does; every skill as a row; packs and the registry including precedence and `retract`; vault structure; the immutability model; key files. |
 | **`MANUAL.md`** | **Reader:** a daily user. **Must carry:** the model; packs and the registry in full (merge modes, precedence, `retract`, slots without consumers); vault layout; use cases; setup; daily work; every setting. The deepest document — anything with a *why* belongs here rather than in a README. |
 | **`golden-thread-docs.md`** | **Reader:** quick lookup, and the printed PDF. **Must carry:** an accurate version line for **every** plugin and module; the Core rules; one row per skill; the modules. **Goes stale at:** the version line, which names six plugins whose numbers move independently. |
+
+### Security
+
+| | |
+|---|---|
+| **`SECURITY.md`** (0.20.0) | **Reader:** anyone deciding whether to turn gt unlock on, and an enterprise reviewer. **Must carry:** the verbatim headline ("Unlock proves a person was present…"); what was built and what each measure stops; how it works; per-platform setup; the threat-model table with what each level does **not** protect; "Locking down more"; enterprise floor and signing; recovery and turning it off. **Must not carry:** any claim stronger than the code and its tests support — never "secure", "unhackable". **Goes stale at:** factor setup steps, the level table, the broker ratings. |
 
 ### Getting started
 
