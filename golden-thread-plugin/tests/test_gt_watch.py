@@ -15,7 +15,8 @@ import unittest
 from pathlib import Path
 
 from _harness import (Sandbox, SCRIPTS, REPO, PYTHON, latest_version_dir, IS_WINDOWS,
-                      skip_on_windows, WIN_CRON, WIN_FAKE_EXE)
+                      skip_on_windows, WIN_CRON)
+from _fakes import install_fake
 
 WATCH_MODULE = latest_version_dir(REPO / "golden-thread-watch")
 WATCH = WATCH_MODULE / "scripts" / "gt_watch.py"
@@ -83,6 +84,12 @@ class WatchTest(Sandbox):
     # -- fixtures ------------------------------------------------------------
     def _stub(self, name, body):
         p = self.bin / name
+        if name == "gh":
+            # Runnable on native Windows too (0.20.0, tests/_fakes.py). `crontab` is NOT: cron
+            # is POSIX-only (WIN_CRON), and a crontab Windows could find would change what the
+            # hook says there.
+            install_fake(self, p, body)
+            return
         p.write_text(body, encoding="utf-8")
         p.chmod(p.stat().st_mode | stat.S_IEXEC | stat.S_IXGRP | stat.S_IXOTH)
 
@@ -234,7 +241,6 @@ class TestFetchAndRules(WatchTest):
         self.assertEqual(e["severity"], "p0")
         self.assertIn("p0_when", " ".join(e["reasons"]))
 
-    @skip_on_windows(WIN_FAKE_EXE)
     def test_rule1_advisory_and_release_via_gh_stub(self):
         self._stub("gh", GH_STUB)
         (self.fixtures / "releases.json").write_text("[]")
@@ -399,7 +405,7 @@ class TestCron(WatchTest):
 
     @unittest.skipUnless(IS_WINDOWS, "the Windows wording; POSIX installs the cron entry")
     def test_windows_says_cron_is_posix_only(self):
-        """0.19.3: Windows has no cron. install-cron says so in words, and with watches the
+        """0.20.0: Windows has no cron. install-cron says so in words, and with watches the
         report says nothing fetches on its own -- not a silent "nothing new" for ever."""
         p = self.watch("install-cron", "--every", "30m")
         self.assertEqual(p.returncode, 1, p.stdout)

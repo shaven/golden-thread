@@ -14,12 +14,13 @@ Contract:
     a second run writes nothing and reports "conflict awaiting you".
 """
 import json
+import os
 import shutil
 import subprocess
 import unittest
 
-from _harness import (Sandbox, SCRIPTS, TEMPLATES, WIN_FAKE_EXE, core_rules_dir,
-                      legacy_core_rules_dir, skip_on_windows)
+from _harness import Sandbox, SCRIPTS, TEMPLATES, core_rules_dir, legacy_core_rules_dir
+from _fakes import install_fake
 
 
 UP = SCRIPTS / "gt_upgrade.py"
@@ -318,7 +319,6 @@ class DocumentMerges(UpgradeBase):
         _lf(base, shipped.replace("\n", "\n\n", 1))
         self.assertIn("doc-merge", self.up("status").stdout)
 
-    @skip_on_windows(WIN_FAKE_EXE)
     def test_a_dry_run_writes_no_working_copy_inside_the_vault(self):
         """A rehearsal must not write, not even for an instant.
 
@@ -344,14 +344,13 @@ class DocumentMerges(UpgradeBase):
         seen = self.tmp / "seen.txt"
         bindir = self.tmp / "spybin"
         bindir.mkdir()
-        spy = bindir / "git"
-        spy.write_text('#!/bin/sh\nls -a "%s" >> "%s"\nexec "%s" "$@"\n'
-                       % (d.parent, seen, real_git))
-        spy.chmod(0o755)
+        install_fake(self, bindir / "git", '#!/bin/sh\nls -a "%s" >> "%s"\nexec "%s" "$@"\n'
+                     % (d.parent, seen, real_git))
 
         before = self.snapshot()
         p = self.py(UP, "run", "--vault", str(self.v), "--dry-run",
-                    env={"PATH": "%s:%s" % (bindir, self.env.get("PATH", "/usr/bin:/bin"))})
+                    env={"PATH": os.pathsep.join([str(bindir),
+                                                  self.env.get("PATH", "/usr/bin:/bin")])})
         self.assertEqual(p.returncode, 0, p.stdout + p.stderr)
         self.assertTrue(seen.is_file(), "the spy git was never called; the test proves nothing")
         self.assertNotIn(".merging", seen.read_text(),

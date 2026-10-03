@@ -9,7 +9,8 @@ import os
 import shutil
 import unittest
 
-from _harness import skip_on_windows, WIN_FAKE_EXE, Sandbox, REPO, PYTHON, needs_dev
+from _harness import Sandbox, REPO, PYTHON, needs_dev
+from _fakes import install_fake
 
 ANNOUNCE = REPO / "dev" / "announce.py"
 PUBLISH = REPO / "dev" / "publish.sh"
@@ -84,11 +85,9 @@ class Announce(Sandbox):
         self.bin.mkdir()
         self.log = self.tmp / "gh.log"
         self.json = self.tmp / "gh.json"
-        gh = self.bin / "gh"
-        gh.write_text(FAKE_GH % {"log": self.log, "json": self.json,
-                                 "fail": self.tmp / "gh.fail",
-                                 "failcreate": self.tmp / "gh.failcreate"})
-        gh.chmod(0o755)
+        install_fake(self, self.bin / "gh", FAKE_GH % {
+            "log": self.log, "json": self.json, "fail": self.tmp / "gh.fail",
+            "failcreate": self.tmp / "gh.failcreate"})
         self.env["PATH"] = os.pathsep.join([str(self.bin), self.env.get("PATH", "")])
         self.discussions([])
         self.draft = self.home / ".claude" / "golden-thread" / "announce-0.5.3.md"
@@ -112,12 +111,12 @@ class Announce(Sandbox):
         return p.stdout + p.stderr
 
     def calls(self):
-        return self.log.read_text().count("CALL ") if self.log.exists() else 0
+        return self.log.read_text(encoding="utf-8").count("CALL ") if self.log.exists() else 0
 
     def creates(self):
         if not self.log.exists():
             return []
-        return [c for c in self.log.read_text().split("CALL ")[1:] if "createDiscussion" in c]
+        return [c for c in self.log.read_text(encoding="utf-8").split("CALL ")[1:] if "createDiscussion" in c]
 
     # -- off ----------------------------------------------------------------------------
     def test_off_by_default_calls_nothing(self):
@@ -132,19 +131,17 @@ class Announce(Sandbox):
         self.assertEqual(self.calls(), 0)
 
     # -- draft --------------------------------------------------------------------------
-    @skip_on_windows(WIN_FAKE_EXE)
     def test_draft_writes_the_file_and_posts_nothing(self):
         self.setting("draft")
         out = self.announce()
         self.assertTrue(self.draft.is_file(), out)
         self.assertIn(str(self.draft), out)
         self.assertEqual(self.creates(), [])
-        text = self.draft.read_text()
+        text = self.draft.read_text(encoding="utf-8")
         for v in ("0.5.1", "0.5.2", "0.5.3"):
             self.assertIn(v, text)
 
     # -- post ---------------------------------------------------------------------------
-    @skip_on_windows(WIN_FAKE_EXE)
     def test_post_creates_one_discussion_naming_every_version(self):
         self.setting("post")
         out = self.announce()
@@ -161,15 +158,13 @@ class Announce(Sandbox):
         self.assertIn("discussions/99", out)
         self.assertFalse(self.draft.exists())
 
-    @skip_on_windows(WIN_FAKE_EXE)
     def test_owner_and_repo_come_from_origin(self):
         self.setting("post")
         self.announce()
-        log = self.log.read_text()
+        log = self.log.read_text(encoding="utf-8")
         self.assertIn("owner=wombat-owner", log)
         self.assertIn("name=kestrel-repo", log)
 
-    @skip_on_windows(WIN_FAKE_EXE)
     def test_an_announced_version_is_left_out(self):
         self.setting("post")
         self.discussions([{"title": "gt 0.5.1 is out", "body": ""}])
@@ -180,7 +175,6 @@ class Announce(Sandbox):
         self.assertNotIn("0.5.1", create)
         self.assertIn("title=gt 0.5.2 → 0.5.3 — ", create)
 
-    @skip_on_windows(WIN_FAKE_EXE)
     def test_a_single_release_title(self):
         self.setting("post")
         self.discussions([{"title": "Notes", "body": "covers v0.5.2"}])
@@ -189,7 +183,6 @@ class Announce(Sandbox):
         self.assertIn("title=gt 0.5.3 — ", create)
         self.assertNotIn("0.5.2", create.split("body=")[0])
 
-    @skip_on_windows(WIN_FAKE_EXE)
     def test_the_release_itself_already_announced_is_never_posted_twice(self):
         self.setting("post")
         self.discussions([{"title": "gt 0.5.3 — kestrel", "body": ""}])
@@ -198,7 +191,6 @@ class Announce(Sandbox):
         self.assertEqual(self.creates(), [])
         self.assertFalse(self.draft.exists())
 
-    @skip_on_windows(WIN_FAKE_EXE)
     def test_a_bounded_match_0_5_3_is_not_named_by_0_5_30(self):
         self.setting("post")
         self.discussions([{"title": "gt 0.5.30", "body": ""}])
@@ -247,7 +239,6 @@ class Announce(Sandbox):
         self.assertIn("Falling back to draft", out)
         self.assertTrue(self.draft.is_file())
 
-    @skip_on_windows(WIN_FAKE_EXE)
     def test_create_failing_falls_back_to_draft(self):
         self.setting("post")
         (self.tmp / "gh.failcreate").write_text("")
@@ -255,7 +246,6 @@ class Announce(Sandbox):
         self.assertIn("could not create", out)
         self.assertTrue(self.draft.is_file())
 
-    @skip_on_windows(WIN_FAKE_EXE)
     def test_no_announcements_category_falls_back_to_draft(self):
         self.setting("post")
         self.discussions([], category="Ideas")
@@ -265,7 +255,6 @@ class Announce(Sandbox):
         self.assertTrue(self.draft.is_file())
 
     # -- dry run ------------------------------------------------------------------------
-    @skip_on_windows(WIN_FAKE_EXE)
     def test_dry_run_prints_and_posts_nothing(self):
         self.setting("post")
         out = self.announce("--dry-run")
@@ -288,7 +277,6 @@ class Announce(Sandbox):
         self.assertEqual(p.returncode, 0, p.stdout + p.stderr)
         return p.stdout
 
-    @skip_on_windows(WIN_FAKE_EXE)
     def test_publish_dry_run_prints_the_announcement_and_posts_nothing(self):
         self.setting("post")
         out = self.publish_step("yes")
@@ -296,7 +284,6 @@ class Announce(Sandbox):
         self.assertEqual(self.creates(), [])
         self.assertFalse(self.draft.exists())
 
-    @skip_on_windows(WIN_FAKE_EXE)
     def test_publish_post_posts(self):
         self.setting("post")
         self.publish_step("no")

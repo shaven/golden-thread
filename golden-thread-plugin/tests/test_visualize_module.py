@@ -31,7 +31,8 @@ import unittest
 from pathlib import Path
 
 from _harness import Sandbox, GT, WIKI, REPO, PYTHON, SCRIPTS, TOOLS, GIT_ID, needs_dev, \
-    latest_version_dir, gt_requires_range, load_module, skip_on_windows, WIN_FAKE_EXE
+    latest_version_dir, gt_requires_range, load_module
+from _fakes import install_fake
 
 VIS = latest_version_dir(REPO / "golden-thread-visualize")
 SCRIPT = VIS / "scripts" / "gt_visualize.py"
@@ -893,9 +894,8 @@ class VisualizePublish(Sandbox):
         d = self.tmp / "ghbin"
         d.mkdir()
         log = self.tmp / "gh.log"
-        (d / "gh").write_text(FAKE_GH % {"log": log})
-        (d / "gh").chmod(0o755)
-        self.env["PATH"] = "%s:%s" % (d, self.env["PATH"])
+        install_fake(self, d / "gh", FAKE_GH % {"log": log})
+        self.env["PATH"] = os.pathsep.join([str(d), self.env["PATH"]])
         return log
 
     def test_the_module_registers_both_settings(self):
@@ -953,7 +953,6 @@ class VisualizePublish(Sandbox):
                                  "the credential's value was printed")
                 self.assertNotIn("10.20.30.40", p.stdout + p.stderr)
 
-    @skip_on_windows(WIN_FAKE_EXE)
     def test_the_settings_choose_the_default_target(self):
         log = self.fake_gh()
         self.settings(visualize_publish="gist", visualize_publish_visibility="link")
@@ -985,7 +984,6 @@ class VisualizePublish(Sandbox):
         self.assertEqual(p.returncode, 1)
         self.assertIn("targets set github-pages repo=", p.stderr)
 
-    @skip_on_windows(WIN_FAKE_EXE)
     def test_gist_creates_once_then_edits_the_same_gist(self):
         log = self.fake_gh()
         p = self.publish("--target", "gist", "--visibility", "link", "--yes")
