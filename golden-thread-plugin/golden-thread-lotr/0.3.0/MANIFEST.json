@@ -41,8 +41,8 @@
    "sha256": "9393f43745dab800f31aa4d8e688d1a755504e3330f5a1c0ca4cbade09794dde"
   },
   "scripts/lotrlib/engine.py": {
-   "bytes": 21353,
-   "sha256": "c0194acd2e08a99f44388b669185659c5d5a7743738023eb9a6216494aee654f"
+   "bytes": 21724,
+   "sha256": "ba0006da4ff05a8f47933e4bb6ca6c97467b8472bb3b86a5ab028d1d938128ae"
   },
   "scripts/lotrlib/errors.py": {
    "bytes": 632,
@@ -53,8 +53,8 @@
    "sha256": "1b8465a298ed6b2395bd9a8d2b0fcac8dbd8ae18ff5d0f799b87cde0bc108071"
   },
   "scripts/lotrlib/policy.py": {
-   "bytes": 3199,
-   "sha256": "26d3ff0981c1158da1e7e7d74a7b4bf405bce539503730607b3bb464ff727f29"
+   "bytes": 7043,
+   "sha256": "1b245d11162152975aa42a261c3f6ef68558c33c509b5d2c95b963f2d4e597b4"
   },
   "scripts/lotrlib/profiles.py": {
    "bytes": 19668,
@@ -109,6 +109,6 @@
    "sha256": "0a5dc06c80759b3c11ce748a9cfea2213d37f4138bb4e97010ee01db27b6ea66"
   }
  },
- "generated": "2026-10-04T09:59:00",
+ "generated": "2026-10-04T12:14:22",
  "version": "0.3.0"
 }

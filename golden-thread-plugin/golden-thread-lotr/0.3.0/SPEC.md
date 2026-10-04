@@ -175,7 +175,7 @@ def check_client(client: dict, conn_id: str, tier: str) -> None
 3. `policy.write` → write.
 4. `policy.read` → read.
 5. Profile override `op["tier"]`.
-6. GraphQL: `graphql_query` whose first keyword is `mutation` → write, otherwise read.
+6. GraphQL: `graphql_query` is lexed whole (comments and strings removed); read only if it holds exactly one operation, a `query` or the `{...}` shorthand, plus fragment definitions. Mutation, subscription, several operations, or anything unparsable → write. An explicit `body` is classified in place of `query`.
 7. Method: GET/HEAD → read; anything else → write.
 
 Unknown → write.
