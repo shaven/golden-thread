@@ -494,6 +494,29 @@ report-card, watch; lockstep modules `requires_gt >=0.20.0,<0.21.0`).
   runs the suite with HOME and TMPDIR in one per-run directory on the runner's disk,
   `/var/tmp/gt-test-<uid>/<run id>` (`$GT_REMOTE_TMP` overrides `/var/tmp`), which it removes: test temp dirs that leaked into a 3.9 GB tmpfs
   `/tmp` had made claudebox2's full runs fail with ENOSPC.
+- **A test that leaks a temp dir now fails.** `tests/prun.py` gives every unit its own empty
+  `TMPDIR` and fails any unit that leaves something in it, naming each entry and its size, then
+  removes it. The leaks were invisible because the tests passed: `test_gt_demote` left a ~118 MB
+  `gt-dem-*` per test, `test_gt_registry` a `gt-reg-*`, and nine other classes the same (all now
+  clean up with `addCleanup`). The check found three more on its first runs: the harness's
+  `Sandbox` removed its directory in `tearDown`, which never runs when a subclass's `setUp`
+  calls `skipTest()` (every skipped sandbox test leaked; it is a cleanup now); on Windows
+  `shutil.rmtree(..., ignore_errors=True)` silently left every sandbox holding a git repo
+  (read-only objects) in `dev/check_wiring_coverage.py` and the shared post-install fixture;
+  and `dev/remote-test.sh` never removed its own log (it now keeps it only for a failed run,
+  whose message names it). `GT_TEST_LEAK_CHECK=0` turns the check off for diagnosis; plain
+  `GT_TEST_SERIAL=1` runs are not checked, and tests that put sockets in `/tmp` on purpose
+  (the LOTR tests) are outside `TMPDIR` and covered only by their own `tearDown`.
+- **A sandbox never touches the real scheduler.** `gt_schedule.py` took any HOME *inside* the
+  real home for the real user, so a test or throwaway install under it -- `test_tmpdir=noindex`
+  puts every test HOME in `~/Library/Caches/gt-tests.noindex` -- would `launchctl bootout` /
+  `bootstrap` the developer's real jobs on `reconcile` (which `install.sh` runs) and probe under
+  the real launchd domain. The real user is now exactly `<pwd home>/Library/LaunchAgents`,
+  realpath-compared; and with a sandbox marker set (`GT_TEST_SANDBOX`, which the test harness
+  sets for every test and every process a test starts, and `selftest.sh` for its throwaway
+  install) every scheduler write -- launchctl
+  bootstrap/bootout/kickstart/load/unload..., schtasks /Create /Run /Delete /Change /End -- is
+  refused whatever code path reaches it. Reads (`launchctl print`, `schtasks /Query`) still run.
 
 ## gt 0.19.2 — 2026-10-03
 

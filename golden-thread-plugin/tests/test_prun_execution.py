@@ -194,5 +194,43 @@ class Hosts(FakeRepo):
         self.assertIn("no runner reachable", p.stdout)
 
 
+class LeakCheck(FakeRepo):
+    """0.20.0: a unit that leaves anything in its TMPDIR fails, naming what it left. Before it,
+    test_gt_demote left ~118 MB per test and claudebox2's /tmp filled to 97%, all green."""
+
+    def test_a_leaked_temp_dir_fails_its_unit_and_nothing_is_left(self):
+        tests = self.plugin / "tests"
+        (tests / "test_leaky.py").write_text(
+            "import tempfile, unittest\n"
+            "class Leaky(unittest.TestCase):\n"
+            "    def test_leaks(self): tempfile.mkdtemp(prefix='gt-leak-')\n")
+        (tests / "test_tidy.py").write_text(
+            "import shutil, tempfile, unittest\n"
+            "class Tidy(unittest.TestCase):\n"
+            "    def test_cleans(self):\n"
+            "        d = tempfile.mkdtemp(prefix='gt-tidy-')\n"
+            "        self.addCleanup(shutil.rmtree, d)\n")
+        tmp = self.tmp / "t"
+        tmp.mkdir()
+        p = self.prun("test_leaky", "test_tidy", env={"TMPDIR": str(tmp)})
+        self.assertEqual(p.returncode, 1, p.stdout)
+        self.assertIn("FAIL test_leaky.Leaky", p.stdout)
+        self.assertIn("ok   test_tidy.Tidy", p.stdout)
+        self.assertRegex(p.stdout, r"LEAKED TEMP: test_leaky\.Leaky left 1 entry .*\n  gt-leak-")
+        self.assertNotIn("gt-tidy-", p.stdout)
+        self.assertEqual(list(tmp.iterdir()), [], "the run left its own temp dirs behind")
+
+    def test_the_check_can_be_turned_off(self):
+        (self.plugin / "tests" / "test_leaky.py").write_text(
+            "import tempfile, unittest\n"
+            "class Leaky(unittest.TestCase):\n"
+            "    def test_leaks(self): tempfile.mkdtemp(prefix='gt-leak-')\n")
+        tmp = self.tmp / "t"
+        tmp.mkdir()
+        p = self.prun("test_leaky", env={"TMPDIR": str(tmp), "GT_TEST_LEAK_CHECK": "0"})
+        self.assertOk(p)
+        self.assertNotIn("LEAKED TEMP", p.stdout)
+
+
 if __name__ == "__main__":
     unittest.main()

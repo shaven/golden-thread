@@ -307,6 +307,23 @@ def run_install(repo, home, vault):
     return p.returncode, (p.stdout or "") + (p.stderr or "")
 
 
+def _rmtree(path):
+    """shutil.rmtree that clears read-only bits first: git writes its objects read-only and
+    Windows refuses to delete those, so ignore_errors left every sandbox behind (0.20.0)."""
+    import stat
+
+    def retry(func, p, _exc):
+        try:
+            os.chmod(p, stat.S_IWRITE | stat.S_IREAD)
+            func(p)
+        except OSError:
+            pass
+    if sys.version_info >= (3, 12):
+        shutil.rmtree(str(path), onexc=retry)
+    else:
+        shutil.rmtree(str(path), onerror=retry)
+
+
 def check(version_dir, keep=False, module_matrix=True):
     version_dir = Path(version_dir).resolve()
     plugin_root = version_dir.parent.parent
@@ -477,7 +494,7 @@ def check(version_dir, keep=False, module_matrix=True):
         if keep:
             print("sandbox kept at %s" % sandbox, file=sys.stderr)
         else:
-            shutil.rmtree(sandbox, ignore_errors=True)
+            _rmtree(sandbox)
     # Two shipped files installing to ONE destination: the manifest then records two
     # hashes for one path, so the drift check must disagree with one of them forever.
     # Found 2026-09-12 -- gt_paths.py shipped from both hooks/ (a 0.12.2-era copy) and

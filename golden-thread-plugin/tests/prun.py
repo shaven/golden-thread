@@ -121,13 +121,104 @@ def classes_in(module):
     return ["%s.%s" % (module, n) for n in names] or [module]
 
 
+# ---- temp dirs a unit leaves behind (0.20.0) ------------------------------------
+#
+# Every unit runs with its OWN empty TMPDIR under one run root, and whatever is still in it when
+# the unit's process has exited is a leak: the unit FAILS, naming what it left and how big. Before
+# this, tests/test_gt_demote.py left a ~118 MB `gt-dem-*` per test and test_gt_registry.py a
+# `gt-reg-*`, every run, on every machine -- claudebox2's /tmp reached 97% full -- and nothing
+# said so, because a leak is invisible to a test that passed. The unit's directory is removed
+# after the check, so a leak is reported once and never accumulates.
+#
+# The limit: a test that writes outside TMPDIR on purpose (the LOTR tests put sockets in /tmp,
+# because macOS caps a socket path at 104 bytes) is not seen here; those clean up in tearDown.
+
+_UNIT_TMP_ROOT = None
+_UNIT_SEQ = iter(range(1, 1 << 30))
+_UNIT_SEQ_LOCK = threading.Lock()
+
+
+def _tree_size(path):
+    total = 0
+    for root, _dirs, files in os.walk(path):
+        for f in files:
+            try:
+                total += os.lstat(os.path.join(root, f)).st_size
+            except OSError:
+                pass
+    return total
+
+
+def _rm_all(path):
+    """rmtree that clears read-only bits first (git objects; Windows refuses them otherwise)."""
+    import stat
+
+    def retry(func, p, _exc):
+        try:
+            os.chmod(p, stat.S_IWRITE | stat.S_IREAD | stat.S_IEXEC)
+            parent = os.path.dirname(p)
+            os.chmod(parent, stat.S_IRWXU)
+            func(p)
+        except OSError:
+            pass
+    if sys.version_info >= (3, 12):
+        shutil.rmtree(str(path), onexc=retry)
+    else:
+        shutil.rmtree(str(path), onerror=retry)
+
+
+def leaked_temp(unit_tmp):
+    """-> ['name (size)', ...] for everything a unit left in its TMPDIR, largest first."""
+    try:
+        names = sorted(os.listdir(unit_tmp))
+    except OSError:
+        return []
+    sized = []
+    for n in names:
+        p = os.path.join(unit_tmp, n)
+        size = _tree_size(p) if os.path.isdir(p) and not os.path.islink(p) else \
+            (os.lstat(p).st_size if os.path.lexists(p) else 0)
+        sized.append((size, n))
+    sized.sort(reverse=True)
+    return ["%s (%s)" % (n, _human(size)) for size, n in sized]
+
+
+def _human(n):
+    for unit in ("B", "KB", "MB", "GB"):
+        if n < 1024 or unit == "GB":
+            return ("%d %s" % (n, unit)) if unit == "B" else ("%.1f %s" % (n, unit))
+        n /= 1024.0
+
+
+def _drop_run_dirs(cache_dir):
+    shutil.rmtree(cache_dir, ignore_errors=True)
+    if _UNIT_TMP_ROOT and os.path.isdir(_UNIT_TMP_ROOT):
+        _rm_all(_UNIT_TMP_ROOT)
+
+
 def run_unit(unit):
     started = time.time()
+    env, unit_tmp = None, None
+    if _UNIT_TMP_ROOT:
+        with _UNIT_SEQ_LOCK:
+            seq = next(_UNIT_SEQ)
+        unit_tmp = os.path.join(_UNIT_TMP_ROOT, str(seq))
+        os.mkdir(unit_tmp, 0o700)
+        # Forward slashes on Windows: Python reads either, and Git Bash's mktemp needs them.
+        env = dict(os.environ, TMPDIR=Path(unit_tmp).as_posix() if os.name == "nt" else unit_tmp)
     p = subprocess.run([PY, "-m", "unittest", "-v", unit],
-                       capture_output=True, text=True, cwd=str(HERE))
+                       capture_output=True, text=True, cwd=str(HERE), env=env)
     out = (p.stdout or "") + (p.stderr or "")
     m = COUNT.search(out)
     rc = p.returncode
+    if unit_tmp:
+        left = leaked_temp(unit_tmp)
+        _rm_all(unit_tmp)
+        if left:
+            out += ("\nLEAKED TEMP: %s left %d entr%s in its TMPDIR after it exited -- each "
+                    "mkdtemp/TemporaryDirectory needs addCleanup/tearDown (or use Sandbox):\n  %s\n"
+                    % (unit, len(left), "y" if len(left) == 1 else "ies", "\n  ".join(left[:20])))
+            rc = rc or 1
     # (0.20.0) Python 3.12+ exits 5 when a unit ran no tests; a helper base class (WatchTest,
     # ChooseCase...) is exactly that, and older Pythons exit 0 for it, as the note in
     # classes_in() assumes. Only the "no tests" exit is forgiven, never a real failure.
@@ -552,6 +643,11 @@ def main(argv=None):
 
     # One cached install per run, shared by every unit (tests/_harness.cached_install).
     cache_dir = Path(tempfile.mkdtemp(prefix="gt-install-cache-"))
+    # One root for every unit's private TMPDIR (the leak check in run_unit). Short name: a deep
+    # TMPDIR pushes socket paths past macOS's 104 bytes sooner (gt_ipc falls back, but why push).
+    global _UNIT_TMP_ROOT
+    if os.environ.get("GT_TEST_LEAK_CHECK", "1") != "0":
+        _UNIT_TMP_ROOT = tempfile.mkdtemp(prefix="gtu")
     os.environ.setdefault("GT_TEST_INSTALL_CACHE", str(cache_dir))
     started = time.time()
     skipped_hosts = []
@@ -562,16 +658,16 @@ def main(argv=None):
             hosts = [h for h in ((m.get("runners") if m else "") or "").split(",") if h]
         if not hosts:
             print("--hosts: no runners given and the `runners` setting is empty")
-            shutil.rmtree(cache_dir, ignore_errors=True)
+            _drop_run_dirs(cache_dir)
             return 2
         results, skipped_hosts = run_hosts(todo, hosts, jobs)
         if results is None:
-            shutil.rmtree(cache_dir, ignore_errors=True)
+            _drop_run_dirs(cache_dir)
             return 1
         traits.append("hosts")
     else:
         results = run_local(todo, jobs, cap, load_aware)
-    shutil.rmtree(cache_dir, ignore_errors=True)
+    _drop_run_dirs(cache_dir)
 
     total = sum(r["tests"] for r in results)
     failed = [r for r in results if r["rc"] != 0]

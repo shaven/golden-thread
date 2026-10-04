@@ -26,7 +26,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from _harness import (Sandbox, REPO, PYTHON, IS_WINDOWS, latest_version_dir,
+from _harness import (Sandbox, REPO, PYTHON, IS_WINDOWS, latest_version_dir, rmtree,
                       cached_sandbox, source_fingerprint)
 import test_install as _ti   # module import only: its TestCases must not be collected here
 
@@ -74,11 +74,14 @@ class InstalledMachine(Sandbox):
     _shared = None
     PRE_INSTALL = None          # hook: (self) -> None, run after the vault exists, before install
     INSTALL_ARGS = ()
+    KEEP_SANDBOX_AFTER_TEST = True      # shared by every test in the class; removed below
 
     @classmethod
     def tearDownClass(cls):
         if cls._shared:
-            shutil.rmtree(cls._shared["tmp"], ignore_errors=True)
+            # The harness rmtree: git writes read-only objects, which shutil.rmtree cannot
+            # delete on Windows -- ignore_errors left the whole install behind (0.20.0).
+            rmtree(cls._shared["tmp"])
             cls._shared = None
         super().tearDownClass()
 

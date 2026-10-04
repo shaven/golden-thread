@@ -45,6 +45,12 @@ HAS_DEV = (REPO / "dev").is_dir()
 #                         real daemon starts and stops it itself, and asserts it is gone
 UNLOCK_TEST_ENV = {"GT_UNLOCK_NO_UI": "1", "GT_UNLOCK_NO_START": "1"}
 os.environ.update(UNLOCK_TEST_ENV)
+# gt_schedule (0.20.0): launchd's domain is gui/<uid> and Task Scheduler's is the user's,
+# whatever HOME says, so a test must never change either. GT_TEST_SANDBOX makes gt_schedule
+# refuse every scheduler write and never treat any HOME as the real user's. Same reach as
+# UNLOCK_TEST_ENV: every test process, and every process a test starts (Sandbox.env).
+SANDBOX_TEST_ENV = {"GT_TEST_SANDBOX": "1"}
+os.environ.update(SANDBOX_TEST_ENV)
 needs_dev = unittest.skipUnless(HAS_DEV, "dev-only: needs dev/, which the published tree "
                                          "does not carry")
 
@@ -284,12 +290,17 @@ class Sandbox(unittest.TestCase):
 
     def setUp(self):
         self.tmp = Path(tempfile.mkdtemp(prefix="gt-test-"))
+        # A cleanup, not only tearDown: tearDown never runs when setUp raises -- a skipTest()
+        # in a subclass's setUp included -- and every such test leaked its whole sandbox
+        # (0.20.0; tests/prun.py now fails a unit that leaves anything in TMPDIR).
+        self.addCleanup(self._remove_sandbox, self.tmp)
         self.home = self.tmp / "home"
         (self.home / ".claude").mkdir(parents=True)
         env = {k: v for k, v in os.environ.items()
                if not k.startswith(("CLAUDE", "GT_"))}
         env.update(GIT_ID)
         env.update(UNLOCK_TEST_ENV)            # no real prompt, no stray daemon (0.20.0)
+        env.update(SANDBOX_TEST_ENV)           # never the real launchd/schtasks (0.20.0)
         env["HOME"] = str(self.home)
         if IS_WINDOWS:
             # Windows Python's expanduser reads USERPROFILE, not HOME: without this every tool a
@@ -314,8 +325,16 @@ class Sandbox(unittest.TestCase):
         env["GT_SECRETS_BIN"] = str(SCRIPTS / "gt_secrets.py")
         self.env = env
 
+    # A class that shares ONE sandbox across its tests (test_gt_doctor_postinstall's
+    # InstalledMachine) sets this and removes the sandbox itself, in tearDownClass.
+    KEEP_SANDBOX_AFTER_TEST = False
+
+    def _remove_sandbox(self, tmp):
+        if not self.KEEP_SANDBOX_AFTER_TEST:
+            rmtree(tmp)
+
     def tearDown(self):
-        rmtree(self.tmp)
+        pass                    # the sandbox is removed by the cleanup setUp registered
 
     # -- running things ---------------------------------------------------------
     def run_cmd(self, args, input=None, cwd=None, env=None, timeout=120):

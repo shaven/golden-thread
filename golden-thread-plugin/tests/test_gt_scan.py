@@ -27,7 +27,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from _harness import GT
+from _harness import GT, rmtree
 
 AGG = GT / "scripts" / "gt_scan.py"
 LEAF = GT / "scripts" / "gt_scan_language.py"
@@ -48,6 +48,7 @@ class ScanBase(unittest.TestCase):
 
     def setUp(self):
         self.tmp = Path(tempfile.mkdtemp(prefix="gt-scan-"))
+        self.addCleanup(rmtree, self.tmp)
         self.release = self.tmp / "golden-thread" / "9.9.9"
         (self.release / "scripts").mkdir(parents=True)
         (self.release / "packs" / "core").mkdir(parents=True)

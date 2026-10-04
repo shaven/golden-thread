@@ -20,7 +20,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from _harness import GT, Sandbox, SCRIPTS, TOOLS
+from _harness import GT, Sandbox, SCRIPTS, TOOLS, rmtree
 
 SCRIPT = GT / "scripts" / "gt_handoff.py"
 
@@ -28,6 +28,7 @@ SCRIPT = GT / "scripts" / "gt_handoff.py"
 class HandoffTest(unittest.TestCase):
     def setUp(self):
         self.tmp = Path(tempfile.mkdtemp(prefix="gt-ho-"))
+        self.addCleanup(rmtree, self.tmp)
         self.vault = self.tmp / "vault"
         self.proj = self.vault / "Projects" / "alpha"
         self.proj.mkdir(parents=True)

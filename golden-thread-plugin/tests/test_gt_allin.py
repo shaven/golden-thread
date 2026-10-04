@@ -20,7 +20,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from _harness import GT
+from _harness import GT, rmtree
 
 SCRIPT = GT / "scripts" / "gt_allin.py"
 
@@ -28,6 +28,7 @@ SCRIPT = GT / "scripts" / "gt_allin.py"
 class AllInTest(unittest.TestCase):
     def setUp(self):
         self.tmp = Path(tempfile.mkdtemp(prefix="gt-allin-"))
+        self.addCleanup(rmtree, self.tmp)
         self.vault = self.tmp / "vault"
         (self.vault / "Projects" / "alpha" / "memory").mkdir(parents=True)
         (self.vault / "global-memory").mkdir()
@@ -118,6 +119,7 @@ class AllInTest(unittest.TestCase):
         `1 of 1 member(s) ran`, exited 0 having scanned nothing, and offered to push."""
         import shutil
         rel = Path(tempfile.mkdtemp(prefix="gt-partial-")) / "scripts"
+        self.addCleanup(rmtree, rel.parent)
         rel.mkdir(parents=True)
         for name in ("gt_allin.py", "gt_aggregate.py", "gt_doctor.py"):
             src = SCRIPT.parent / name

@@ -14,6 +14,9 @@ set -uo pipefail
 HERE="$(cd "$(dirname "$0")" && pwd)"
 TMP="$(mktemp -d)"; trap 'rm -rf "$TMP"' EXIT
 export HOME="$TMP/home"; mkdir -p "$HOME/.claude"
+# A throwaway HOME must never reach the real launchd domain / Task Scheduler: gt_schedule.py
+# refuses every scheduler write while this is set (0.20.0).
+export GT_TEST_SANDBOX=1
 fail=0
 ok()  { printf 'ok    %s\n' "$1"; }
 bad() { printf 'FAIL  %s\n' "$1"; fail=1; }

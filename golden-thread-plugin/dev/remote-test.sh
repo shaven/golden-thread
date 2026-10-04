@@ -59,7 +59,12 @@ except Exception: pass' 2>/dev/null)
 fi
 [ -n "$HOST" ] || HOST=claudebox
 case "$JOBS" in ''|*[!0-9]*) [ -z "$JOBS" ] || { echo "-j wants a number, got: $JOBS"; exit 2; } ;; esac
-AFF_JSON=""
+AFF_JSON=""; LOG=""; KEEP_LOG=no
+# Its own temp files go when it exits (0.20.0: the leak check in tests/prun.py caught both left
+# behind on every run). A FAILED run keeps its log, because the failure message names it.
+cleanup() { [ -z "$AFF_JSON" ] || rm -f "$AFF_JSON"
+            [ -z "$LOG" ] || [ "$KEEP_LOG" = yes ] || rm -f "$LOG"; }
+trap cleanup EXIT
 if [ "$AFFECTED" = yes ]; then
   # A full template, not `mktemp -t NAME`: GNU mktemp refuses a template with no X's, and the
   # empty result then named a file in the CURRENT directory -- inside the tree being fingerprinted.
@@ -158,6 +163,7 @@ G_SCOPE=$(gate scope); G_TESTS=$(gate tests); G_SEC=$(gate secrets); G_CODE=$(ga
 COUNT=$(gate count); [ -n "$COUNT" ] || COUNT=$(sed -n 's/^Ran \([0-9][0-9]*\) tests.*/\1/p' "$LOG" | tail -1)
 echo "== gates on $HOST: ${GATELINE:-NONE -- the run printed no gt-gates verdict line}"
 if [ "$RC" -ne 0 ]; then
+  KEEP_LOG=yes
   echo "FAILED on $HOST (exit $RC): tests=${G_TESTS:-?} secrets=${G_SEC:-?} code=${G_CODE:-?}. Log: $LOG"; exit 1
 fi
 

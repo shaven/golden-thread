@@ -73,6 +73,22 @@ TASKS = LOGS / "jobs"
 SCHTASKS_NEVER_RAN, SCHTASKS_RUNNING = "267011", "267009"
 SCHTASKS_DAYS = ("SUN", "MON", "TUE", "WED", "THU", "FRI", "SAT", "SUN")   # launchd 0..7
 
+# A test or throwaway install says so through the environment (0.20.0). launchd's domain is
+# gui/<uid> and Task Scheduler's is the user's, WHATEVER HOME says, so a sandbox that reached
+# either would replace the developer's real jobs with its own. tests/_harness.py sets
+# GT_TEST_SANDBOX for every test and every process a test starts.
+SANDBOX_MARKERS = ("GT_TEST_SANDBOX",)
+# The scheduler verbs that CHANGE something. Read-only ones (launchctl print, schtasks /Query)
+# stay allowed, so a sandbox can still report status.
+SCHEDULER_WRITES = {"launchctl": {"bootstrap", "bootout", "kickstart", "load", "unload",
+                                  "enable", "disable", "remove", "submit"},
+                    "schtasks": {"/create", "/run", "/delete", "/change", "/end"}}
+
+
+def sandboxed():
+    """True when a test/sandbox marker is set: the real scheduler is never touched then."""
+    return any(os.environ.get(k) for k in SANDBOX_MARKERS)
+
 
 def on_windows():
     """Read at call time, not import time, so a POSIX test can patch os.name."""
@@ -161,6 +177,15 @@ def run(args, timeout=180):
     # doctor's schedule row can be tested on Windows without touching the real Task Scheduler.
     if args and args[0] == "schtasks" and os.environ.get("GT_SCHTASKS_STUB"):
         args = [sys.executable, os.environ["GT_SCHTASKS_STUB"]] + list(args[1:])
+    elif (len(args) > 1 and str(args[1]).lower() in SCHEDULER_WRITES.get(str(args[0]), ())
+          and sandboxed()):
+        # The last line of defence: whichever code path got here, a sandbox never changes the
+        # real launchd domain or Task Scheduler.
+        class Refused:
+            returncode, stdout = 1, ""
+            stderr = ("refused: %s %s from a test/sandbox (%s set) -- the real scheduler is "
+                      "never touched from one" % (args[0], args[1], "/".join(SANDBOX_MARKERS)))
+        return Refused()
     try:
         return subprocess.run([str(a) for a in args], capture_output=True, text=True,
                               timeout=timeout)
@@ -744,13 +769,21 @@ def do_choose_interpreter(a) -> int:
 
 
 def _is_real_home():
+    """True only when the LaunchAgents this run would load from are EXACTLY the account's own
+    (<pwd home>/Library/LaunchAgents, realpath-compared) and no sandbox marker is set.
+
+    Until 0.20.0 any HOME *inside* the real home counted as the real user, so a sandbox or test
+    install under it -- test_tmpdir=noindex puts every test HOME in
+    ~/Library/Caches/gt-tests.noindex -- would bootout/bootstrap the developer's real jobs."""
+    if sandboxed():
+        return False
     try:
         import pwd
-        real = Path(pwd.getpwuid(os.getuid()).pw_dir).resolve()
+        real = os.path.realpath(pwd.getpwuid(os.getuid()).pw_dir)
     except Exception:
         return False
-    return AGENTS.resolve().is_relative_to(real) if hasattr(Path, 'is_relative_to') \
-        else str(AGENTS.resolve()).startswith(str(real) + os.sep)
+    return (os.path.realpath(str(AGENTS))
+            == os.path.realpath(os.path.join(real, "Library", "LaunchAgents")))
 
 
 def job_interpreter(job):

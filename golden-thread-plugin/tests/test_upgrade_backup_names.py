@@ -12,7 +12,7 @@ import unittest
 from pathlib import Path
 from unittest import mock
 
-from _harness import REPO, latest_version_dir
+from _harness import REPO, latest_version_dir, rmtree
 
 GT = latest_version_dir(REPO / "golden-thread")
 
@@ -28,6 +28,7 @@ def load():
 class BackupNames(unittest.TestCase):
     def setUp(self):
         self.tmp = Path(tempfile.mkdtemp())
+        self.addCleanup(rmtree, self.tmp)
         self.vault = self.tmp / "vault"
         self.vault.mkdir()
         (self.vault / "note.md").write_text("x")

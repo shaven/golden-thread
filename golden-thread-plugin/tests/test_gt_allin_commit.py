@@ -19,7 +19,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from _harness import GT
+from _harness import GT, rmtree
 
 SCRIPT = GT / "scripts" / "gt_allin_commit.py"
 
@@ -27,6 +27,7 @@ SCRIPT = GT / "scripts" / "gt_allin_commit.py"
 class CommitTest(unittest.TestCase):
     def setUp(self):
         self.tmp = Path(tempfile.mkdtemp(prefix="gt-commit-"))
+        self.addCleanup(rmtree, self.tmp)
         self.repo = self.tmp / "repo"
         self.repo.mkdir()
         self.git("init", "-q")

@@ -63,6 +63,7 @@ class CachedInstallIsAFreshInstall(unittest.TestCase):
     def tearDown(self):
         for c in self.cases:
             c.tearDown()
+            c.doCleanups()          # Sandbox removes its tmp in a cleanup (0.20.0)
         shutil.rmtree(self.cache, ignore_errors=True)
         if self.old is None:
             os.environ.pop("GT_TEST_INSTALL_CACHE", None)

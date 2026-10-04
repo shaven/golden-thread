@@ -24,7 +24,7 @@ import unittest
 from contextlib import redirect_stderr, redirect_stdout
 from pathlib import Path
 
-from _harness import GT, load_module, CORE_RULES as CORE, skip_on_windows, WIN_MODE_BITS, WIN_CHMOD_FAULT
+from _harness import GT, load_module, CORE_RULES as CORE, skip_on_windows, WIN_MODE_BITS, WIN_CHMOD_FAULT, rmtree
 
 SCRIPT = GT / "scripts" / "gt_demote.py"
 
@@ -47,6 +47,7 @@ def digest(root):
 class DemoteTest(unittest.TestCase):
     def setUp(self):
         self.tmp = Path(tempfile.mkdtemp(prefix="gt-dem-"))
+        self.addCleanup(rmtree, self.tmp)
         self.vault = self.tmp / "vault"
         for d in ("global-memory", "Knowledge", "Sources",
                   "Projects/alpha/memory", CORE):

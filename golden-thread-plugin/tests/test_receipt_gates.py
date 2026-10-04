@@ -260,6 +260,11 @@ class RemoteTestRunsTheGates(FakeRepo):
         self.env["GT_TEST_LOAD_AWARE"] = "0"
         self.rtmp = self.tmp / "rtmp"
         self.env["GT_REMOTE_TMP"] = self.rtmp.as_posix()
+        # remote-test.sh's OWN temp files (its log, the --affected mapping) go to TMPDIR:
+        # here, so this test can see what it leaves (0.20.0).
+        self.ltmp = self.tmp / "ltmp"
+        self.ltmp.mkdir()
+        self.env["TMPDIR"] = self.ltmp.as_posix()
 
     def remote(self, *args):
         return self.run_cmd(["bash", "dev/remote-test.sh", "--host", "box", *args],
@@ -279,6 +284,7 @@ class RemoteTestRunsTheGates(FakeRepo):
         per_uid = list(self.rtmp.glob("gt-test-*")) if self.rtmp.is_dir() else []
         self.assertEqual(len(per_uid), 1, "the run did not use a per-run TMPDIR under GT_REMOTE_TMP")
         self.assertEqual(list(per_uid[0].iterdir()), [], "the run left its temp dir behind")
+        self.assertEqual(list(self.ltmp.iterdir()), [], "a passing run left its log behind")
 
     def test_a_gate_that_cannot_pass_on_the_runner_records_nothing(self):
         (self.rel / "scripts" / "gt_secrets.py").unlink()
@@ -286,6 +292,11 @@ class RemoteTestRunsTheGates(FakeRepo):
         self.assertEqual(p.returncode, 1, p.stdout + p.stderr)
         self.assertIn("secrets=cannot-run", p.stdout)
         self.assertEqual(ledger_rows(self.home), [], "a run whose secrets gate failed was receipted")
+        # A failed run keeps its log -- the failure message names it -- and nothing else.
+        kept = [p.name for p in self.ltmp.iterdir()]
+        self.assertEqual(len(kept), 1, kept)
+        self.assertTrue(kept[0].startswith("gt-remote-test."), kept)
+        self.assertIn("Log: ", p.stdout)
 
 
 if __name__ == "__main__":

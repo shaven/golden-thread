@@ -22,7 +22,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from _harness import GT
+from _harness import GT, rmtree
 
 SCRIPT = GT / "scripts" / "gt_context.py"
 REGISTRY = GT / "scripts" / "gt_registry.py"
@@ -55,6 +55,7 @@ def pack(slot, name, entries, tier="D"):
 class ContextTest(unittest.TestCase):
     def setUp(self):
         self.tmp = Path(tempfile.mkdtemp(prefix="gt-ctx-"))
+        self.addCleanup(rmtree, self.tmp)
         self.release = self.tmp / "golden-thread" / "9.9.9"
         (self.release / "scripts").mkdir(parents=True)
         (self.release / "packs" / "core").mkdir(parents=True)

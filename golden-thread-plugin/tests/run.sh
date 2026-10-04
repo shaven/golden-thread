@@ -34,6 +34,12 @@
 #
 # GT_TEST_SERIAL=1 falls back to plain `unittest`, and is worth keeping: if a test fails
 # in parallel and passes serially, that difference is itself the finding.
+#
+# TEMP-DIR LEAKS FAIL (0.20.0): prun.py gives every unit its own empty TMPDIR and fails any unit
+# that leaves something in it, naming each entry and its size, then removes it. A leak used to be
+# invisible -- a passing test that left 118 MB behind on every run looked exactly like a clean
+# one. Not covered: GT_TEST_SERIAL=1 (plain unittest, one shared TMPDIR). GT_TEST_LEAK_CHECK=0
+# turns it off, for diagnosis only.
 set -uo pipefail
 cd "$(dirname "$0")"
 

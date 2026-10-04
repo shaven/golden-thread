@@ -14,7 +14,7 @@ import time
 import unittest
 from pathlib import Path
 
-from _harness import needs_dev
+from _harness import needs_dev, rmtree
 
 REPO = Path(__file__).resolve().parent.parent
 SCRIPT = REPO / "dev" / "submissions.py"
@@ -40,6 +40,7 @@ def pack(**over):
 class SubmissionsTest(unittest.TestCase):
     def setUp(self):
         self.tmp = tempfile.mkdtemp(prefix="gt-sub-")
+        self.addCleanup(rmtree, self.tmp)
         # Isolate from the machine's real scrub terms so results are deterministic.
         self.env = dict(os.environ)
         empty = Path(self.tmp) / "scrub.txt"

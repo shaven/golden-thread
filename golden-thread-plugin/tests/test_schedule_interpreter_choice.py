@@ -254,6 +254,77 @@ class AFailedRewriteLeavesTheJob(ChooseCase):
                          "no temporary file left beside the plist")
 
 
+@skip_on_windows("pwd and launchd are POSIX; Windows reloads nothing (Task Scheduler is "
+                 "tested separately)")
+class OnlyTheRealHomeIsReal(ChooseCase):
+    """2026-10-04: _is_real_home() took any HOME *inside* the real home for the real user, so a
+    test or sandbox install under it (test_tmpdir=noindex puts every test HOME in
+    ~/Library/Caches/gt-tests.noindex) would bootout/bootstrap the developer's real launchd jobs.
+    Now: exactly <pwd home>/Library/LaunchAgents, and never with a sandbox marker set."""
+
+    def setUp(self):
+        super().setUp()
+        import pwd
+        self.real = Path(pwd.getpwuid(os.getuid()).pw_dir)
+        # These tests are about what happens WITHOUT the harness's marker; each puts it back
+        # (or sets it) explicitly. patch.dict restores os.environ on cleanup.
+        p = mock.patch.dict(os.environ)
+        p.start()
+        self.addCleanup(p.stop)
+        os.environ.pop("GT_TEST_SANDBOX", None)
+
+    def test_a_home_nested_inside_the_real_home_is_not_the_real_user(self):
+        nested = (self.real / "Library" / "Caches" / "gt-tests.noindex" / "gt-test-x" / "home")
+        self.m.AGENTS = nested / "Library" / "LaunchAgents"        # never created
+        self.assertFalse(self.m._is_real_home(),
+                         "a sandbox HOME under the real home was taken for the real user")
+
+    def test_exactly_the_real_home_is_the_real_user(self):
+        self.m.AGENTS = self.real / "Library" / "LaunchAgents"
+        self.assertTrue(self.m._is_real_home())
+
+    def test_a_sandbox_marker_wins_even_at_the_real_home(self):
+        self.m.AGENTS = self.real / "Library" / "LaunchAgents"
+        os.environ["GT_TEST_SANDBOX"] = "1"
+        self.assertFalse(self.m._is_real_home())
+
+    def fake_launchctl(self):
+        bin_dir = self.tmp / "fakebin"
+        bin_dir.mkdir()
+        log = self.tmp / "launchctl.log"
+        tool = bin_dir / "launchctl"
+        tool.write_text('#!/bin/sh\necho "$@" >> "%s"\n' % log)
+        tool.chmod(0o755)
+        os.environ["PATH"] = str(bin_dir) + os.pathsep + os.environ.get("PATH", "")
+        return log
+
+    def test_a_sandbox_never_runs_a_scheduler_write(self):
+        log = self.fake_launchctl()
+        os.environ["GT_TEST_SANDBOX"] = "1"
+        for args in (["launchctl", "bootstrap", "gui/1", "/x.plist"],
+                     ["launchctl", "bootout", "gui/1/com.markethaven.gt-daily"],
+                     ["launchctl", "kickstart", "-k", "gui/1/com.markethaven.gt-daily"],
+                     ["schtasks", "/Create", "/TN", "gt-daily"],
+                     ["schtasks", "/Delete", "/TN", "gt-daily", "/F"]):
+            r = self.m.run(args)
+            self.assertEqual(r.returncode, 1, args)
+            self.assertIn("refused", r.stderr, args)
+        self.assertFalse(log.exists(), "a scheduler write reached launchctl from a sandbox")
+        # A read is still allowed: a sandbox may report status.
+        self.assertEqual(self.m.run(["launchctl", "print", "gui/1"]).returncode, 0)
+        self.assertEqual(log.read_text().split(), ["print", "gui/1"])
+
+    def test_without_the_marker_the_write_goes_through(self):
+        log = self.fake_launchctl()
+        self.assertEqual(self.m.run(["launchctl", "bootout", "gui/1/x"]).returncode, 0)
+        self.assertEqual(log.read_text().split(), ["bootout", "gui/1/x"])
+
+    def test_the_harness_marks_every_test_and_every_process_it_starts(self):
+        from _harness import SANDBOX_TEST_ENV
+        self.assertEqual(SANDBOX_TEST_ENV, {"GT_TEST_SANDBOX": "1"})
+        self.assertEqual(self.env.get("GT_TEST_SANDBOX"), "1")
+
+
 if __name__ == "__main__":
     import unittest
     unittest.main()

@@ -23,7 +23,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from _harness import GT, CORE_RULES as CORE, core_rules_dir
+from _harness import GT, CORE_RULES as CORE, core_rules_dir, rmtree
 
 SCRIPT = GT / "scripts" / "gt_optimize.py"
 
@@ -45,6 +45,7 @@ def tree_digest(root):
 class OptimizeTest(unittest.TestCase):
     def setUp(self):
         self.tmp = Path(tempfile.mkdtemp(prefix="gt-opt-"))
+        self.addCleanup(rmtree, self.tmp)
         self.vault = self.tmp / "vault"
         for d in ("global-memory", "Sources", "Knowledge",
                   "Projects/alpha/memory", CORE):

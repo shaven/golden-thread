@@ -18,7 +18,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from _harness import GT, skip_on_windows, WIN_FILENAME
+from _harness import GT, skip_on_windows, WIN_FILENAME, rmtree
 
 SCRIPT = GT / "scripts" / "gt_registry.py"
 
@@ -49,6 +49,7 @@ class RegistryTest(unittest.TestCase):
 
     def setUp(self):
         self.tmp = Path(tempfile.mkdtemp(prefix="gt-reg-"))
+        self.addCleanup(rmtree, self.tmp)
         self.release = self.tmp / "golden-thread" / "9.9.9"
         self.scripts = self.release / "scripts"
         self.scripts.mkdir(parents=True)
