@@ -7,6 +7,8 @@
     gt_sandbox.py remove [--json]              take out exactly what gt added
     gt_sandbox.py check  [--json]              drift: is what gt wrote still there, still current?
     gt_sandbox.py verify [--json]              PASS / FAIL / NOT-CHECKED rows (gt_unlock.py verify)
+    gt_sandbox.py managed [--out FILE] [--json]  print (or save) the ADMIN-REQUIRED variant, for
+                                               managed settings or `claude --settings FILE`
 
 Normally driven by the `sandbox_mode` setting (gt_settings.py set sandbox_mode on|off), which
 calls apply / remove. `sandbox_vault_reads` (deny, the default, or allow) decides whether the
@@ -33,6 +35,15 @@ code.claude.com/docs/en/sandboxing, /settings-reference and /permissions, 2026-1
       the sandbox does not cover them. Plus Edit on any .claude/settings.json and
       .claude/settings.local.json, so the file tools cannot switch the sandbox back off.
 
+      Plus Edit on the files Claude Code, your login shell or launchd load code or config
+      from (re-review M2): ~/.claude.json, ~/.claude/{settings.local.json,CLAUDE.md,agents,
+      skills,commands,hooks,output-styles}, any .mcp.json and any .claude/{agents,skills,
+      commands,hooks,workflows}, the shell rc files, ~/Library/LaunchAgents (macOS) and
+      ~/.config/{systemd/user,autostart} (Linux). Not ~/.claude/** as a whole: the file tools
+      write auto-memory and plans there in normal use.
+  permissions.disableBypassPermissionsMode "disable"
+      bypass mode would skip every rule above; restored to its previous value on `remove`.
+
   Write/NotebookEdit path rules are NOT written: the permissions page says Claude Code
   "checks file permissions against Edit(path) and Read(path) rules only" and ignores (and
   warns about) Write(...) and NotebookEdit(...) path rules; Edit covers every editing tool.
@@ -43,6 +54,22 @@ user's own entries -- including an identical one the user had first -- in place.
 set is restored to what it was before, unless someone changed it since. Managed settings are
 never written; `check` reports when they override what gt asked for. Each write is atomic, and
 the previous settings.json is copied to ~/.claude/golden-thread/backups/ first.
+
+WHAT `check` FLAGS (re-review M1). Every setting that loosens the sandbox is a problem, in your
+user settings AND in the project files Claude Code loads for the working directory
+(.claude/settings.json there; .claude/settings.local.json there and at the git root):
+sandbox.enabled false, allowUnsandboxedCommands / enableWeakerNestedSandbox /
+enableWeakerNetworkIsolation / allowAppleEvents / network.allowAllUnixSockets /
+network.allowLocalBinding / filesystem.disabled true, any excludedCommands, ignoreViolations,
+network.allowUnixSockets or network.allowMachLookup entry, an allowRead / allowWrite / Edit or
+Read allow / additionalDirectories entry that re-opens a region gt denies, any project
+additionalDirectories entry, and a project disableBypassPermissionsMode other than "disable".
+
+ADMIN-REQUIRED. User settings never make the sandbox unloosenable: a repository's settings still
+merge in. Only `allowUnsandboxedCommands: false` in MANAGED settings or passed with `claude
+--settings` does -- then Claude Code ignores a repository's loosening keys
+(code.claude.com/docs/en/sandboxing, "Repository settings under an admin-required sandbox";
+v2.1.285+). `gt_sandbox.py managed` prints that variant; gt never writes managed settings.
 
 WHAT IT DOES NOT DO. It is a fence around Claude's own tools. Hooks, MCP servers (gt's vault
 server, LOTR) and anything you run in a terminal run outside it, by Claude Code's design -- which
@@ -82,6 +109,46 @@ PASS, FAIL, NC = "PASS", "FAIL", "NOT-CHECKED"
 # "Settings precedence"). The sandbox itself already write-protects these inside the working
 # directory for shell commands ("Protected paths"); these rules do it for the file tools.
 SETTINGS_FILE_RULES = ("Edit(//**/.claude/settings.json)", "Edit(//**/.claude/settings.local.json)")
+# Files and folders Claude Code -- or your login shell, or launchd -- loads CODE or CONFIGURATION
+# from, outside the vault (0.20.0, re-review M2). The sandbox already write-protects these for
+# shell commands ("Protected paths"), but the file tools (Edit, Write, NotebookEdit) follow
+# permission rules only, so without these a file tool could add a hook, an MCP server, a skill or
+# a login item that runs OUTSIDE the sandbox next time. Home-relative entries ("dir/" = a folder)
+# are written as `//` absolute rules like every other gt rule; `//**/` matches the name anywhere
+# (code.claude.com/docs/en/permissions, "Read and Edit").
+# ~/.claude/** as a whole is deliberately NOT denied: the auto-memory folder
+# (~/.claude/projects/*/memory/) and plans are written by the file tools in normal use.
+HOME_CONFIG_FILES = (
+    ".claude.json", ".claude/settings.local.json", ".claude/CLAUDE.md",
+    ".claude/agents/", ".claude/skills/", ".claude/commands/", ".claude/hooks/",
+    ".claude/output-styles/",
+    ".zshrc", ".zshenv", ".zprofile", ".zlogin", ".bashrc", ".bash_profile", ".bash_login",
+    ".profile")
+HOME_CONFIG_FILES_BY_MODE = {
+    "macos": ("Library/LaunchAgents/",),
+    "linux": (".config/systemd/user/", ".config/autostart/"),
+    "wsl2": (".config/systemd/user/", ".config/autostart/"),
+}
+ANYWHERE_CONFIG_RULES = (
+    "Edit(//**/.mcp.json)", "Edit(//**/.claude/agents/**)", "Edit(//**/.claude/skills/**)",
+    "Edit(//**/.claude/commands/**)", "Edit(//**/.claude/hooks/**)",
+    "Edit(//**/.claude/workflows/**)")
+
+
+def config_file_rules(h=None, mode=None):
+    """-> the Edit(...) denies for HOME_CONFIG_FILES (+ this platform's) and the anywhere rules."""
+    out = []
+    for rel in HOME_CONFIG_FILES + HOME_CONFIG_FILES_BY_MODE.get(mode or platform_mode(), ()):
+        d = rel.endswith("/")
+        out.append("Edit(%s)" % rule_path(os.path.join(home(h), *rel.rstrip("/").split("/")), d))
+    return out + list(ANYWHERE_CONFIG_RULES)
+
+
+# Scalar permission keys gt sets while the mode is on, with the value (re-review M2): bypass
+# mode skips every permission prompt AND rule check for the file tools, so it would switch the
+# deny rules above off. `"disable"` is the documented value, honoured from any scope
+# (code.claude.com/docs/en/permissions, "Permission modes" / "Managed settings").
+PERMISSION_KEYS = (("disableBypassPermissionsMode", "disable"),)
 
 
 class SandboxError(Exception):
@@ -349,13 +416,15 @@ def plan(h=None, vault=None, vault_reads=None, mode=None):
     deny += [("Edit(%s)" % rule_path(p, False)) for p in deny_write_files]
     deny += [("Read(%s)" % rule_path(p, True)) for p in deny_read_dirs]
     deny += list(SETTINGS_FILE_RULES)
+    deny += config_file_rules(h, mode)
     lists["permissions.deny"] = list(dict.fromkeys(deny))
     for p in [vault, inbox]:
         if _GLOB.search(p.replace("\\", "/")) and mode in ("linux", "wsl2"):
             notes.append("%s contains a glob character: on Linux the sandbox skips write-list "
                          "entries with * ? or [ (settings-reference, 'Sandbox path prefixes')" % p)
     return {"mode": mode, "vault": vault, "vault_reads": vault_reads,
-            "sandbox_bools": bools, "lists": lists, "notes": notes,
+            "sandbox_bools": bools, "permission_keys": dict(PERMISSION_KEYS),
+            "lists": lists, "notes": notes,
             "paths": {"vault": vault, "gt_home": gth, "unlock_home": uh,
                       "unlock_socket_dir": sock, "lotr_homes": lotr, "lotr_store": store,
                       "inbox": inbox, "locked_folders": locked}}
@@ -498,28 +567,207 @@ def managed_sandbox(paths=None):
     return out
 
 
-def project_overrides(cwd=None):
-    """Project settings in `cwd` that outrank user settings and loosen the sandbox: a local or
-    shared project file setting sandbox.enabled false (or the filesystem layer off). -> [text]."""
-    cwd = cwd or os.getcwd()
-    out = []
-    for name in ("settings.json", "settings.local.json"):
-        p = os.path.join(cwd, ".claude", name)
+def managed_settings(paths=None):
+    """-> the managed files' `sandbox` and `permissions` objects, merged shallowly (later files
+    win), as {"sandbox": {...}, "permissions": {...}}."""
+    out = {"sandbox": {}, "permissions": {}}
+    for p in paths if paths is not None else managed_paths():
         d = _read_json(p, None)
-        sb = d.get("sandbox") if isinstance(d, dict) else None
-        if not isinstance(sb, dict):
+        if not isinstance(d, dict):
             continue
-        if sb.get("enabled") is False:
-            out.append("%s sets sandbox.enabled false, which outranks your user settings in "
-                       "this project" % p)
-        if sb.get("allowUnsandboxedCommands") is True:
-            out.append("%s sets sandbox.allowUnsandboxedCommands true (user settings' false "
-                       "holds from Claude Code v2.1.285)" % p)
-        fs = sb.get("filesystem")
-        if isinstance(fs, dict) and (fs.get("allowRead") or fs.get("allowWrite")):
-            out.append("%s adds sandbox.filesystem allowRead/allowWrite entries; a narrower "
-                       "allowRead re-opens part of a denied region" % p)
+        for top in ("sandbox", "permissions"):
+            if isinstance(d.get(top), dict):
+                out[top].update(d[top])
     return out
+
+
+def _git_root(start):
+    cur = os.path.abspath(start)
+    while True:
+        if os.path.exists(os.path.join(cur, ".git")):
+            return cur
+        up = os.path.dirname(cur)
+        if up == cur:
+            return None
+        cur = up
+
+
+def project_settings_files(cwd=None, h=None):
+    """The project-scope settings files Claude Code loads for a session started in `cwd`
+    (code.claude.com/docs/en/settings, 'Where Claude Code looks for each file', and
+    /permissions, 'Working directories'): `.claude/settings.json` from the working directory
+    only (no parent-directory fallback), and `.claude/settings.local.json` from the git
+    repository root -- or the working directory outside a repository, on Windows, and before
+    v2.1.211, so both are checked. A file that IS the user settings file (a session started in
+    your home directory) is user scope, not project scope, and is left out."""
+    cwd = os.path.abspath(cwd or os.getcwd())
+    user = os.path.normcase(os.path.abspath(settings_path(h)))
+    cands = [os.path.join(cwd, ".claude", "settings.json"),
+             os.path.join(cwd, ".claude", "settings.local.json")]
+    root = _git_root(cwd)
+    if root and root != cwd:
+        cands.append(os.path.join(root, ".claude", "settings.local.json"))
+    out = []
+    for c in cands:
+        if os.path.normcase(os.path.abspath(c)) == user or c in out:
+            continue
+        if os.path.isfile(c):
+            out.append(c)
+    return out
+
+
+_GLOBCH = re.compile(r"[*?\[]")
+
+
+def _entry_path(entry, kind, base, cwd, h=None):
+    """Resolve one settings path entry to an absolute path (a glob keeps its pattern part).
+    kind "sandbox": sandbox.filesystem syntax (`/abs`, `~/home`, relative to the settings
+    file's anchor). kind "rule": Read/Edit rule syntax (`//abs`, `~/home`, `/` = anchor,
+    else cwd). kind "dir": additionalDirectories (`~`, absolute, else cwd)."""
+    if not isinstance(entry, str) or not entry.strip():
+        return None
+    e = entry.strip().replace("\\", "/")
+    hm = home(h).replace("\\", "/")
+    if e == "~" or e.startswith("~/"):
+        return hm + e[1:]
+    if kind == "rule":
+        if e.startswith("//"):
+            e = e[1:]
+            m = re.match(r"^/([A-Za-z])/(.*)$", e)
+            return ("%s:/%s" % (m.group(1), m.group(2))) if (m and IS_WINDOWS) else e
+        if e.startswith("/"):
+            return base.replace("\\", "/").rstrip("/") + e
+        return cwd.replace("\\", "/").rstrip("/") + "/" + (e[2:] if e.startswith("./") else e)
+    if e.startswith("/") or re.match(r"^[A-Za-z]:/", e):
+        return e
+    anchor = base if kind == "sandbox" else cwd
+    return anchor.replace("\\", "/").rstrip("/") + "/" + (e[2:] if e.startswith("./") else e)
+
+
+def _reopens(path, denied):
+    """Could `path` (an allow entry, possibly a glob) re-open part of a denied region? True when
+    it is at or under a denied path (the narrower allow wins, docs 'Sandbox' table), or when it
+    is a glob whose literal prefix is at, under or ABOVE a denied path (it could match one)."""
+    if not path:
+        return None
+    m = _GLOBCH.search(path)
+    lit = path[:m.start()] if m else path
+    lit = lit.rstrip("/") or "/"
+    for d in denied:
+        dd = d.replace("\\", "/").rstrip("/") or "/"
+        if _inside(lit, dd):
+            return d
+        if m and _inside(dd, lit):
+            return d
+    return None
+
+
+# Sandbox keys that weaken the boundary however they are set (code.claude.com/docs/en/
+# sandboxing, 'Keep developers from widening the policy' and 'Repository settings under an
+# admin-required sandbox'; settings-reference, 'Sandbox settings'). Value test -> why.
+_LOOSE_TRUE = (("enableWeakerNestedSandbox", "weakens the Linux sandbox considerably"),
+               ("enableWeakerNetworkIsolation", "weakens network isolation"),
+               ("allowAppleEvents", "lets sandboxed commands launch other apps unsandboxed"),
+               ("allowUnsandboxedCommands", "lets a failed command retry OUTSIDE the sandbox"),
+               ("network.allowAllUnixSockets", "opens every Unix socket (e.g. docker.sock) "
+                                               "to sandboxed commands"),
+               ("network.allowLocalBinding", "lets sandboxed commands listen on local ports"),
+               ("filesystem.disabled", "turns the filesystem layer, and every gt deny, off"))
+_LOOSE_LIST = (("excludedCommands", "run OUTSIDE the sandbox, with your full access"),
+               ("ignoreViolations", "silences sandbox violations"),
+               ("network.allowUnixSockets", "opens these Unix sockets to sandboxed commands"),
+               ("network.allowMachLookup", "opens these Mach services to sandboxed commands"))
+
+
+def _dig(d, dotted):
+    cur = d
+    for part in dotted.split("."):
+        if not isinstance(cur, dict) or part not in cur:
+            return ABSENT
+        cur = cur[part]
+    return cur
+
+
+def loosening(d, where, scope, denied_read, denied_write, cwd, h=None):
+    """-> [text]: every setting in one settings object `d` (from file `where`, scope "user" or
+    "project") that loosens gt's sandbox (re-review M1). Read-only."""
+    out = []
+    sb = d.get("sandbox") if isinstance(d.get("sandbox"), dict) else {}
+    pm = d.get("permissions") if isinstance(d.get("permissions"), dict) else {}
+    if scope == "user":
+        base = claude_dir(h)
+    else:
+        base = cwd                                       # project anchors: primary working dir
+    if sb.get("enabled") is False:
+        out.append("%s sets sandbox.enabled false%s" % (
+            where, ", which outranks your user settings in this project" if scope == "project"
+            else ""))
+    if sb.get("failIfUnavailable") is False and scope == "project":
+        out.append("%s sets sandbox.failIfUnavailable false: a missing sandbox would run "
+                   "commands unsandboxed" % where)
+    for key, why in _LOOSE_TRUE:
+        if _dig(sb, key) is True:
+            extra = ""
+            if key == "allowUnsandboxedCommands" and scope == "project":
+                extra = " (a user false holds from Claude Code v2.1.285; earlier, this wins)"
+            out.append("%s sets sandbox.%s true: %s%s" % (where, key, why, extra))
+    for key, why in _LOOSE_LIST:
+        v = _dig(sb, key)
+        if v is not ABSENT and v not in (None, [], {}, ""):
+            shown = (", ".join(map(str, v[:6])) + (" ..." if len(v) > 6 else "")) \
+                if isinstance(v, list) else json.dumps(v)[:120]
+            out.append("%s sets sandbox.%s (%s): %s" % (where, key, shown, why))
+    fs = sb.get("filesystem") if isinstance(sb.get("filesystem"), dict) else {}
+    for key, kind, denied in (("allowRead", "sandbox", denied_read),
+                              ("allowWrite", "sandbox", denied_read + denied_write)):
+        for e in fs.get(key) or [] if isinstance(fs.get(key), list) else []:
+            hit = _reopens(_entry_path(e, kind, base, cwd, h), denied)
+            if hit:
+                out.append("%s: sandbox.filesystem.%s %r re-opens %s, which gt denies"
+                           % (where, key, e, hit))
+    dirs = pm.get("additionalDirectories")
+    for e in dirs if isinstance(dirs, list) else []:
+        hit = _reopens(_entry_path(e, "dir", base, cwd, h), denied_read + denied_write)
+        if hit or scope == "project":
+            out.append("%s: permissions.additionalDirectories %r %s" % (
+                where, e, ("re-opens %s, which gt denies" % hit) if hit else
+                "gives sandboxed commands write access a repository chose"))
+    allow = pm.get("allow")
+    for r in allow if isinstance(allow, list) else []:
+        m = re.match(r"^\s*(Edit|Read)\((.*)\)\s*$", r) if isinstance(r, str) else None
+        if not m:
+            continue
+        denied = denied_read if m.group(1) == "Read" else denied_read + denied_write
+        hit = _reopens(_entry_path(m.group(2), "rule", base, cwd, h), denied)
+        if hit:
+            out.append("%s: permissions.allow %s reaches %s, which gt denies (an Edit allow "
+                       "grants sandboxed commands write access too)" % (where, r, hit))
+    if scope == "project":
+        v = pm.get("disableBypassPermissionsMode", ABSENT)
+        if v is not ABSENT and v != "disable":
+            out.append("%s sets permissions.disableBypassPermissionsMode %s, which outranks "
+                       "gt's \"disable\"" % (where, json.dumps(v)))
+    return out
+
+
+def project_overrides(cwd=None, h=None, denied_read=(), denied_write=()):
+    """Project settings that outrank or merge with user settings and loosen the sandbox ->
+    [text]. Kept for callers; check() uses loosening() directly."""
+    cwd = os.path.abspath(cwd or os.getcwd())
+    out = []
+    for p in project_settings_files(cwd, h):
+        d = _read_json(p, None)
+        if isinstance(d, dict):
+            out += loosening(d, p, "project", list(denied_read), list(denied_write), cwd, h)
+    return out
+
+
+def admin_required(ms):
+    """Is the sandbox admin-required by managed settings (docs: 'Repository settings under an
+    admin-required sandbox')? Then Claude Code itself ignores a repository's loosening keys."""
+    sb = ms.get("sandbox") or {}
+    net = sb.get("network") if isinstance(sb.get("network"), dict) else {}
+    return sb.get("allowUnsandboxedCommands") is False or net.get("allowManagedDomainsOnly") is True
 
 
 # ------------------------------------------------------------------ apply / remove
@@ -528,6 +776,13 @@ def _bool_get(d, key):
     if not isinstance(sb, dict) or key not in sb:
         return ABSENT
     return sb[key]
+
+
+def _perm_get(d, key):
+    pm = d.get("permissions")
+    if not isinstance(pm, dict) or key not in pm:
+        return ABSENT
+    return pm[key]
 
 
 def apply(h=None, force=False, vault=None, reads=None):
@@ -593,9 +848,22 @@ def apply(h=None, force=False, vault=None, reads=None):
         d["sandbox"][name] = val
         changes.append("set sandbox.%s %s (was %s)" % (name, json.dumps(val),
                                                       "unset" if cur == ABSENT else json.dumps(cur)))
+    pkeys = dict(st.get("permission_keys") or {})
+    for name, val in p["permission_keys"].items():
+        cur = _perm_get(d, name)
+        if cur == val:
+            continue                                     # already so: not gt's to restore
+        if name not in pkeys:
+            pkeys[name] = {"prev": cur, "set": val}
+        if not isinstance(d.get("permissions"), dict):
+            d["permissions"] = {}
+        d["permissions"][name] = val
+        changes.append("set permissions.%s %s (was %s)" % (
+            name, json.dumps(val), "unset" if cur == ABSENT else json.dumps(cur)))
     if changes:
         save_settings(d, h)
-    st.update({"schema": STATE_SCHEMA, "added": added, "booleans": bools, "mode": mode,
+    st.update({"schema": STATE_SCHEMA, "added": added, "booleans": bools,
+               "permission_keys": pkeys, "mode": mode,
                "vault": p["vault"], "vault_reads": p["vault_reads"],
                "applied_at": time.strftime("%Y-%m-%dT%H:%M:%S%z")})
     save_state(st, h)
@@ -637,8 +905,22 @@ def remove(h=None):
             d["sandbox"][name] = prev
         changes.append("restored sandbox.%s to %s" % (name, "unset" if prev == ABSENT
                                                       else json.dumps(prev)))
-    if isinstance(d.get("sandbox"), dict) and not d["sandbox"]:
-        del d["sandbox"]
+    for name, rec in (st.get("permission_keys") or {}).items():
+        cur = _perm_get(d, name)
+        if cur != rec.get("set"):
+            notes.append("permissions.%s was changed since gt set it; left as %s" % (
+                name, "unset" if cur == ABSENT else json.dumps(cur)))
+            continue
+        prev = rec.get("prev", ABSENT)
+        if prev == ABSENT:
+            d["permissions"].pop(name, None)
+        else:
+            d["permissions"][name] = prev
+        changes.append("restored permissions.%s to %s" % (name, "unset" if prev == ABSENT
+                                                          else json.dumps(prev)))
+    for top in ("sandbox", "permissions"):
+        if isinstance(d.get(top), dict) and not d[top]:
+            del d[top]
     if changes:
         save_settings(d, h)
     try:
@@ -665,6 +947,9 @@ def check(h=None, cwd=None, managed=None):
             for key in LISTS:
                 lst = _get_list(d, key) or []
                 left += ["%s %s" % (key, e) for e in st.get("added", {}).get(key) or [] if e in lst]
+            for name, rec in (st.get("permission_keys") or {}).items():
+                if _perm_get(d, name) == rec.get("set"):
+                    left.append("permissions.%s %s" % (name, json.dumps(rec.get("set"))))
         return {"state": "stale-off" if left else "off", "on": False, "missing": [],
                 "stale": left, "problems": (["sandbox mode is off but gt's entries are still in "
                                              "settings.json: gt_sandbox.py remove"] if left else []),
@@ -684,27 +969,55 @@ def check(h=None, cwd=None, managed=None):
     for name, val in p["sandbox_bools"].items():
         if _bool_get(d, name) != val:
             missing.append("sandbox.%s %s" % (name, json.dumps(val)))
+    for name, val in p["permission_keys"].items():
+        if _perm_get(d, name) != val:
+            missing.append("permissions.%s %s" % (name, json.dumps(val)))
     sb = d.get("sandbox") if isinstance(d.get("sandbox"), dict) else {}
-    fs = sb.get("filesystem") if isinstance(sb.get("filesystem"), dict) else {}
-    if fs.get("disabled") is True:
-        problems.append("sandbox.filesystem.disabled is true in your user settings: the "
-                        "filesystem layer, and every gt deny, is off")
-    if sb.get("allowAppleEvents") is True:
-        problems.append("sandbox.allowAppleEvents is true: sandboxed commands can launch "
-                        "other apps unsandboxed (docs: 'Security limitations')")
-    ms = managed if managed is not None else managed_sandbox()
+    # Every key that loosens the sandbox is a problem in user AND project scope (re-review M1):
+    # an excludedCommands entry runs with your full access, whoever wrote it.
+    # The regions gt denies (on native Windows there are no sandbox lists: the same paths).
+    dr = p["lists"]["sandbox.filesystem.denyRead"] or [p["paths"]["unlock_home"]]
+    dw = p["lists"]["sandbox.filesystem.denyWrite"] or [p["paths"]["vault"],
+                                                        p["paths"]["gt_home"]]
+    cwd = os.path.abspath(cwd or os.getcwd())
+    problems += loosening(d, settings_path(h), "user", dr, dw, cwd, h)
+    if managed is None:
+        ms = managed_settings()
+    elif "sandbox" in managed or "permissions" in managed:
+        ms = {"sandbox": dict(managed.get("sandbox") or {}),
+              "permissions": dict(managed.get("permissions") or {})}
+    else:                                                # legacy: the merged sandbox booleans
+        ms = {"sandbox": {k: v for k, v in managed.items() if "." not in k},
+              "permissions": {}}
+        if managed.get("filesystem.disabled") is True:
+            ms["sandbox"]["filesystem"] = {"disabled": True}
+    msb = ms["sandbox"]
     for name, val in p["sandbox_bools"].items():
-        if name in ms and ms[name] != val:
+        if name in msb and isinstance(msb[name], bool) and msb[name] != val:
             problems.append("managed settings set sandbox.%s %s, which overrides gt's %s (gt "
-                            "never changes managed settings)" % (name, json.dumps(ms[name]),
+                            "never changes managed settings)" % (name, json.dumps(msb[name]),
                                                                  json.dumps(val)))
-    if ms.get("filesystem.disabled") is True:
+    mfs = msb.get("filesystem") if isinstance(msb.get("filesystem"), dict) else {}
+    if mfs.get("disabled") is True:
         problems.append("managed settings turn the sandbox's filesystem layer off")
-    problems += project_overrides(cwd)
+    problems += ["managed settings: " + x for x in
+                 loosening({"sandbox": {k: v for k, v in msb.items()
+                                        if k not in ("enabled", "allowUnsandboxedCommands",
+                                                     "failIfUnavailable")},
+                            "permissions": {k: v for k, v in ms["permissions"].items()
+                                            if k in ("additionalDirectories",)}},
+                           "managed settings", "user", dr, dw, cwd, h)]
     notes = list(p["notes"])
-    exc = sb.get("excludedCommands")
-    if isinstance(exc, list) and exc:
-        notes.append("excludedCommands run OUTSIDE the sandbox: %s" % ", ".join(map(str, exc)))
+    proj = project_overrides(cwd, h, dr, dw)
+    if proj and admin_required(ms):
+        notes += ["ignored by Claude Code (managed settings make the sandbox admin-required): "
+                  + x for x in proj]
+    else:
+        problems += proj
+    if not admin_required(ms):
+        notes.append("a repository's .claude/settings.json or settings.local.json can still "
+                     "loosen the sandbox in that project; only managed settings or "
+                     "`claude --settings` make it admin-required (gt_sandbox.py managed)")
     state = "ok" if not (missing or stale or problems) else "drift"
     return {"state": state, "on": True, "missing": missing, "stale": stale,
             "problems": problems, "mode": p["mode"], "notes": notes}
@@ -835,6 +1148,64 @@ def verify_rows(h=None, cwd=None, live=True, status=None):
     return rows
 
 
+# ------------------------------------------------------------------ admin-required
+def required_settings_path(h=None):
+    return os.path.join(gt_home(h), "sandbox", "required-settings.json")
+
+
+def managed_snippet(h=None, mode=None):
+    """-> the settings that make gt's sandbox ADMIN-REQUIRED, for managed settings or
+    `claude --settings <file>` (re-review M1). gt writes neither on its own: user settings can
+    always be loosened by a repository's .claude/settings*.json, and only a disabled
+    unsandboxed retry set in managed settings or with --settings stops that
+    (code.claude.com/docs/en/sandboxing, 'Repository settings under an admin-required
+    sandbox'). Pure."""
+    p = plan(h, mode=mode)
+    out = {"permissions": {"deny": p["lists"]["permissions.deny"]}}
+    out["permissions"].update(p["permission_keys"])
+    if p["sandbox_bools"]:
+        sb = dict(p["sandbox_bools"])
+        # Locked to false: a repository or user `true` for these is then ignored ('Keep
+        # developers from widening the policy').
+        sb.update({"enableWeakerNestedSandbox": False, "enableWeakerNetworkIsolation": False,
+                   "allowAppleEvents": False})
+        sb["network"] = {"allowAllUnixSockets": False, "allowLocalBinding": False}
+        sb["filesystem"] = {"denyWrite": p["lists"]["sandbox.filesystem.denyWrite"],
+                            "denyRead": p["lists"]["sandbox.filesystem.denyRead"],
+                            "allowWrite": p["lists"]["sandbox.filesystem.allowWrite"]}
+        out["sandbox"] = sb
+    return out
+
+
+def managed_text(h=None, out_file=None, mode=None):
+    mode = mode or platform_mode()
+    snip = managed_snippet(h, mode=mode)
+    lines = []
+    if not os_sandbox_supported(mode):
+        lines.append("note: %s has no Claude Code sandbox; only the permission rules below "
+                     "apply, and nothing makes them a boundary." % mode)
+    target = out_file or required_settings_path(h)
+    lines += [
+        "gt sandbox mode, ADMIN-REQUIRED. gt's own entries live in your user settings, which a",
+        "repository's .claude/settings.json or settings.local.json can loosen (excludedCommands,",
+        "allowWrite, unix sockets, ...). Claude Code ignores those repository keys only when the",
+        "unsandboxed retry is disabled in MANAGED settings or with `--settings`. Two ways:",
+        "",
+        "  1. Managed settings (every session on this machine; needs admin rights). Merge this",
+        "     into %s:" % managed_paths()[0],
+        "",
+        "  2. One session at a time, no admin rights:",
+        "       gt_sandbox.py managed --out %s" % target,
+        "       claude --settings %s" % target,
+        "     (%s is inside gt's write-denied home, so the sandboxed shell" % target,
+        "     and the file tools cannot change it.)",
+        "",
+        "Re-run after moving the vault or locking a folder: the paths are this machine's.",
+        "",
+        json.dumps(snip, indent=2)]
+    return "\n".join(lines)
+
+
 # ------------------------------------------------------------------ CLI
 def _print_report(rep, as_json):
     if as_json:
@@ -918,6 +1289,24 @@ def main(argv=None):
                 for x in c["problems"] + c["missing"] + c["stale"]:
                     print("  - " + x)
             return 0 if c["state"] in ("ok", "off") else 1
+        if cmd == "managed":
+            out_file = None
+            if "--out" in rest:
+                i = rest.index("--out")
+                out_file = rest[i + 1] if i + 1 < len(rest) else None
+                if not out_file:
+                    print("gt_sandbox: --out needs a file", file=sys.stderr)
+                    return 2
+                out_file = os.path.abspath(os.path.expanduser(out_file))
+                _atomic_write(out_file, json.dumps(managed_snippet(hh), indent=2) + "\n")
+            if as_json:
+                print(json.dumps(managed_snippet(hh), indent=2))
+            else:
+                print(managed_text(hh, out_file))
+                if out_file:
+                    print("\nwrote %s -- start Claude Code with: claude --settings %s"
+                          % (out_file, out_file))
+            return 0
         if cmd == "verify":
             rows = verify_rows(hh)
             if as_json:
@@ -933,8 +1322,8 @@ def main(argv=None):
         print("gt_sandbox: could not write (%s). Inside Claude Code's sandbox, ~/.claude is "
               "write-protected: run this from a terminal." % e, file=sys.stderr)
         return 1
-    print("usage: gt_sandbox.py status|plan|apply [--force]|remove|check|verify [--json] "
-          "[--home H]", file=sys.stderr)
+    print("usage: gt_sandbox.py status|plan|apply [--force]|remove|check|verify|"
+          "managed [--out FILE] [--json] [--home H]", file=sys.stderr)
     return 2
 
 

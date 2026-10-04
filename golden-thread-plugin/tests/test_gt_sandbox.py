@@ -156,7 +156,11 @@ class ApplyRemove(InProcess):
         self.assertEqual(d["permissions"]["deny"].count(mine), 1, "an existing entry is not doubled")
         self.assertEqual(d["permissions"]["allow"], ["Bash(ls)"])
         self.assertEqual(self.gs.apply()["changes"], [], "apply is idempotent")
-        self.assertEqual(self.gs.check()["state"], "ok")
+        # The user's own excludedCommands is left in place but is NOT a pass (re-review M1):
+        # an excluded command runs outside the sandbox with full access.
+        c = self.gs.check()
+        self.assertEqual(c["state"], "drift")
+        self.assertTrue(any("excludedCommands" in x for x in c["problems"]), c["problems"])
         self.gs.remove()
         self.assertEqual(self.settings(), before, "remove must leave exactly what was there, "
                          "including the user's own copy of an entry gt also wants")
