@@ -415,6 +415,9 @@ if [ "$QUICK" = no ]; then
   OUT=$(tests/run.sh 2>&1); rc=$?
   printf '%s\n' "$OUT" > "$TESTLOG"
   echo "$OUT" | tail -3
+  # The run's verdict line (0.20.0): which gates ran and what they said. The receipt below
+  # carries these verdicts, read from the run itself rather than inferred from its exit code.
+  TEST_GATES=$(printf '%s\n' "$OUT" | grep -v '^[[:space:]]*$' | tail -1 | grep '^gt-gates: ')
   if [ $rc -eq 0 ]; then
     ok "tests/run.sh"
   else
@@ -439,9 +442,16 @@ if [ $FAILS -eq 0 ]; then
   # The receipt core_test_before_commit reads. A --quick pass skipped the tests and the
   # selftest, so it is deliberately NOT evidence: recording one would let a commit
   # through on the strength of a check that never ran the suite.
+  # It names the gates the suite's own verdict line reports (0.20.0); gt_test_receipt refuses a
+  # passing receipt without them, so a run that somehow skipped a gate records nothing.
   if [ "$QUICK" = no ]; then
-    python3 "$GT/scripts/gt_test_receipt.py" record --repo . \
-      --what "dev/release-check.sh" --ok >/dev/null 2>&1 || true
+    tg() { printf '%s\n' "${TEST_GATES:-}" | tr ' ' '\n' | sed -n "s/^$1=//p" | tail -1; }
+    if [ "$(tg scope)" = full ]; then
+      python3 "$GT/scripts/gt_test_receipt.py" record --repo . \
+        --what "dev/release-check.sh" --ok --tests "$(tg count)" \
+        --gate "tests=$(tg tests)" --gate "secrets=$(tg secrets)" --gate "code=$(tg code)" \
+        >/dev/null 2>&1 || true
+    fi
   fi
 else
   echo "RELEASE CHECK FAILED — $FAILS step(s)"

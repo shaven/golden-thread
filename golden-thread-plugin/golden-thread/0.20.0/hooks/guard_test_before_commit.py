@@ -382,6 +382,18 @@ def main():
                                              receipt.get("at_human", "?")))
     else:
         why = "No passing test run is recorded for this repo."
+        try:
+            # 0.20.0: a passing receipt that does not carry the gates this repo's runner
+            # declares (gt-receipt-gates) is refused -- say so, or "no run recorded" reads as
+            # a lie to someone who just watched the suite pass as a subset.
+            bad, need = gt_test_receipt.ungated(root)
+            if bad:
+                why = ("The newest passing run (%s, %s) has no `pass` for gate(s) %s, which "
+                       "this repo's test runner declares; a run that skipped them is not "
+                       "evidence. Run the FULL suite (no selectors) so the gates run."
+                       % (bad.get("what", "?"), bad.get("at_human", "?"), ", ".join(need)))
+        except Exception:
+            pass
     n = len(code)
     reason = (
         "BLOCKED by Core rule core_test_before_commit.\n\n"

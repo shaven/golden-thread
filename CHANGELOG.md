@@ -466,6 +466,35 @@ report-card, watch; lockstep modules `requires_gt >=0.20.0,<0.21.0`).
   python.org's `python` works); hooks under a logged-in Claude Code for Windows are still an
   owner step.
 
+### Test receipts name the gates that ran
+
+- **`-j` no longer turns a full run into a subset.** `tests/run.sh` treated any argument as a
+  test selector, so `dev/remote-test.sh -j 8` (which passed `-j 8` through) ran the suite as a
+  "subset" that skips the secrets gate and the code gate, and remote-test.sh then recorded a
+  full receipt from the exit code. Every remote receipt on 2026-10-03 had skipped the secrets
+  scan. `tests/run.sh` now separates options (`-j`, `--hosts`, `--no-load-aware`, `--affected`)
+  from selectors: a run with no selector is FULL and runs both gates (together, so a secrets
+  finding no longer hides the code verdict), and an unknown option is refused instead of being
+  taken for a module name. remote-test.sh sends the worker count as `GT_TEST_JOBS`, and its
+  `--affected` subsets run with `--gates`.
+- **Every run ends with a verdict line**, `gt-gates: scope=full|scoped|subset tests=… count=N
+  secrets=… code=…`. remote-test.sh records a receipt only when that line, read back from the
+  runner, says full (or `--affected`) and names tests, secrets and code all as `pass`.
+- **A receipt carries the verdicts, and readers require them.** `gt_test_receipt.py record
+  --gate NAME=VERDICT`. A repo whose test runner declares gates (`# gt-receipt-gates: tests
+  secrets code`, in `tests/run.sh` — this repo's does) gets no passing receipt without a `pass`
+  for each: recording one is refused (exit 2), and `check`, the commit guard, `gt-allin-commit`
+  and scoped coverage all skip one that lacks them — the guard and `check` say which gates are
+  missing. A repo that declares none is unaffected. `dev/release-check.sh` records the suite's
+  own verdicts on its receipt. Receipts written before this change carry no gates and no longer
+  count in this repo: the next full run writes one that does.
+- remote-test.sh no longer fails to ship when a tracked file has been deleted from the working
+  tree (`git ls-files -co` still listed it and tar aborted), works under Git Bash (the remote
+  path came from mixed `C:/` and `/tmp` forms) and on Linux (`mktemp -t NAME` is macOS-only), and
+  runs the suite with HOME and TMPDIR in one per-run directory on the runner's disk,
+  `/var/tmp/gt-test-<uid>/<run id>` (`$GT_REMOTE_TMP` overrides `/var/tmp`), which it removes: test temp dirs that leaked into a 3.9 GB tmpfs
+  `/tmp` had made claudebox2's full runs fail with ENOSPC.
+
 ## gt 0.19.2 — 2026-10-03
 
 **gt installs on native Windows** (owner, 2026-10-03). Proven on a Windows 11 VM (Git for

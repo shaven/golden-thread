@@ -43,10 +43,28 @@ append-only, and calling it that was wrong (found 2026-09-18): pruning is the po
 is safe here in a way it would not be in dev/validations.jsonl, because a receipt is
 disposable evidence about a moment rather than a record anyone reviews later. A receipt
 means nothing on another machine: it records that a particular working tree passed here.
+
+GATE VERDICTS (0.20.0). A repo whose test runner also runs GATES -- this repo's tests/run.sh runs
+a secrets scan and a source-validation scan after the suite -- declares them with one comment
+line in that runner, `# gt-receipt-gates: tests secrets code` (looked for in tests/run.sh and
+<dir>/tests/run.sh at the repo root). In such a repo a passing receipt counts -- full or scoped --
+only if it names a `pass` verdict for EVERY declared gate:
+
+    gt_test_receipt.py record --repo . --what "tests/run.sh" --ok --tests 3638 \
+        --gate tests=pass --gate secrets=pass --gate code=pass
+
+and recording a passing receipt that lacks one is REFUSED (exit 2). Found 2026-10-03:
+`dev/remote-test.sh -j 8` handed `-j 8` to tests/run.sh, which took any argument for a test
+selector, ran the suite as a "subset" that skips both gates -- and remote-test.sh still recorded a
+receipt saying the suite passed. Every remote receipt that day had skipped the secrets scan, and
+nothing reading the ledger could tell. A receipt now says which gates ran, and a reader that
+needs them refuses one that does not. A repo that declares no gates is unaffected.
 """
 import argparse
+import glob
 import json
 import os
+import re
 import subprocess
 import sys
 import time
@@ -83,11 +101,57 @@ def read():
         return []
 
 
-def record(repo, what, ok, tests=0, elapsed=0.0, scope=None, files=None):
+# CR tolerated: a runner checked out with CRLF line ends must not silently declare nothing.
+GATES_MARKER = re.compile(r"^#[ \t]*gt-receipt-gates:[ \t]*([a-z][a-z0-9 _-]*?)[ \t\r]*$", re.M)
+
+
+class GatesMissing(ValueError):
+    """A passing receipt that does not carry a `pass` for every gate its repo declares."""
+
+
+def required_gates(repo):
+    """-> sorted list of the gate names a passing receipt for this repo must carry ([] = none).
+
+    Declared by the repo's own test runner (see the module docstring), so the runner that
+    produces the verdicts is the thing that demands them. An unreadable runner declares
+    nothing -- but a runner whose declaration is found cannot be satisfied without it."""
     root = repo_root(repo)
+    names = set()
+    cands = [os.path.join(root, "tests", "run.sh")] + \
+        sorted(glob.glob(os.path.join(root, "*", "tests", "run.sh")))
+    for runner in cands:
+        try:
+            with open(runner, encoding="utf-8", errors="replace") as fh:
+                text = fh.read(65536)
+        except OSError:
+            continue
+        for m in GATES_MARKER.finditer(text):
+            names.update(m.group(1).split())
+    return sorted(names)
+
+
+def missing_gates(r, required):
+    """The required gates this receipt does not name as `pass` (empty = it satisfies them)."""
+    gates = r.get("gates") if isinstance(r.get("gates"), dict) else {}
+    return [g for g in required if gates.get(g) != "pass"]
+
+
+def record(repo, what, ok, tests=0, elapsed=0.0, scope=None, files=None, gates=None):
+    root = repo_root(repo)
+    gates = {str(k): str(v) for k, v in (gates or {}).items()}
+    if ok:
+        need = missing_gates({"gates": gates}, required_gates(root))
+        if need:
+            raise GatesMissing(
+                "refusing to record a passing receipt for %s without a `pass` verdict for "
+                "gate(s): %s -- this repo's test runner declares them (gt-receipt-gates), "
+                "and a receipt that cannot say they ran is not evidence they did"
+                % (root, ", ".join(need)))
     entry = {"repo": root, "what": what, "ok": bool(ok), "tests": int(tests or 0),
              "elapsed": round(float(elapsed or 0.0), 1), "at": time.time(),
              "at_human": time.strftime("%Y-%m-%d %H:%M:%S %Z"), "head": head(root)}
+    if gates:
+        entry["gates"] = gates
     if scope == "scoped":
         entry["scope"] = "scoped"
         entry["files"] = sorted({os.path.relpath(os.path.join(root, f), root).replace(os.sep, "/")
@@ -105,11 +169,32 @@ def record(repo, what, ok, tests=0, elapsed=0.0, scope=None, files=None):
 
 
 def latest(repo, ok_only=True, scoped=False):
-    """The newest FULL receipt (a scoped one only when `scoped=True` is asked for)."""
+    """The newest FULL receipt (a scoped one only when `scoped=True` is asked for).
+
+    With `ok_only` (every caller that decides anything) a receipt lacking a `pass` for a gate
+    the repo declares is not a passing receipt, and is skipped: an older one that carries the
+    gates can still answer, a newer one that does not cannot shadow it."""
     root = repo_root(repo)
+    need = required_gates(root) if ok_only else []
     rows = [r for r in read() if r.get("repo") == root and (r.get("ok") or not ok_only)
-            and (scoped or r.get("scope") != "scoped")]
+            and (scoped or r.get("scope") != "scoped") and not missing_gates(r, need)]
     return max(rows, key=lambda r: r.get("at", 0)) if rows else None
+
+
+def ungated(repo):
+    """-> (newest passing receipt this repo has that is refused ONLY for lacking gates, the
+    gates it lacks), or (None, []). For the refusal message: "no receipt" and "a receipt that
+    skipped the secrets scan" are different problems with different fixes."""
+    root = repo_root(repo)
+    need = required_gates(root)
+    if not need:
+        return None, []
+    rows = [r for r in read() if r.get("repo") == root and r.get("ok")
+            and missing_gates(r, need)]
+    if not rows:
+        return None, []
+    r = max(rows, key=lambda r: r.get("at", 0))
+    return r, missing_gates(r, need)
 
 
 def covers_scoped(repo, files):
@@ -117,8 +202,9 @@ def covers_scoped(repo, files):
     a passing SCOPED receipt that names it -- whichever is newer -- and be older than it."""
     root = repo_root(repo) or repo
     full = latest(repo, ok_only=True)
+    need = required_gates(root)
     scoped = [r for r in read() if r.get("repo") == root and r.get("ok")
-              and r.get("scope") == "scoped"]
+              and r.get("scope") == "scoped" and not missing_gates(r, need)]
     used = None
     for f in files:
         full_path = f if os.path.isabs(f) else os.path.join(root, f)
@@ -312,7 +398,13 @@ def run(repo, dry_run=False):
     tail = ((proc.stdout or "") + (proc.stderr or "")).strip().splitlines()[-25:]
     print("\n".join(tail))
     ok = proc.returncode == 0
-    record(root, "gt-allin: " + how, ok=ok, elapsed=time.time() - t0)
+    try:
+        record(root, "gt-allin: " + how, ok=ok, elapsed=time.time() - t0)
+    except GatesMissing:
+        # This repo's runner declares gates and records its OWN receipt with their verdicts;
+        # a second, gate-less row from here would be refused by every reader anyway.
+        print("receipt: left to `%s` itself -- this repo's runner declares gates and records "
+              "them" % how)
     print("%s: `%s` exited %d" % ("PASS" if ok else "FAIL", how, proc.returncode))
     return 0 if ok else 1
 
@@ -329,6 +421,10 @@ def main():
     rec.add_argument("--files-from", help="with --scope scoped: the files it covers -- a JSON "
                                           "file with a `files` list (prun.py --affected), or "
                                           "one path per line")
+    rec.add_argument("--gate", action="append", default=[], metavar="NAME=VERDICT",
+                     help="a gate that ran and its verdict (pass|findings|fail|not-run|...); "
+                          "repeat per gate. A passing receipt needs `pass` for every gate "
+                          "the repo's runner declares (gt-receipt-gates)")
     g = rec.add_mutually_exclusive_group(required=True)
     g.add_argument("--ok", action="store_true")
     g.add_argument("--failed", action="store_true")
@@ -359,11 +455,24 @@ def main():
                 files = json.loads(raw).get("files") or []
             except (ValueError, AttributeError):
                 files = [l.strip() for l in raw.splitlines() if l.strip()]
-        e = record(a.repo, a.what, ok=a.ok, tests=a.tests, elapsed=a.elapsed,
-                   scope=a.scope, files=files)
-        print("recorded %s: %s%s in %s" % ("PASS" if e["ok"] else "FAIL", e["what"],
-                                           " (%d tests)" % e["tests"] if e["tests"] else "",
-                                           e["repo"]))
+        gates = {}
+        for g in a.gate:
+            name, sep, verdict = g.partition("=")
+            if not sep or not name.strip() or not verdict.strip():
+                print("--gate wants NAME=VERDICT, got %r" % g, file=sys.stderr)
+                return 2
+            gates[name.strip()] = verdict.strip()
+        try:
+            e = record(a.repo, a.what, ok=a.ok, tests=a.tests, elapsed=a.elapsed,
+                       scope=a.scope, files=files, gates=gates)
+        except GatesMissing as exc:
+            print(str(exc), file=sys.stderr)
+            return 2
+        print("recorded %s: %s%s%s in %s" % (
+            "PASS" if e["ok"] else "FAIL", e["what"],
+            " (%d tests)" % e["tests"] if e["tests"] else "",
+            " [%s]" % " ".join("%s=%s" % kv for kv in sorted(e["gates"].items()))
+            if e.get("gates") else "", e["repo"]))
         return 0
     if a.cmd == "latest":
         r = latest(a.repo, ok_only=False)
@@ -376,7 +485,14 @@ def main():
     if r and stale:
         print("receipt is stale: %s changed after %s" % (stale, r["at_human"]))
     else:
-        print("no passing receipt for this repo")
+        bad, need = ungated(a.repo)
+        if bad:
+            print("no passing receipt with its gates for this repo: the newest passing one (%s "
+                  "at %s) has no `pass` for gate(s) %s, which this repo's runner declares -- "
+                  "run the FULL suite (tests/run.sh with no selectors) so the gates run"
+                  % (bad.get("what", "?"), bad.get("at_human", "?"), ", ".join(need)))
+        else:
+            print("no passing receipt for this repo")
     return 1
 
 

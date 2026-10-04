@@ -51,6 +51,11 @@ runners' measured capacity heaviest-first, and every failure is printed under th
 on. An unreachable runner is SKIPPED AND REPORTED and its units go to the others; a unit no host
 reported is a failure, never a pass. GT_PRUN_SSH replaces `ssh` (tests use a local stand-in).
 
+prun.py runs tests and nothing else: it records no receipt and runs no gate. tests/run.sh does
+both, and since 0.20.0 its options (-j, --hosts, --no-load-aware) never make a run a subset:
+`tests/run.sh --hosts a,b` with no selector is a FULL run, and the secrets and code gates run
+here, on the tree that was shipped.
+
 ## What it does NOT change
 
 Output. A failing run must show the same traceback as `unittest` would, so failures are

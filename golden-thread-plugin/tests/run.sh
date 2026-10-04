@@ -3,11 +3,25 @@
 #
 #   tests/run.sh                    # every test, in parallel
 #   tests/run.sh test_safe_write    # one file (module name, no .py)
-#   tests/run.sh -j 4               # cap the workers
+#   tests/run.sh -j 4               # cap the workers -- still the FULL suite, gates and all
+#   GT_TEST_JOBS=4 tests/run.sh     # the same, as an environment variable
+#   tests/run.sh --hosts a,b        # the full suite split across ssh runners; gates run here
 #   GT_TEST_SERIAL=1 tests/run.sh   # plain unittest, one process
 #   tests/run.sh --affected         # only the tests the branch's changes need (0.18.1): a pass
 #                                   # records a SCOPED receipt, which the commit guard accepts
 #                                   # on a feature branch only -- never at a release gate
+#   tests/run.sh --gates test_x     # a subset, plus both gates (dev/remote-test.sh --affected)
+#
+# OPTIONS ARE NOT SELECTORS (0.20.0). A run is FULL when it names no test selector, whatever
+# options it carries; only a full run runs the whole suite AND both gates (secrets, code) and
+# may record a full receipt. Until 0.20.0 any argument at all -- `-j 8` included -- made the run
+# a "subset": dev/remote-test.sh -j 8 skipped both gates and still recorded a receipt saying
+# the suite passed. The last line of every run is a machine-readable verdict:
+#   gt-gates: scope=full|scoped|subset tests=pass|fail count=N secrets=<v> code=<v>
+# (<v> = pass | findings | cannot-run | partial | not-run), which dev/remote-test.sh reads back.
+#
+# The gates a passing receipt for this repo must carry (gt_test_receipt.py reads this line):
+# gt-receipt-gates: tests secrets code
 #
 # Stdlib only. Every test uses a throwaway HOME; nothing on this machine is touched.
 # Complements selftest.sh, which proves the new-user install path end to end; these
@@ -46,12 +60,20 @@ esac
 # letting a commit through. Only a FULL run counts: `tests/run.sh test_gt_lint` proves
 # one module, not the tree, and a receipt from it would wave through a commit nothing
 # had covered. Receipts are best-effort -- a clone with no ~/.claude still runs tests.
+gate_args() {
+  # The verdicts every receipt carries (0.20.0): a receipt names which gates ran.
+  printf '%s\n' --gate "tests=$TESTS_V" --gate "secrets=$SEC_V" --gate "code=$CODE_V"
+}
+
 scoped_receipt() {
   # $1 test count, $2 the prun.py --affected mapping (JSON with the `files` it covers).
-  for d in ../golden-thread/*/scripts; do
+  # Newest release first: an older gt_test_receipt.py has no --gate and would refuse the call.
+  local d
+  for d in $(ls -d ../golden-thread/*/scripts 2>/dev/null | sort -V -r); do
     [ -f "$d/gt_test_receipt.py" ] || continue
+    # shellcheck disable=SC2046
     python3 "$d/gt_test_receipt.py" record --repo .. --what "tests/run.sh --affected" \
-      --tests "${1:-0}" --ok --scope scoped --files-from "$2" >/dev/null 2>&1 || true
+      --tests "${1:-0}" --ok --scope scoped --files-from "$2" $(gate_args) >/dev/null 2>&1 || true
     return 0
   done
 }
@@ -60,11 +82,12 @@ receipt() {
   # $1 is the test count parsed from the run, so the receipt says WHAT passed rather
   # than merely that something did. A receipt reading "0 tests" is exactly the kind of
   # evidence that looks like evidence.
-  local count="${1:-0}"
-  for d in ../golden-thread/*/scripts; do
+  local count="${1:-0}" d
+  for d in $(ls -d ../golden-thread/*/scripts 2>/dev/null | sort -V -r); do
     [ -f "$d/gt_test_receipt.py" ] || continue
+    # shellcheck disable=SC2046
     python3 "$d/gt_test_receipt.py" record --repo .. \
-      --what "tests/run.sh" --tests "$count" --ok >/dev/null 2>&1 || true
+      --what "tests/run.sh" --tests "$count" --ok $(gate_args) >/dev/null 2>&1 || true
     return 0
   done
 }
@@ -98,7 +121,7 @@ secrets_gate() {
   sec=$(ls -d ../golden-thread/*/scripts/gt_secrets.py 2>/dev/null | sort -V | tail -1)
   if [ -z "$sec" ]; then
     echo "secrets: NOT RUN — no gt_secrets.py in any release directory" >&2
-    return 1                      # absent means unknown, and unknown is not clean
+    return 127                    # absent means unknown, and unknown is not clean
   fi
   base=(); [ -f secrets-baseline.json ] && base=(--baseline secrets-baseline.json)
   local out
@@ -132,7 +155,7 @@ code_gate() {
   sc=$(ls -d ../golden-thread/*/scripts/gt_scan_code.py 2>/dev/null | sort -V | tail -1)
   if [ -z "$sc" ]; then
     echo "code: NOT RUN — no gt_scan_code.py in any release directory" >&2
-    return 1                      # absent means unknown, and unknown is not clean
+    return 127                    # absent means unknown, and unknown is not clean
   fi
   base=(); [ -f ../.gt/code-baseline.json ] && base=(--baseline ../.gt/code-baseline.json)
   out=$(python3 "$sc" .. "${SECRETS_EXCLUDES[@]}" ${base[@]+"${base[@]}"} 2>&1) || rc=$?
@@ -168,54 +191,114 @@ EOF
     ${GT_TEST_REF:+--ref "$GT_TEST_REF"} >/dev/null 2>&1 || true
 }
 
-# Only a FULL run is evidence: `tests/run.sh test_gt_lint` proves one module, not the
-# tree, and a receipt from it would wave through a commit nothing had covered.
-FULL_RUN=no; [ $# -eq 0 ] && FULL_RUN=yes
-SCOPED=no
-for _a in "$@"; do [ "$_a" = "--affected" ] && SCOPED=yes; done
+# ── Arguments: OPTIONS are not SELECTORS (0.20.0) ─────────────────────────────────
+#
+# Only a FULL run is evidence: `tests/run.sh test_gt_lint` proves one module, not the tree, and
+# a receipt from it would wave through a commit nothing had covered. But "full" means "names no
+# selector", not "has no arguments": `-j 8` caps the workers and changes nothing about WHAT ran.
+# Until 0.20.0 this read `[ $# -eq 0 ]`, so `-j 8` (which dev/remote-test.sh always passed when
+# asked for a worker count) silently turned a full run into a subset that skipped both gates.
+OPTS=(); SELECTORS=(); SCOPED=no; FORCE_GATES=no; PRINT_ONLY=no
+while [ $# -gt 0 ]; do
+  case "$1" in
+    -j|--jobs|--hosts|--base)
+      [ $# -ge 2 ] || { echo "tests/run.sh: $1 needs a value" >&2; exit 2; }
+      OPTS+=("$1" "$2"); shift 2 ;;
+    -j?*|--jobs=*|--hosts=*|--base=*|--no-load-aware) OPTS+=("$1"); shift ;;
+    --affected) SCOPED=yes; OPTS+=("$1"); shift ;;
+    --gates) FORCE_GATES=yes; shift ;;
+    --print-affected|-h|--help) PRINT_ONLY=yes; OPTS+=("$1"); shift ;;
+    --) shift; SELECTORS+=("$@"); break ;;
+    -*) echo "tests/run.sh: unknown option $1 (a selector is a test module, module.Class or module.Class.test)" >&2
+        exit 2 ;;
+    *) SELECTORS+=("$1"); shift ;;
+  esac
+done
+# Runs nothing, so it proves nothing and records nothing.
+[ "$PRINT_ONLY" = yes ] && exec python3 prun.py ${OPTS[@]+"${OPTS[@]}"}
+
+FULL_RUN=no; [ ${#SELECTORS[@]} -eq 0 ] && [ "$SCOPED" = no ] && FULL_RUN=yes
+RUN_GATES=no; { [ "$FULL_RUN" = yes ] || [ "$FORCE_GATES" = yes ]; } && RUN_GATES=yes
+if [ "$FULL_RUN" = yes ]; then SCOPE=full; elif [ "$SCOPED" = yes ]; then SCOPE=scoped; else SCOPE=subset; fi
+TESTS_V=fail; SEC_V=not-run; CODE_V=not-run; COUNT=""
+
+# Both gates, each on its own: a secrets finding no longer hides what the code gate would say,
+# and both verdicts reach the summary line. $1 is the test run's exit code; the combined code
+# keeps the FIRST failure (tests, then secrets, then code), as before.
+run_gates() {
+  local trc=$1 src=0 crc=0
+  secrets_gate || src=$?
+  case $src in 0) SEC_V=pass ;; 1) SEC_V=findings ;; *) SEC_V=cannot-run ;; esac
+  code_gate || crc=$?
+  case $crc in 0) CODE_V=pass ;; 1) CODE_V=findings ;; 127) CODE_V=cannot-run ;; *) CODE_V=partial ;; esac
+  rc=$trc
+  [ "$rc" -eq 0 ] && rc=$src
+  [ "$rc" -eq 0 ] && rc=$crc
+  return 0
+}
+
+# The LAST line of every run. dev/remote-test.sh reads it back from the runner, and records a
+# receipt only from what it says -- never from the exit code alone.
+gate_line() {
+  echo "gt-gates: scope=$SCOPE tests=$TESTS_V count=${COUNT:-0} secrets=$SEC_V code=$CODE_V"
+}
+# The suite's own count: prun's summary line ("Ran N tests in ... across M unit(s)") comes BEFORE
+# the verbatim output of any failing unit, which carries "Ran k tests" lines of its own; the
+# last "Ran" line is the fallback, for plain unittest (GT_TEST_SERIAL).
+run_count() {
+  local n
+  n=$(sed -n 's/^Ran \([0-9][0-9]*\) tests\{0,1\} in .* across [0-9][0-9]* unit.*/\1/p' "$1" | head -1)
+  [ -n "$n" ] || n=$(sed -n 's/^Ran \([0-9][0-9]*\) test.*/\1/p' "$1" | tail -1)
+  printf '%s\n' "$n"
+}
+all_pass() { [ "$TESTS_V" = pass ] && [ "$SEC_V" = pass ] && [ "$CODE_V" = pass ]; }
+
+LOG=$(mktemp "${TMPDIR:-/tmp}/gt-tests.XXXXXX")
 if [ "$SCOPED" = yes ]; then
   AFF=$(mktemp "${TMPDIR:-/tmp}/gt-affected.XXXXXX")
-  GT_AFFECTED_OUT="$AFF" python3 prun.py "$@" 2>&1 | tee /tmp/gt-tests-$$.log
+  GT_AFFECTED_OUT="$AFF" python3 prun.py ${OPTS[@]+"${OPTS[@]}"} ${SELECTORS[@]+"${SELECTORS[@]}"} 2>&1 | tee "$LOG"
   rc=${PIPESTATUS[0]}
+  [ $rc -eq 0 ] && TESTS_V=pass
+  COUNT=$(run_count "$LOG")
   # The credential and code gates run here too: a scoped receipt licenses a commit as well.
-  if [ $rc -eq 0 ] && [ -s "$AFF" ]; then secrets_gate || rc=$?; fi
-  if [ $rc -eq 0 ] && [ -s "$AFF" ]; then code_gate || rc=$?; fi
-  if [ $rc -eq 0 ] && [ -s "$AFF" ]; then
-    scoped_receipt "$(sed -n 's/^Ran \([0-9]*\) test.*/\1/p' /tmp/gt-tests-$$.log | tail -1)" "$AFF"
+  # An empty mapping means nothing ran ("no code changed"), and nothing is recorded.
+  if [ $rc -eq 0 ] && [ -s "$AFF" ]; then run_gates "$rc"; fi
+  if [ $rc -eq 0 ] && [ -s "$AFF" ] && all_pass; then
+    scoped_receipt "$COUNT" "$AFF"
     echo "scoped receipt recorded: it covers the changed files on this feature branch only"
   fi
-  rm -f /tmp/gt-tests-$$.log "$AFF"
+  rm -f "$LOG" "$AFF"
+  gate_line
   exit $rc
 fi
 
 if [ "${GT_TEST_SERIAL:-}" = "1" ]; then
-  if [ $# -gt 0 ]; then exec python3 -m unittest -v "$@"; fi
-  out=$(python3 -m unittest discover -s . -p 'test_*.py' -v 2>&1); rc=$?
+  if [ ${#SELECTORS[@]} -gt 0 ] && [ "$RUN_GATES" = no ]; then
+    exec python3 -m unittest -v "${SELECTORS[@]}"
+  fi
+  if [ ${#SELECTORS[@]} -gt 0 ]; then
+    out=$(python3 -m unittest -v "${SELECTORS[@]}" 2>&1); rc=$?
+  else
+    out=$(python3 -m unittest discover -s . -p 'test_*.py' -v 2>&1); rc=$?
+  fi
+  printf '%s\n' "$out" > "$LOG"
   printf '%s\n' "$out"
-  if [ $rc -eq 0 ] && [ "$FULL_RUN" = yes ]; then
-    secrets_gate || rc=$?
-    [ $rc -eq 0 ] && { code_gate || rc=$?; }
-  fi
-  if [ $rc -eq 0 ] && [ "$FULL_RUN" = yes ]; then
-    receipt "$(printf '%s\n' "$out" | sed -n 's/^Ran \([0-9]*\) test.*/\1/p' | tail -1)"
-  fi
-  exit $rc
+else
+  # tee, not capture-then-print: the suite takes minutes and its progress must stay live.
+  # PIPESTATUS[0] is the RUNNER's exit code. [1] is tee's, which is 0 whether the suite
+  # passed or failed -- reading it would call every run a pass and write a receipt for a
+  # red suite, which is worse than having no receipt at all.
+  python3 prun.py ${OPTS[@]+"${OPTS[@]}"} ${SELECTORS[@]+"${SELECTORS[@]}"} 2>&1 | tee "$LOG"
+  rc=${PIPESTATUS[0]}
 fi
-
-# tee, not capture-then-print: the suite takes minutes and its progress must stay live.
-# PIPESTATUS[0] is the RUNNER's exit code. [1] is tee's, which is 0 whether the suite
-# passed or failed -- reading it would call every run a pass and write a receipt for a
-# red suite, which is worse than having no receipt at all.
-python3 prun.py "$@" 2>&1 | tee /tmp/gt-tests-$$.log
-rc=${PIPESTATUS[0]}
-if [ $rc -eq 0 ] && [ "$FULL_RUN" = yes ]; then
-  secrets_gate || rc=$?
+[ $rc -eq 0 ] && TESTS_V=pass
+COUNT=$(run_count "$LOG")
+rm -f "$LOG"
+# Gates run on every FULL run whether or not the tests passed, so a red suite still says what
+# the scans found -- and a green one can never be recorded without them.
+[ "$RUN_GATES" = yes ] && run_gates "$rc"
+if [ "$FULL_RUN" = yes ] && [ $rc -eq 0 ] && all_pass; then
+  receipt "$COUNT"
 fi
-if [ $rc -eq 0 ] && [ "$FULL_RUN" = yes ]; then
-  code_gate || rc=$?
-fi
-if [ $rc -eq 0 ] && [ "$FULL_RUN" = yes ]; then
-  receipt "$(sed -n 's/^Ran \([0-9]*\) test.*/\1/p' /tmp/gt-tests-$$.log | tail -1)"
-fi
-rm -f /tmp/gt-tests-$$.log
+gate_line
 exit $rc
