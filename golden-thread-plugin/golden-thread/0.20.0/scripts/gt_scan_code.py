@@ -839,7 +839,15 @@ def scan_unit(unit: Unit, rules, findings, skipped_ids):
 
 
 def key_of(f):
+    # The 0.19-era key, still honoured from an old baseline. Since 0.20.0 the baseline is
+    # content-keyed (gt_baseline): rule, the path with release-version segments as <ver>, and
+    # a SHA-256 of the normalised line -- a version cut no longer re-flags accepted lines.
     return [f["path"], f["rule"], f["line"]]
+
+
+def _content_hash(f):
+    import gt_baseline
+    return gt_baseline.fast_hash(f["rule"], f["path"], f.get("text", ""))
 
 
 def main(argv=None) -> int:
@@ -995,12 +1003,17 @@ def _scan_tree(a, root, rules, tiers, skipped_ids, problems, findings) -> int:
     base = None
     if a.baseline and Path(a.baseline).is_file():
         try:
-            base = {tuple(x) for x in json.loads(Path(a.baseline).read_text())["accepted"]}
+            import gt_baseline
+            doc = json.loads(Path(a.baseline).read_text(encoding="utf-8"))
+            if not isinstance(doc, dict) or not ("accepted" in doc or "entries" in doc):
+                raise ValueError("no accepted/entries")
+            base = gt_baseline.Baseline(doc)
         except Exception:
             print("gt-scan-code: PROBLEM baseline could not be read — reporting everything",
                   file=sys.stderr)
     if base is not None:
-        findings = [f for f in findings if tuple(key_of(f)) not in base]
+        findings = [f for f in findings
+                    if not base.accepts(key_of(f), f["rule"], f["path"], _content_hash(f))]
 
     if a.write_baseline:
         # A baselined finding is INVISIBLE, which is the whole hazard of having a baseline at
@@ -1014,7 +1027,12 @@ def _scan_tree(a, root, rules, tiers, skipped_ids, problems, findings) -> int:
                 reasons = json.loads(out.read_text()).get("reasons") or {}
             except Exception:
                 reasons = {}
-        doc = {"accepted": sorted(key_of(f) for f in findings)}
+        import gt_baseline
+        for f in findings:
+            f["_hash"] = _content_hash(f)
+        doc = {"format": gt_baseline.FORMAT, "entries": gt_baseline.entries_for(findings)}
+        for f in findings:
+            f.pop("_hash", None)
         doc["reasons"] = reasons
         doc["_note"] = ("Each accepted finding SHOULD have an entry in `reasons`, keyed "
                         "\"path::rule\". An accepted finding with no reason is a silenced "

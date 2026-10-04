@@ -4537,6 +4537,17 @@ regression rather than a tidy-up.</p>
 not drown the ones that arrived today. <code>--write-baseline</code> records the current set — read it
 before you accept it; a baseline written without looking is a decision to ignore whatever was
 there.</p>
+<p><strong>Baselines are content-keyed (0.20.0), for both <code>gt_secrets</code> and <code>gt_scan_code</code>.</strong> An entry
+matches by the rule, the path with every release-version segment written as <code>&lt;ver&gt;</code>
+(<code>golden-thread/0.20.0/x.py</code> and <code>golden-thread/0.20.1/x.py</code> are one path), and a hash of the
+normalised line, with a count. So a version cut that copies a release directory no longer
+re-flags lines you already accepted, while an edited line, the same text in another file, a
+different rule, or one more copy of an accepted line still fails. The secrets baseline stores no
+matched text, no value and no fast hash: its hash is PBKDF2-HMAC-SHA256 (200,000 rounds, salted
+with the rule and the path), because a plain digest of a short line is a lookup away from the
+line; the code baseline uses SHA-256 (code is not a secret). A baseline written before 0.20.0
+(path-keyed <code>accepted</code> tuples) is still honoured exactly as before -- it just does not survive a
+cut. <code>--write-baseline</code> writes the new format; run it once (and read what it records) to migrate.</p>
 <p>Exit: <code>0</code> clean (nothing new against the baseline) · <code>1</code> found something · <code>2</code> <strong>could not run,
 or could not scan part of what it was asked to scan</strong>. <strong>Silence is never clean</strong>: every
 successful run ends with an affirmative naming what was covered, because a scanner that could

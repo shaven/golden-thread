@@ -458,6 +458,7 @@ HOOK_DIR_SCRIPTS = ("gt_paths.py", "gt_components.py",
                     "gt_daily.py",         # job `daily` (stdlib only)
                     "gt_sweep.py",         # job `sweep`; its members and their imports follow
                     "gt_secrets.py", "gt_scan_code.py", "gt_check_report.py",
+                    "gt_baseline.py",      # both scanners' content-keyed baselines (0.20.0)
                     "gt_registry.py", "gt_staged.py",
                     # 0.18.1: gt_push_check imports gt_sync for the opt-in behind-check
                     # (sync_check); gt_reminder is the `reminder` job's script, and

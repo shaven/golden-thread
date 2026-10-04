@@ -562,6 +562,22 @@ report-card, watch; lockstep modules `requires_gt >=0.20.0,<0.21.0`).
   install) every scheduler write -- launchctl
   bootstrap/bootout/kickstart/load/unload..., schtasks /Create /Run /Delete /Change /End -- is
   refused whatever code path reaches it. Reads (`launchctl print`, `schtasks /Query`) still run.
+- **Scanner baselines are content-keyed, so a version cut no longer re-flags accepted lines.**
+  `tests/secrets-baseline.json` and `.gt/code-baseline.json` keyed each entry by path
+  (`gt_secrets`: path, rule, length; `gt_scan_code`: path, rule, line), so every cut --
+  `golden-thread/0.20.0/...` copied to `golden-thread/0.20.1/...` -- re-flagged every line the
+  owner had accepted, under the new release directory. New `gt_baseline.py`, used by both: an
+  entry is the rule, the path with every release-version segment written `<ver>`, a hash of the
+  normalised line, and a count. A byte-identical line moved by a cut stays accepted; an edited
+  line, the same text in another file, a different rule, or one more copy of an accepted line
+  still fails. No values at rest: the secrets baseline holds a PBKDF2-HMAC-SHA256 of the line
+  (200,000 rounds, salted with rule and path), never the text, the value or a fast digest; the
+  code baseline uses SHA-256. Old path-keyed baselines are still honoured as before (they just
+  do not survive a cut); `--write-baseline` writes the new format, and `gt_scan_code` still
+  carries `reasons` through a rewrite. Simulated 0.20.0 -> 0.20.1 rename of the code baseline's
+  file: 18 accepted findings re-flagged with the old baseline, 0 with the new one, and 1 again
+  once an accepted line is edited. The repo's own two baselines are NOT rewritten here: they
+  are the owner's records; migrating them is one `--write-baseline` each.
 
 ## gt 0.19.2 — 2026-10-03
 

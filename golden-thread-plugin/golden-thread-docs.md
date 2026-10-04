@@ -329,7 +329,9 @@ that answer, and because it surfaces old debt it must never block. It files each
 | `gt_scan_code.py <path> [--staged] [--sarif FILE] [--json] [--baseline F] [--write-baseline F] [--rules]` | Source validation against the `lint` rules in effect — the second `gt-scan` member alongside `gt_scan_language.py`; `gt_scan.py --list` shows both. Rules are DATA from `lint` packs, in a documented subset of ast-grep's rule schema; gt evaluates that data and never executes anything a pack supplies. Tiers `text` and `stdlib` are always present, `astgrep` and `treesitter` only if the optional dependency imports, and **a rule whose tier is absent is reported SKIPPED, never silently passed** (exit 3: nothing found, but the scan does not cover what it was asked to). Emits SARIF 2.1.0. It DOES print source text, because here the text is the finding — which is why it may never share a process with `gt_secrets`. |
 
 Accepted findings go in a baseline (`.gt/secrets-baseline.json`, `.gt/code-baseline.json`),
-which the gate and the sweep pick up automatically; new findings still fire. The gate's two
+which the gate and the sweep pick up automatically; new findings still fire. Entries are
+content-keyed since 0.20.0 (rule, version-normalised path, a hash of the line -- salted PBKDF2
+for secrets, no text stored), so a version cut does not re-flag them. The gate's two
 escapes are loud: `git commit --no-verify` once, or `git config gt.secretsgate off` for the
 clone, which prints that it is off on every commit.
 

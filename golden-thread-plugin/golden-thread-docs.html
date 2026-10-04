@@ -748,7 +748,9 @@ that answer, and because it surfaces old debt it must never block. It files each
 </tbody>
 </table>
 <p>Accepted findings go in a baseline (<code>.gt/secrets-baseline.json</code>, <code>.gt/code-baseline.json</code>),
-which the gate and the sweep pick up automatically; new findings still fire. The gate's two
+which the gate and the sweep pick up automatically; new findings still fire. Entries are
+content-keyed since 0.20.0 (rule, version-normalised path, a hash of the line -- salted PBKDF2
+for secrets, no text stored), so a version cut does not re-flag them. The gate's two
 escapes are loud: <code>git commit --no-verify</code> once, or <code>git config gt.secretsgate off</code> for the
 clone, which prints that it is off on every commit.</p>
 <h3 id="the-record">The record</h3>

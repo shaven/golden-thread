@@ -433,7 +433,10 @@ of a commit. It exits non-zero only when a member could not run. Run it from lau
 
 Accepted findings belong in a baseline (`--write-baseline .gt/secrets-baseline.json`,
 `.gt/code-baseline.json`), which both the gate and the sweep pick up automatically, so
-what you have examined goes quiet while anything new still fires. The commit gate has two
+what you have examined goes quiet while anything new still fires. Since 0.20.0 an entry is
+content-keyed -- rule, the path with release-version segments as `<ver>`, a hash of the line
+(a salted PBKDF2 for secrets; no text is stored) -- so a version cut does not re-flag what you
+accepted, and an old path-keyed baseline is still honoured. The commit gate has two
 loud escapes — `git commit --no-verify` once, or `git config gt.secretsgate off` for the
 clone, which prints that it is off on every commit.
 

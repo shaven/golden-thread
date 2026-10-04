@@ -20,6 +20,13 @@ never a first-four/last-four, and never a hash -- a hash of a short or low-entro
 is crackable, and a hash still confirms a guess. Core rule 3 forbids the value entering a
 session at all, and "redacted" output has a way of becoming un-redacted in a log.
 
+THE BASELINE (0.20.0) is the one place a hash is kept, and it is never printed: an accepted
+finding is stored as its rule, its path with release-version segments as <ver>, and a
+PBKDF2-HMAC-SHA256 of the normalised line (200,000 rounds, salted with rule and path;
+gt_baseline.py) -- never the text, the value or a fast digest -- so a version cut does not
+re-flag accepted lines. The lines this tool flags are long, high-entropy values by its own
+rules, which is what makes a slow salted hash of the whole line an acceptable thing to keep.
+
 Exit: 0 clean (nothing NEW against the baseline) | 1 found something | 2 could not run, or
 could not scan part of what it was asked to scan. Silence is never clean: every successful
 run ends with an affirmative naming what was covered.
@@ -42,6 +49,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import gt_registry                                        # noqa: E402
+import gt_baseline                                        # noqa: E402
 import gt_staged                                          # noqa: E402
 
 SLOT = "secrets"
@@ -146,13 +154,23 @@ class Out:
     def __init__(self, as_json: bool):
         self.as_json = as_json
         self.findings: list[dict] = []
+        # The matched LINE of each finding, held in memory only to hash it for the baseline
+        # (gt_baseline.slow_hash). Never in a finding record, so never printed or in --json.
+        self._lines: dict[int, str] = {}
         self.notes: list[str] = []
 
-    def finding(self, path: str, line: int, rule: str, length: int, entropy=None):
+    def finding(self, path: str, line: int, rule: str, length: int, entropy=None,
+                text=None):
         rec = {"path": path, "line": line, "rule": rule, "length": length}
         if entropy is not None:
             rec["entropy"] = round(entropy, 2)
         self.findings.append(rec)
+        if text is not None:
+            self._lines[id(rec)] = text
+
+    def line_hash(self, rec):
+        """The baseline key's hash for a finding (PBKDF2, salted; never the text)."""
+        return gt_baseline.slow_hash(rec["rule"], rec["path"], self._lines.get(id(rec), ""))
 
     def note(self, text: str):
         self.notes.append(text)
@@ -251,7 +269,7 @@ def scan_file(p: Path, rel: str, rules, out: Out) -> int:
             # finditer, not search: 0.16.0 reported ONE finding for five tokens on a
             # minified line, because it stopped at the first match per pattern per line.
             for m in r["re"].finditer(line):
-                out.finding(rel, lineno, r["id"], len(m.group(0)))
+                out.finding(rel, lineno, r["id"], len(m.group(0)), text=line)
                 hits += 1
         for m in ASSIGN.finditer(line):
             val = m.group("val")
@@ -264,24 +282,30 @@ def scan_file(p: Path, rel: str, rules, out: Out) -> int:
             ent = shannon(val)
             if ent < MIN_ENTROPY:
                 continue
-            out.finding(rel, lineno, "generic.assigned-credential", len(val), ent)
+            out.finding(rel, lineno, "generic.assigned-credential", len(val), ent, text=line)
             hits += 1
     return hits
 
 
 def load_baseline(path: Path):
+    """-> gt_baseline.Baseline (content entries, plus 0.19-era path-keyed tuples), or None."""
     if not path or not path.is_file():
         return None
     try:
-        return {tuple(x) for x in json.loads(path.read_text())["accepted"]}
+        doc = json.loads(path.read_text(encoding="utf-8"))
+        if not isinstance(doc, dict) or not ("accepted" in doc or "entries" in doc):
+            return None
+        return gt_baseline.Baseline(doc)
     except Exception:
         return None
 
 
 def key_of(f):
-    # path + rule + length. NOT the line: a finding that only moved is the same finding.
-    # NOT the value, by the output contract -- but the LENGTH is carried, so a rotated
-    # credential of a different length resurfaces rather than staying accepted.
+    # The 0.19-era key, still honoured from an old baseline: path + rule + length. Since 0.20.0
+    # a baseline is CONTENT-keyed (gt_baseline): rule, the path with its release-version
+    # segment normalised, and a salted PBKDF2 of the line -- so a version cut that copies a
+    # file to golden-thread/<new>/ does not re-flag lines the owner already accepted, while an
+    # edited line, a rotated credential, or the same text in another file still does.
     return (f["path"], f["rule"], f["length"])
 
 
@@ -372,12 +396,21 @@ def _main(argv, tmps):
     if a.baseline and base is None:
         out.note("PROBLEM baseline %s could not be read — reporting every finding" % a.baseline)
     if base is not None:
-        out.findings = [f for f in out.findings if key_of(f) not in base]
+        out.findings = [f for f in out.findings
+                        if not base.accepts(key_of(f), f["rule"], f["path"], out.line_hash(f))]
 
     if a.write_baseline:
-        Path(a.write_baseline).write_bytes((json.dumps(
-            {"accepted": sorted(key_of(f) for f in out.findings)}, indent=2) + "\n")
-            .encode("utf-8"))
+        # The content-keyed format (0.20.0). It holds rule, normalised path, a salted PBKDF2 of
+        # the line and a count -- never the line, the value, or a fast hash of either.
+        for f in out.findings:
+            f["_hash"] = out.line_hash(f)
+        doc = {"format": gt_baseline.FORMAT, "entries": gt_baseline.entries_for(out.findings),
+               "_note": "Content-keyed (gt_baseline.py): rule, the path with release-version "
+                        "segments as <ver>, and a salted PBKDF2 of the normalised line. No "
+                        "matched text is stored."}
+        for f in out.findings:
+            f.pop("_hash", None)
+        Path(a.write_baseline).write_bytes((json.dumps(doc, indent=2) + "\n").encode("utf-8"))
         out.said("gt-secrets: recorded %d finding(s) as accepted in %s"
                  % (len(out.findings), a.write_baseline))
         return CLEAN

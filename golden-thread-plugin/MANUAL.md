@@ -3542,6 +3542,18 @@ not drown the ones that arrived today. `--write-baseline` records the current se
 before you accept it; a baseline written without looking is a decision to ignore whatever was
 there.
 
+**Baselines are content-keyed (0.20.0), for both `gt_secrets` and `gt_scan_code`.** An entry
+matches by the rule, the path with every release-version segment written as `<ver>`
+(`golden-thread/0.20.0/x.py` and `golden-thread/0.20.1/x.py` are one path), and a hash of the
+normalised line, with a count. So a version cut that copies a release directory no longer
+re-flags lines you already accepted, while an edited line, the same text in another file, a
+different rule, or one more copy of an accepted line still fails. The secrets baseline stores no
+matched text, no value and no fast hash: its hash is PBKDF2-HMAC-SHA256 (200,000 rounds, salted
+with the rule and the path), because a plain digest of a short line is a lookup away from the
+line; the code baseline uses SHA-256 (code is not a secret). A baseline written before 0.20.0
+(path-keyed `accepted` tuples) is still honoured exactly as before -- it just does not survive a
+cut. `--write-baseline` writes the new format; run it once (and read what it records) to migrate.
+
 Exit: `0` clean (nothing new against the baseline) · `1` found something · `2` **could not run,
 or could not scan part of what it was asked to scan**. **Silence is never clean**: every
 successful run ends with an affirmative naming what was covered, because a scanner that could
