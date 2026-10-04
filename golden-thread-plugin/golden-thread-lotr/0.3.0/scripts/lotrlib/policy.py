@@ -14,8 +14,10 @@ from .errors import GatewayError
 TIERS = ("read", "write", "consent")
 _RANK = {t: i for i, t in enumerate(TIERS)}
 _TOOL_MAX = {"call_read": "read", "call_write": "write", "call_consent": "consent"}
-_GQL_COMMENT = re.compile(r"#[^\n]*")
-_GQL_WORD = re.compile(r"[A-Za-z_]+")
+_GQL_NAME = re.compile(r"[A-Za-z_][A-Za-z_0-9]*")
+_GQL_PAIRS = {"}": "{", ")": "(", "]": "["}
+_GQL_IGNORED = " \t\r\n,\ufeff"
+_GQL_NUMBER = re.compile(r"-?[0-9][0-9A-Za-z_.+-]*")
 
 
 def _forms(op):
@@ -34,11 +36,105 @@ def _hits(globs, forms):
     return any(fnmatch.fnmatchcase(f, g) for g in globs or () for f in forms)
 
 
+def _gql_tokens(text):
+    """Tokens of a GraphQL document with comments and string literals removed.
+
+    Returns a list of (kind, value, depth_before) or None if the text is not lexically
+    valid GraphQL (unterminated string, stray character, unbalanced brackets) so the caller
+    can fail closed. Strings become a single "str" token, so a keyword inside one is data.
+    """
+    toks, stack, i, n = [], [], 0, len(text)
+    while i < n:
+        c = text[i]
+        if c in _GQL_IGNORED:
+            i += 1
+        elif c == "#":
+            while i < n and text[i] not in "\r\n":
+                i += 1
+        elif c == '"':
+            if text.startswith('"""', i):
+                j = i + 3
+                while True:
+                    j = text.find('"""', j)
+                    if j < 0:
+                        return None
+                    if text[j - 1] == "\\":      # \""" is an escaped delimiter in a block string
+                        j += 3
+                        continue
+                    break
+                i = j + 3
+            else:
+                j = i + 1
+                while j < n and text[j] != '"':
+                    if text[j] in "\r\n":
+                        return None
+                    j += 2 if text[j] == "\\" else 1
+                if j >= n:
+                    return None
+                i = j + 1
+            toks.append(("str", "", len(stack)))
+        elif c in "{([":
+            toks.append(("open", c, len(stack)))
+            stack.append(c)
+            i += 1
+        elif c in "})]":
+            if not stack or stack.pop() != _GQL_PAIRS[c]:
+                return None
+            toks.append(("close", c, len(stack)))
+            i += 1
+        elif c in "!$&:=@|":
+            toks.append(("punct", c, len(stack)))
+            i += 1
+        elif text.startswith("...", i):
+            toks.append(("punct", "...", len(stack)))
+            i += 3
+        else:
+            m = _GQL_NAME.match(text, i) or _GQL_NUMBER.match(text, i)
+            if not m:
+                return None     # includes every non-ASCII character outside a string
+            toks.append(("name", m.group(0), len(stack)))
+            i = m.end()
+    return None if stack else toks
+
+
 def _graphql_tier(query):
-    """mutation -> write; query, subscription, `{` shorthand or anything else -> read."""
-    text = _GQL_COMMENT.sub("", query).lstrip()
-    m = _GQL_WORD.match(text)
-    return "write" if m and m.group(0) == "mutation" else "read"
+    """read only for a document that is provably one query (plus fragment definitions).
+
+    Fail closed: the whole document is lexed (comments and string literals stripped) and its
+    top-level definitions are counted. `read` needs exactly one operation, it must be a
+    `query` or the anonymous `{...}` shorthand, and every other top-level definition must be
+    a `fragment`. A mutation or subscription anywhere at depth 0, several operations, a
+    fragment-first document hiding a mutation, or anything unparsable -> `write`.
+    """
+    if not isinstance(query, str):
+        return "write"
+    toks = _gql_tokens(query)
+    if not toks:
+        return "write"
+    ops, i = 0, 0
+    while i < len(toks):
+        kind, val, _ = toks[i]
+        if kind == "open" and val == "{":
+            ops += 1                               # anonymous query shorthand
+        elif kind == "name" and val in ("query", "fragment"):
+            if val == "query":
+                ops += 1
+            i += 1
+            while i < len(toks) and not (toks[i][0] == "open" and toks[i][1] == "{"
+                                         and toks[i][2] == 0):
+                if toks[i][2] == 0 and toks[i][0] == "str":
+                    return "write"
+                i += 1
+            if i >= len(toks):
+                return "write"                     # a header with no selection set
+        else:
+            return "write"     # mutation, subscription, extend, schema ..., or junk
+        depth0 = toks[i][2]
+        i += 1
+        while i < len(toks) and not (toks[i][0] == "close" and toks[i][2] == depth0):
+            i += 1
+        i += 1                                     # the matching "}"
+    return "read" if ops == 1 else "write"
 
 
 def classify(conn, op):

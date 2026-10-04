@@ -341,7 +341,14 @@ class Engine:
         probe = {"name": opd.get("name"), "method": opd["method"], "path": opd["path"],
                  "tier": opd.get("tier")}
         if opd.get("graphql"):
-            probe["graphql_query"] = (args or {}).get("query", "")
+            # The query that is SENT is the body's when an explicit `body` is given (conn_http
+            # merges body over args), so classify that one; an opaque body is a write.
+            a = args or {}
+            if "body" in a:
+                b = a["body"]
+                probe["graphql_query"] = b.get("query", "") if isinstance(b, dict) else "\0"
+            else:
+                probe["graphql_query"] = a.get("query", "")
         return policy.classify(conn, probe)
 
     def _shape(self, data, prof, select):

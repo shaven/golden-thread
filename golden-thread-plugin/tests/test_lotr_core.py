@@ -37,6 +37,7 @@ def _gateway_dir():
 sys.path.insert(0, str(_gateway_dir() / "scripts"))
 
 from lotrlib import audit, policy, registry, secrets  # noqa: E402
+from lotrlib import engine as lotr_engine  # noqa: E402
 from lotrlib.errors import GatewayError  # noqa: E402
 
 FAKE_VALUE = "lorFAKE-" + "Qz7pL2xV9kM4nR8tW1sY6"   # distinctive, never a real credential
@@ -456,6 +457,73 @@ class TestPolicy(unittest.TestCase):
         self.assertEqual(policy.classify(c, dict(g, graphql_query="  # c\n mutation X { a }")), "write")
         self.assertEqual(policy.classify(self.conn(deny=["graphql"]),
                                          dict(g, graphql_query="query { a }")), "deny")
+
+    def _gql(self, q):
+        return policy.classify(self.conn(), {"name": "graphql", "method": "POST",
+                                             "path": "/graphql", "graphql_query": q})
+
+    def test_graphql_fails_closed_on_hidden_mutations(self):
+        write = [
+            "fragment F on X {id}\nmutation M { a }",           # fragment-first mutation
+            "query A{x} mutation B{y}",                           # query then mutation
+            "mutation B{y} query A{x}",
+            "query A{x} query B{y}",                              # several operations
+            "{ a } { b }",
+            "query A{x} {y}",
+            "subscription S { a }",
+            "fragment F on X {id}",                               # no operation at all
+            "# query\nmutation M { a }",                          # comment before it
+            "query A{x}\n# }\nmutation M { a }",                  # comment holds a brace
+            'query A{x(a:"}")}\nmutation M { a }',               # string holds a brace
+            'query A($a:String="\\"") { x }\nmutation M { a }',   # escaped quote in string
+            'query A{x(a:"""}\\"""}""")}\nmutation M { a }',      # escaped block-string end
+            "query A{x}\r mutation M { a }",                     # bare CR separators
+            "\ufeffmutation M { a }",                             # BOM / unicode whitespace
+            "query\u00a0A{x}\u00a0mutation M{a}",
+            "mut\u0430tion M { a }",                              # homoglyph: not valid GraphQL
+            "query A{x} \u2028 mutation M{a}",
+            "query A{x",                                          # unbalanced
+            'query A{x(a:"oops)}',                                # unterminated string
+            "query A{x}}",
+            "", "   ", "# only a comment", "{",
+            "query A { a } extend schema @x",
+            "query A { a } schema { query: Q }",
+        ]
+        for q in write:
+            self.assertEqual(self._gql(q), "write", q)
+        self.assertEqual(policy._graphql_tier(None), "write")
+        self.assertEqual(policy._graphql_tier(["mutation { a }"]), "write")
+
+    def test_graphql_plain_queries_stay_read(self):
+        read = [
+            "query { viewer { login } }",
+            "{ viewer { login } }",
+            "query Q($n: Int = 3, $o: In = {a: [1, 2]}) @d(x: 1) { a(first: $n) { ...F } }\n"
+            "fragment F on X { id }",
+            "fragment F on X { id }\nquery Q { a { ...F } }",
+            "fragment F on X { id } fragment G on X { ...F } { a { ...G } }",
+            "query { search(query: \"mutation { x }\") { id } }",       # word in a string
+            'query { r(q: "a # not a comment") { id } } # mutation M { a }',
+            'query { r(q: """mutation M { a } } {""") { id } }',
+            "# mutation M { a }\nquery A { x } # query B { y }",
+            "query A {\n  x(a: \"mutation\")\n}\n",
+            "query A { x } ,,, ",
+        ]
+        for q in read:
+            self.assertEqual(self._gql(q), "read", q)
+
+    def test_graphql_body_override_is_classified(self):
+        """conn_http merges an explicit body over args, so the body's query is what is sent."""
+        classify = lotr_engine.Engine._classify
+        opd = {"name": "graphql", "method": "POST", "path": "/graphql", "graphql": True}
+        c = self.conn()
+        ro, mut = "query { viewer { login } }", "mutation { a }"
+        self.assertEqual(classify(None, c, opd, {"query": ro}), "read")
+        self.assertEqual(classify(None, c, opd, {"query": ro, "body": {"query": mut}}), "write")
+        self.assertEqual(classify(None, c, opd, {"query": ro, "body": '{"query": "%s"}' % mut}),
+                         "write")
+        self.assertEqual(classify(None, c, opd, {"body": {"query": ro}}), "read")
+        self.assertEqual(classify(None, c, opd, {"query": {"a": 1}}), "write")
 
     def test_allowed_through(self):
         cases = {"call_read": {"read"}, "call_write": {"read", "write"},

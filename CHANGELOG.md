@@ -18,6 +18,16 @@ release's own summary line, kept short rather than reconstructed after the fact.
 > 0.19.3 directories were re-cut as 0.20.0, as 0.19.0 was re-cut as 0.19.1. The rollback target
 > is 0.19.2, the last release published.
 
+### gt-lotr: a GraphQL mutation can no longer ride `call_read` (review finding M2)
+
+`_graphql_tier` classified a document by its first word, so `fragment F on X {id} mutation M {...}`
+and `query A{x} mutation B{y}` were `read`. It now lexes the whole document (comments and string
+literals removed) and answers `read` only for exactly one `query` (or `{...}` shorthand) plus
+fragment definitions; a mutation or subscription anywhere, several operations, or anything
+unparsable is `write`. An explicit `body` argument, which the HTTP layer merges over `query`, is
+now the text that is classified. Raw `POST /$batch` and Jira/Graph POSTs were already `write`
+(POST defaults to write); no curated op is read-classified on a body.
+
 ### gt unlock: agents need your presence for what matters (off by default)
 
 (Owner, 2026-10-03: "I want to be able to sleep at night that I am not putting out something
