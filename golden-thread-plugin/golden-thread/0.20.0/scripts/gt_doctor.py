@@ -217,6 +217,38 @@ def plugin_root(explicit=None):
     return None
 
 
+CACHE_ROOT = Path.home() / ".claude" / "plugins" / "cache" / MARKET_NAME
+
+
+def source_present(root):
+    """True when `root` is a plugin source tree that still holds an installable gt release."""
+    return bool(root) and version_dir(root) is not None
+
+
+def resolve_release(root):
+    """-> (module root, release dir, source_gone) for the plain doctor (0.20.1).
+
+    The release every answer is relative to is the one INSTALLED (a deliberate rollback
+    included), not the newest directory in the tree: comparing a rolled-back 0.19.2 against
+    0.20.0's files reported wiring FAIL and drift on a healthy rollback (usability run M3).
+    Its copy in the source tree is preferred; else the installed copy in the plugin cache.
+
+    And the source tree may be gone (INSTALL.md option C installs from a temporary folder):
+    then the cache is both the release and the module root, as the SessionStart component
+    check already did -- until 0.20.1 the doctor printed `?` rows there and exited 2 (M7)."""
+    inst = installed_release()
+    if source_present(root):
+        if inst is not None:
+            in_tree = Path(root) / "golden-thread" / inst.name
+            if (in_tree / ".claude-plugin" / "plugin.json").is_file():
+                return root, in_tree, False
+            return root, inst, False
+        return root, version_dir(root), False
+    if inst is not None:
+        return CACHE_ROOT, inst, True
+    return root, None, bool(root)
+
+
 def version_dir(root):
     """The newest installable version directory, the way install.sh picks it."""
     if not root:
@@ -589,8 +621,14 @@ def check_core_rules(rep, vault):
                 fix="python3 <plugin>/scripts/vault_init.py install-core-rules --vault %s"
                     % vault)
     else:
+        # Counted the way the injector and the docs count (0.20.1): the priority MODEL is
+        # level: core but describes how rules rank -- it is not itself a rule. "11 Core rules"
+        # here beside "10 rules injected" in smoke-rules read as one going missing.
+        model = 1 if (cdir / "core_rule_priority_model.md").is_file() else 0
         rep.add("core-rules", OK,
-                "%d Core rule(s), each with its mechanism wired" % rules, "\n".join(lines))
+                "%d Core rule(s)%s, each with its mechanism wired"
+                % (rules - model, " and the priority model" if model else ""),
+                "\n".join(lines))
 
 
 def _components_module():
@@ -679,6 +717,8 @@ def check_modules(rep, root, vdir):
     installed = (_read_json(INSTALLED_PLUGINS).get("plugins") or {})
     enabled = (_read_json(SETTINGS).get("enabledPlugins") or {})
     lines, problems, fixes = [], [], set()
+    # The cache is not where install.sh lives: name the placeholder, not a wrong path.
+    installer = ("<plugin-repo>" if Path(root) == CACHE_ROOT else root)
     gtv = vdir.name if vdir else "?"
     for name, d in sorted(det.items()):
         key = "%s@%s" % (d.get("plugin"), MARKET_NAME)
@@ -698,7 +738,7 @@ def check_modules(rep, root, vdir):
                                     ("not enabled in settings.json", on_flag)) if not ok]
             if miss:
                 problems.append(name)
-                fixes.add('bash "%s/install.sh"' % root)
+                fixes.add('bash "%s/install.sh"' % installer)
                 lines.append(head + " — plugin %s %s" % (key, " and ".join(miss)))
             else:
                 lines.append(head + " — plugin %s installed and enabled" % key)
@@ -710,7 +750,7 @@ def check_modules(rep, root, vdir):
                 lines.append(head + " — not installed by choice (%s)" % why)
             if present or on_flag:
                 problems.append(name)
-                fixes.add('bash "%s/install.sh"' % root)
+                fixes.add('bash "%s/install.sh"' % installer)
                 lines[-1] += "; but plugin %s is still %s" % (
                     key, "installed" if present else "enabled")
     n_on = sum(1 for d in det.values() if d["state"] == "on")
@@ -838,12 +878,14 @@ def check_schedule(rep):
     UNKNOWN or SKIPPED -- never clean."""
     import shutil as _sh
     # Windows (0.20.0): the same jobs on Task Scheduler, judged by the same job_status().
+    # Linux (0.20.1): systemd --user timers or tagged crontab lines (gt_schedule.platform_kind).
     windows = os.name == "nt"
-    if sys.platform != "darwin" and not windows:
+    sched = _load_script("gt_schedule.py", HERE, INSTALLED_HOOKS)
+    linux_ok = sched is not None and hasattr(sched, "platform_kind")
+    if sys.platform != "darwin" and not windows and not linux_ok:
         rep.add("schedule", SKIPPED, "scheduled jobs are launchd agents or Windows tasks; "
                 "this is neither macOS nor Windows")
         return
-    sched = _load_script("gt_schedule.py", HERE, INSTALLED_HOOKS)
     if sched is None or not hasattr(sched, "job_status"):
         rep.add("schedule", UNKNOWN, "gt_schedule.py (0.17.2+) is not installed beside the "
                 "doctor", fix="re-run install.sh")
@@ -857,10 +899,15 @@ def check_schedule(rep):
     if not jobs:
         rep.add("schedule", SKIPPED, "no gt job is installed (gt_schedule.py list)")
         return
-    tool = "schtasks" if windows else "launchctl"
-    if not _sh.which(tool):
+    if windows:
+        tools = ("schtasks",)
+    elif sys.platform == "darwin":
+        tools = ("launchctl",)
+    else:
+        tools = ("systemctl", "crontab")
+    if not any(_sh.which(t) for t in tools):
         rep.add("schedule", UNKNOWN, "%d job(s) installed but %s is not on PATH, so "
-                "their state is unknown" % (len(jobs), tool))
+                "their state is unknown" % (len(jobs), " / ".join(tools)))
         return
     bad, lines = [], []
     for job in jobs:
@@ -868,7 +915,7 @@ def check_schedule(rep):
             code, problems = sched.job_status(job)
         except Exception as exc:
             problems, code = ["could not be checked (%s)" % exc.__class__.__name__], None
-        label = sched.label_for(job)
+        label = getattr(sched, "installed_label", sched.label_for)(job)
         if problems:
             bad.append(job)
             lines += ["%s: %s" % (label, p) for p in problems]
@@ -906,14 +953,29 @@ def check_workers(rep):
     line = out.strip().splitlines()[0]
     if "NOT CHECKED" in line:
         # 0.20.0: gt_workers could not read the process table (no `ps -eo` on native Windows).
-        # Not checked is neither clean nor a stray to reap.
-        rep.add("workers", UNKNOWN, line.strip(), out.strip()[:800])
+        # Not checked is neither clean nor a stray to reap -- and on native Windows it is the
+        # platform, not a failure, so it is SKIPPED and says so (0.20.1: as UNKNOWN it made
+        # every Windows doctor run exit 2, usability run M8).
+        if os.name == "nt":
+            rep.add("workers", SKIPPED, "not supported on Windows (no POSIX process table) — "
+                    "check Task Manager for stray bash.exe / python.exe processes")
+        else:
+            rep.add("workers", UNKNOWN, line.strip(), _whole_lines(out))
         return
-    if "clean" in out:
+    if "clean" in line:
         rep.add("workers", OK, line.strip())
     else:
-        rep.add("workers", WARN, line.strip(), out.strip()[:800],
+        rep.add("workers", WARN, line.strip(), _whole_lines(out),
                 fix="python3 %s reap --dry-run   (then without --dry-run)" % script)
+
+
+def _whole_lines(text, limit=12):
+    """At most `limit` whole lines of a sub-check's output, then a count -- never a cut
+    mid-line, which read as a path or a command that does not exist (0.20.1)."""
+    lines = [l for l in (text or "").strip().splitlines() if l.strip()]
+    if len(lines) > limit:
+        lines = lines[:limit] + ["… and %d more line(s)" % (len(lines) - limit)]
+    return "\n".join(lines)
 
 
 def check_push(rep):
@@ -931,6 +993,9 @@ def check_push(rep):
         rep.add("push", UNKNOWN, "the push check could not run", text[-800:])
     elif "in sync" in text:
         rep.add("push", OK, first)
+    elif "no remote configured" in first:
+        # 0.20.1: a vault with no remote is a choice, not a finding (M8).
+        rep.add("push", NOTE, first, "\n".join(text.splitlines()[1:]))
     elif "nothing to check" in text:
         # No vault repo, or no vault: the question does not apply here.
         rep.add("push", SKIPPED, first)
@@ -938,7 +1003,10 @@ def check_push(rep):
         # git missing, git timed out, branch unreadable: it could not answer.
         rep.add("push", UNKNOWN, first)
     else:
-        rep.add("push", WARN, first, text[-800:], fix="git -C <vault> push")
+        rep.add("push", WARN, first, _whole_lines(text),
+                fix=next((l.split(":", 1)[1].strip() for l in text.splitlines()
+                          if l.strip().startswith(("push with:", "set one with:", "fetch first:"))),
+                         "git -C <vault> push"))
 
 
 def check_gt_src(rep):
@@ -1106,7 +1174,15 @@ def check_astgrep(rep):
         rep.add("astgrep", WARN, problem)
     else:
         rep.add("astgrep", OK, "not installed — structural rules are SKIPPED, not silently "
-                               "passed. brew install ast-grep (or npm install -g @ast-grep/cli)")
+                               "passed. %s" % astgrep_install_hint())
+
+
+def astgrep_install_hint():
+    """How to install ast-grep on THIS platform (0.20.1: Homebrew was named on Linux and
+    Windows too)."""
+    if sys.platform == "darwin":
+        return "brew install ast-grep (or npm install -g @ast-grep/cli)"
+    return "npm install -g @ast-grep/cli (or cargo install ast-grep --locked)"
 
 
 # ---- post-install: the release gate -----------------------------------------
@@ -1173,7 +1249,13 @@ def release_dir(explicit, root):
         if _VERSION_NAME.match(HERE.parent.name):
             return HERE.parent
         return installed_release() or version_dir(root) or HERE.parent
-    return version_dir(root)
+    # The hooks-dir doctor (0.20.1): the INSTALLED release -- its copy in the source tree when
+    # the tree still has it, else the cached copy -- so a rollback is judged against what it
+    # installed and a deleted source tree (INSTALL.md option C) still has a release to answer
+    # for. Until 0.20.1 this was the newest dir under the root, and None once the root was gone,
+    # which failed the whole gate with "no release directory found" (usability run M7).
+    _root, rel, _gone = resolve_release(root)
+    return rel
 
 
 _VERSION_NAME = __import__("re").compile(r"\A\d+\.\d+\.\d+\Z")
@@ -1520,7 +1602,8 @@ def pi_daily_job(gate):
     # Windows (0.20.0): the job is a Task Scheduler task whose arguments gt_schedule keeps in a
     # spec file; job_file/job_args read whichever this platform uses.
     plist = sched.job_file("daily") if hasattr(sched, "job_file") else sched.plist_path("daily")
-    kind = "Task Scheduler" if os.name == "nt" else "launchd"
+    kind = ("Task Scheduler" if os.name == "nt" else "launchd" if sys.platform == "darwin"
+            else "systemd/cron")
     if not plist.is_file():
         gate.add("daily-job", INFO, "not installed (gt_schedule.py install daily --vault V)")
         return
@@ -1536,6 +1619,15 @@ def pi_daily_job(gate):
     except Exception as exc:
         gate.add("daily-job", PFAIL, "could not run: %s is unreadable (%s)"
                  % (plist, exc.__class__.__name__))
+        return
+    # 0.20.1 (usability run M11): a job file on disk is not a job the scheduler has. A refused
+    # bootstrap used to leave the plist behind and this row PASSed a job nothing would run.
+    # None = the scheduler could not be asked honestly (a sandbox, another HOME): as before.
+    reg = getattr(sched, "job_registered", lambda j: None)("daily")
+    if reg is False:
+        gate.add("daily-job", PFAIL, "%s daily job is on disk (%s) but not registered with the "
+                 "scheduler, so it never runs" % (kind, plist),
+                 "python3 %s install daily --vault V" % (INSTALLED_HOOKS / "gt_schedule.py"))
         return
     if want in args and Path(want).is_file():
         gate.add("daily-job", PASS, "%s daily job runs %s" % (kind, want))
@@ -1967,7 +2059,9 @@ def post_install_main(a):
     stage = getattr(a, "stage", None) or "final"
     rel = release_dir(getattr(a, "release", None), plugin_root(getattr(a, "plugin_root", None)))
     root = plugin_root(getattr(a, "plugin_root", None))
-    if root is None and rel is not None:
+    if not source_present(root) and rel is not None:
+        # No source tree (deleted after the install, or never wired): module states are read
+        # from where the release itself lives -- its source tree, or the plugin cache (M7).
         root = rel.parent.parent
     vault = vault_path(getattr(a, "vault", None))
     import time
@@ -2227,9 +2321,16 @@ def check_unlock(rep):
         return
     lv = (st.get("assurance") or {})
     if not st.get("enabled"):
-        rep.add("unlock", NOTE, "unlock: off -- agents use LOTR, secrets and gt's settings "
-                "without asking you. It can require your presence (TOTP + Touch ID / Windows "
-                "Hello): gt_unlock.py enroll, then gt_unlock.py policy enable; SECURITY.md")
+        # LOTR is named only when its module is installed (0.20.1: "agents use LOTR" was said
+        # with LOTR off). The presence factors are this platform's.
+        lotr = bool(_entry(_installed_record() or {}, "gt-lotr@%s" % MARKET_NAME))
+        factor = ("Touch ID" if sys.platform == "darwin" else
+                  "Windows Hello" if os.name == "nt" else None)
+        rep.add("unlock", NOTE, "unlock: off -- agents use %sgt's settings without asking "
+                "you. It can require your presence (TOTP%s): python3 %s enroll, then python3 %s "
+                "policy enable; SECURITY.md"
+                % ("LOTR, secrets and " if lotr else "secrets and ",
+                   " + " + factor if factor else "", cli, cli))
         return
     if st.get("reachable") is False:
         rep.add("unlock", WARN, "unlock: ON, authority not running -- every gated scope is "
@@ -2526,13 +2627,21 @@ def main(argv=None):
         return post_install_main(a)
 
     wanted = set(a.only or CHECKS)
-    root = plugin_root(a.plugin_root)
-    vdir = version_dir(root)
+    src_root = plugin_root(a.plugin_root)
+    root, vdir, source_gone = resolve_release(src_root)
     vault = vault_path(a.vault)
 
     rep = Report()
     if "version" in wanted:
-        check_version(rep, root)
+        if source_gone and vdir is not None:
+            # Not `?`: the install is fine and checkable from its cached copy; only "is a
+            # newer release available?" has nothing to compare against.
+            rep.add("version", NOTE, "gt %s installed; the plugin source it was installed from "
+                    "is gone (%s), so whether a newer release exists cannot be checked — the "
+                    "other rows use the installed copy" % (vdir.name, src_root),
+                    fix='to re-point it, re-run install.sh from wherever the source now lives')
+        else:
+            check_version(rep, src_root)
     if "components" in wanted:
         check_components(rep, vdir)
     if "wiring" in wanted:

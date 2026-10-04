@@ -868,3 +868,64 @@ class CommsContentIsOffByDefault(NamedSections):
         spec.loader.exec_module(m)
         s = m.SETTINGS["daily_comms_content"]
         self.assertEqual((s["default"], s["values"]), ("follow", ["follow", "off"]))
+
+
+class WhatTheQueueWroteTodayCounts(DailyBase):
+    """0.20.1 (usability run 2026-10-04). gt writes the vault through the write queue and never
+    commits it, and the daily note read COMMITS only: right after `gt_task add` it said "0
+    task(s) added" (seen on Windows, where the README is also written with CRLF), a project
+    created that day was missing, and gt's own scaffold folder was listed as a new project."""
+
+    def setUp(self):
+        super().setUp()
+        import datetime
+        self.today = datetime.date.today().isoformat()
+        self.commit("base", {"Projects/alpha/README.md": readme("alpha", "- [ ] old one\n")})
+
+    def run_today(self):
+        proc = self.py(DAILY, "--vault", self.vault, "--date", self.today, "--dry-run")
+        self.assertEqual(proc.returncode, 0, proc.stderr)
+        return proc.stdout
+
+    def test_an_uncommitted_task_add_with_crlf_lines_is_counted(self):
+        p = self.vault / "Projects" / "alpha" / "README.md"
+        p.write_bytes(readme("alpha", "- [ ] old one\n- [ ] brand new task\n")
+                      .replace("\n", "\r\n").encode("utf-8"))
+        out = self.run_today()
+        self.assertIn("brand new task", out)
+        self.assertIn("1 task(s) added", out)
+        self.assertNotIn("old one", out.split("Tasks added", 1)[1].split("\n\n", 1)[0])
+
+    def test_an_uncommitted_close_is_counted(self):
+        p = self.vault / "Projects" / "alpha" / "README.md"
+        p.write_text(readme("alpha", "- [x] old one\n"))
+        self.assertIn("1 task(s) closed", self.run_today())
+
+    def test_a_project_created_today_and_not_committed_is_a_new_project(self):
+        (self.vault / "Projects" / "beta").mkdir()
+        (self.vault / "Projects" / "beta" / "README.md").write_text(
+            readme("beta", "- [ ] first beta task\n"))
+        out = self.run_today()
+        self.assertIn("**New projects** — beta", out)
+        self.assertIn("first beta task", out)
+
+    def test_gts_own_scaffold_is_never_a_new_project(self):
+        files = {"Projects/golden-thread/README.md": "# Golden Thread\n",
+                 "Projects/golden-thread/tools/x.py": "",
+                 "Projects/delta/README.md": readme("delta")}
+        for rel, text in files.items():
+            p = self.vault / rel
+            p.parent.mkdir(parents=True, exist_ok=True)
+            p.write_text(text)
+        self.git("add", "-A")
+        self.git("commit", "-q", "-m", "vault created")          # committed today
+        (self.vault / "Projects" / "epsilon").mkdir()             # and one not committed
+        (self.vault / "Projects" / "epsilon" / "README.md").write_text(readme("epsilon"))
+        out = self.run_today()
+        line = out.split("**New projects** — ", 1)[1].split("\n", 1)[0]
+        self.assertEqual(line, "delta, epsilon")
+
+    def test_a_past_date_ignores_the_working_tree(self):
+        (self.vault / "Projects" / "beta").mkdir()
+        (self.vault / "Projects" / "beta" / "README.md").write_text(readme("beta"))
+        self.assertNotIn("beta", self.run_daily("--dry-run", expect=0).stdout)

@@ -17,6 +17,7 @@ import json
 import os
 import posixpath
 import shutil
+import subprocess
 import sys
 import unittest
 from pathlib import Path
@@ -400,11 +401,50 @@ class InstallCmd(unittest.TestCase):
 
     def test_it_only_launches_install_sh(self):
         text = INSTALL_CMD.read_text(encoding="utf-8")
-        self.assertIn('"%GT_BASH%" "%GT_SH%" %*', text)
-        self.assertIn("exit /b %ERRORLEVEL%", text)
+        self.assertIn('"%GT_BASH%" "%GT_SH%" %GT_ARGS%', text)
+        self.assertIn('set "GT_RC=%ERRORLEVEL%"', text)
+        self.assertIn("exit /b %GT_RC%", text)
         self.assertIn("System32\\bash.exe", text, "WSL's bash must be skipped")
         self.assertIn("https://git-scm.com/download/win", text)
         self.assertIn("%GT_SH:\\=/%", text, "install.sh finds itself with dirname: needs '/'")
+
+
+    def test_windows_switches_utf8_and_the_launcher_marker(self):
+        """0.20.1 (M14, M15): /uninstall and /check reach install.sh as --uninstall --check;
+        the console is switched to UTF-8 for the run and restored; install.sh is told its
+        hints are read in cmd/PowerShell."""
+        text = INSTALL_CMD.read_text(encoding="utf-8")
+        for win, posix in (("/uninstall", "--uninstall"), ("/check", "--check"),
+                           ("/yes", "--yes"), ("/?", "--help")):
+            self.assertIn('if /i "%%GT_A%%"=="%s" set "GT_A=%s"' % (win, posix), text)
+        self.assertIn("chcp 65001 >nul", text)
+        self.assertIn("chcp %GT_CP% >nul", text)
+        self.assertIn('set "GT_LAUNCHER=install.cmd"', text)
+
+    @unittest.skipUnless(IS_WINDOWS, "cmd.exe")
+    def test_cmd_runs_help_in_utf8(self):
+        p = subprocess.run(["cmd.exe", "/c", str(INSTALL_CMD), "/?"], capture_output=True,
+                           timeout=120)
+        out = p.stdout.decode("utf-8", errors="strict")
+        self.assertEqual(p.returncode, 0, out[-1500:])
+        self.assertIn("install.sh —", out)
+        self.assertIn("--uninstall", out)
+
+
+class ShellAwareHints(Sandbox):
+    """0.20.1 (M14): hints a cmd/PowerShell user can type -- py -3 or the interpreter's path,
+    Windows paths, install.cmd -- and the installer by its full path everywhere else."""
+
+    @unittest.skipIf(IS_WINDOWS, "Git Bash names the path in its own /c/... form")
+    def test_posix_hints_name_the_installer_by_its_full_path(self):
+        p = self.run_cmd([BASH, INSTALL, "--with"], timeout=120)
+        self.assertNotEqual(p.returncode, 0)
+        self.assertIn('bash "%s"' % (REPO / "install.sh"), p.stdout)
+
+    def test_install_sh_reads_the_launcher_marker(self):
+        text = INSTALL.read_text(encoding="utf-8")
+        self.assertIn('"${GT_LAUNCHER:-}" = install.cmd', text)
+        self.assertIn('U_PY="py -3"', text)
 
 
 if __name__ == "__main__":

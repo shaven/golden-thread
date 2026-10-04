@@ -148,3 +148,22 @@ class ANewSessionNeverInheritsAFigure(HookOutputBase):
         p = self.run_hook(["hook"], "PreCompact", session=NEW)
         self.assertNotIn("88%", self.messages(p)[0])
         self.assertIn("context unknown", self.messages(p)[0])
+
+
+class CannotTellIsNotSaidEveryTurn(HookOutputBase):
+    """0.20.1 (usability run, Linux): "no usage ledger at ... (is the usage module installed?)"
+    was printed on EVERY prompt. As a hook it is now said at most once per session, and not at
+    all when there is no ledger -- the usage module being off is a choice, not a fault."""
+
+    def test_no_ledger_is_silent_as_a_hook(self):
+        p = self.run_hook(["check", "--write"], "UserPromptSubmit", session=NEW)
+        self.assertNotIn("cannot tell", p.stderr)
+        self.assertNotIn("usage ledger", p.stdout + p.stderr)
+        self.assertEqual([], self.messages(p))
+
+    def test_a_ledger_with_nothing_for_this_session_is_said_once(self):
+        self.ledger([self.reading(50, session=OLD[:8])])
+        first = self.run_hook(["check", "--write"], "UserPromptSubmit", session=NEW)
+        self.assertIn("cannot tell", first.stderr)
+        second = self.run_hook(["check", "--write"], "UserPromptSubmit", session=NEW)
+        self.assertNotIn("cannot tell", second.stderr)

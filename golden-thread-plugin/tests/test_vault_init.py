@@ -92,6 +92,10 @@ class FreshTest(VaultInitBase):
                   f"{CORE}/core_rule_priority_model.md",
                   "Projects/golden-thread/tools/gt_tasks.py"):
             self.assertTrue((v / f).is_file(), f)
+        # 0.20.1: bytecode from the vault tools is ignored, so it never shows in git status.
+        gi = (v / ".gitignore").read_text()
+        self.assertIn("__pycache__/", gi)
+        self.assertIn("*.pyc", gi)
         cfg = self.cfg()
         self.assertEqual(cfg["vault_path"], str(v.resolve()))
         self.assertEqual(cfg["core_rules_path"], CORE)
@@ -318,6 +322,29 @@ class ConnectTest(VaultInitBase):
         self.assertTrue((v / "Projects" / "golden-thread" / "tools" / "gt_tasks.py").is_file())
         self.assertEqual((v / "notes" / "mine.md").read_text(), "hands off\n")
         self.assertFalse(self.actions(res, "error"), res)
+
+    def test_a_reconnect_leaves_an_existing_tasks_rollup_byte_identical(self):
+        """0.20.1: connect runs on every install and regenerated TASKS.md (and its receipt)
+        each time, so a re-install that changed nothing dirtied the vault's git status."""
+        import os
+        v = self.make_vault()
+        files = [v / "TASKS.md", v / "Projects" / "golden-thread" / ".tasks-digest"]
+        for f in files:
+            os.utime(f, ns=(1_000_000_000, 1_000_000_000))
+        before = [(f.read_bytes(), f.stat().st_mtime_ns) for f in files]
+        self.vi_json("connect", "--vault", v)
+        self.assertEqual(before, [(f.read_bytes(), f.stat().st_mtime_ns) for f in files])
+
+    def test_connect_seeds_a_gitignore_only_when_there_is_none(self):
+        v = self.tmp / "existing"
+        v.mkdir()
+        self.vi_json("connect", "--vault", v)
+        self.assertIn("__pycache__/", (v / ".gitignore").read_text())
+        w = self.tmp / "theirs"
+        w.mkdir()
+        (w / ".gitignore").write_text("mine\n")
+        self.vi_json("connect", "--vault", w)
+        self.assertEqual((w / ".gitignore").read_text(), "mine\n")
 
     def test_connect_keeps_an_owner_core_hooks_path(self):
         if not shutil.which("git"):

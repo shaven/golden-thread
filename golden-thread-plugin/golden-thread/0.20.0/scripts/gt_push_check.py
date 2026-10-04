@@ -159,11 +159,16 @@ def report(vault=None):
                   % (vault, remote or "origin", branch))
             return 1
         if not remotes:
-            print("GOLDEN THREAD push: vault branch '%s' has NO REMOTE — its %s "
-                  "commit(s) exist on this disk only." % (branch, n))
-            print("  add one with: git -C \"%s\" remote add origin <url>" % vault)
-            print("  then:         git -C \"%s\" push -u origin %s" % (vault, branch))
-            return 1
+            # 0.20.1: information, not a finding. A vault with no remote at all is a choice
+            # (a fresh install makes one) -- there is nothing to push TO, so "push" was an
+            # impossible fix and the doctor was never green on a fresh install (M8).
+            print("GOLDEN THREAD push: no remote configured — nothing to push (vault branch "
+                  "'%s', %s commit(s) on this disk only)." % (branch, n))
+            print("  to back it up: git -C \"%s\" remote add origin <url> && "
+                  "git -C \"%s\" push -u origin %s" % (vault, vault, branch))
+            print("  to silence this line: python3 \"%s\" set push_check off"
+                  % os.path.join(os.path.dirname(os.path.abspath(__file__)), "gt_settings.py"))
+            return 0
         remote = "origin" if "origin" in remotes else remotes[0]
         print("GOLDEN THREAD push: vault branch '%s' has NO UPSTREAM — its %s "
               "commit(s) have nowhere to go." % (branch, n))

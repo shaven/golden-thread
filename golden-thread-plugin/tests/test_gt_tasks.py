@@ -183,6 +183,34 @@ class GtTasksTest(Sandbox):
         self.assertNotIn("I ticked this by hand", target.read_text(encoding="utf-8"),
                          "the projection is still regenerated -- the edit does not survive")
 
+    def test_a_run_that_changes_nothing_leaves_both_files_untouched(self):
+        """0.20.1: every re-install regenerated TASKS.md and its receipt with a new
+        "Generated" stamp as the only difference, so the vault's git status went dirty."""
+        import os, time
+        self.project("alpha", tasks=["- [ ] do it [p:: 2]"])
+        self.run_rollup()
+        files = [self.vault / "TASKS.md", self.vault / self.DIGEST]
+        before = [(f.read_bytes(), f.stat().st_mtime_ns) for f in files]
+        for f in files:                                     # an mtime the write would move
+            os.utime(f, ns=(1_000_000_000, 1_000_000_000))
+        before = [(f.read_bytes(), f.stat().st_mtime_ns) for f in files]
+        time.sleep(1.1)                                     # the stamp moves by the minute,
+        proc = self.py(self.tool, "--vault", self.vault)    # the mtime would by any write
+        self.assertOk(proc, "gt_tasks.py failed")
+        self.assertIn("TASKS.md unchanged", proc.stdout)
+        self.assertEqual(before, [(f.read_bytes(), f.stat().st_mtime_ns) for f in files])
+        self.project("alpha", tasks=["- [ ] do it [p:: 2]", "- [ ] another"])
+        proc = self.py(self.tool, "--vault", self.vault)
+        self.assertIn("TASKS.md written", proc.stdout)
+        self.assertIn("another", (self.vault / "TASKS.md").read_text())
+
+    def test_counts_are_pluralised(self):
+        self.project("alpha", tasks=["- [ ] do it [p:: 2]"])
+        (self.vault / "TASKS.md").unlink(missing_ok=True)
+        proc = self.py(self.tool, "--vault", self.vault)
+        self.assertRegex(proc.stdout, r"— 1 open task across \d+ projects?\n")
+        self.assertNotIn("1 open tasks", proc.stdout)
+
     def test_the_digest_is_recorded_so_the_next_run_is_quiet(self):
         self.project("alpha", tasks=["- [ ] do it [p:: 2]"])
         self.run_rollup()

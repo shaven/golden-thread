@@ -36,7 +36,10 @@ FAKE_SCHTASKS = textwrap.dedent(r'''
     def opt(name):
         return a[a.index(name) + 1] if name in a else None
     tn, rc = opt("/TN"), 0
-    if a[0] == "/Create":
+    if a[0] == "/Create" and os.environ.get("FAKE_SCHTASKS_CREATE") == "refuse":
+        print("ERROR: Access is denied.", file=sys.stderr)
+        rc = 1
+    elif a[0] == "/Create":
         state["tasks"][tn] = {"tr": opt("/TR"), "sc": opt("/SC"), "d": opt("/D"),
                               "st": opt("/ST"), "last": "267011", "ran": "N/A"}
         print("SUCCESS: The scheduled task \"%s\" has successfully been created." % tn)
@@ -237,6 +240,72 @@ class CheckRemoveListReconcile(TaskSchedulerCase):
         self.assertIn('"%s"' % new_py, self.m.wrapper_path("daily").read_text(encoding="utf-8"))
         self.assertEqual(sum(1 for c in self.calls() if c[0] == "/Create"), creates)
         self.assertNoLaunchd()
+
+
+class HonestOnTaskScheduler(TaskSchedulerCase):
+    """0.20.1 (M11): a refused /Create is not an installed job; old labels migrate."""
+
+    def setUp(self):
+        super().setUp()
+        os.environ["FAKE_SCHTASKS_RESULT"] = "0"
+        self.addCleanup(os.environ.pop, "FAKE_SCHTASKS_CREATE", None)
+
+    def test_a_refused_create_is_not_recorded(self):
+        os.environ["FAKE_SCHTASKS_CREATE"] = "refuse"
+        rc, said = self.install()
+        self.assertEqual(rc, self.m.PROBLEM)
+        self.assertIn("NOT INSTALLED", said)
+        self.assertIn("Access is denied", said)
+        self.assertFalse(self.m.spec_path("daily").exists(), "a refused task left its spec")
+        self.assertFalse(self.m.wrapper_path("daily").exists())
+        self.assertEqual(self.m.installed_jobs(), [])
+        self.assertEqual(self.m.job_status("daily")[1][:1], ["no task file at %s"
+                                                            % self.m.spec_path("daily")])
+
+    def test_a_refused_create_keeps_the_previous_job_files(self):
+        self.assertEqual(self.install()[0], self.m.OK)
+        before = self.m.spec_path("daily").read_bytes()
+        os.environ["FAKE_SCHTASKS_CREATE"] = "refuse"
+        rc, _said = self.install("daily", "--hour", "5")
+        self.assertEqual(rc, self.m.PROBLEM)
+        self.assertEqual(self.m.spec_path("daily").read_bytes(), before)
+
+    def legacy_task(self, job="daily"):
+        self.assertEqual(self.install(job)[0], self.m.OK)
+        old, new = self.m.legacy_label_for(job), self.m.label_for(job)
+        st = json.loads(self.state.read_text())
+        st["tasks"][old] = st["tasks"].pop(new)
+        self.state.write_text(json.dumps(st))
+        doc = json.loads(self.m.spec_path(job).read_text(encoding="utf-8"))
+        doc["Label"] = old
+        self.m.spec_path(job).write_text(json.dumps(doc), encoding="utf-8")
+        return old, new
+
+    def test_migrate_labels_moves_the_task(self):
+        old, new = self.legacy_task()
+        self.assertEqual(self.m.installed_label("daily"), old)
+        with mock.patch("sys.stdout"):
+            self.assertEqual(self.m.main(["migrate-labels"]), self.m.OK)
+        self.assertEqual(sorted(self.tasks()), [new])
+        doc = json.loads(self.m.spec_path("daily").read_text(encoding="utf-8"))
+        self.assertEqual(doc["Label"], new)
+        self.assertIn(new, self.m.wrapper_path("daily").read_text(encoding="utf-8"))
+        self.assertNoLaunchd()
+
+    def test_a_refused_migration_leaves_the_old_task(self):
+        old, _new = self.legacy_task()
+        os.environ["FAKE_SCHTASKS_CREATE"] = "refuse"
+        with mock.patch("sys.stdout"), mock.patch("sys.stderr"):
+            self.assertEqual(self.m.main(["migrate-labels"]), self.m.PROBLEM)
+        self.assertEqual(sorted(self.tasks()), [old])
+        self.assertEqual(json.loads(self.m.spec_path("daily").read_text())["Label"], old)
+
+    def test_remove_names_only_what_it_removed(self):
+        with mock.patch("sys.stdout") as out:
+            self.assertEqual(self.m.main(["remove", "daily"]), self.m.OK)
+        said = "".join(c.args[0] for c in out.write.call_args_list)
+        self.assertIn("nothing to remove", said)
+        self.assertNotIn("removed", said)
 
 
 if __name__ == "__main__":

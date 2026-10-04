@@ -404,6 +404,19 @@ class SourceMoved(ComponentsBase):
         self.assertIn("re-run install.sh", out)
         self.assertNotIn("no-manifest", out)
 
+    def test_a_deleted_source_tree_is_not_a_badpath_hook(self):
+        """0.20.1 (M7): INSTALL.md option C installs from a temporary folder and deletes it.
+        gt_version_check's `check <plugin-root>` then names a path that is gone; the hook
+        still runs and says so, so it is not `badpath` -- which failed the post-install gate's
+        wiring row on a healthy install."""
+        self.full_setup()
+        cache = self.home / ".claude" / "plugins" / "cache" / "golden-thread-plugin" / "gt" / "1.2.3"
+        shutil.copytree(self.vdir, cache)
+        self.root.rename(self.root.parent / "deleted-tree")
+        out = self.check()
+        self.assertIn("is gone", out)
+        self.assertNotIn("badpath", out)
+
     def test_with_no_installed_copy_either_it_still_says_no_manifest(self):
         self.full_setup()
         self.vdir.rename(self.vdir.parent / "moved-away")

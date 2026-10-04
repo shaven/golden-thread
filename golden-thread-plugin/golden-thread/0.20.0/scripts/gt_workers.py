@@ -382,8 +382,14 @@ def classify(w, declared, mine=None):
         if w.get("waiting") and not working:
             return "waiting"
         if w["pid"] in declared:
-            return "active" if working else "own-idle"
-        return "undeclared-working" if working else "own-idle"
+            # A DECLARED worker that is idle is the one owned case worth a question:
+            # someone was told work was happening.
+            return "active" if working else "declared-stalled"
+        # 0.20.1: an undeclared shell of THIS live session is an ordinary Bash tool process
+        # (a background command, a poll loop, a server) that Claude Code itself tracks. Until
+        # 0.20.1 it was "UNDECLARED but ACTIVE" / "IDLE in this session", so the doctor was
+        # never green while a session had any background command (usability run M8).
+        return "this-session"
     if w["pid"] in declared:
         return "active" if working else "declared-stalled"
     return "undeclared-working" if working else "undeclared-stalled"
@@ -408,6 +414,8 @@ def _clean_line(ws, buckets):
         bits.append("%d active" % len(buckets["active"]))
     if buckets.get("waiting"):
         bits.append("%d waiting" % len(buckets["waiting"]))
+    if buckets.get("this-session"):
+        bits.append("%d running in this session" % len(buckets["this-session"]))
     if buckets.get("live-session"):
         bits.append("%d belong to other live sessions" % len(buckets["live-session"]))
     if buckets.get("young"):
@@ -416,22 +424,44 @@ def _clean_line(ws, buckets):
             % (len(ws), ", ".join(bits) or "all accounted for"))
 
 
+def short_cmd(cmd, width=72):
+    """A command shown on one line: whitespace collapsed, cut on a word boundary with an
+    ellipsis -- never mid-word with nothing to say it was cut (0.20.1)."""
+    one = " ".join(str(cmd or "").split())
+    if len(one) <= width:
+        return one
+    cut = one[:width - 1]
+    if " " in cut[width // 2:]:
+        cut = cut[:cut.rfind(" ")]
+    return cut.rstrip() + "…"
+
+
+# A session's workers are summarised, not listed one by one, past this many.
+LIST_PER_SESSION = 3
+
+
 def _sessions_lines(buckets):
-    """One line per other live session, then one per worker: what it is doing."""
+    """One line per live session (this one first), then up to LIST_PER_SESSION workers each."""
     lines, by_owner = [], {}
-    for w in buckets.get("live-session", []) + buckets.get("waiting", []):
+    for w in (buckets.get("this-session", []) + buckets.get("live-session", [])
+              + buckets.get("waiting", [])):
         by_owner.setdefault(w["owner"], []).append(w)
-    for owner, group in sorted(by_owner.items()):
+    own = {w["owner"] for w in buckets.get("this-session", []) + buckets.get("waiting", [])}
+    for owner, group in sorted(by_owner.items(), key=lambda kv: (kv[0] not in own, kv[0])):
         sid = next((w["session"] for w in group if w.get("session")), "")
-        lines.append("  session %s(claude pid %d, up %s): %d worker(s), ok"
-                     % (sid[:8] + " " if sid else "", owner,
+        lines.append("  %s %s(claude pid %d, up %s): %d worker(s), ok"
+                     % ("this session" if owner in own else "session",
+                        sid[:8] + " " if sid else "", owner,
                         group[0]["owner_elapsed_raw"], len(group)))
-        for w in sorted(group, key=lambda x: x["pid"]):
+        group = sorted(group, key=lambda x: x["pid"])
+        for w in group[:LIST_PER_SESSION]:
             if w.get("waiting"):
-                what = "WAITING on: %s" % (w["waits_on"] or "sleep")
+                what = "WAITING on: %s" % short_cmd(w["waits_on"] or "sleep", 150)
             else:
-                what = "running, %.1fs CPU: %s" % (w["cpu"], w["cmd"])
-            lines.append(("    pid %d  " % w["pid"] + what)[:160])
+                what = "%.1fs CPU: %s" % (w["cpu"], short_cmd(w["cmd"]))
+            lines.append("    pid %d  %s" % (w["pid"], what))
+        if len(group) > LIST_PER_SESSION:
+            lines.append("    … and %d more" % (len(group) - LIST_PER_SESSION))
     return lines
 
 
@@ -454,15 +484,14 @@ def report():
     for w in buckets.get("active", []):
         why = declared.get(w["pid"], {}).get("why", "")
         print(BANNER)
-        print("****  ACTIVE CLAUDE WORKER: %s" % (w["cmd"][:70]))
+        print("****  ACTIVE CLAUDE WORKER: %s" % short_cmd(w["cmd"], 70))
         print("****  pid %-7d running %-12s cpu %.1fs   %s"
               % (w["pid"], w["elapsed_raw"], w["cpu"], why))
         print(BANNER)
 
     alerts = (buckets.get("declared-stalled", []) +
               buckets.get("undeclared-stalled", []) +
-              buckets.get("undeclared-working", []) +
-              buckets.get("own-idle", []))
+              buckets.get("undeclared-working", []))
     if not alerts:
         print(_clean_line(ws, buckets))
         for l in info:
@@ -470,25 +499,20 @@ def report():
         return 0
 
     print("CLAUDE WORKERS needing a decision (%d):" % len(alerts))
-    for w in buckets.get("own-idle", []):
-        print("  IDLE in this session — pid %d, alive %s, only %.2fs CPU, not waiting on anything"
-              % (w["pid"], w["elapsed_raw"], w["cpu"]))
-        print("      %s" % w["cmd"][:88])
-        print("      Not an orphan (this session owns it). Stop it if it is no longer needed.")
     for w in buckets.get("declared-stalled", []):
         print("  STALLED, though declared — pid %d, alive %s, only %.2fs CPU"
               % (w["pid"], w["elapsed_raw"], w["cpu"]))
         print("      declared for: %s" % declared.get(w["pid"], {}).get("why", "?"))
-        print("      %s" % w["cmd"][:88])
+        print("      %s" % short_cmd(w["cmd"], 88))
         print("      Work someone was told was happening is NOT happening.")
     for w in buckets.get("undeclared-stalled", []):
         print("  ORPHAN — pid %d, alive %s, only %.2fs CPU (nothing declared it)"
               % (w["pid"], w["elapsed_raw"], w["cpu"]))
-        print("      %s" % w["cmd"][:88])
+        print("      %s" % short_cmd(w["cmd"], 88))
     for w in buckets.get("undeclared-working", []):
         print("  UNDECLARED but ACTIVE — pid %d, alive %s, %.1fs CPU"
               % (w["pid"], w["elapsed_raw"], w["cpu"]))
-        print("      %s" % w["cmd"][:88])
+        print("      %s" % short_cmd(w["cmd"], 88))
         print("      Doing real work, but nothing recorded why. Declare or stop it.")
     if buckets.get("declared-stalled") or buckets.get("undeclared-stalled"):
         print("  reap the stalled ones: python3 %s reap" % os.path.abspath(__file__))
@@ -598,7 +622,7 @@ def main():
             return 0
         for w in ws:
             print("%-7d %-12s cpu %6.2fs  %s"
-                  % (w["pid"], w["elapsed_raw"], w["cpu"], w["cmd"][:70]))
+                  % (w["pid"], w["elapsed_raw"], w["cpu"], short_cmd(w["cmd"], 70)))
         return 0
     print("usage: gt_workers.py [check | list | declare <pid> <why> | reap [--dry-run]]")
     return 2

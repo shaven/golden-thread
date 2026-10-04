@@ -436,6 +436,7 @@ HOOK_DIR_SCRIPTS = ("gt_paths.py", "gt_components.py",
                     "gt_lint.py",         # the vault linter lives in the hooks dir too (used by gt_lint_weekly.py and /gt:gt-lint)
                     "gt_lint_weekly.py",   # weekly vault + wiki lint under launchd (0.9.11)
                     "gt_doctor.py",        # /gt:gt-doctor runs the other probes from here (0.12.0)
+                    "gt_uninstall.py",     # the uninstall works after the source tree is gone (0.20.1)
                     "gt_test_receipt.py",  # test-run receipts, read by the commit guard (0.12.5)
                     "gt_state.py",         # session state written before the context runs out
                     "gt_surface.py",       # MUST DO, handoffs and state shown at session start (0.17.2)
@@ -1397,7 +1398,20 @@ def check_wiring(version_dir, settings_path=None, owner=None, plugin_root=None, 
                          "owner": reg.get("owner", ""), "state": "badpath",
                          "detail": argv[0]})
             continue
-        for a in argv[1:]:
+        for i, a in enumerate(argv[1:], 1):
+            # gt_version_check's `check <plugin-root>` (0.20.1): a source tree deleted after the
+            # install (INSTALL.md option C installs from a temporary folder) is not a broken
+            # hook -- it runs, and says the source is gone. The doctor's version row reports it;
+            # as `badpath` it failed the post-install gate on a healthy install (M7).
+            if reg["script"] == "gt_version_check.py" and argv[i - 1] == "check":
+                continue
+            # The same for this file's own `check <release-dir>`, when the installed copy of
+            # that release is in the plugin cache: report() falls back to it and says so.
+            if reg["script"] == "gt_components.py" and argv[i - 1] == "check" \
+                    and not os.path.exists(a) and os.path.isfile(os.path.join(
+                        os.path.expanduser("~/.claude/plugins/cache/golden-thread-plugin/gt"),
+                        os.path.basename(a.rstrip("/\\")), MANIFEST_NAME)):
+                continue
             if ("/" in a or os.sep in a) and not a.startswith("-") and not os.path.exists(a):
                 rows.append({"script": reg["script"], "event": reg["event"],
                              "owner": reg.get("owner", ""), "state": "badpath",
@@ -1983,8 +1997,20 @@ def localize_mcp(paths, python):
     return changed
 
 
+GT_SHIM_MARK = "gt-python3-shim"
+
+
+def _is_gt_shim(path):
+    try:
+        with open(path, encoding="utf-8", errors="replace") as fh:
+            return GT_SHIM_MARK in fh.read(4096)
+    except OSError:
+        return False
+
+
 def export_shell_env(home=None):
-    """Windows (0.20.0): put gt's python3 shim on PATH for the model's Bash commands.
+    """Windows (0.20.0), and macOS when install.sh wrote a shim (0.20.1): put gt's python3 shim
+    on PATH for the model's Bash commands.
 
     Skills tell Claude to run `python3 <tool>.py`; in Git Bash that is the Microsoft Store stub.
     install.sh writes a shim to ~/.claude/golden-thread/bin/python3, and a SessionStart hook may
@@ -1996,10 +2022,16 @@ def export_shell_env(home=None):
     try:
         target = os.environ.get("CLAUDE_ENV_FILE")
         home = home or os.path.expanduser("~")
-        if os.name != "nt" or not target \
-                or not os.path.isfile(os.path.join(home, ".claude", "golden-thread", "bin",
-                                                   "python3")):
+        shim = os.path.join(home, ".claude", "golden-thread", "bin", "python3")
+        if not target or not os.path.isfile(shim):
             return False
+        if os.name != "nt":
+            # macOS (0.20.1): only a shim install.sh wrote -- it writes one there only when the
+            # python3 on PATH FAILED gt's write probe (macOS refused it vault writes), so skills'
+            # bare `python3` runs the interpreter that passed, as on Windows (usability run M9).
+            # A file of anyone else's in that dir never puts gt's dir first on PATH.
+            if sys.platform != "darwin" or not _is_gt_shim(shim):
+                return False
         try:
             with open(target, encoding="utf-8") as fh:
                 if SHELL_ENV_LINES[0] in fh.read():

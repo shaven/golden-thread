@@ -465,8 +465,9 @@ class DoctorWorkersAndLint(DoctorBase):
         self.install_hook_scripts(["gt_workers.py"])
         row = [c for c in json.loads(self.doctor("--json").stdout)["checks"]
                if c["check"] == "workers"][0]
-        # unknown on native Windows: no `ps -eo`, so gt_workers says NOT CHECKED (0.20.0)
-        self.assertIn(row["state"], ("ok", "warn", "unknown") if IS_WINDOWS else ("ok", "warn"))
+        # skipped on native Windows: no `ps -eo`, so gt_workers says NOT CHECKED (0.20.0) and
+        # the doctor reports it as not supported there (0.20.1)
+        self.assertIn(row["state"], ("skipped",) if IS_WINDOWS else ("ok", "warn"))
 
     def test_lint_findings_are_summarised_not_dumped(self):
         self.install_hook_scripts(["gt_lint.py", "gt_paths.py"])
@@ -727,7 +728,9 @@ class DoctorCoreRulesCheck(DoctorBase):
         self.wire_everything()
         row, p = self.row()
         self.assertEqual(row["state"], "ok", str(row))
-        self.assertIn("3 Core rule(s)", row["summary"])
+        # 0.20.1: the priority model is named, not counted as a rule -- the count the
+        # injector, the docs and smoke-rules use (it said 11 beside "10 rules injected").
+        self.assertIn("2 Core rule(s) and the priority model", row["summary"])
         self.assertEqual(p.returncode, 0)
 
     def test_a_rule_whose_mechanism_is_missing_is_a_failure(self):
@@ -848,8 +851,14 @@ class DoctorUnderlyingCheckCrashes(DoctorBase):
             encoding="utf-8")
         row = [c for c in json.loads(self.doctor("--json").stdout)["checks"]
                if c["check"] == "workers"][0]
-        self.assertEqual(row["state"], "unknown", str(row))
-        self.assertIn("NOT CHECKED", row["summary"])
+        if IS_WINDOWS:
+            # 0.20.1: on native Windows that is the platform, not a failure -- SKIPPED, in
+            # words, so a healthy Windows install no longer exits 2 (usability run M8).
+            self.assertEqual(row["state"], "skipped", str(row))
+            self.assertIn("not supported on Windows", row["summary"])
+        else:
+            self.assertEqual(row["state"], "unknown", str(row))
+            self.assertIn("NOT CHECKED", row["summary"])
         self.assertFalse(row.get("fix"), "nothing to reap")
 
     def test_a_crashed_push_check_is_not_in_sync(self):
@@ -857,6 +866,133 @@ class DoctorUnderlyingCheckCrashes(DoctorBase):
         row = [c for c in json.loads(self.doctor("--json").stdout)["checks"]
                if c["check"] == "push"][0]
         self.assertEqual(row["state"], "unknown", str(row))
+
+
+class DoctorReleaseIsTheInstalledOne(DoctorBase):
+    """0.20.1 (usability run M3, M7): every answer is relative to the INSTALLED release --
+    a deliberate rollback is judged against what it installed, not the newest dir in the
+    tree -- and a source tree deleted after the install (INSTALL.md option C) falls back to
+    the installed copy in the plugin cache instead of `?` rows and exit 2."""
+
+    def setUp(self):
+        super().setUp()
+        self.cache = (self.home / ".claude" / "plugins" / "cache" / "golden-thread-plugin"
+                      / "gt" / "0.16.4")
+        (self.cache / ".claude-plugin").mkdir(parents=True)
+        (self.cache / ".claude-plugin" / "plugin.json").write_text(
+            '{"name": "gt", "version": "0.16.4"}')
+        pl = self.home / ".claude" / "plugins"
+        (pl / "installed_plugins.json").write_text(json.dumps({"version": 2, "plugins": {
+            "gt@golden-thread-plugin": [{"version": "0.16.4", "installPath": str(self.cache)}]}}))
+        (self.hooks / "gt_components.py").write_text(STUB)
+        (self.hooks / "stub-spec.json").write_text(json.dumps({
+            "check": ["GOLDEN THREAD components: clean — installed matches 0.16.4, all 3 "
+                      "hooks wired.", 0],
+            "wiring": ["GOLDEN THREAD wiring: all 3 declared hooks are wired", 0]}))
+        self.install_hook_scripts(["gt_version_check.py"])
+
+    def wire_root(self, root):
+        cmd = 'python3 "%s" check "%s"' % (self.hooks / "gt_version_check.py", root)
+        (self.home / ".claude" / "settings.json").write_text(json.dumps({"hooks": {
+            "SessionStart": [{"hooks": [{"type": "command", "command": cmd}]}]}}))
+
+    def tree(self, *versions):
+        root = self.tmp / "plugin"
+        for v in versions:
+            d = root / "golden-thread" / v / ".claude-plugin"
+            d.mkdir(parents=True)
+            (d / "plugin.json").write_text('{"name": "gt", "version": "%s"}' % v)
+        return root
+
+    def run_doctor(self, *only):
+        args = ["--json"] + sum([["--only", o] for o in only], [])
+        p = self.doctor(*args)
+        self.assertNotIn("Traceback", p.stdout + p.stderr)
+        data = json.loads(p.stdout)
+        return {c["check"]: c for c in data["checks"]}, data, p
+
+    def test_source_tree_gone_uses_the_cached_install(self):
+        self.wire_root(self.tmp / "gone-from-tmp")
+        rows, data, p = self.run_doctor("version", "components", "wiring")
+        self.assertEqual(Path(data["version_dir"]), self.cache)
+        self.assertEqual(rows["version"]["state"], "note", rows["version"])
+        self.assertIn("is gone", rows["version"]["summary"])
+        self.assertEqual(rows["components"]["state"], "ok", rows["components"])
+        self.assertEqual(rows["wiring"]["state"], "ok", rows["wiring"])
+        self.assertEqual(p.returncode, 0, p.stdout)
+
+    def test_post_install_with_the_source_gone_has_a_release(self):
+        self.wire_root(self.tmp / "gone-from-tmp")
+        shutil.copy2(DOCTOR, self.hooks / "gt_doctor.py")
+        self.install_hook_scripts(["gt_components.py", "gt_paths.py"])   # the real one
+        p = self.py(self.hooks / "gt_doctor.py", "post-install", "--json", "--dry-run",
+                    env=self.env)
+        data = json.loads(p.stdout)
+        self.assertEqual(data["release"], "0.16.4", p.stdout[-600:])
+        rel = [r for r in data["rows"] if r["row"] in ("release", "post-install")]
+        self.assertEqual(rel[0]["row"], "release", rel)
+        self.assertNotIn("could not run", rel[0]["summary"])
+
+    def test_a_rollback_is_judged_against_the_installed_release(self):
+        root = self.tree("0.16.4", "0.17.0")
+        self.wire_root(root)
+        rows, data, _p = self.run_doctor("components")
+        self.assertEqual(Path(data["version_dir"]), root / "golden-thread" / "0.16.4",
+                         "the doctor compared a rolled-back install against the newest tree")
+
+    def test_with_nothing_installed_the_newest_tree_release_is_used(self):
+        (self.home / ".claude" / "plugins" / "installed_plugins.json").unlink()
+        root = self.tree("0.16.4", "0.17.0")
+        self.wire_root(root)
+        _rows, data, _p = self.run_doctor("components")
+        self.assertEqual(Path(data["version_dir"]), root / "golden-thread" / "0.17.0")
+
+
+class DoctorPushWithNoRemote(DoctorBase):
+    def test_no_remote_is_information_not_a_warning(self):
+        """M8: "NO REMOTE" was a WARN on every fresh install, with `git push` as the fix."""
+        self.install_hook_scripts(["gt_push_check.py", "gt_settings.py"])
+        v = self.tmp / "vault"
+        v.mkdir()
+        self.git_init(v)
+        rows = {c["check"]: c for c in json.loads(
+            self.doctor("--json", "--only", "push", "--vault", str(v),
+                        env=dict(self.env, GT_VAULT=str(v))).stdout)["checks"]}
+        self.assertEqual(rows["push"]["state"], "note", rows["push"])
+        self.assertIn("no remote configured", rows["push"]["summary"])
+        self.assertIn("push_check off", rows["push"]["detail"])
+
+
+class DailyJobMustBeRegistered(DoctorBase):
+    """0.20.1 (M11): the gate PASSed daily-job from the job FILE alone, so a refused bootstrap
+    (the plist left behind) read as an installed job nothing would ever run."""
+
+    def test_on_disk_but_not_registered_is_a_failure(self):
+        import types
+        from _harness import load_module
+        doc = load_module(DOCTOR, "gt_doctor_dailyjob")
+        job = self.tmp / "io.goldenthread.gt-daily.plist"
+        job.write_text("x")
+        want = str(doc.INSTALLED_HOOKS / "gt_daily.py")
+        fake = types.SimpleNamespace(
+            plist_path=lambda j: job, job_file=lambda j: job,
+            job_args=lambda j: ["/usr/bin/python3", want, "--vault", "V"])
+        gate = doc.Gate("final")
+        for registered, state in ((False, doc.PFAIL), (None, None)):
+            fake.job_registered = lambda j, r=registered: r
+            gate.rows.clear()
+            orig = doc._load_script
+            doc._load_script = lambda *a, **k: fake
+            try:
+                doc.pi_daily_job(gate)
+            finally:
+                doc._load_script = orig
+            row = gate.rows[-1]
+            if state:
+                self.assertEqual(row["state"], state, row)
+                self.assertIn("not registered", row["summary"])
+            else:
+                self.assertNotIn("not registered", row["summary"])
 
 
 if __name__ == "__main__":
@@ -914,7 +1050,9 @@ class AstgrepIsOptionalNotMissing(Sandbox):
         """"Not installed" alone tells nobody whether it matters."""
         out = self.doctor().stdout
         self.assertIn("SKIPPED", out, "it did not say structural rules are skipped, not passed")
-        self.assertIn("brew install ast-grep", out)
+        # 0.20.1: the platform's own route -- Homebrew is named on macOS only
+        self.assertIn("brew install ast-grep" if sys.platform == "darwin"
+                      else "npm install -g @ast-grep/cli", out)
 
     def test_present_reports_the_version(self):
         proc = self.doctor(extra_path=str(self.fake_astgrep()))

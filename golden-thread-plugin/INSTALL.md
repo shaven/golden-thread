@@ -1,7 +1,7 @@
 # Golden Thread Plugin — Install Guide
 
 > **Reader:** installing for the first time, or verifying a fork
-> **Claims last checked against the code:** 2026-09-16 — see *The documents, and what belongs in each* in [`CLAUDE.md`](../CLAUDE.md).
+> **Claims last checked against the code:** 2026-10-04 (0.20.1) — see *The documents, and what belongs in each* in [`CLAUDE.md`](../CLAUDE.md).
 
 **Requirements:** Python 3.8+, Claude Code (any version).
 
@@ -41,7 +41,8 @@ where should the vault live? Re-run with `--vault` once you know.
 
 **On Windows** (0.19.2; complete in 0.20.0) run the same installer from Git Bash, or run `install.cmd` from
 cmd.exe, PowerShell or Explorer — it finds Git Bash and hands `install.sh` every argument
-unchanged (`install.cmd --vault C:\Users\you\Documents\GoldenThread`). Both need
+unchanged (`install.cmd --vault C:\Users\you\Documents\GoldenThread`; `/uninstall`, `/check`
+and `/?` are understood too). Both need
 [Git for Windows](https://git-scm.com/download/win), which Claude Code on Windows needs anyway,
 and Python 3.8+ from [python.org](https://www.python.org/downloads/) with *Add python.exe to
 PATH* ticked. See *Windows* below.
@@ -75,6 +76,11 @@ curl -fsSL https://github.com/shaven/golden-thread/archive/refs/heads/main.tar.g
   && bash /tmp/golden-thread-main/golden-thread-plugin/install.sh
 ```
 
+The source folder may be deleted afterwards (a reboot clears `/tmp`). Everything keeps working
+from the installed copy: `gt_doctor.py` and its post-install gate check the plugin cache
+instead, and the doctor's `version` row says only that it cannot tell whether a newer release
+exists (0.20.1). Re-run the one-liner to upgrade.
+
 ---
 
 ## What the installer does
@@ -84,17 +90,20 @@ rather than carrying a hardcoded one, so this guide does not name a version eith
 pin an older release deliberately: `bash install.sh 0.14.0`.
 
 **What gets installed.** gt itself, plus each **module** — an optional plugin that ships
-beside gt and is versioned with it. 0.15.0 ships six:
+beside gt and is versioned with it. `bash install.sh --list-modules` prints the modules in the
+tree you have, with each one's state and why; at the time of writing they are:
 
 | Module | Plugin | Default | What it adds |
 |---|---|---|---|
 | `wiki` | `gt-wiki` | on | five `/gt-wiki:*` skills for an LLM wiki (query, ingest, lint, refresh, init) |
 | `demo` | `gt-demo` | on | `/gt-demo:gt-demo`, the guided PizzaBot 3000 tour in its own throwaway vault |
 | `watch` | `gt-watch` | on | `/gt-watch:gt-watch` and its session-start report; fetches nothing until the `watch` setting is `report` |
-| `report-card` | `gt-report-card` | on | the session report card and close-out question (three hooks, no command) |
+| `report-card` | `gt-report-card` | on | the session report card and close-out question (hooks, no command) |
 | `flow` | `gt-flow` | on | `/gt-flow:gt-flow`, an offline HTML timeline of knowledge moving up the ladder |
 | `visualize` | `gt-visualize` | on | `/gt-visualize:gt-visualize`, a codebase in 3D — how-it-works walkthrough or code city (three.js inlined) |
+| `usage` | `gt-usage` | on | `/gt-usage:gt-usage`, the plan-allowance meter (5-hour, weekly and spend windows) |
 | `farm` | `gt-farm` | **off** | `/gt-farm:gt-farm`, work packets for an external AI service |
+| `lotr` | `gt-lotr` | **off** | `/gt-lotr:gt-lotr`, one MCP gateway in front of GitHub, Jira, Microsoft 365 and others |
 
 `farm` is off for a fresh install. A machine upgrading from a gt that shipped `/gt:gt-farm`
 keeps it on: a one-time machine migration records that choice, so nobody loses a command
@@ -142,8 +151,8 @@ install of the newest would**, so skipping releases is fine. On each run it:
    longer ships (`retired.json`, after a backup) — files it does not recognise are reported
    and left alone;
 2. applies one-time **machine migrations** (changes under `~/.claude/` a skipped release would
-   have made); the first failure stops the install with `INSTALL INCOMPLETE`, nothing is
-   rolled back, and re-running is safe;
+   have made); the first failure stops the install with `INSTALL INCOMPLETE` and the install
+   is rolled back (see *A failed install is rolled back* above); re-running is safe;
 3. applies pending **vault upgrades** itself when the vault had no uncommitted changes before
    the install touched it (after a backup; the results are left uncommitted for you to
    review). If the vault holds your own uncommitted work it only reports, and prints the
@@ -156,45 +165,51 @@ install of the newest would**, so skipping releases is fine. On each run it:
 hooks and the first `TASKS.md`. If a vault is already configured when `install.sh`
 runs, it refreshes that vault's tools to the installed templates.
 
-`install.sh` registers the hooks it owns in `~/.claude/settings.json` — five for gt, plus
-each module's while it is on (`watch` one, `report-card` three); the other five, the
-Core-rule enforcement hooks, are wired against the vault — and then
-verifies them, printing either `Verified hook wiring → every hook this installer owns
-is connected` or a list of what will never run. Read that line: **a file being
-installed and a file being wired are different things**, and until 0.9.13 nothing
-reported the difference.
+`install.sh` registers the hooks it owns in `~/.claude/settings.json` — gt's, plus each
+module's while it is on — and prints how many, and how many more (the Core-rule enforcement
+hooks) the vault step wires against the vault. It then verifies them, printing either
+`Verified hook wiring → every hook this installer owns is connected` or a list of what will
+never run. Read that line: **a file being installed and a file being wired are different
+things**, and until 0.9.13 nothing reported the difference. The counts are not repeated here
+because they change with the release and your module choices; the installer's own lines are
+the ones to read.
 
 After installing, **restart Claude Code** — plugins and hooks load at session start.
-Then confirm enforcement is actually live, because a rule that is not wired is not a rule:
+Then confirm enforcement is actually live, because a rule that is not wired is not a rule.
+One command answers it — the release gate the installer already ran, now against the
+restarted machine:
 
 ```bash
-# Are the Core rules being asserted? (the UserPromptSubmit hook)
-echo '{}' | ~/.claude/golden-thread/hooks/inject_core_rules.sh
-
-# Are ALL declared hooks wired? (14 in 0.15.0 with the default modules)
-python3 ~/.claude/golden-thread/hooks/gt_components.py wiring \
-  "<plugin-repo>/golden-thread/<version>"
+# macOS / Linux / Git Bash
+python3 ~/.claude/golden-thread/hooks/gt_doctor.py post-install --vault <vault>
 ```
 
-The Core rules should print. Silence or an error means they are not being asserted.
-
-The second command should print `all 14 declared hooks are wired` with the default modules
-(fewer when you have turned `watch` or `report-card` off). It is the broader
-check of the two: the first proves one hook answers, while this one compares live
-settings against the list of every hook the release declares — so it can report the
-case the first cannot, which is a hook that was never registered at all. Anything it
-lists as `unwired` never runs, and `badpath` means it is registered against a path that
-does not exist on this machine (a version directory removed by a later bump, most often).
-
-Both are worth running on a **second machine** in particular. Files sync; a
-`settings.json` on another box does not.
-
-Two more checks after an upgrade:
-
-```bash
-python3 ~/.claude/golden-thread/hooks/gt_doctor.py      # includes a modules row: on/off, installed, enabled
-python3 "<plugin-repo>/golden-thread/<version>/scripts/gt_upgrade.py" --vault <vault> status
+```bat
+:: Windows cmd.exe
+py -3 "%USERPROFILE%\.claude\golden-thread\hooks\gt_doctor.py" post-install --vault <vault>
 ```
+
+```powershell
+# Windows PowerShell
+py -3 "$env:USERPROFILE\.claude\golden-thread\hooks\gt_doctor.py" post-install --vault <vault>
+```
+
+(No `py`? Use the full path of the Python the installer printed as `Python: ...`.) Every row
+should be PASS or INFO. `wiring` compares live settings against every hook the release
+declares, so it reports the case nothing else can — a hook that was never registered at all;
+`smoke-rules` runs the installed Core-rule injector and checks every shipped rule comes out.
+Anything `unwired` never runs; `badpath` means it is registered against a path that does not
+exist on this machine.
+
+It is worth running on a **second machine** in particular. Files sync; a `settings.json` on
+another box does not. For the whole health picture, run the doctor without `post-install`
+(`/gt:gt-doctor` in Claude Code does the same): it adds the modules, vault, scheduled jobs,
+workers and push rows. On a healthy fresh install it reports no WARN — a vault with no git
+remote is an `i` (information) row saying there is nothing to push, and on Windows the
+`workers` row says it is not supported there.
+
+After an upgrade, `gt_upgrade.py ... status` (in the release's `scripts/`) lists vault
+migrations still pending; `/gt:gt-upgrade` applies them.
 
 ---
 
@@ -297,7 +312,12 @@ an actual write probe -- create, write, `os.replace`, remove in the vault and in
 `~/.claude/golden-thread`, and open `log.md` for append -- preferring `/usr/bin/python3` when it
 is a working 3.8+. It is recorded in `~/.claude/golden-thread/interpreter.json` and
 `~/.claude/golden-thread/python`; the hook wrappers and the `.py` hook commands in
-`settings.json` use it instead of bare `python3`. To see where you stand:
+`settings.json` use it instead of bare `python3`. Since 0.20.1, when the `python3` on your PATH
+is one the probe REFUSED, Claude's own shell gets the same remedy Windows has: a `python3` shim
+in `~/.claude/golden-thread/bin/` (put first on PATH for Claude's Bash commands at session
+start, through `$CLAUDE_ENV_FILE`) runs the chosen interpreter, and the gt-vault MCP server is
+started by that interpreter's full path. A `python3` that passes the probe is never overridden.
+To see where you stand:
 
 ```bash
 python3 ~/.claude/golden-thread/hooks/gt_write_probe.py probe     # PASS/FAIL per interpreter
@@ -307,8 +327,7 @@ python3 ~/.claude/golden-thread/hooks/gt_write_probe.py probe     # PASS/FAIL pe
 Fix: re-run `install.sh` (it re-probes and re-records), run gt's tools with the interpreter it
 names, or give that Python Full Disk Access (System Settings > Privacy & Security). A recorded
 interpreter that later disappears (a `brew upgrade`) shows as `badpath` in the wiring check
-rather than letting every hook fail open. Commands a skill runs as `python3 ...` from Claude's
-shell still use your PATH's `python3`.
+rather than letting every hook fail open. In your own terminal `python3` is untouched.
 
 See *Troubleshooting* in [`MANUAL.md`](MANUAL.md) for the same note.
 
@@ -390,7 +409,11 @@ to PATH and sets `PYTHONUTF8=1` through `$CLAUDE_ENV_FILE`, which Claude Code so
 Bash command. A `~/bin/python3` that is not gt's is left alone. Claude Code's PowerShell tool
 does not read `$CLAUDE_ENV_FILE`; there `python` (python.org's name) works as it is.
 
-*Scheduled jobs (0.20.0).* `gt_schedule.py install|check|remove|list|reconcile` use Task
+*Scheduled jobs (0.20.0).* Jobs are labelled `io.goldenthread.gt-<job>` (0.20.1; an install
+moves a job still under the old `com.markethaven.gt-<job>` label). A job is reported installed
+only when the scheduler accepted it: a refused registration puts the files back and says NOT
+INSTALLED (0.20.1). On Linux a job is a systemd user timer, or a tagged crontab line where
+there is no user systemd. On Windows `gt_schedule.py install|check|remove|list|reconcile` use Task
 Scheduler (`schtasks`), per user and without admin: the task runs
 `~/.claude/golden-thread/jobs/gt-<job>.cmd`, which appends to the same `<job>.out` / `.err` logs
 the macOS jobs write. `install` runs the task once and reads Task Scheduler's Last Result, as it
@@ -408,8 +431,8 @@ directly, so it stays a direct child of `claude`, which gt unlock's shim registr
 The post-install gate's `smoke-lotr` row starts exactly that configured command and asks it for
 its tools. macOS and Linux keep the manifest as shipped. *What does not run on Windows, and says so (0.20.0).* gt-lotr before 0.3.0 (a Unix-domain-socket gateway) is
 off on Windows whatever is chosen; `gt-watch`'s hourly cron fetch (`install-cron`) is POSIX-only —
-run `gt_watch.py fetch` by hand or from Task Scheduler; `gt_workers.py` reports NOT CHECKED (there
-is no POSIX process table); task priority windows need a time-zone database —
+run `gt_watch.py fetch` by hand or from Task Scheduler; the doctor's `workers` row says it is not
+supported on Windows (there is no POSIX process table); task priority windows need a time-zone database —
 `python -m pip install tzdata`. The repository's `.gitattributes` forces LF on checkout (0.17.3) — except `*.cmd`,
 which stays CRLF — so a Windows clone neither breaks the shell scripts nor fails the checksum
 check. Not yet exercised: the hooks as Claude Code for Windows itself runs them (they have been
@@ -417,7 +440,21 @@ run directly, with the same payloads). WSL is Linux, and installs as Linux does.
 
 **Rollback:** the repo (and a gt-src copy) keeps the previous release, so
 `bash install.sh <previous version> --vault <vault>` reinstalls it; your recorded module
-choices and vault are kept. Rolling back to 0.14.0 removes the module plugins it does not
+choices and vault are kept. **If you turned on sandbox mode or gt unlock, turn them off
+first** — a release from before them cannot undo their settings, so the vault could be left
+unreachable:
+
+```bash
+python3 ~/.claude/golden-thread/hooks/gt_settings.py set sandbox_mode off
+python3 ~/.claude/golden-thread/hooks/gt_unlock.py policy disable
+python3 ~/.claude/golden-thread/hooks/gt_unlock.py daemon stop
+```
+
+A rollback is judged against the release it installed, not the newest in the tree (0.20.1):
+the post-install gate and the doctor compare against the installed release, the vault's
+gt-shipped tools and git hooks go back to that release's copies (they are not reported as
+local edits), and an installer verb the older release lacks is skipped rather than printing
+a usage error. Rolling back to 0.14.0 removes the module plugins it does not
 know (`gt-watch`, `gt-report-card`, `gt-farm`, `gt-flow`), so the older gt — which carries
 watch, the report card and farm itself — is not left with two copies of the same skill.
 Each other plugin installs the release that gt shipped with (gt-wiki 0.1.2 for 0.12.x, 0.1.3
@@ -431,19 +468,40 @@ for a module since the gt you had.
 
 ## Uninstall
 
+One command removes everything gt put on this machine, shows you first, and checks afterwards
+that it is gone (0.20.1):
+
 ```bash
-rm -rf ~/.claude/plugins/cache/golden-thread-plugin \
-       ~/.claude/plugins/marketplaces/golden-thread-plugin \
-       ~/.claude/golden-thread/hooks ~/.claude/golden-thread/bin
+bash install.sh --uninstall --check     # list what would be removed; nothing changes
+bash install.sh --uninstall             # remove it (asks once; --yes when not at a terminal)
 ```
 
-On Windows also delete `~/bin/python3` if its second line reads `gt-python3-shim`, and remove
-each scheduled job first: `python3 ~/.claude/golden-thread/hooks/gt_schedule.py remove <job>`.
+On Windows: `install.cmd /uninstall /check`, then `install.cmd /uninstall`. If the plugin source
+is gone, run the installed copy: `python3 ~/.claude/golden-thread/hooks/gt_uninstall.py --check`
+(cmd.exe: `py -3 "%USERPROFILE%\.claude\golden-thread\hooks\gt_uninstall.py" --check`).
 
-Then remove the `golden-thread-plugin` entries from `~/.claude/plugins/installed_plugins.json`
-and `~/.claude/plugins/known_marketplaces.json`, the `*@golden-thread-plugin` keys under
-`enabledPlugins` in `~/.claude/settings.json`, and every hook whose command points into
-`~/.claude/golden-thread/hooks/` — otherwise Claude Code keeps calling hooks that no longer
-exist. To drop only an optional part, use `bash install.sh --without <module>` instead.
+It removes:
 
-Your vault and `~/.claude/vault-config.json` are unaffected — the vault is yours, not the plugin's.
+- gt's scheduled jobs — launchd, Task Scheduler, systemd timers or cron lines — under both the
+  current `io.goldenthread.gt-*` and the old `com.markethaven.gt-*` labels;
+- the sandbox entries gt added to `settings.json` (through `gt_sandbox.py remove`);
+- the unlock daemon and its home. **Your enrolled factors, recovery codes and sealed secrets are
+  destroyed**; a git credential helper pointing at `gt_unlock.py` goes too;
+- gt's hook entries and the `*@golden-thread-plugin` keys in `~/.claude/settings.json` (your own
+  hooks stay), and the plugin registrations, cache and marketplace;
+- `~/.claude/golden-thread`, keeping its `backups/` unless `--purge-backups`;
+- gt's `python3` shims (a `~/bin/python3` that is not gt's is kept);
+- `~/.gt-inbox` and `~/.gt-scratch`, module crontab lines, and stale gt socket directories in
+  `/tmp`;
+- `~/.claude/vault-config.json` (keep it with `--keep-vault-config`).
+
+It refuses while `~/.gt-inbox` holds vault writes that were never applied — drain them first
+(`python3 ~/.claude/golden-thread/hooks/gt_broker.py drain --vault <vault>`) or pass
+`--discard-queued`. Every configuration file it edits is copied first to
+`~/.claude/gt-uninstall-backup-<stamp>/`, and the summary prints the commands to copy them back.
+Exit 0 means the re-check found nothing of gt's left. Restart Claude Code afterwards.
+
+**Your vault is never touched** — it is yours, not the plugin's. To detach its git hooks:
+`git -C <vault> config --unset core.hooksPath`. The LOTR gateway home (`~/.config/gt-lotr`) is
+kept unless `--purge-lotr`. To drop only an optional part, use `bash install.sh --without
+<module>` instead.

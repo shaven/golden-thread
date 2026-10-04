@@ -1,6 +1,6 @@
 ---
 name: gt-handoff-list
-description: "Deprecated alias, removed after 0.18.x — use /gt:gt-list handoffs. Kept working for one release: it does exactly what /gt:gt-list handoffs does (show the waiting handoffs (read-only))."
+description: "Deprecated alias — use /gt:gt-list handoffs. Still works, and will be removed in a future release: it does exactly what /gt:gt-list handoffs does (show the waiting handoffs (read-only))."
 model_intent: fast
 ---
 
@@ -18,5 +18,5 @@ argument. That section is this command's procedure, moved there unchanged in 0.1
 (verb-first vocabulary: one verb per action, the artifact as its argument), so the result is the
 same. Skip that file's sections for the other artifacts.
 
-This alias has no trigger phrases of its own — they moved to `gt-list` — and it is removed in the
-release after 0.18.x.
+This alias has no trigger phrases of its own — they moved to `gt-list` — and it will be removed in a
+future release.

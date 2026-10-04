@@ -123,6 +123,25 @@ def _prune_backups(bdir, now=None):
     return removed
 
 
+GENERATED_LINE = re.compile(r"^> \*\*Generated [^\n]*\n?", re.M)
+
+
+def rollup_unchanged(vault, out):
+    """True when TASKS.md on disk is this tool's output and differs from `out` only in the
+    "Generated <stamp>" line -- then nothing needs writing (0.20.1). A file that is not what
+    this tool last generated (no receipt, or a hand edit) is never "unchanged": write_rollup
+    must see it, so the edit is backed up and named."""
+    target = vault / "TASKS.md"
+    try:
+        current = target.read_text(encoding="utf-8")
+        recorded = (vault / DIGEST_FILE).read_text(encoding="utf-8").strip()
+    except (OSError, UnicodeDecodeError):
+        return False
+    if _sha(current) != recorded:
+        return False
+    return GENERATED_LINE.sub("", current) == GENERATED_LINE.sub("", out)
+
+
 def write_rollup(vault, out):
     """Replace TASKS.md, but never silently over someone's edit. -> [note, ...]
 
@@ -683,9 +702,17 @@ def main():
         print("dry run: TASKS.md not written (%d line(s) rendered)" % len(out.splitlines()),
               file=sys.stderr)
         return
-    for note in write_rollup(vault, out):
-        print(note, file=sys.stderr)
-    print(f"TASKS.md written — {len(rows)} open tasks across {len(projects)} projects")
+    counted = (f"{len(rows)} open task{'' if len(rows) == 1 else 's'} across "
+               f"{len(projects)} project{'' if len(projects) == 1 else 's'}")
+    if rollup_unchanged(vault, out):
+        # 0.20.1: nothing but the "Generated" stamp would change, so nothing is written --
+        # neither TASKS.md nor its receipt. A re-install (or any no-op run) used to leave both
+        # dirty in the vault's git status with a timestamp as the only difference.
+        print(f"TASKS.md unchanged — {counted}")
+    else:
+        for note in write_rollup(vault, out):
+            print(note, file=sys.stderr)
+        print(f"TASKS.md written — {counted}")
     emitted = task_events(vault, observed)
     if emitted:
         print(f"  events: {emitted} task.open/task.done")
