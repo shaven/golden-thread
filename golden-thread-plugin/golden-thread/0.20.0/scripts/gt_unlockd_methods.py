@@ -38,7 +38,7 @@ import time
 import gt_ipc
 import gt_unlock_factors as F
 import gt_unlock_policy as P
-from gt_unlockd import Denied, _sha
+from gt_unlockd import Denied, _sha, approval_bind, seat_of
 
 
 def methods(auth):
@@ -76,9 +76,11 @@ def methods(auth):
         finally:
             lk.release()
 
-    def write_approval(h, used, evidence):
+    def write_approval(h, used, evidence, serial, ts):
         """Record the approval of policy bytes with sha256 `h` in state.json: the platform
-        signature when one was made (verified on every load, F3), else the hash (L1)."""
+        signature when one was made (verified on every load, F3), else the hash (L1) -- both
+        with the approval's serial and time (M3), and the serial becomes the floor no older
+        approval may go below."""
         st = auth.state()
         st["policy_approved"] = h
         sigs = (evidence or {}).get("sigs") or {}
@@ -87,9 +89,11 @@ def methods(auth):
             st["policy_approval"] = {
                 "hash": h, "factor": name, "requester": evidence["requester"],
                 "nonce": base64.b64encode(evidence["nonce"]).decode("ascii"),
-                "sig": base64.b64encode(sigs[name]).decode("ascii")}
+                "sig": base64.b64encode(sigs[name]).decode("ascii"),
+                "serial": serial, "ts": ts}
         else:
-            st.pop("policy_approval", None)
+            st["policy_approval"] = {"hash": h, "serial": serial, "ts": ts}
+        auth.raise_floor(serial, h)
         return st
 
     def need_consumer(peer, what):
@@ -154,8 +158,10 @@ def methods(auth):
             setattr(s, seat, me)
             setattr(s, had, False)
         if replaced:
-            # F7: a new shim never inherits the grant an earlier one held.
-            auth.revoke_key(s.key, "shim_replaced" if role == "lotr" else "vault_shim_replaced")
+            # F7: a new shim never inherits the grant an earlier one held -- its own seat's
+            # (L4: the seats' grants are separate).
+            auth.revoke_key(s.gkey("main" if role == "lotr" else "vault"),
+                            "shim_replaced" if role == "lotr" else "vault_shim_replaced")
         auth.audit("register_shim", verdict="ok", subject=peer["pid"], session=root["pid"],
                    role=role)
         return {"session": root["pid"], "role": role}
@@ -182,6 +188,7 @@ def methods(auth):
         if kind == "job":
             raise Denied("unattended", "a scheduled job cannot unlock; use the allow-list")
         target = shim_s
+        seat = seat_of(kind)
         sp = params.get("session_pid")
         if sp is not None:
             with auth.lock:
@@ -189,13 +196,17 @@ def methods(auth):
             if not cands:
                 raise Denied("no_session", "no registered session with root pid %s" % sp)
             target = cands[0]
+            # A terminal unlocking a named session (gt_unlock.py unlock --session N) unlocks
+            # the seat its scope belongs to: gt:vault:* -> the vault MCP seat, else main (L4).
+            seat = "vault" if str(params.get("scope") or "").startswith("gt:vault:") \
+                else "main"
         if target is None:
             target = auth.session_for(root, kind)
         g = auth.do_unlock(target, requester(peer), params.get("scope") or "",
                            params.get("reason") or "", conn, rid, tty(params),
-                           use_recovery=bool(params.get("recovery")))
+                           use_recovery=bool(params.get("recovery")), seat=seat)
         return {"grant": g.gid, "factors": g.factors, "ttl_s": g.ttl, "idle_s": g.idle,
-                "session": target.root["pid"],
+                "session": target.root["pid"], "seat": seat,
                 "needs_reenrol": bool(auth.state().get("needs_reenrol"))}
 
     @method
@@ -237,7 +248,7 @@ def methods(auth):
         if kind == "job":
             raise Denied("unattended", "consent can never be given unattended")
         session = shim_s or auth.session_for(root, kind)
-        g = auth.active_grant(session.key)
+        g = auth.active_grant(session.gkey(seat_of(kind)))
         if g is None:
             raise Denied("locked", "gt is locked; unlock first")
         now = time.monotonic()
@@ -493,18 +504,19 @@ def methods(auth):
         new = {k: v for k, v in new.items() if k != P.ADMIN_FLOOR_KEY}
         data = (json.dumps(new, indent=2, sort_keys=True) + "\n").encode("utf-8")
         h = _sha(data)
+        serial, ts = auth.next_approval()
         evidence = {}
         used = []
         if eff.enabled or merged.get("enabled"):
             # Turning unlock on proves the factors work before anything is locked; changing
             # or turning it off needs the same proof (step-up + K) -- and the platform
             # factor's signature over THESE bytes is the approval (F3).
-            used = require_full(peer, "change the unlock policy", conn, rid, params, bind=h,
-                                evidence=evidence)
+            used = require_full(peer, "change the unlock policy", conn, rid, params,
+                                bind=approval_bind(h, serial, ts), evidence=evidence)
             if not used:
                 raise Denied("enrol_first", "enrol your factors before turning unlock on")
         F.write_private(auth.path("policy.json"), data)
-        st = write_approval(h, used, evidence)
+        st = write_approval(h, used, evidence, serial, ts)
         st["unlock_on"] = bool(merged.get("enabled"))     # see gt_unlock_policy.enabled_at
         auth.save_state(st)
         P.set_marker(auth.home, bool(merged.get("enabled")))
@@ -519,10 +531,11 @@ def methods(auth):
         h = auth._policy_file_hash()
         if h is None:
             raise Denied("no_policy", "there is no policy.json to approve")
+        serial, ts = auth.next_approval()
         evidence = {}
         used = require_full(peer, "approve a policy.json edited outside gt_unlock.py", conn,
-                            rid, params, bind=h, evidence=evidence)
-        st = write_approval(h, used, evidence)
+                            rid, params, bind=approval_bind(h, serial, ts), evidence=evidence)
+        st = write_approval(h, used, evidence, serial, ts)
         pol = F.read_json(auth.path("policy.json")) or {}
         st["unlock_on"] = bool(pol.get("enabled"))
         auth.save_state(st)

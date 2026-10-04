@@ -1782,7 +1782,7 @@ def smoke_lotr(base, rel, root):
                          "personal", "--mode", "local"], env)
         if rc != 0:
             return PFAIL, "lotr.py init exited %s: %s" % (rc, out.strip()[-160:])
-        daemon = subprocess.Popen([sys.executable, str(scripts / "lotrd.py"), "--home", str(lhome)],
+        daemon = subprocess.Popen([sys.executable, "-I", str(scripts / "lotrd.py"), "--home", str(lhome)],
                                   env=env, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE,
                                   text=True)
         sock, t0 = lhome / "lotrd.sock", time.time()

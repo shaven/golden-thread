@@ -1910,6 +1910,12 @@ def localize_mcp(paths, python):
             env = cfg.get("env") if isinstance(cfg.get("env"), dict) else {}
             env.setdefault("PYTHONUTF8", "1")
             cfg["env"] = env
+            # gt starts its servers isolated (python -I, review L1), and -I ignores every
+            # PYTHON* variable -- PYTHONUTF8 included. -X utf8 is the same switch as an option.
+            args = cfg.get("args") if isinstance(cfg.get("args"), list) else []
+            if "-I" in args and "utf8" not in args:
+                i = args.index("-I") + 1
+                cfg["args"] = args[:i] + ["-X", "utf8"] + args[i:]
             changed.append((p, name))
             touched = True
         if touched:

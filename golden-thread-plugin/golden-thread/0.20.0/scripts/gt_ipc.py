@@ -367,28 +367,161 @@ def process_args(pid):
             with open("/proc/%d/cmdline" % pid, "rb") as f:
                 return [a.decode("utf-8", "replace") for a in f.read().split(b"\0") if a]
         if IS_MAC:
-            import ctypes
-            libc = ctypes.CDLL(None, use_errno=True)
-            mib = (ctypes.c_int * 3)(1, 49, pid)            # CTL_KERN, KERN_PROCARGS2
-            size = ctypes.c_size_t(0)
-            if libc.sysctl(mib, 3, None, ctypes.byref(size), None, 0) != 0 or not size.value:
-                return []
-            buf = ctypes.create_string_buffer(size.value)
-            if libc.sysctl(mib, 3, buf, ctypes.byref(size), None, 0) != 0:
-                return []
-            raw = buf.raw[:size.value]
-            argc = struct.unpack_from("=i", raw, 0)[0]
-            rest = raw[4:]
-            # exec path, then NUL padding, then argc NUL-terminated strings (then env: ignored)
-            end = rest.find(b"\0")
-            rest = rest[end:].lstrip(b"\0")
-            parts = rest.split(b"\0")
-            return [p.decode("utf-8", "replace") for p in parts[:argc]]
+            got = _mac_procargs(pid)
+            return got[0] if got else []
         if IS_WINDOWS:
             return _win_args(pid)
     except (OSError, ValueError, AttributeError, struct.error):
         pass
     return []
+
+
+def _mac_procargs(pid):
+    """(argv, env NAMES) of a process from KERN_PROCARGS2, or None. Environment VALUES are
+    dropped here and never leave this function: only the names are returned."""
+    import ctypes
+    libc = ctypes.CDLL(None, use_errno=True)
+    mib = (ctypes.c_int * 3)(1, 49, int(pid))           # CTL_KERN, KERN_PROCARGS2
+    size = ctypes.c_size_t(0)
+    if libc.sysctl(mib, 3, None, ctypes.byref(size), None, 0) != 0 or not size.value:
+        return None
+    buf = ctypes.create_string_buffer(size.value)
+    if libc.sysctl(mib, 3, buf, ctypes.byref(size), None, 0) != 0:
+        return None
+    raw = buf.raw[:size.value]
+    argc = struct.unpack_from("=i", raw, 0)[0]
+    rest = raw[4:]
+    # exec path, then NUL padding, then argc NUL-terminated strings, then the environment
+    end = rest.find(b"\0")
+    rest = rest[end:].lstrip(b"\0")
+    parts = rest.split(b"\0")
+    args = [p.decode("utf-8", "replace") for p in parts[:argc]]
+    names = set()
+    for p in parts[argc:]:
+        if not p:
+            break
+        if b"=" in p:
+            names.add(p.split(b"=", 1)[0].decode("utf-8", "replace"))
+    return args, names
+
+
+def process_env_names(pid):
+    """The NAMES of a process's environment variables (a set), or None where they cannot be
+    read: macOS KERN_PROCARGS2 (the initial environment), Linux /proc/<pid>/environ. Windows:
+    None -- reading another process's environment needs its PEB, which gt does not do (best
+    effort; the -I check in isolation_problem() covers it). Values are never returned."""
+    try:
+        pid = int(pid)
+        if IS_LINUX:
+            with open("/proc/%d/environ" % pid, "rb") as f:
+                return {e.split(b"=", 1)[0].decode("utf-8", "replace")
+                        for e in f.read().split(b"\0") if b"=" in e}
+        if IS_MAC:
+            got = _mac_procargs(pid)
+            return got[1] if got else None
+    except (OSError, ValueError, AttributeError, struct.error):
+        pass
+    return None
+
+
+# Environment variables that make a python interpreter run code that is not the script it was
+# asked to run (review L1, 2026-10-04: PYTHONPATH=<dir with sitecustomize.py> ran arbitrary code
+# under the realpath identity of the INSTALLED lotr_mcp.py). -I (isolated mode) ignores every
+# PYTHON* variable and the user site-packages; -E ignores the variables, -s the user site.
+PYTHON_INJECTION_VARS = ("PYTHONPATH", "PYTHONSTARTUP", "PYTHONHOME", "PYTHONUSERBASE",
+                         "PYTHONINSPECT", "PYTHONEXECUTABLE")
+
+
+def python_flags(args):
+    """The single-letter interpreter options before the script in a python argv
+    (["python3", "-IB", "x.py"] -> {"I", "B"}). Options that take a value (-X, -W) consume it;
+    -c / -m end the options."""
+    flags = set()
+    i = 1
+    while i < len(args):
+        a = args[i]
+        if a in ("-", "--") or not a.startswith("-") or a.startswith("--"):
+            break
+        j = 1
+        while j < len(a):
+            ch = a[j]
+            if ch in "XWQ":
+                if j == len(a) - 1:
+                    i += 1                              # the value is the next argument
+                break
+            flags.add(ch)
+            if ch in "cm":
+                return flags
+            j += 1
+        i += 1
+    return flags
+
+
+def isolation_problem(pid):
+    """None when the python process `pid` was started isolated -- with -I, or with both -E and
+    -s -- so no PYTHON* variable and no user site-packages could have run code before its
+    script; else the reason (naming variables, never their values). A process whose argv cannot
+    be read is a problem too (fail closed)."""
+    args = process_args(pid)
+    if not args:
+        return "its command line could not be read"
+    flags = python_flags(args)
+    if "I" in flags or ("E" in flags and "s" in flags):
+        return None
+    names = process_env_names(pid) or set()
+    bad = sorted(n for n in names if n in PYTHON_INJECTION_VARS)
+    if bad:
+        return ("it runs with %s in its environment and without -I, so code other than its "
+                "script may have run" % ", ".join(bad))
+    return "it was not started with python -I (isolated mode)"
+
+
+# Shells, for telling a person's terminal from an orphan (review H2). A LOGIN shell is what
+# login(1), sshd, Terminal / iTerm2 and tmux start: argv[0] begins with "-", or -l / --login.
+SHELL_NAMES = ("sh", "bash", "zsh", "fish", "dash", "ksh", "mksh", "tcsh", "csh", "nu", "xonsh")
+# Windows has no login shell: the interactive shells and terminal hosts a person types into.
+WINDOWS_SHELLS = ("cmd.exe", "powershell.exe", "pwsh.exe", "windowsterminal.exe",
+                  "openconsole.exe", "conhost.exe", "explorer.exe", "bash.exe", "mintty.exe")
+
+
+def is_login_shell(args):
+    if not args:
+        return False
+    a0 = args[0]
+    base = os.path.basename(a0.lstrip("-")).lower()
+    if a0.startswith("-") and base in SHELL_NAMES:
+        return True
+    if base not in SHELL_NAMES:
+        return False
+    for a in args[1:]:
+        if a == "--login":
+            return True
+        if a.startswith("-") and not a.startswith("--") and "l" in a[1:] \
+                and a[1:].isalpha():
+            return True
+        if not a.startswith("-"):
+            break
+    return False
+
+
+def interactive_chain(chain, args_of=None, windows=None):
+    """Is `chain` (ancestry(): the process first, then its parents) a person's terminal --
+    rather than an ORPHAN, a process re-parented to init/launchd (or, on Windows, whose
+    parent is gone or was started after it) with no login shell above it? Review H2: an orphan
+    that setsid()s and takes a controlling tty with openpty + TIOCSCTTY looked like a terminal.
+    POSIX: some process in the chain is a login shell. Windows: the chain has a parent at all,
+    and some ancestor is an interactive shell or terminal host (ancestry() already stops at a
+    parent created after its child, so a reused pid ends the chain)."""
+    windows = IS_WINDOWS if windows is None else windows
+    args_of = args_of or process_args
+    if not chain:
+        return False
+    if windows:
+        if len(chain) < 2:
+            return False
+        return any(os.path.basename((i.get("comm") or "").replace("\\", "/")).lower()
+                   in WINDOWS_SHELLS for i in chain[1:])
+    return any(is_login_shell(args_of(i["pid"])) for i in chain)
 
 
 _win_args_cache = {}

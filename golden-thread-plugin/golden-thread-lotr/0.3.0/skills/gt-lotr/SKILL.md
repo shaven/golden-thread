@@ -42,7 +42,7 @@ The admin commands edit files on this machine. They are refused in `client` mode
 travel over the network.
 
 - **Set up:** `lotr --zone personal init --mode local|hub|client`. Then start the daemon:
-  `python3 <base>/../../scripts/lotrd.py --zone personal`.
+  `python3 -I <base>/../../scripts/lotrd.py --zone personal`.
 - **Add a connection:**
   `lotr add-http github@personal --profile github --base-url https://api.github.com --identity "shaven @ github.com" --auth bearer --token-ref keychain:gt-lotr/github-personal`.
   - Profiles: `github`, `jira-v3` (Cloud), `jira-v2` (Data Center), `graph`, `generic`.
@@ -106,7 +106,7 @@ LOTR behaves exactly as 0.2.0. With it on, LOTR asks gt's unlock authority befor
 On native Windows the daemon serves a named pipe instead of a unix socket: only this user's SID
 may open it, remote clients are rejected, and a name someone else already holds is refused. gt
 core must be installed (the pipe comes from its `gt_ipc.py`). Start it the same way:
-`python <base>/../../scripts/lotrd.py --zone personal`.
+`python -I <base>/../../scripts/lotrd.py --zone personal`.
 
 ## Rules
 

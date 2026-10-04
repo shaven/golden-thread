@@ -60,7 +60,7 @@ class GatewayModule(unittest.TestCase):
         servers = p["mcpServers"]
         self.assertEqual(list(servers), ["gt-lotr"])
         args = servers["gt-lotr"]["args"]
-        self.assertEqual(args, ["${CLAUDE_PLUGIN_ROOT}/scripts/lotr_mcp.py"])
+        self.assertEqual(args, ["-I", "${CLAUDE_PLUGIN_ROOT}/scripts/lotr_mcp.py"])   # isolated (L1)
         self.assertFalse((GW / ".mcp.json").exists())
 
     def test_listed_scripts_and_skill_exist(self):

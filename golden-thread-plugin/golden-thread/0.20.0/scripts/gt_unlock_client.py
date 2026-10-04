@@ -81,7 +81,9 @@ def start_daemon(h=None, wait=START_WAIT_S):
     if gt_ipc.alive_at(addr, timeout=0.5):
         return True
     os.makedirs(h, mode=0o700, exist_ok=True)
-    cmd = [sys.executable, "-B", os.path.join(HERE, "gt_unlockd.py"), "--home", h]
+    # -I (isolated mode, review L1): no PYTHON* variable or user site-packages runs code inside
+    # the authority before its first line -- and verify_server() refuses a server without it.
+    cmd = [sys.executable, "-I", "-B", os.path.join(HERE, "gt_unlockd.py"), "--home", h]
     kw = {"stdin": subprocess.DEVNULL, "stdout": subprocess.DEVNULL,
           "stderr": subprocess.DEVNULL, "close_fds": True}
     if IS_WINDOWS:
@@ -139,6 +141,15 @@ def verify_server(client):
                               "address is not gt_unlockd.py (pid %s); refusing it" % peer["pid"],
                               ["gt_unlock.py daemon status", "a process of yours may be "
                                "impersonating the authority"])
+    # L1 (review 2026-10-04): the REAL gt_unlockd.py started with PYTHONPATH pointing at a
+    # sitecustomize.py runs someone else's code under the authority's identity. Only an
+    # isolated interpreter (python -I, which start_daemon uses) counts.
+    why = gt_ipc.isolation_problem(peer["pid"])
+    if why:
+        raise gt_ipc.IpcError("server_unverified", "the process serving the unlock authority's "
+                              "address runs gt_unlockd.py, but %s (pid %s); refusing it"
+                              % (why, peer["pid"]),
+                              ["gt_unlock.py daemon stop, then let gt start it again"])
 
 
 def connect(h=None, timeout=5.0, answer=None):

@@ -102,13 +102,21 @@ def runs_installed_script(peer, plugin, script, plugins_file=None):
     beside it -- passed the old file-name check and received the shim's credential. Now only
     the file Claude Code installed counts. Residual (documented, L1/L2): installed_plugins.json
     and the installed files are the user's own, so a same-user process can edit them or run the
-    real file with its own arguments; L3 (admin-owned code) closes that."""
-    main = gt_ipc.main_script((peer or {}).get("pid"))
+    real file with its own arguments; L3 (admin-owned code) closes that.
+
+    INVARIANT (review L1, 2026-10-04): the right FILE is not enough -- PYTHONPATH pointing at a
+    sitecustomize.py ran arbitrary code inside the real lotr_mcp.py before its first line. The
+    interpreter must also have been started isolated (python -I; gt_ipc.isolation_problem),
+    which is how gt's own manifests start it."""
+    pid = (peer or {}).get("pid")
+    main = gt_ipc.main_script(pid)
     if not main:
         return False
     real = os.path.realpath(main)
-    return any(real == os.path.realpath(os.path.join(d, "scripts", script))
-               for d in installed_plugin_dirs(plugin, plugins_file))
+    if not any(real == os.path.realpath(os.path.join(d, "scripts", script))
+               for d in installed_plugin_dirs(plugin, plugins_file)):
+        return False
+    return gt_ipc.isolation_problem(pid) is None
 
 
 def is_lotr_daemon(peer, plugins_file=None):
@@ -134,6 +142,16 @@ def is_vault_shim(peer, plugins_file=None):
 # vault MCP server -- never to a process from the session's shell, nor to LOTR's shim.
 VAULT_PREFIX = "gt:vault:"
 
+# Grants are held PER SEAT (review L4, 2026-10-04): the vault MCP server's unlock (a prompt
+# that says "gt vault MCP") must not unlock LOTR's shim or the session's shell for lotr:*, and
+# the other way round. Seat "vault" = the session's registered gt vault MCP server; seat
+# "main" = everything else in the session (LOTR's shim, the shell, a terminal).
+SEATS = ("main", "vault")
+
+
+def seat_of(kind):
+    return "vault" if kind == "vault_shim" else "main"
+
 
 def _sha(data):
     return hashlib.sha256(data).hexdigest()
@@ -154,6 +172,10 @@ class Session:
     @property
     def key(self):
         return (self.root["pid"], self.root["start"])
+
+    def gkey(self, seat="main"):
+        """The grant table key for one of this session's seats (L4)."""
+        return (self.root["pid"], self.root["start"], seat)
 
 
 class Grant:
@@ -192,7 +214,7 @@ class Authority:
 
     def __init__(self, home, *, factors=None, admin_paths=None, trusted_uids=(0,),
                  claude_names=CLAUDE_NAMES, is_claude=None, screen_locked=None, clock=None,
-                 consumer_ok=None, shim_ok=None, vault_shim_ok=None):
+                 consumer_ok=None, shim_ok=None, vault_shim_ok=None, interactive=None):
         self.home = home
         os.makedirs(home, mode=0o700, exist_ok=True)
         if not IS_WINDOWS:
@@ -211,6 +233,9 @@ class Authority:
         self.consumer_ok = consumer_ok or is_lotr_daemon
         self.shim_ok = shim_ok or is_lotr_shim
         self.vault_shim_ok = vault_shim_ok or is_vault_shim
+        # H2: is a "terminal" peer a person's terminal, or an orphan? (tests may stand in)
+        self._interactive = interactive or (lambda ident: gt_ipc.interactive_chain(
+            gt_ipc.ancestry(ident["pid"])))
         self._screen_locked = screen_locked or screen_locked_now
         self._clock = clock or (lambda: (time.time(), time.monotonic()))
         self.lock = threading.RLock()
@@ -230,6 +255,9 @@ class Authority:
         self.eff = None
         self._was_on = False              # unlock was ON at some point in this daemon's life
         self._off_by_policy = False       # ... and was turned off through policy_set
+        # M3: the highest policy-approval serial accepted -- in memory for the daemon's life,
+        # and persisted beside state.json so a restart keeps it ({"serial", "hash"}).
+        self._floor = self._read_floor()
         self.reload()
         self.audit("daemon_start", verdict="ok", reason="grants start empty (I3)")
 
@@ -249,6 +277,36 @@ class Authority:
     def save_state(self, st):
         F.write_json(self.path("state.json"), st)
 
+    # ------------------------------------------------------------------ approval floor (M3)
+    def _read_floor(self):
+        f = F.read_json(self.path(FLOOR_FILE), {}) or {}
+        try:
+            return {"serial": max(0, int(f.get("serial") or 0)),
+                    "hash": f.get("hash") if isinstance(f.get("hash"), str) else None}
+        except (TypeError, ValueError, AttributeError):
+            return {"serial": 0, "hash": None}
+
+    def approval_floor(self):
+        """The highest approval serial accepted so far: the larger of memory and disk (a
+        rolled-back or deleted floor file never lowers what this daemon already saw)."""
+        disk = self._read_floor()
+        with self.lock:
+            if disk["serial"] > self._floor["serial"]:
+                self._floor = disk
+            return dict(self._floor)
+
+    def raise_floor(self, serial, h):
+        with self.lock:
+            if serial < self._floor["serial"]:
+                return
+            self._floor = {"serial": int(serial), "hash": h}
+            floor = dict(self._floor)
+        F.write_json(self.path(FLOOR_FILE), floor)
+
+    def next_approval(self):
+        """-> (serial, ts) for a new approval: one above the floor, stamped now."""
+        return self.approval_floor()["serial"] + 1, int(time.time())
+
     def _policy_file_hash(self):
         try:
             with open(self.path("policy.json"), "rb") as f:
@@ -262,7 +320,8 @@ class Authority:
         # enrolment.json and state.json are stamped too: an enrolment changes K's usable count,
         # and state.json carries the policy approval.
         for p in [self.path("policy.json"), self.path("enrolment.json"),
-                  self.path("state.json")] + list(self.admin_paths or P.admin_paths()):
+                  self.path("state.json"), self.path(FLOOR_FILE)] \
+                + list(self.admin_paths or P.admin_paths()):
             try:
                 st = os.stat(p)
                 stamp.append((p, st.st_mtime_ns, st.st_size))
@@ -317,11 +376,39 @@ class Authority:
         return eff
 
     # ------------------------------------------------------------------ policy approval (I6)
-    def approval_challenge(self, policy_hash, nonce, requester, factor):
+    def approval_challenge(self, policy_hash, nonce, requester, factor, serial=None, ts=None):
         """The challenge a platform factor signs to approve policy bytes with sha256
         `policy_hash`: the same construction as every other factor challenge, with purpose
-        "change" and scope "policy:<hash>", so the signature binds exactly those bytes."""
-        return self._challenge(nonce, "change", "policy:" + policy_hash, requester, factor)
+        "change" and scope approval_bind(), so the signature binds exactly those bytes AND,
+        since review M3 (2026-10-04), the approval's serial and time."""
+        return self._challenge(nonce, "change", "policy:" + approval_bind(policy_hash, serial,
+                                                                          ts),
+                               requester, factor)
+
+    def _serial_problem(self, appr, h):
+        """M3: -> None when the approval's serial is not below the floor (equal only for the
+        very approval the floor recorded), else why. A serial-less approval (written before
+        0.20.0's M3 fix) counts as serial 0: accepted until the first serial'd approval."""
+        try:
+            serial = int(appr.get("serial") or 0)
+        except (TypeError, ValueError):
+            return "the policy approval's serial is malformed"
+        floor = self.approval_floor()
+        if serial < floor["serial"] or (serial == floor["serial"] and floor["serial"] > 0
+                                        and floor["hash"] != h):
+            return ("the policy approval is older than one already accepted (serial %d, "
+                    "highest seen %d): a restored or replayed approval is refused -- approve "
+                    "the policy again with `gt_unlock.py policy approve`"
+                    % (serial, floor["serial"]))
+        return None
+
+    def _accept_serial(self, appr, h):
+        try:
+            serial = int(appr.get("serial") or 0)
+        except (TypeError, ValueError):
+            return
+        if serial > self.approval_floor()["serial"]:
+            self.raise_floor(serial, h)
 
     def _approval_problem(self, h):
         """-> None when policy.json (sha256 `h`) carries a valid approval, else the reason.
@@ -339,7 +426,13 @@ class Authority:
         platform = [n for n in P.PLATFORM_FACTORS
                     if n in enrolled and hasattr(self.factors.get(n), "verify")]
         if not platform:
-            if h in (st.get("policy_approved"), appr.get("hash")):
+            if appr.get("hash") == h:
+                why = self._serial_problem(appr, h)
+                if why:
+                    return why
+                self._accept_serial(appr, h)
+                return None
+            if h == st.get("policy_approved") and self.approval_floor()["serial"] == 0:
                 return None
             return ("policy.json changed outside `gt_unlock.py policy` -- approve it with "
                     "`gt_unlock.py policy approve` (needs your factors)")
@@ -364,13 +457,25 @@ class Authority:
             sig = base64.b64decode(appr.get("sig") or "", validate=True)
         except (TypeError, ValueError):
             return "the policy approval is malformed"
-        ch = self.approval_challenge(h, nonce, str(appr.get("requester") or ""), name)
+        serial, ts = appr.get("serial"), appr.get("ts")
+        if (serial is None) != (ts is None) or any(
+                v is not None and (not isinstance(v, int) or isinstance(v, bool) or v < 0)
+                for v in (serial, ts)):
+            return "the policy approval's serial / time is malformed"
+        ch = self.approval_challenge(h, nonce, str(appr.get("requester") or ""), name,
+                                     serial, ts)
         try:
             ok = bool(self.factors[name].verify(enrolled[name], ch, sig))
         except Exception:                                     # noqa: BLE001
             ok = False
         if not ok:
             return "the policy approval's %s signature does not verify" % name
+        # M3: a valid signature is not enough -- an OLDER valid approval (a looser policy the
+        # owner once approved, restored with its state.json) is a replay.
+        why = self._serial_problem(appr, h)
+        if why:
+            return why
+        self._accept_serial(appr, h)
         return None
 
     def usable_factors(self, policy=None):
@@ -449,6 +554,12 @@ class Authority:
             return "terminal", {"pid": chain[1]["pid"], "start": chain[1]["start"]}, None
         return "terminal", {"pid": chain[0]["pid"], "start": chain[0]["start"]}, None
 
+    def interactive(self, ident):
+        try:
+            return bool(self._interactive(ident))
+        except Exception:                                     # noqa: BLE001 - fail closed
+            return False
+
     def session_for(self, root, kind, session_id=None):
         key = (root["pid"], root["start"])
         with self.lock:
@@ -473,12 +584,15 @@ class Authority:
 
     # ------------------------------------------------------------------ revocation (I5)
     def revoke_key(self, key, why):
+        """Revoke one grant (a 3-tuple seat key) or EVERY seat's grant of a session (its
+        2-tuple session key). -> a revoked Grant, or None."""
         with self.lock:
-            g = self.grants.pop(key, None)
+            keys = [key] if len(key) == 3 else [k for k in self.grants if k[:2] == tuple(key)]
+            gone = [g for g in (self.grants.pop(k, None) for k in keys) if g is not None]
             self.sealed_cache.clear()          # every revocation empties it (sealed I2)
-        if g:
+        for g in gone:
             self.audit("revoke", grant=g.gid, reason=why, session=key[0])
-        return g
+        return gone[0] if gone else None
 
     def revoke_all(self, why):
         with self.lock:
@@ -514,12 +628,12 @@ class Authority:
                 s.shim = None
                 s.had_shim = True
                 if "shim_exit" in lock_on:
-                    self.revoke_key(s.key, "shim_exit")
+                    self.revoke_key(s.gkey("main"), "shim_exit")
             if s.vault_shim and not gt_ipc.alive(s.vault_shim["pid"], s.vault_shim["start"]):
                 s.vault_shim = None
                 s.had_vault_shim = True
                 if "shim_exit" in lock_on:
-                    self.revoke_key(s.key, "vault_shim_exit")
+                    self.revoke_key(s.gkey("vault"), "vault_shim_exit")
             if s.kind != "job" and not gt_ipc.alive(s.root["pid"], s.root["start"]):
                 self.revoke_key(s.key, "session_root_exit")
                 with self.lock:
@@ -609,8 +723,9 @@ class Authority:
             raise Denied("busy", "another unlock prompt is open")
         return self.prompt_lock
 
-    def do_unlock(self, session, requester, scope, reason, conn, rid, tty, use_recovery=False):
-        """Collect K factors and grant `session`."""
+    def do_unlock(self, session, requester, scope, reason, conn, rid, tty, use_recovery=False,
+                  seat="main"):
+        """Collect K factors and grant `session`'s `seat` (L4)."""
         text = prompt_text("%s asks to unlock gt%s." % (requester, " for %s" % scope
                                                           if scope else ""), reason)
         lk = self._prompting(session.key)
@@ -623,18 +738,19 @@ class Authority:
                 raise
         finally:
             lk.release()
-        g = self.grant_for(session, used)
+        g = self.grant_for(session, used, seat)
         if ctx.state.get("needs_reenrol"):
             self.audit("recovery_used", grant=g.gid, reason="re-enrolment required")
         return g
 
-    def grant_for(self, session, used):
+    def grant_for(self, session, used, seat="main"):
         gp = self.eff.policy.get("grant") or {}
-        g = Grant(session.key, used, int(gp.get("ttl_s", 28800)), int(gp.get("idle_s", 900)))
+        g = Grant(session.gkey(seat), used, int(gp.get("ttl_s", 28800)),
+                  int(gp.get("idle_s", 900)))
         with self.lock:
-            self.grants[session.key] = g
+            self.grants[session.gkey(seat)] = g
         self.audit("grant", grant=g.gid, factors=",".join(used), session=session.root["pid"],
-                   kind=session.kind)
+                   kind=session.kind, seat=seat)
         return g
 
     def step_up(self, session, g, requester, scope, reason, conn, rid, tty):
@@ -704,11 +820,14 @@ class Authority:
                                      "registered gt vault MCP server (door: mcp_only); a "
                                      "process started from the session's shell is refused"
                                      % scope, None, level, scope, target)
-            # F6: read_without_unlock is for a person at a terminal. A "terminal" peer with
-            # no controlling terminal (a double-forked orphan, a daemon) gets the level the
+            # F6 + H2: read_without_unlock is for a person at a terminal. A "terminal" peer
+            # with no controlling terminal (a double-forked orphan, a daemon) -- or an ORPHAN
+            # that gave itself one (setsid + openpty + TIOCSCTTY; review H2, 2026-10-04): no
+            # login shell above it, its chain ending at init/launchd -- gets the level the
             # scope has WITHOUT that convenience.
             if level == "open" and kind == "terminal" \
-                    and scope.startswith(("lotr:", VAULT_PREFIX)) and not _has_tty(target):
+                    and scope.startswith(("lotr:", VAULT_PREFIX)) \
+                    and not (_has_tty(target) and self.interactive(target)):
                 raw = P.Effective(dict(eff.policy, read_without_unlock=False), [],
                                   True).level(scope)
                 if raw != "open":
@@ -716,7 +835,8 @@ class Authority:
             if level == "open":
                 return self._verdict(True, "open", "open scope", None, level, scope, target)
             session = shim_session or self.session_for(root, kind)
-            g = self.active_grant(session.key)
+            seat = seat_of(kind)
+            g = self.active_grant(session.gkey(seat))
             requester = self.describe(peer["pid"])
             if g is None:
                 if not request:
@@ -724,7 +844,8 @@ class Authority:
                                          level, scope, target,
                                          hints=["gt_unlock.py unlock", "or call again and "
                                                 "approve the prompt"])
-                g = self.do_unlock(session, requester, scope, reason, conn, rid, tty)
+                g = self.do_unlock(session, requester, scope, reason, conn, rid, tty,
+                                   seat=seat)
             if level == "step_up":
                 if not request:
                     fresh = int((eff.policy.get("step_up") or {}).get("fresh_s", 60))
@@ -788,7 +909,10 @@ class Authority:
         with self.lock:
             sess = [{"root": s.root["pid"], "kind": s.kind, "shim": bool(s.shim),
                      "vault_shim": bool(s.vault_shim),
-                     "grant": (self.grants.get(s.key).gid if s.key in self.grants else None)}
+                     "grant": (self.grants[s.gkey("main")].gid
+                               if s.gkey("main") in self.grants else None),
+                     "vault_grant": (self.grants[s.gkey("vault")].gid
+                                     if s.gkey("vault") in self.grants else None)}
                     for s in self.sessions.values()]
         import gt_unlock_seal as S
         return {"version": VERSION, "enabled": eff.enabled, "problems": eff.problems,
@@ -803,6 +927,17 @@ class Authority:
 
 
 BROKER_SCOPES = ("gt:secrets",)
+# M3: the highest policy-approval serial this authority has accepted.
+FLOOR_FILE = "approval-floor.json"
+
+
+def approval_bind(policy_hash, serial=None, ts=None):
+    """What a policy approval signs, after "policy:": the policy's sha256, then -- since
+    review M3 -- the approval's monotonic serial and its Unix time. A serial-less approval
+    (before M3) binds the hash alone."""
+    if serial is None:
+        return policy_hash
+    return "%s:serial=%d:ts=%d" % (policy_hash, int(serial), int(ts or 0))
 
 
 def prompt_text(head, claim=None):

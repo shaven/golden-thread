@@ -19,6 +19,15 @@ refuses a binary that is not signed by gt's release team. Honest limit: the reco
 the helper in your own directory, so a same-user process that rewrites BOTH defeats the hash
 (not the code-signing requirement of a release binary) -- friction at L1/L2.
 
+HASH, THEN EXEC THE SAME BYTES (review L5, 2026-10-04). The helper used to be hashed by path and
+then executed by path, so a swap between the two ran a binary nobody had hashed. Now every use
+reads the helper ONCE through a file descriptor (O_NOFOLLOW), hashes exactly those bytes against
+the install record, writes them to a fresh private directory (mkdtemp, 0700, created beside the
+helper -- in ~/.claude/golden-thread/bin, which gt sandbox mode write-protects), checks the
+recorded code-signing requirement on THAT copy, executes the copy and removes it. Residual: the
+record itself is the user's own file (above), and a same-user process outside the sandbox could
+in principle race the private copy inside its random 0700 directory.
+
 How the factor works (the authority is the only caller):
 
   enroll   the helper creates TWO Secure Enclave P-256 keys, both [.privateKeyUsage,
@@ -64,6 +73,7 @@ QUICK_TIMEOUT_S = 30
 CODES = ("cancelled", "timeout", "wrong", "locked_out", "replayed", "unavailable", "malformed",
          "helper_failed", "not_enrolled")
 MAX_OUT = 1 << 20
+MAX_HELPER = 64 << 20          # a helper larger than this is refused, never read whole
 
 
 def default_helper():
@@ -130,15 +140,18 @@ class TouchIdFactor(F.Factor):
         if cmd in ("sign", "unseal") and bio is not False:
             F.require_ui("Touch ID")
         path = self._check_helper(self.helper_path(record))
+        rundir, copy = private_copy(path)                  # L5: exec what was hashed
         try:
             # The request (it may carry plaintext for `seal`) goes over a pipe, never argv/env.
-            r = subprocess.run([path, cmd], input=json.dumps(req).encode("utf-8"),
+            r = subprocess.run([copy, cmd], input=json.dumps(req).encode("utf-8"),
                                stdout=subprocess.PIPE, stderr=subprocess.DEVNULL,
                                timeout=timeout)
         except subprocess.TimeoutExpired:
             raise F.FactorError("timeout", "the Touch ID helper did not answer in time")
         except OSError as e:
             raise F.FactorError("unavailable", "%s (%s)" % (MISSING, type(e).__name__))
+        finally:
+            shutil.rmtree(rundir, ignore_errors=True)
         if len(r.stdout) > MAX_OUT:
             raise F.FactorError("helper_failed", "the helper answered too much")
         try:
@@ -276,6 +289,71 @@ def _codesign_ok(path, requirement):
     except (OSError, subprocess.SubprocessError):
         return False
     return r.returncode == 0
+
+
+def _read_helper_bytes(path):
+    """The helper's bytes, read ONCE through one descriptor that refuses a symlink and anything
+    but a regular file, capped at MAX_HELPER. Raises FactorError("unavailable")."""
+    flags = os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0) | getattr(os, "O_NONBLOCK", 0) \
+        | getattr(os, "O_BINARY", 0)
+    try:
+        fd = os.open(path, flags)
+    except OSError:
+        raise F.FactorError("unavailable", MISSING)
+    try:
+        st = os.fstat(fd)
+        if not stat.S_ISREG(st.st_mode) or st.st_size > MAX_HELPER:
+            raise F.FactorError("unavailable", MISSING)
+        chunks, total = [], 0
+        while True:
+            b = os.read(fd, 1 << 16)
+            if not b:
+                break
+            total += len(b)
+            if total > MAX_HELPER:
+                raise F.FactorError("unavailable", MISSING)
+            chunks.append(b)
+        return b"".join(chunks)
+    finally:
+        os.close(fd)
+
+
+def private_copy(helper):
+    """-> (rundir, copy): the helper's bytes, hashed against its install record and written to
+    a fresh 0700 directory as a 0700 file -- the file that is then executed (L5). The caller
+    removes rundir. Raises FactorError("unavailable") on any mismatch."""
+    import hashlib
+    try:
+        with open(record_path(helper), "r", encoding="utf-8") as f:
+            rec = json.load(f)
+    except (OSError, ValueError):
+        raise F.FactorError("unavailable", "the helper %s has no install record; reinstall gt "
+                            "(install.sh) so the helper is built and recorded" % helper)
+    if not isinstance(rec, dict) or not isinstance(rec.get("sha256"), str):
+        raise F.FactorError("unavailable", "the helper's install record is damaged; reinstall gt")
+    data = _read_helper_bytes(helper)
+    if hashlib.sha256(data).hexdigest() != rec["sha256"]:
+        raise F.FactorError("unavailable", "the helper %s does not match the binary install "
+                            "recorded; it may have been replaced -- reinstall gt" % helper)
+    try:
+        rundir = tempfile.mkdtemp(prefix=".gt-presence-run-", dir=os.path.dirname(helper))
+    except OSError:
+        rundir = tempfile.mkdtemp(prefix="gt-presence-run-")
+    try:
+        os.chmod(rundir, 0o700)
+        copy = os.path.join(rundir, HELPER_NAME)
+        fd = os.open(copy, os.O_WRONLY | os.O_CREAT | os.O_EXCL
+                     | getattr(os, "O_NOFOLLOW", 0) | getattr(os, "O_BINARY", 0), 0o700)
+        with os.fdopen(fd, "wb") as f:
+            f.write(data)
+        req = rec.get("requirement")
+        if req and not _codesign_ok(copy, req):
+            raise F.FactorError("unavailable", "the helper %s no longer satisfies its "
+                                "code-signing requirement" % helper)
+    except BaseException:
+        shutil.rmtree(rundir, ignore_errors=True)
+        raise
+    return rundir, copy
 
 
 def record_path(helper):

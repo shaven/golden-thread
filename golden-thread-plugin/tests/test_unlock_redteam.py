@@ -113,7 +113,7 @@ class FromTheSessionShell(AuthorityCase):
             verdicts = {}
             for name, script in (("installed", os.path.join(plugin, "scripts", "lotrd.py")),
                                  ("look-alike", os.path.join(fake, "lotrd.py"))):
-                p = subprocess.Popen([PYTHON, "-B", script])
+                p = subprocess.Popen([PYTHON, "-I", "-B", script])   # installed AND isolated (L1)
                 try:
                     deadline = time.monotonic() + 5
                     ok = False
