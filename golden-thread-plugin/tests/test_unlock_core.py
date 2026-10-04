@@ -641,8 +641,14 @@ class Sealed(AuthorityCase):
         self.assertEqual(self.auth.sealed_cache, {})
 
 
+# Owner decision 2026-10-03 21:09 CDT: the p95 limit stays 15 ms on macOS and Linux and is 25 ms
+# on native Windows, where process and pipe overhead is slower (measured 13.5-15.2 ms alone and
+# 18.3 ms under suite load on gt-win11 against the old 15 ms). Windows only; nothing else changes.
+HOOK_P95_LIMIT_MS = 25.0 if IS_WINDOWS else 15.0
+
+
 class HookCost(AuthorityCase):
-    """(g) the added check: one round trip, p95 well under 15 ms."""
+    """(g) the added check: one round trip, p95 well under 15 ms (25 ms on native Windows)."""
 
     def test_check_round_trip_p95(self):
         """Best p95 of three rounds of 100: one round measures the machine's load as much as
@@ -664,7 +670,8 @@ class HookCost(AuthorityCase):
                 best = p95 if best is None else min(best, p95)
         finally:
             c.close()
-        self.assertLess(best, 15.0, "best p95 %.1f ms" % best)
+        self.assertLess(best, HOOK_P95_LIMIT_MS, "best p95 %.1f ms (limit %.0f ms)"
+                        % (best, HOOK_P95_LIMIT_MS))
 
 
 class DocsCarryTheThreatModel(unittest.TestCase):
