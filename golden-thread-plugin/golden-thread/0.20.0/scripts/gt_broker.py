@@ -17,8 +17,10 @@ folder is gt_log.py's, and log.md is generated from it):
     apply        written. append (any number, from any sessions, in timestamp order), create
                  of a file that does not exist, replace-section of a section nobody changed
                  since the request was made
-    deduplicate  not written, because it is already there: an append whose text is >= 90%
-                 token-identical to a block already in the section, a create whose file
+    deduplicate  not written, because it is already there: an append whose lines are already
+                 in the section, in order (compared ignoring only case, spacing, a leading
+                 bullet and a trailing full stop -- never a differing number, value or
+                 identifier; 0.20.1), so a retried append lands once; a create whose file
                  already holds exactly that content, or a replace-section another request in
                  the same pass contains in full (a strict superset wins)
     escalate     not written; a task for the owner instead. Two sessions replacing one
@@ -67,8 +69,13 @@ _Inbox). A symlinked inbox folder is not read. The broker stamps every inbox req
 cannot speak for a session, so no claim holder's permission covers its request. `status` counts
 the inbox.
 
-Exit: 0 every request decided (or nothing queued) | 1 something left queued, or another drain
-is running | 2 usage or no vault.
+CONCURRENT DRAINS (0.20.1). One drain runs at a time on every OS (flock on POSIX, msvcrt.locking
+on native Windows). A drain that finds another running waits for it, up to 30 s
+($GT_BROKER_LOCK_WAIT), then drains what is left and reports what the other decided meanwhile.
+
+Exit: 0 every request decided, or held only because another live session claims its file
+("held (waiting on a claim), not failed"), or nothing queued | 1 something left queued for any
+other reason, or another drain still running after the wait | 2 usage or no vault.
 """
 from __future__ import annotations
 
@@ -95,10 +102,16 @@ try:
     import fcntl
 except ImportError:                                             # pragma: no cover
     fcntl = None
+try:
+    import msvcrt
+except ImportError:
+    msvcrt = None
 
 BROKER_REL = Path("Projects") / "golden-thread" / "spool" / "broker"
 TOOLS_REL = Path("Projects") / "golden-thread" / "tools"
-NEAR_DUP = 0.90
+# Similarity above which a KEPT append is reported as sitting beside a near-identical line
+# (0.20.1). It decides nothing: only an exact normalised repeat is deduplicated (B1).
+NEAR_DUP = 0.75
 REVIEW_NAMES = {"design.md"}
 REVIEW_PREFIXES = ("global-memory/",)
 
@@ -109,27 +122,71 @@ def _now():
     return datetime.datetime.now(datetime.timezone.utc)
 
 
+LIST_MARK = re.compile(r"^\s*(?:[-*+]|\d+[.)])\s+(?:\[[ xX]\]\s+)?")
+
+
+def _norm_line(line: str) -> str:
+    """One line, normalised only in ways that never change a fact (B1, 0.20.1): surrounding and
+    repeated whitespace, case, a leading markdown bullet / number / checkbox, and one trailing
+    sentence full stop. Every number, value, sign and identifier is kept as written."""
+    s = LIST_MARK.sub("", line.strip(), count=1)
+    s = " ".join(s.split()).lower()
+    return s[:-1].rstrip() if s.endswith(".") and not s.endswith("..") else s
+
+
+def _norm_lines(text: str) -> list[str]:
+    return [n for n in (_norm_line(ln) for ln in text.split("\n")) if n]
+
+
 def _tokens(text: str) -> list[str]:
-    return re.findall(r"\w+", text.lower())
-
-
-def _blocks(body: str) -> list[str]:
-    """Paragraphs and single lines: an append is compared with both, so a restated bullet is
-    caught inside a list paragraph."""
-    paras = [p for p in re.split(r"\n\s*\n", body) if p.strip()]
-    lines = [ln for ln in body.split("\n") if ln.strip()]
-    return paras + lines
+    return re.findall(r"\w+|[^\w\s]", text)
 
 
 def near_duplicate(new: str, body: str) -> bool:
-    t = _tokens(new)
-    if not t:
+    """True only when `new` is ALREADY in `body`: its normalised non-blank lines appear, in
+    order and contiguously, among the body's (B1, 0.20.1). Until 0.20.1 this was a >= 90%
+    token-similarity test, which recorded "410 C" as a duplicate of "455 C" and dropped the
+    corrected fact. Now a line differing in any number, value or identifier is never a
+    duplicate, and a retried heading+body append -- several paragraphs, which no single block
+    ever matched -- is recognised as the retry it is."""
+    want = _norm_lines(new)
+    if not want:
         return True
-    for block in _blocks(body):
-        b = _tokens(block)
-        if b and difflib.SequenceMatcher(None, t, b, autojunk=False).ratio() >= NEAR_DUP:
-            return True
-    return False
+    have = _norm_lines(body)
+    n = len(want)
+    return any(have[i:i + n] == want for i in range(len(have) - n + 1))
+
+
+def closest_difference(new: str, body: str):
+    """-> "<tokens>" naming how an appended line differs from the most similar existing line,
+    when one is at least NEAR_DUP similar, else None. Reported, never acted on: the line is
+    kept, and the owner can see it sits beside a near-identical one (B1, 0.20.1)."""
+    best = None
+    old_lines = [ln for ln in body.split("\n") if ln.strip()]
+    for ln in [x for x in new.split("\n") if x.strip()]:
+        t = _tokens(_norm_line(ln))
+        if not t:
+            continue
+        for old in old_lines:
+            b = _tokens(_norm_line(old))
+            if not b:
+                continue
+            sm = difflib.SequenceMatcher(None, b, t, autojunk=False)
+            r = sm.ratio()
+            if r >= NEAR_DUP and r < 1.0 and (best is None or r > best[0]):
+                best = (r, sm, b, t)
+    if best is None:
+        return None
+    _, sm, b, t = best
+    parts = []
+    for op, i1, i2, j1, j2 in sm.get_opcodes():
+        if op == "replace":
+            parts.append("%s (existing: %s)" % (" ".join(t[j1:j2]), " ".join(b[i1:i2])))
+        elif op == "insert":
+            parts.append("+%s" % " ".join(t[j1:j2]))
+        elif op == "delete":
+            parts.append("-%s" % " ".join(b[i1:i2]))
+    return _clean("; ".join(parts), 120)
 
 
 def _lineset(text: str) -> set:
@@ -365,7 +422,8 @@ class Drain:
     def __init__(self, vault: Path, dry_run: bool):
         self.vault, self.dry = vault, dry_run
         self.results = []          # dicts, one per request
-        self.left = 0
+        self.left = 0              # held: still queued
+        self.stuck = 0             # held for a reason that is not a live claim (exit 1)
 
     # -- bookkeeping
     def record(self, req, decision, reason="", **extra):
@@ -377,6 +435,8 @@ class Drain:
         self.results.append(row)
         if decision == "held":
             self.left += 1
+            if row.get("waiting") != "claim":
+                self.stuck += 1
         if self.dry:
             return
         d = self.vault / BROKER_REL
@@ -388,16 +448,22 @@ class Drain:
     def done(self, req):
         if not self.dry:
             try:
-                os.unlink(req["_file"])
+                wq.retry_os(os.unlink, req["_file"])
             except FileNotFoundError:
                 pass
+            except PermissionError as exc:
+                # Windows (B2, 0.20.1): something held the request file open past every retry.
+                # The write itself is done and logged; a later drain finds it already applied.
+                print("gt_broker: %s was applied, but its request file could not be removed "
+                      "(%s); the next drain sees it is already there" % (req.get("id"), exc),
+                      file=sys.stderr)
 
     def reject(self, path: Path, req, why):
         self.record(req if isinstance(req, dict) else {"id": path.stem}, "reject", why)
         if not self.dry:
             dest = self.vault / BROKER_REL / "rejected"
             dest.mkdir(parents=True, exist_ok=True)
-            os.replace(path, dest / path.name)
+            wq.retry_os(os.replace, path, dest / path.name)
 
     def escalate(self, reqs, reason, current=None):
         if self.dry:
@@ -419,11 +485,19 @@ class Drain:
         reqs = []
         for p in wq.pending(self.vault):
             try:
-                req = json.loads(p.read_text(encoding="utf-8"))
-            except (OSError, UnicodeDecodeError, ValueError) as exc:
+                raw = wq.retry_os(p.read_bytes)
+            except FileNotFoundError:
+                continue                        # decided meanwhile by a drain that was finishing
+            except PermissionError:
+                continue                        # Windows: still being written; the next drain
+            if not raw and _young(p):
+                continue                        # a name just reserved; its request lands next
+            try:
+                req = json.loads(raw.decode("utf-8"))
+            except (UnicodeDecodeError, ValueError) as exc:
                 self.reject(p, None, "unreadable request (%s)" % exc.__class__.__name__)
                 continue
-            why = wq.validate(req, self.vault)
+            why = wq.validate(req, self.vault, at_submit=False)
             if why:
                 self.reject(p, req, why)
                 continue
@@ -480,8 +554,9 @@ class Drain:
                                         "(ADR-8)")
         why = self.held_by_claim(r)
         if why:
+            claim = why.startswith("claimed by live session")
             for x in group:
-                self.record(x, "held", why)
+                self.record(x, "held", why, **({"waiting": "claim"} if claim else {}))
             return
         if r["op"] == "replace-section" and len(group) > 1:
             return self.replace_group(group)
@@ -535,6 +610,7 @@ class Drain:
         if lines and lines[-1] == "":
             lines = lines[:-1]
         sec = r.get("section")
+        kept = None
         if r["op"] == "create":
             if text is not None:
                 if text.strip() == r["content"].strip():
@@ -547,11 +623,18 @@ class Drain:
             new = r["content"].rstrip("\n") + "\n"
         elif r["op"] == "append":
             body = (wq.section_body(lines, sec) if sec else text) or ""
-            if near_duplicate(r["content"], body):
-                self.record(r, "deduplicate", ">= %d%% token-identical to text already in the %s"
-                            % (NEAR_DUP * 100, "section" if sec else "file"))
+            # A heading in the appended text starts a section of its own once written, so a
+            # retry of a heading+body append is looked for in the whole file, not only in the
+            # section the heading has since closed (B1, 0.20.1).
+            if near_duplicate(r["content"], body) or (
+                    sec and text and any(wq.ANY_TOP.match(ln) for ln in
+                                         r["content"].split("\n"))
+                    and near_duplicate(r["content"], text)):
+                self.record(r, "deduplicate", "already in the %s (the same lines, ignoring only "
+                            "case, spacing and bullets)" % ("section" if sec else "file"))
                 self.done(r)
                 return True
+            kept = closest_difference(r["content"], body)
             new = "\n".join(_render_append(lines, sec, r["content"])) + "\n"
         elif r["op"] == "replace-file":
             if text is not None and text.strip() == r["content"].strip():
@@ -610,22 +693,137 @@ class Drain:
         if not written:
             self.record(r, "held", "the file changed while the broker was writing it")
             return False
-        self.record(r, "apply", "written")
+        self.record(r, "apply", "written; kept: differs from an existing line in %s" % kept
+                    if kept else "written")
         self.done(r)
         return True
 
 
-def _lock(vault: Path):
+# M4 (0.20.1): a drain that finds another one running waits for it -- up to LOCK_WAIT seconds --
+# then drains whatever is left, instead of exiting 1 and stranding its session's requests until
+# some later drain. GT_BROKER_LOCK_WAIT overrides it (tests).
+LOCK_WAIT = 30.0
+
+
+class _DrainLock:
+    """One drain at a time, on every OS (B2, 0.20.1). POSIX: flock on spool/queue/.drain.lock.
+    Native Windows: msvcrt.locking on byte 0 of the same file -- until 0.20.1 the lock was flock
+    only, a no-op there, so two drains applied the same requests. Both locks belong to the
+    process and the OS drops them when it dies, so a crashed drain leaves no stale lock. With
+    neither available, an O_CREAT|O_EXCL lock directory holding the owner's pid, taken over only
+    when that pid is gone."""
+
+    def __init__(self, path: Path):
+        self.path, self.fd, self.kind = path, None, None
+
+    def try_take(self) -> bool:
+        if fcntl is not None or msvcrt is not None:
+            fd = os.open(str(self.path), os.O_RDWR | os.O_CREAT | getattr(os, "O_BINARY", 0),
+                         0o644)
+            try:
+                if fcntl is not None:
+                    fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+                    self.kind = "flock"
+                else:
+                    os.lseek(fd, 0, os.SEEK_SET)
+                    msvcrt.locking(fd, msvcrt.LK_NBLCK, 1)
+                    self.kind = "msvcrt"
+            except OSError:
+                os.close(fd)
+                return False
+            self.fd = fd
+            return True
+        d = Path(str(self.path) + ".d")
+        try:
+            d.mkdir()
+        except FileExistsError:
+            try:
+                pid = int((d / "pid").read_text().strip())
+                os.kill(pid, 0)
+                return False                                    # its owner is alive
+            except (OSError, ValueError):
+                pass                                            # owner gone (or unreadable)
+            try:
+                (d / "pid").unlink()
+                d.rmdir()
+                d.mkdir()
+            except OSError:
+                return False
+        with open(d / "pid", "w", encoding="utf-8", newline="\n") as fh:
+            fh.write(str(os.getpid()))
+        self.kind = "dir"
+        return True
+
+    def close(self):
+        if self.kind == "msvcrt":
+            try:
+                os.lseek(self.fd, 0, os.SEEK_SET)
+                msvcrt.locking(self.fd, msvcrt.LK_UNLCK, 1)
+            except OSError:
+                pass
+        if self.fd is not None:
+            os.close(self.fd)
+            self.fd = None
+        if self.kind == "dir":
+            d = Path(str(self.path) + ".d")
+            try:
+                (d / "pid").unlink()
+                d.rmdir()
+            except OSError:
+                pass
+        self.kind = None
+
+
+def _lock(vault: Path, wait: float = 0.0):
+    """-> a held _DrainLock, or None if another drain still holds it after `wait` seconds."""
     q = wq.queue_dir(vault)
     q.mkdir(parents=True, exist_ok=True)
-    fh = open(q / ".drain.lock", "a", encoding="utf-8", newline="\n")
-    if fcntl is not None:
-        try:
-            fcntl.flock(fh, fcntl.LOCK_EX | fcntl.LOCK_NB)
-        except OSError:
-            fh.close()
+    lock = _DrainLock(q / ".drain.lock")
+    end = time.monotonic() + wait
+    while True:
+        if lock.try_take():
+            return lock
+        if time.monotonic() >= end:
             return None
-    return fh
+        time.sleep(0.1)
+
+
+def _lock_wait() -> float:
+    try:
+        return max(0.0, float(os.environ.get("GT_BROKER_LOCK_WAIT", LOCK_WAIT)))
+    except ValueError:
+        return LOCK_WAIT
+
+
+def _young(p: Path) -> bool:
+    try:
+        return time.time() - p.stat().st_mtime < wq.RESERVE_GRACE
+    except OSError:
+        return True
+
+
+def _rows_since(vault: Path, since: float) -> list:
+    """Broker log rows written at or after `since` (epoch s): what another drain decided while
+    this one waited for it, so the caller still hears the fate of its own requests."""
+    out = []
+    days = {datetime.datetime.fromtimestamp(t, datetime.timezone.utc).strftime("%Y-%m-%d")
+            for t in (since, time.time())}
+    for day in sorted(days):
+        f = vault / BROKER_REL / ("log-%s.jsonl" % day)
+        try:
+            lines = f.read_text(encoding="utf-8").splitlines()
+        except (OSError, UnicodeDecodeError):
+            continue
+        for line in lines:
+            try:
+                row = json.loads(line)
+            except ValueError:
+                continue
+            t = _parse_ts(row.get("ts")) if isinstance(row, dict) else None
+            if t is not None and t >= since:
+                row["by"] = "another drain"
+                out.append(row)
+    return out
 
 
 def _line(row, dry):
@@ -812,6 +1010,8 @@ class _Inbox:
             return _InboxEntry(name, why=LINK_WHY, link=True)
         if st.st_size > INBOX_MAX_BYTES:
             return _InboxEntry(name, why="larger than %d bytes" % INBOX_MAX_BYTES)
+        if st.st_size == 0 and time.time() - st.st_mtime < wq.RESERVE_GRACE:
+            return _InboxEntry(name, why="gone")        # a name just reserved (0.20.1): next drain
         chunks, got = [], 0
         while got <= INBOX_MAX_BYTES:
             try:
@@ -992,29 +1192,49 @@ def pickup_inbox(vault: Path, dry_run: bool = False) -> list:
     return rows
 
 
-def cmd_drain(a, vault: Path) -> int:
+def _queued(vault: Path) -> bool:
     # An oversized inbox file is reported by `status`, never acted on, so it does not count.
     inbox = [c for c in inbox_candidates(vault) if not (c[2] or "").startswith("larger than")]
-    if not wq.pending(vault) and not inbox:
+    return bool(wq.pending(vault) or inbox)
+
+
+def cmd_drain(a, vault: Path) -> int:
+    started = float(int(time.time())) - 1         # log stamps are whole seconds
+    if not _queued(vault):
         if a.json:
             print(json.dumps({"results": [], "left": 0}))
         return 0                                   # an empty queue drains silently
-    lock = None
+    lock, other = None, []
     if not a.dry_run:
         lock = _lock(vault)
         if lock is None:
-            print("gt_broker: another drain is running; nothing done", file=sys.stderr)
-            return 1
+            # M4 (0.20.1): wait for the running drain, then take what it left. Its decisions
+            # since we started waiting are reported too: they include this caller's requests.
+            wait = _lock_wait()
+            lock = _lock(vault, wait)
+            if lock is None:
+                print("gt_broker: another drain is still running after %gs; nothing done here "
+                      "-- the requests stay queued and the next drain applies them" % wait,
+                      file=sys.stderr)
+                return 1
+            other = _rows_since(vault, started)
     try:
-        inbox_rows = pickup_inbox(vault, a.dry_run)
-        d = Drain(vault, a.dry_run)
-        rows = inbox_rows + d.run()
+        if other and not _queued(vault):
+            inbox_rows, d = [], Drain(vault, a.dry_run)
+        else:
+            inbox_rows = pickup_inbox(vault, a.dry_run)
+            d = Drain(vault, a.dry_run)
+            d.run()
+        rows = other + inbox_rows + d.results
     finally:
         if lock is not None:
             lock.close()
     if a.json:
-        print(json.dumps({"results": rows, "left": d.left}, indent=1))
+        print(json.dumps({"results": rows, "left": d.left, "stuck": d.stuck}, indent=1))
     else:
+        if other:
+            print("gt_broker: waited for another drain; it decided %d request(s), shown first"
+                  % len(other))
         for row in rows:
             print(_line(row, a.dry_run))
         counts = {}
@@ -1023,7 +1243,14 @@ def cmd_drain(a, vault: Path) -> int:
         print("gt_broker: %d request(s): %s%s" % (
             len(rows), ", ".join("%d %s" % (n, k) for k, n in sorted(counts.items())),
             " (dry run: nothing written)" if a.dry_run else ""))
-    return 1 if d.left else 0
+        waiting = d.left - d.stuck
+        if waiting:
+            print("gt_broker: %d held (waiting on a claim), not failed -- %s applied by the "
+                  "first drain after the claim is released" % (
+                      waiting, "it is" if waiting == 1 else "they are"))
+    # Held on a live claim is waiting, not failing (MANUAL, "Writing anything into the vault"):
+    # exit 1 only when something is stuck for another reason (0.20.1, M4).
+    return 1 if d.stuck else 0
 
 
 def cmd_status(a, vault: Path) -> int:
@@ -1208,9 +1435,22 @@ def main(argv=None) -> int:
             os.stat(wq.queue_dir(vault))
         except (FileNotFoundError, NotADirectoryError):
             pass
-    if a.cmd == "audit":
-        return cmd_audit(a, vault)
-    return cmd_drain(a, vault) if a.cmd == "drain" else cmd_status(a, vault)
+    try:
+        if a.cmd == "audit":
+            return cmd_audit(a, vault)
+        return cmd_drain(a, vault) if a.cmd == "drain" else cmd_status(a, vault)
+    except PermissionError as exc:
+        # B2 (0.20.1): on Windows a refusal that outlasted every retry (a sharing violation, an
+        # antivirus scan) is one line, never a traceback. Nothing is lost: a request leaves the
+        # queue only after its decision is logged. On POSIX a PermissionError is a sandbox or
+        # interpreter refusal, which gt_errors.run (the __main__ wrapper) words, with its next
+        # step -- so it is re-raised there, not reworded here.
+        if os.name != "nt":
+            raise
+        print("gt_broker: the OS refused %s (%s); nothing queued was lost -- run the drain "
+              "again in a moment" % (getattr(exc, "filename", None) or "a queue file",
+                                     exc.strerror or exc), file=sys.stderr)
+        return 1
 
 
 if __name__ == "__main__":

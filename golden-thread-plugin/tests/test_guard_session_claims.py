@@ -150,7 +150,9 @@ class GuardTest(GuardTestBase):
         self.assertIn("Projects/alpha/research.json", reason)
         self.assertIn("session : other", reason)
         self.assertIn("testing the guard", reason)
-        self.assertIn("Projects/golden-thread/pending/", reason)
+        self.assertNotIn("pending/", reason, "claim refused => queue first, not pending/")
+        self.assertIn("gt_write_queue.py", reason)
+        self.assertIn("HOLDS the write while that claim is live", reason)
 
     def test_live_pid_wins_over_an_old_heartbeat(self):
         self.session(host=HOST, pid=os.getpid(), last_execution=local_stamp(600))

@@ -790,6 +790,40 @@ Known, and not fixed here: an out-of-session `gt_log add` still creates one
 write-probe EPERM line names Full Disk Access on Linux too (`gt_write_probe.eperm_message`); and
 `gt_unlock.py status` says "agents use LOTR" with LOTR off — all in other areas of this release.
 
+### The write queue after the 0.20 usability run (B1, B2, M4 and the queue items)
+
+- **A corrected value is never dropped as a duplicate (B1).** The broker deduplicated an append
+  that was >= 90% token-similar to an existing line, so "410 C" corrected to "455 C" was logged
+  `deduplicate` and never written. Now only an exact repeat is a duplicate -- the same lines,
+  in order, ignoring case, spacing, a leading bullet or checkbox and a trailing full stop. A line
+  differing in any number, sign, value or identifier is written, and the log row and drain
+  output say `kept: differs from an existing line in 455 (existing: 410)`. A retried
+  heading+body append (several paragraphs) is now recognised and lands once; before, no single
+  block matched it and every retry was written again.
+- **Windows: one drain at a time, and no lost requests (B2).** The drain lock was `flock` only,
+  a no-op on native Windows, so two drains applied the same requests. It is now
+  `msvcrt.locking` there (an `O_EXCL` lock folder with a pid where neither exists). Request ids
+  carry a random part, and each request's name is reserved with `O_CREAT|O_EXCL` and never
+  overwritten: until now two writers in one session and one clock tick got the same id and the
+  second replaced the first, while both printed `queued` (42 to 59 of 60 landed). `queued` is
+  printed only after the file is in place. A Windows sharing violation (`PermissionError`
+  [WinError 5]) on removing, moving or replacing a request is retried with backoff, then
+  reported in one line instead of a traceback.
+- **A second drain waits instead of failing (M4).** A drain that found another one running
+  exited 1 and left its session's requests for some later drain. It now waits up to 30 s,
+  drains what is left and reports what the other drain decided meanwhile. A drain whose only
+  leftovers are held on another live session's claim exits 0 and says `held (waiting on a
+  claim), not failed`; exit 1 is kept for requests stuck for any other reason.
+- **The queue refuses two writes it used to take.** An append or replace to an `idea.md`
+  that already holds its brain dump is refused (`idea.md` is immutable once written; the
+  first fill of the scaffold still goes through). A write into `Projects/<slug>/` when the
+  project has no `README.md` is refused with the exact `vault_init.py create-project` command,
+  instead of creating an orphan folder.
+- **A refused claim says queue first.** The claim guard's deny text and `gt_session.py claim`'s
+  CONFLICT text told you to stage the change under `pending/`, which 0.17.11 retired. They now
+  give the `gt_write_queue.py` command and say the queue holds the write until the claim is
+  released, when the next drain applies it.
+
 ## gt 0.19.2 — 2026-10-03
 
 **gt installs on native Windows** (owner, 2026-10-03). Proven on a Windows 11 VM (Git for
