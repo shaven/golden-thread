@@ -27,6 +27,7 @@ class ScheduleTest(Sandbox):
         # These test the launchd backend (plists), which is plain Python on any platform; the
         # Task Scheduler backend has its own tests (test_schedule_task_scheduler.py).
         m.on_windows = lambda: False
+        m.on_linux = lambda: False
         return m
 
     def test_list_names_every_job_and_its_default_time(self):
@@ -174,6 +175,7 @@ class OneRecordedInterpreter(Sandbox):
         super().setUp()
         self.m = load_module(SCHED, "gt_schedule_interp")
         self.m.on_windows = lambda: False            # the launchd backend; see ScheduleTest.mod
+        self.m.on_linux = lambda: False
         self.m.AGENTS = self.tmp / "LaunchAgents"
         self.m.HOOKS = self.tmp / "hooks"
         self.m.LOGS = self.tmp / "logs"
@@ -247,6 +249,209 @@ class OneRecordedInterpreter(Sandbox):
         (self.m.HOOKS / "gt_lint_weekly.py").write_text("")
         self.m.last_exit = lambda job: ("1", None)
         self.assertNotIn("Full Disk Access", "\n".join(self.m.job_status("lint-weekly")[1]))
+
+
+class FakeLaunchd:
+    """A stand-in for `launchctl`, reached through gt_schedule.run: a set of loaded labels.
+    `refuse` makes bootstrap fail, `refuse_bootout` makes bootout fail."""
+
+    def __init__(self, m, loaded=(), refuse=False, refuse_bootout=False):
+        self.m, self.loaded, self.calls = m, set(loaded), []
+        self.refuse, self.refuse_bootout = refuse, refuse_bootout
+
+    def __call__(self, args, timeout=180, input=None):
+        args = [str(a) for a in args]
+        self.calls.append(args)
+
+        class R:
+            returncode, stdout, stderr = 0, "", ""
+        r = R()
+        if args[:1] == ["launchctl"]:
+            verb, target = args[1], args[-1]
+            label = target.rsplit("/", 1)[-1].replace(".plist", "")
+            if verb == "bootstrap":
+                if self.refuse:
+                    r.returncode, r.stderr = 5, "Bootstrap failed: 5: Input/output error"
+                else:
+                    self.loaded.add(label)
+            elif verb == "bootout":
+                if self.refuse_bootout:
+                    r.returncode, r.stderr = 5, "Boot-out failed: 5"
+                elif label in self.loaded:
+                    self.loaded.discard(label)
+                else:
+                    r.returncode = 113
+            elif verb == "print":
+                if label in self.loaded:
+                    r.stdout = "\tlast exit code = 0\n"
+                else:
+                    r.returncode = 113
+            return r
+        if "--check" in args:
+            return r
+        r.returncode, r.stderr = 127, "unexpected command in a test: %s" % args
+        return r
+
+
+@unittest.skipIf(os.name == "nt", "simulates a POSIX scheduler (os.getuid, POSIX quoting); Windows has its own tests")
+class MacScheduler(Sandbox):
+    """0.20.1 (M11): on macOS, installed means launchd has it; the label is io.goldenthread."""
+
+    def setUp(self):
+        super().setUp()
+        m = self.m = load_module(SCHED, "gt_schedule_mac")
+        m.on_windows = lambda: False
+        m.on_linux = lambda: False
+        m.AGENTS = self.tmp / "LaunchAgents"
+        m.HOOKS = self.tmp / "hooks"
+        m.LOGS = self.tmp / "logs"
+        m.INTERPRETER_RECORD = m.LOGS / "interpreter.json"
+        for d in (m.HOOKS, m.LOGS):
+            d.mkdir(parents=True)
+        for script, *_ in m.JOBS.values():
+            (m.HOOKS / script).write_text("")
+        from unittest import mock
+        sl = mock.patch.object(m.time, "sleep", lambda s: None)
+        sl.start()
+        self.addCleanup(sl.stop)
+        m._is_real_home = lambda: True        # the FAKE launchd stands in for the real one
+
+    def main(self, *argv):
+        import io
+        from unittest import mock
+        out, err = io.StringIO(), io.StringIO()
+        with mock.patch("sys.stdout", out), mock.patch("sys.stderr", err):
+            rc = self.m.main(list(argv))
+        return rc, out.getvalue() + err.getvalue()
+
+    def legacy_plist(self, job="daily"):
+        self.m.AGENTS.mkdir(parents=True, exist_ok=True)
+        doc = self.m.build_plist(job, "/tmp/v", ["/tmp/t"], *self.m.JOBS[job][1:4])
+        doc["Label"] = self.m.legacy_label_for(job)
+        with self.m.legacy_plist_path(job).open("wb") as fh:
+            plistlib.dump(doc, fh)
+        return doc
+
+    def test_the_label_is_product_neutral(self):
+        self.assertEqual(self.m.label_for("daily"), "io.goldenthread.gt-daily")
+        self.assertEqual(self.m.LEGACY_LABEL_PREFIX, "com.markethaven.gt-")
+        self.assertNotIn("markethaven", self.m.PROBE_LABEL)
+        self.assertNotIn("markethaven", self.m.build_plist("daily", "/v", [], 22, 0, None)["Label"])
+
+    def test_a_refused_bootstrap_is_not_installed(self):
+        self.m.run = FakeLaunchd(self.m, refuse=True)
+        rc, said = self.main("install", "daily", "--vault", str(self.tmp))
+        self.assertEqual(rc, self.m.PROBLEM, said)
+        self.assertIn("NOT INSTALLED", said)
+        self.assertNotIn("PROVEN", said)
+        self.assertFalse(self.m.plist_path("daily").exists(), "a plist launchd refused was kept")
+        self.assertEqual(self.m.installed_jobs(), [])
+        rc, said = self.main("list")
+        self.assertNotIn("[installed]", said)
+
+    def test_a_refused_bootstrap_puts_the_previous_job_back(self):
+        self.m.AGENTS.mkdir(parents=True)
+        self.m.plist_path("daily").write_bytes(b"previous")
+        self.m.run = FakeLaunchd(self.m, refuse=True)
+        rc, said = self.main("install", "daily", "--vault", str(self.tmp))
+        self.assertEqual(rc, self.m.PROBLEM)
+        self.assertEqual(self.m.plist_path("daily").read_bytes(), b"previous")
+
+    def test_a_good_install_also_removes_the_old_label(self):
+        self.legacy_plist()
+        fake = self.m.run = FakeLaunchd(self.m, loaded={"com.markethaven.gt-daily"})
+        rc, said = self.main("install", "daily", "--vault", str(self.tmp))
+        self.assertEqual(rc, self.m.OK, said)
+        self.assertIn("io.goldenthread.gt-daily", fake.loaded)
+        self.assertNotIn("com.markethaven.gt-daily", fake.loaded)
+        self.assertFalse(self.m.legacy_plist_path("daily").exists())
+
+    def test_job_status_names_a_job_launchd_does_not_have(self):
+        self.m.AGENTS.mkdir(parents=True)
+        self.m.plist_path("daily").write_bytes(plistlib.dumps({"Label": "x"}))
+        self.m.run = FakeLaunchd(self.m)
+        self.assertIs(self.m.job_registered("daily"), False)
+        _code, problems = self.m.job_status("daily")
+        self.assertTrue(problems, "a plist launchd never loaded passed as healthy")
+
+    def test_job_registered_is_unknown_outside_the_real_home(self):
+        self.m._is_real_home = lambda: False
+        self.m.run = FakeLaunchd(self.m)
+        self.assertIsNone(self.m.job_registered("daily"))
+
+    def test_remove_claims_nothing_when_nothing_was_there(self):
+        self.m.run = FakeLaunchd(self.m)
+        rc, said = self.main("remove", "daily")
+        self.assertEqual(rc, self.m.OK)
+        self.assertIn("nothing to remove", said)
+        self.assertNotIn("booted", said)
+
+    def test_remove_reports_a_failed_bootout(self):
+        self.m.AGENTS.mkdir(parents=True)
+        self.m.plist_path("daily").write_bytes(b"x")
+        self.m.run = FakeLaunchd(self.m, loaded={"io.goldenthread.gt-daily"},
+                                 refuse_bootout=True)
+        rc, said = self.main("remove", "daily")
+        self.assertEqual(rc, self.m.PROBLEM, said)
+        self.assertIn("bootout", said)
+        self.assertNotIn("booted io.goldenthread.gt-daily out", said)
+
+    def test_remove_says_booted_out_only_when_it_was_loaded(self):
+        self.m.AGENTS.mkdir(parents=True)
+        self.m.plist_path("daily").write_bytes(b"x")
+        self.m.run = FakeLaunchd(self.m)                   # not loaded
+        rc, said = self.main("remove", "daily")
+        self.assertEqual(rc, self.m.OK, said)
+        self.assertIn("deleted", said)
+        self.assertNotIn("booted", said)
+
+    def test_migrate_labels_moves_an_old_job(self):
+        old = self.legacy_plist("lint-weekly")
+        fake = self.m.run = FakeLaunchd(self.m, loaded={"com.markethaven.gt-lint-weekly"})
+        rc, said = self.main("migrate-labels")
+        self.assertEqual(rc, self.m.OK, said)
+        self.assertIn("com.markethaven.gt-lint-weekly → io.goldenthread.gt-lint-weekly", said)
+        self.assertEqual(fake.loaded, {"io.goldenthread.gt-lint-weekly"})
+        self.assertFalse(self.m.legacy_plist_path("lint-weekly").exists())
+        with self.m.plist_path("lint-weekly").open("rb") as fh:
+            new = plistlib.load(fh)
+        self.assertEqual(new["Label"], "io.goldenthread.gt-lint-weekly")
+        self.assertEqual(new["ProgramArguments"], old["ProgramArguments"])
+        self.assertEqual(new["StartCalendarInterval"], old["StartCalendarInterval"])
+        rc, said = self.main("migrate-labels")
+        self.assertIn("nothing to migrate", said, "migrate-labels is not idempotent")
+
+    def test_a_refused_migration_leaves_the_old_job(self):
+        self.legacy_plist()
+        fake = self.m.run = FakeLaunchd(self.m, loaded={"com.markethaven.gt-daily"}, refuse=True)
+        rc, said = self.main("migrate-labels")
+        self.assertEqual(rc, self.m.PROBLEM)
+        self.assertIn("left exactly as it was", said)
+        self.assertTrue(self.m.legacy_plist_path("daily").exists())
+        self.assertFalse(self.m.plist_path("daily").exists())
+        self.assertEqual(fake.loaded, {"com.markethaven.gt-daily"})
+
+    def test_a_sandbox_never_migrates(self):
+        self.legacy_plist()
+        self.m._is_real_home = lambda: False
+        fake = self.m.run = FakeLaunchd(self.m)
+        rc, said = self.main("migrate-labels")
+        self.assertEqual(rc, self.m.OK)
+        self.assertFalse([c for c in fake.calls if c[:1] == ["launchctl"]])
+        self.assertTrue(self.m.legacy_plist_path("daily").exists())
+
+    def test_an_unmigrated_job_is_still_seen_under_its_old_label(self):
+        self.legacy_plist()
+        self.assertEqual(self.m.installed_jobs(), ["daily"])
+        self.assertEqual(self.m.installed_label("daily"), "com.markethaven.gt-daily")
+        self.assertTrue(self.m.job_args("daily"))
+
+    def test_reconcile_migrates_first(self):
+        self.legacy_plist()
+        fake = self.m.run = FakeLaunchd(self.m, loaded={"com.markethaven.gt-daily"})
+        rc, said = self.main("reconcile", "--no-reload")
+        self.assertEqual(rc, self.m.OK, said)
+        self.assertIn("io.goldenthread.gt-daily", fake.loaded)
 
 
 if __name__ == "__main__":

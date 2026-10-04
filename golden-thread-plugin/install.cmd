@@ -12,6 +12,14 @@ rem      Windows; an install there lands in the Linux home) and the WindowsApps 
 rem   2. %ProgramFiles%\Git\bin\bash.exe        (Git for Windows, all users);
 rem   3. %LocalAppData%\Programs\Git\bin\bash.exe (Git for Windows, this user only).
 rem
+rem Windows-style switches (0.20.1): /uninstall, /check, /yes and /? are passed on as
+rem --uninstall, --check, --yes and --help, so `install.cmd /uninstall /check` works as a
+rem Windows user would type it. Every other argument is passed on unchanged.
+rem
+rem UTF-8 (0.20.1): install.sh prints UTF-8 (arrows, dashes); in a console still on the OEM
+rem code page that was mojibake. The code page is switched to 65001 for the run and put back.
+rem GT_LAUNCHER tells install.sh its hints are read in cmd/PowerShell, not in Git Bash.
+rem
 rem CRLF LINE ENDINGS ON PURPOSE: cmd.exe misreads labels and blocks in an LF batch file.
 rem .gitattributes pins *.cmd to CRLF so a checkout on any platform keeps them.
 setlocal EnableExtensions
@@ -29,8 +37,29 @@ rem install.sh finds its own directory from $0, so hand it a "/" path: `dirname`
 rem does not split on "\".
 set "GT_SH=%~dp0install.sh"
 set "GT_SH=%GT_SH:\=/%"
-"%GT_BASH%" "%GT_SH%" %*
-exit /b %ERRORLEVEL%
+set "GT_ARGS="
+:args
+if "%~1"=="" goto run
+set "GT_A=%~1"
+if /i "%GT_A%"=="/uninstall" set "GT_A=--uninstall"
+if /i "%GT_A%"=="/check" set "GT_A=--check"
+if /i "%GT_A%"=="/yes" set "GT_A=--yes"
+if /i "%GT_A%"=="/?" set "GT_A=--help"
+set GT_ARGS=%GT_ARGS% "%GT_A%"
+shift
+goto args
+:run
+set "GT_CP="
+for /f "tokens=2 delims=:" %%C in ('chcp') do set "GT_CP=%%C"
+if defined GT_CP set "GT_CP=%GT_CP: =%"
+if defined GT_CP set "GT_CP=%GT_CP:.=%"
+chcp 65001 >nul
+set "GT_LAUNCHER=install.cmd"
+set "PYTHONIOENCODING=utf-8"
+"%GT_BASH%" "%GT_SH%" %GT_ARGS%
+set "GT_RC=%ERRORLEVEL%"
+if defined GT_CP chcp %GT_CP% >nul
+exit /b %GT_RC%
 
 :consider
 if defined GT_BASH exit /b 0

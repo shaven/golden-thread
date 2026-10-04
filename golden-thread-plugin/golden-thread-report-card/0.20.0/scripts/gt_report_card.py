@@ -543,10 +543,15 @@ def main(argv=None):
         return 0                      # advisory only: never fail a session close
     cands = closeout_candidates(v) if closeout_mode() != "off" else []
     card = render(m, findings, cands)
-    try:
-        write_notice(card, hook)
-    except Exception:
-        pass                          # the notice is best-effort; stdout still gets it
+    # Parked for the next SessionStart only when a SESSION ended or compacted (0.20.1). A run
+    # with no hook payload is a person or a script -- selftest.sh runs this to prove it works
+    # -- and parking that card made the first real session after an install open with a report
+    # on the installer's own smoke run ("session unknown -- manual"). It still prints.
+    if hook.get("session_id") or hook.get("hook_event_name"):
+        try:
+            write_notice(card, hook)
+        except Exception:
+            pass                      # the notice is best-effort; stdout still gets it
     print(card)
     return 0
 

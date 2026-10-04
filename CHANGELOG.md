@@ -642,6 +642,85 @@ and nothing said so.
   running sandbox mode reports one missing entry in `gt_sandbox.py check` until
   `gt_sandbox.py apply` runs again.
 
+### Install, uninstall, scheduled jobs and the doctor, after the usability run (2026-10-04)
+
+A usability run on macOS, Linux and Windows (throwaway homes and vaults) found the install and
+health surface saying false or alarming things on healthy machines. What changed, and why:
+
+- **Uninstall is a command, not a paragraph** — `install.sh --uninstall [--check]`,
+  `install.cmd /uninstall [/check]`, or the installed `gt_uninstall.py` when the source is gone.
+  The old INSTALL.md steps missed the scheduled jobs on every OS, the sandbox entries in
+  `settings.json`, the unlock daemon and its home, `~/.gt-inbox` and `~/.gt-scratch`; following
+  them left jobs running deleted files and a `settings.json` that still denied the vault.
+  `--check` lists exactly what would go; a real run backs up every file it edits (outside gt's
+  home), prints the rollback commands, re-scans and exits non-zero unless nothing of gt's is
+  left. It refuses while queued vault writes sit unapplied, and never touches the vault, an
+  edited `CLAUDE.md` section or a `python3` that is not gt's.
+- **Scheduled jobs: "installed" means the scheduler has it.** A refused `launchctl bootstrap`,
+  `schtasks /Create` or `systemctl enable` puts the files back as they were and says NOT
+  INSTALLED. Until now the plist or spec stayed, `list` said [installed], the doctor FAILed every
+  run and the post-install gate could PASS a daily job no scheduler knew. `remove` claims only
+  removals that happened.
+- **Linux jobs are real** — a systemd user timer, or a tagged crontab line without a user
+  systemd. 0.20.0 wrote a launchd plist on Linux and called launchctl: every Linux job was a
+  file nothing ran. The next install converts such a plist.
+- **The job label is product-neutral**, `io.goldenthread.gt-<job>` (was
+  `com.markethaven.gt-<job>`). `gt_schedule.py migrate-labels` — run by `reconcile` and by
+  install.sh — moves an old job with its own arguments and schedule, and leaves it untouched if
+  the new registration is refused, so an install from any release converges.
+- **The doctor works without the source tree** (INSTALL.md option C installs from `/tmp`): it
+  and `gt_doctor.py post-install` fall back to the installed copy in the plugin cache, as the
+  SessionStart component check already did. Before, post-install FAILed with "no release
+  directory found" and the doctor printed `?` rows and exited 2. A deleted source is no longer a
+  `badpath` hook either.
+- **The doctor judges the INSTALLED release**, not the newest directory in the tree, so a
+  deliberate rollback no longer reports wiring FAIL and drift against files it chose not to
+  install.
+- **A healthy fresh install is green.** `workers` no longer raises other sessions' — or this
+  session's — ordinary Bash tool processes (only orphans and declared-but-stalled workers need a
+  decision), lists at most three per session with commands cut on a word, and on Windows says
+  "not supported" instead of `?` (which made every Windows doctor run exit 2). `push` with no
+  remote is information ("no remote configured — nothing to push", with how to add one and how
+  to silence it) instead of a WARN whose fix was `git push`.
+- **macOS: skills' bare `python3` runs the interpreter that passed the write probe** when the
+  PATH `python3` failed it — the Windows remedy: a shim in `~/.claude/golden-thread/bin/` put
+  first on PATH for Claude's Bash commands through `$CLAUDE_ENV_FILE`, and the installed gt-vault
+  MCP started by the interpreter's full path. On the Mac where macOS refused Homebrew's
+  python3 vault writes, hooks and jobs were fixed in 0.20.0 but skills and the MCP still
+  failed. A `python3` that passes is never overridden; `interpreter.json` records which
+  interpreters the probe refused.
+- **A rollback is quiet and correct.** An installer verb the older release's `gt_schedule.py`
+  lacks is skipped (it printed argparse's raw usage); the vault's gt-shipped tools and hooks
+  from the newer release are recognised as gt's and put back to the older copies (13 false
+  "MODIFIED LOCALLY" warnings on a rollback to 0.19.2). `downgrade_preflight` in install.sh runs
+  before any write when the install is older than what the machine has.
+- **Windows**: `install.cmd` passes `/uninstall`, `/check`, `/yes` and `/?`, switches the console
+  to UTF-8 for the run (the output was mojibake) and tells install.sh its hints are read in
+  cmd/PowerShell — so they say `py -3 ...` with Windows paths and `install.cmd`, never `python3`
+  (the Store stub) or a pipe into a `.sh`. `settings.json` is written with LF on every install
+  (it flipped between LF and CRLF).
+- **Daily note**: tasks added and new projects now include what the write queue changed today but
+  nobody committed (the "0 task(s) added" right after `gt_task add`); gt's own
+  `Projects/golden-thread/` scaffold is not a "new project"; the template is generic.
+- **Vault hygiene**: fresh and connected vaults get a `.gitignore` for `__pycache__/` and `*.pyc`;
+  a re-install no longer dirties `TASKS.md` and `.tasks-digest` (written only when a task
+  changed); "1 open task across 1 project".
+- **Quieter**: the per-prompt "no usage ledger" line is gone (the usage module being absent is a
+  choice); the report card parks a notice only for a real session, so a new install's first card
+  no longer describes the installer's own run; stale `/tmp/gt-<uid>-*` socket directories are
+  removed at install.
+- **Wording**: installer output names no developer tooling (MANIFEST/release-check,
+  `parallel_profile`); "PENDING becomes FAIL" only when something is pending; the hook count says
+  how many the vault step adds; the doctor counts Core rules as the injector does (10, plus the
+  priority model); LOTR is named in the unlock note only when it is installed; ast-grep's install
+  hint is the platform's; hints carry full paths; `--help` lists the modules read from the tree;
+  deprecated aliases no longer say "removed after 0.18.x".
+
+Known, and not fixed here: an out-of-session `gt_log add` still creates one
+`spool/log/unknown-<pid>.md` per call (`templates/tools/gt_spool.py`, `session_id()`); the
+write-probe EPERM line names Full Disk Access on Linux too (`gt_write_probe.eperm_message`); and
+`gt_unlock.py status` says "agents use LOTR" with LOTR off — all in other areas of this release.
+
 ## gt 0.19.2 — 2026-10-03
 
 **gt installs on native Windows** (owner, 2026-10-03). Proven on a Windows 11 VM (Git for

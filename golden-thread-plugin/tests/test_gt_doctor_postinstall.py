@@ -18,6 +18,7 @@ about what an install leaves behind. One install per class; tests that break som
 it back with addCleanup.
 """
 import json
+import sys
 import os
 import plistlib
 import shutil
@@ -38,10 +39,15 @@ except (RuntimeError, OSError):
 OLD_RULE1 = "Before writing a vault file, claim it with gt_session.py claim."
 
 
+IS_LINUX = sys.platform.startswith("linux")
+
+
 def job_path(home, job):
     """Where an installed gt job lives: a launchd plist, or on Windows (0.20.0) the Task
     Scheduler spec gt_schedule keeps beside the job's .cmd wrapper (gt_schedule.job_file)."""
-    if IS_WINDOWS:
+    if IS_WINDOWS or IS_LINUX:
+        # Linux (0.20.1): a systemd/cron job's spec, as gt_schedule.job_file names it there; a
+        # launchd plist on Linux is a 0.20.0 leftover nothing runs, and is reported as such.
         return home / ".claude" / "golden-thread" / "jobs" / ("gt-%s.json" % job)
     return home / "Library" / "LaunchAgents" / ("com.markethaven.gt-%s.plist" % job)
 
@@ -51,11 +57,13 @@ def write_job(path, data):
     with the log paths every spec gt_schedule writes carries (its .cmd wrapper is built from
     them when the job is rewritten)."""
     path.parent.mkdir(parents=True, exist_ok=True)
-    if IS_WINDOWS:
+    if IS_WINDOWS or IS_LINUX:
         logs = path.parent.parent
         job = data["Label"].rsplit("gt-", 1)[-1]
         data = dict({"StandardOutPath": str(logs / ("%s.out" % job)),
                      "StandardErrorPath": str(logs / ("%s.err" % job))}, **data)
+        if IS_LINUX:
+            data = dict(data, Backend="systemd", Label="io.goldenthread.gt-%s" % job)
         path.write_text(json.dumps(data, indent=1, sort_keys=True) + "\n", encoding="utf-8")
     else:
         with path.open("wb") as fh:
@@ -63,7 +71,7 @@ def write_job(path, data):
 
 
 def read_job(path):
-    if IS_WINDOWS:
+    if IS_WINDOWS or IS_LINUX:
         return json.loads(path.read_text(encoding="utf-8"))
     with path.open("rb") as fh:
         return plistlib.load(fh)

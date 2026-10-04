@@ -103,6 +103,23 @@ if [ ! -d "$SCRIPT_DIR/golden-thread" ]; then
   exit 1
 fi
 
+# Commands shown to the PERSON, in the shell they ran this from (0.20.1, usability run M14).
+# install.cmd sets GT_LAUNCHER=install.cmd: that person is in cmd.exe or PowerShell, where
+# `python3` is the Microsoft Store stub, POSIX paths mean nothing and `./install.sh` does not
+# run -- so hints there use the py launcher (or the interpreter's full path), Windows paths and
+# install.cmd. Anywhere else: python3, the path as it is, and the installer by its full path.
+if [ "${GT_LAUNCHER:-}" = install.cmd ] && command -v cygpath >/dev/null 2>&1; then
+  if command -v py >/dev/null 2>&1; then U_PY="py -3"
+  else U_PY="\"$(cygpath -w "${GT_PYTHON:-python}")\""; fi
+  U_INSTALL="\"$(cygpath -w "$SCRIPT_DIR/install.cmd")\""
+  upath() { cygpath -w "$1" 2>/dev/null || printf '%s' "$1"; }
+else
+  U_PY="python3"
+  U_INSTALL="bash \"$SCRIPT_DIR/install.sh\""
+  upath() { printf '%s' "$1"; }
+fi
+export GT_U_INSTALL="$U_INSTALL"
+
 # ── Version selection ──────────────────────────────────────────────────────
 #
 # The version installed is the newest version DIRECTORY present, not a constant
@@ -194,6 +211,7 @@ import json, os, re, shutil, subprocess, sys, tempfile, time
 
 NAME = re.compile(r"^[a-z][a-z0-9-]*$")
 MARKET = "golden-thread-plugin"
+U_INSTALL = os.environ.get("GT_U_INSTALL") or "./install.sh"   # how the person runs it
 
 
 def vkey(v):
@@ -237,7 +255,7 @@ def read_choices(home):
 def atomic(path, data):
     os.makedirs(os.path.dirname(path), exist_ok=True)
     fd, tmp = tempfile.mkstemp(dir=os.path.dirname(path), prefix=".gt-")
-    with os.fdopen(fd, "w", encoding="utf-8") as fh:
+    with os.fdopen(fd, "w", encoding="utf-8", newline="\n") as fh:
         fh.write(json.dumps(data, indent=2) + "\n")
         fh.flush()
         os.fsync(fh.fileno())
@@ -350,7 +368,7 @@ def cmd_moved(a):
     for s in gone:
         for d, ver, name in zip(rest[0::3], rest[1::3], rest[2::3]):
             if os.path.isfile(os.path.join(d, ver, "skills", s, "SKILL.md")):
-                tail = (" (module %s is off: ./install.sh --with %s)" % (off[name], off[name])
+                tail = (" (module %s is off: %s --with %s)" % (off[name], U_INSTALL, off[name])
                         if name in off else "")
                 print("Moved: /gt:%s → /%s:%s%s" % (s, name, s, tail))
                 break
@@ -373,7 +391,7 @@ def cmd_moved_annotate(a):
     for line in sys.stdin.read().splitlines():
         m = re.match(r"^Moved: /gt:\S+ → /([^:]+):\S+$", line)
         if m and m.group(1) in off:
-            line += " (module %s is off: ./install.sh --with %s)" % (off[m.group(1)],
+            line += " (module %s is off: %s --with %s)" % (off[m.group(1)], U_INSTALL,
                                                                       off[m.group(1)])
         print(line)
     return 0
@@ -582,7 +600,7 @@ def cmd_list(a):
     for m in mods:
         print("  %-10s %-12s %-8s %-4s %s" % (m["name"], m["plugin"], m["version"], m["state"],
                                               why_text(m, gtver)))
-    print("Change with: ./install.sh --with NAME | --without NAME  (the choice is remembered)")
+    print("Change with: %s --with NAME | --without NAME  (the choice is remembered)" % U_INSTALL)
     return 0
 
 
@@ -896,6 +914,8 @@ REQUIRE_CHECKSUM="${GT_REQUIRE_CHECKSUM:+yes}"; REQUIRE_CHECKSUM="${REQUIRE_CHEC
 LIST_MODULES=no
 MODULE_FLAGS=()          # "with:NAME" / "without:NAME", in the order given
 MODEL_PROFILE=""         # --model-profile average|very-high|inherit (0.19.1)
+UNINSTALL=no             # --uninstall: run gt_uninstall.py instead (0.20.1)
+UNINSTALL_ARGS=()        # what is passed through to it: --check/--dry-run, --yes, ...
 ORIG_ARGS=("$@")         # kept for the re-run after a migration changes a module choice
 POSITIONAL=""
 while [ $# -gt 0 ]; do
@@ -905,7 +925,7 @@ while [ $# -gt 0 ]; do
     --list-modules) LIST_MODULES=yes; shift ;;
     --with|--without)
       if [ -z "${2:-}" ] || [ "${2#-}" != "$2" ]; then
-        echo "✗ $1 needs a module name (see ./install.sh --list-modules)"; exit 1
+        echo "✗ $1 needs a module name (see $U_INSTALL --list-modules)"; exit 1
       fi
       MODULE_FLAGS+=("${1#--}:$2"); shift 2 ;;
     --with=*)    MODULE_FLAGS+=("with:${1#--with=}"); shift ;;
@@ -916,8 +936,19 @@ while [ $# -gt 0 ]; do
     --model-profile)   MODEL_PROFILE="${2:-}"; shift 2 || true ;;
     --model-profile=*) MODEL_PROFILE="${1#--model-profile=}"; shift ;;
     --require-checksum) REQUIRE_CHECKSUM=yes; shift ;;
+    --uninstall) UNINSTALL=yes; shift ;;
+    --check|--dry-run|--yes|-y|--keep-vault-config|--discard-queued|--purge-backups|--purge-lotr|--json)
+      UNINSTALL_ARGS+=("$1"); shift ;;
     -h|--help)
-      cat <<'USAGE'
+      # The module list is READ from this tree (0.20.1: a typed list missed lotr, usage and
+      # visualize). Every <dir>/<newest>/module.json's "name".
+      _gt_mods=$(for _d in "$SCRIPT_DIR"/*/; do
+                   _v=$(latest_version "$_d"); [ -n "$_v" ] || continue
+                   [ -f "$_d/$_v/module.json" ] || continue
+                   python3 -c 'import json,sys; print(json.load(open(sys.argv[1], encoding="utf-8")).get("name") or "")' \
+                     "$_d/$_v/module.json" 2>/dev/null || true
+                 done | sed '/^$/d' | LC_ALL=C sort | tr '\n' ',' | sed 's/,$//; s/,/, /g')
+      sed "s/__GT_MODULE_LIST__/${_gt_mods:-none}/" <<'USAGE'
 install.sh — install the Golden Thread Claude Code plugins (gt and every plugin
              shipped beside it, e.g. gt-wiki)
 
@@ -939,6 +970,11 @@ install.sh — install the Golden Thread Claude Code plugins (gt and every plugi
   ./install.sh --list-modules         print each module, its state and why, install nothing
   ./install.sh --model-profile P      the model and effort each skill runs at: average (a new
                                       install's default), very-high, or inherit; remembered
+  ./install.sh --uninstall --check    list everything gt put on this machine; change nothing
+  ./install.sh --uninstall            remove it (asks once; --yes when not at a terminal),
+                                      then re-check that nothing is left. The vault is never
+                                      touched. Also: --keep-vault-config, --discard-queued,
+                                      --purge-backups, --purge-lotr (gt_uninstall.py --help)
   ./install.sh --help                 this text
 
 A tree published by dev/sync-gt-src.sh carries SHA256SUMS at the repository root. Before
@@ -948,7 +984,7 @@ downloaded the repository is never blocked by it. With --require-checksum a mism
 SHA256SUMS, or no hash tool) stops the install with exit 8 before anything is copied: use it
 on the machine that receives a publish. A tree with no SHA256SUMS installs as it stands.
 
-Modules are the optional plugins beside gt (wiki, demo, watch, report-card, farm, flow). State is, in
+Modules are the optional plugins beside gt (in this tree: __GT_MODULE_LIST__). State is, in
 order: --with/--without in this run, your recorded choice, the module's default. gt
 itself is not a module and cannot be removed this way.
 
@@ -978,13 +1014,32 @@ cannot be true until /gt:gt-upgrade has run show PENDING. Any FAIL row stops wit
 Environment: GT_VAULT (same as --vault), GT_VERSION (same as the version argument).
 USAGE
       exit 0 ;;
-    -*) echo "unknown option: $1"; echo "try: install.sh [version] [--vault <path>] [--no-vault] [--with|--without NAME] [--list-modules]"; exit 1 ;;
+    -*) echo "unknown option: $1"; echo "try: install.sh [version] [--vault <path>] [--no-vault] [--with|--without NAME] [--list-modules] [--uninstall [--check]]"; exit 1 ;;
     *)  POSITIONAL="$1"; shift ;;
   esac
 done
 if [ "$LIST_PLUGINS" = yes ]; then
   discover_plugins "$SCRIPT_DIR" | tr '\t' ' '
   exit 0
+fi
+# --uninstall (0.20.1, usability run M15): one validated command instead of a paragraph of
+# manual steps. gt_uninstall.py does the work -- the newest release's copy in this tree, else
+# the installed one -- with --check for a dry run, backups, a summary and a re-scan.
+if [ "$UNINSTALL" = yes ]; then
+  _gt_un="$SCRIPT_DIR/golden-thread/$(latest_version "$SCRIPT_DIR/golden-thread")/scripts/gt_uninstall.py"
+  [ -f "$_gt_un" ] || _gt_un="$HOME/.claude/golden-thread/hooks/gt_uninstall.py"
+  if [ ! -f "$_gt_un" ]; then
+    echo "✗ gt_uninstall.py was not found in this tree or in ~/.claude/golden-thread/hooks."
+    exit 1
+  fi
+  _gt_rc=0
+  python3 "$_gt_un" ${UNINSTALL_ARGS[@]+"${UNINSTALL_ARGS[@]}"} || _gt_rc=$?
+  exit "$_gt_rc"
+fi
+if [ "${#UNINSTALL_ARGS[@]}" -gt 0 ]; then
+  echo "✗ ${UNINSTALL_ARGS[0]} is an --uninstall option; for an install it means nothing."
+  echo "  try: $U_INSTALL --uninstall ${UNINSTALL_ARGS[*]}"
+  exit 1
 fi
 
 # ── Checksum: confirm the tree is the one that was published (0.17.3) ─────────
@@ -1287,7 +1342,7 @@ while [ "$i" -lt "$PLUGIN_COUNT" ]; do
     state="$_state"
     if [ "$_state" = off ]; then
       OFF_MODULES="$OFF_MODULES $_m"
-      [ "$_why" = invalid ] && SKIP_NOTES="${SKIP_NOTES}Skipping module $_m: its module.json is invalid (./install.sh --list-modules says why)
+      [ "$_why" = invalid ] && SKIP_NOTES="${SKIP_NOTES}Skipping module $_m: its module.json is invalid ($U_INSTALL --list-modules says why)
 "
       [ "$_why" = requires ] && SKIP_NOTES="${SKIP_NOTES}Skipping module $_m (${PLUGIN_NAMES[$i]} ${PLUGIN_VERS[$i]}): its requires_gt does not admit gt $VERSION — treated as off for this run, your recorded choice unchanged
 "
@@ -1320,6 +1375,24 @@ fi
 checksum_block
 [ -n "$PICK_NOTES" ] && printf '%s' "$PICK_NOTES"
 [ -n "$SKIP_NOTES" ] && printf '%s' "$SKIP_NOTES"
+
+# ── Downgrade preflight (0.20.1): a HOOK POINT, before anything is written ───────────────────
+#
+# IS_DOWNGRADE=yes when this run installs a gt OLDER than the one this machine has. A release
+# from before a security feature cannot undo that feature's settings (usability run M3: with the
+# sandbox on, 0.19.2 has no gt_sandbox and no gt-vault MCP, so the deny rules stay and the vault
+# is locked out). downgrade_preflight is where a refusal for such a state goes -- it runs before
+# the snapshot and the first write, so a refusal (exit 1, nothing written) leaves the machine
+# untouched. It is a no-op here; the sandbox/unlock check is added beside this comment.
+IS_DOWNGRADE=no
+if [ -n "${GT_PREVIOUS_RELEASE:-}" ] && [ "$GT_PREVIOUS_RELEASE" != "$VERSION" ] \
+   && [ "$(printf '%s\n%s\n' "$GT_PREVIOUS_RELEASE" "$VERSION" | sort -t. -k1,1n -k2,2n -k3,3n | head -1)" = "$VERSION" ]; then
+  IS_DOWNGRADE=yes
+fi
+downgrade_preflight() { return 0; }
+if [ "$IS_DOWNGRADE" = yes ]; then
+  downgrade_preflight
+fi
 
 # ── Rollback: a failed install leaves the machine as it was (0.20.0) ─────────────
 #
@@ -1546,7 +1619,7 @@ verify_source_tree() {
        echo ""
        echo "  Meant to change them?   regenerate the manifest with the command above,"
        echo "                          then re-run this installer"
-       echo "  Installing anyway?      ./install.sh --force-manifest-mismatch"
+       echo "  Installing anyway?      $U_INSTALL --force-manifest-mismatch"
        exit 6 ;;
     5) # VERIFY_NO_MANIFEST from verify_source itself: the file EXISTS (the absent case
        # returned earlier) but could not be read or parsed. Truncated, corrupt, or not JSON.
@@ -1565,7 +1638,7 @@ verify_source_tree() {
        echo ""
        echo "  Restore it:    git -C \"$SRC\" checkout -- MANIFEST.json"
        echo "  Regenerate:    python3 dev/plugins.py manifest \"$SRC\""
-       echo "  Install anyway: ./install.sh --force-manifest-mismatch"
+       echo "  Install anyway: $U_INSTALL --force-manifest-mismatch"
        exit 6 ;;
     *) # An exit code this installer does not know: gt_components.py crashed, python3 is
        # missing, or a future release added a verdict this one predates. Whatever it was,
@@ -1584,7 +1657,7 @@ verify_source_tree() {
        echo "means the check itself failed rather than reaching a verdict, so nothing here has"
        echo "been verified. A check that could not run is not a check that passed."
        echo ""
-       echo "  Install anyway: ./install.sh --force-manifest-mismatch"
+       echo "  Install anyway: $U_INSTALL --force-manifest-mismatch"
        exit 6 ;;
   esac
 }
@@ -1712,6 +1785,7 @@ install_python3_shim() {
 # settings.json references these by absolute path, so the path must survive project
 # renames, merges and vault moves. The scripts locate the rules at run time.
 GT_HOOKS="$HOME/.claude/golden-thread/hooks"
+GT_MAC_SHIM=""        # macOS: the interpreter skills' python3 is pointed at, when needed (M9)
 # Installing a gt OLDER than the newest in this tree (a rollback): what the newer releases
 # put in the hooks dir and wired is removed below when the older gt does not ship it, so
 # the rolled-back machine matches that release (0.15.0). Only bytes a release shipped count.
@@ -1790,12 +1864,29 @@ if [ -d "$SRC/hooks" ]; then
   # interpreter is kept (0.19.1/0.19.2 replaced it with the python running the install, and
   # under launchd Homebrew's python could not write the vault: every install broke the jobs),
   # and with a job installed the choice is proven by a write probe run under launchd.
+  #
+  # Each verb is asked for only when the INSTALLED gt_schedule.py has it (0.20.1): this installer
+  # also installs older releases (a rollback), and 0.19.x's has no choose-interpreter -- the
+  # install printed argparse's raw usage dump (usability run M3). Older ones fall back to what
+  # they do have: record-interpreter (0.19.1), else nothing.
   if [ -f "$GT_HOOKS/gt_schedule.py" ]; then
     _gt_py=$(python3 -c 'import sys; print(sys.executable)' 2>/dev/null) || _gt_py=""
+    _gt_sched="$GT_HOOKS/gt_schedule.py"
     if [ -n "$_gt_py" ]; then
-      python3 -B "$GT_HOOKS/gt_schedule.py" choose-interpreter --candidate "$_gt_py" \
-        ${VAULT_ARG:+--vault "$VAULT_ARG"} || true
-      python3 -B "$GT_HOOKS/gt_schedule.py" reconcile || true
+      if grep -q '"choose-interpreter"' "$_gt_sched" 2>/dev/null; then
+        python3 -B "$_gt_sched" choose-interpreter --candidate "$_gt_py" \
+          ${VAULT_ARG:+--vault "$VAULT_ARG"} || true
+      elif grep -q '"record-interpreter"' "$_gt_sched" 2>/dev/null \
+           && [ ! -f "$GT_HOOKS/../interpreter.json" ]; then
+        python3 -B "$_gt_sched" record-interpreter "$_gt_py" >/dev/null 2>&1 || true
+      fi
+      # Jobs still under the old com.markethaven.* label move to io.goldenthread.* (0.20.1).
+      if grep -q '"migrate-labels"' "$_gt_sched" 2>/dev/null; then
+        python3 -B "$_gt_sched" migrate-labels || true
+      fi
+      if grep -q '"reconcile"' "$_gt_sched" 2>/dev/null; then
+        python3 -B "$_gt_sched" reconcile || true
+      fi
     fi
   fi
   # macOS (0.20.0): the SAME interpreter for the hook wrappers and the settings.json hook
@@ -1808,6 +1899,42 @@ if [ -d "$SRC/hooks" ]; then
     if [ -n "$_gt_rec" ] && [ -x "$_gt_rec" ]; then
       printf '%s\n' "$_gt_rec" > "$GT_HOOKS/../python"
       echo "  hooks and tools run $_gt_rec (it passed gt's write probe)"
+    fi
+    # 0.20.1 (usability run M9): skills and the gt-vault MCP run the BARE `python3` -- the one
+    # on PATH, often Homebrew's. When that one FAILED the write probe (macOS refused it vault
+    # writes), skills' writes failed too; only hooks and jobs were covered. So, only then, the
+    # same remedy Windows has: a python3 shim in gt's bin dir that runs the chosen interpreter,
+    # put first on PATH for Claude's Bash commands by the SessionStart hook (CLAUDE_ENV_FILE),
+    # and the installed gt-vault MCP started by that interpreter's absolute path (step 2c). A
+    # PATH python3 that passed keeps working exactly as before -- no shim, nothing overridden.
+    # Only a release whose SessionStart hook exports the macOS shim (gt_components._is_gt_shim)
+    # gets one: a rollback to an older gt removes it instead of leaving a file nothing reads.
+    if [ -n "$_gt_rec" ] && [ -x "$_gt_rec" ] \
+       && grep -q "def _is_gt_shim" "$SRC/scripts/gt_components.py" 2>/dev/null \
+       && python3 - "$GT_HOOKS/../interpreter.json" <<'PYEOF'
+import json, os, sys
+try:
+    refused = json.load(open(sys.argv[1], encoding="utf-8")).get("refused") or []
+except (OSError, ValueError, AttributeError):
+    refused = []
+here = os.path.realpath(sys.executable)
+sys.exit(0 if any(os.path.realpath(str(r)) == here for r in refused) else 1)
+PYEOF
+    then
+      GT_MAC_SHIM="$_gt_rec"
+      mkdir -p "$HOME/.claude/golden-thread/bin"
+      {
+        echo '#!/bin/sh'
+        echo "# $GT_SHIM_MARK -- written by gt's install.sh (0.20.1). Delete this file to remove it."
+        echo "# macOS: the python3 on PATH failed gt's write probe, so Claude's Bash commands run"
+        echo "# the interpreter that passed it. Re-running install.sh rewrites or removes this."
+        printf 'exec %q "$@"\n' "$_gt_rec"
+      } > "$HOME/.claude/golden-thread/bin/python3"
+      chmod 755 "$HOME/.claude/golden-thread/bin/python3"
+      echo "  skills' python3 → $_gt_rec in Claude Code (shim: $HOME/.claude/golden-thread/bin/python3;"
+      echo "    $(python3 -c 'import sys; print(sys.executable)') failed the write probe)"
+    elif grep -q "$GT_SHIM_MARK" "$HOME/.claude/golden-thread/bin/python3" 2>/dev/null; then
+      rm -f "$HOME/.claude/golden-thread/bin/python3"     # no longer needed: converge
     fi
   fi
 
@@ -1909,7 +2036,7 @@ fi
 # anything without one. Never overwrite a manifest that is already there.
 if [ -f "$SRC/scripts/gt_components.py" ]; then
   if [ -f "$SRC/MANIFEST.json" ]; then
-    echo "Component MANIFEST present → left untouched (verified by dev/release-check.sh)"
+    echo "Release file list (MANIFEST.json) present — installed files are checked against it"
   elif git -C "$SRC" ls-files --error-unmatch MANIFEST.json >/dev/null 2>&1; then
     # Unreachable in a normal run -- verify_source_tree refuses this case before we get here.
     # Kept as a second, independent refusal rather than a comment: the generate step is what
@@ -1948,7 +2075,7 @@ for name, manifest in zip(rest[0::2], rest[1::2]):
     except (OSError, ValueError, AttributeError):
         desc = ""
     plugins.append({"name": name, "source": "./plugins/%s" % name, "description": desc})
-with open(out, "w", encoding="utf-8") as fh:
+with open(out, "w", encoding="utf-8", newline="\n") as fh:
     fh.write(json.dumps({"name": market,
                          "owner": {"name": "Stacy Haven",
                                    "email": "shaven@shavenconsulting.com"},
@@ -1985,6 +2112,26 @@ while [ "$i" -lt "$PLUGIN_COUNT" ]; do
 done
 strip_gt_demo "$MARKETPLACE/plugins/gt"
 echo "Populated marketplace plugin directories with skills/scripts/templates"
+
+# 2c. macOS (0.20.1, M9): when the python3 on PATH failed the write probe, the gt-vault MCP --
+# started by Claude Code with that bare `python3` -- could not write the vault either. Its
+# INSTALLED manifests get the interpreter that passed, by absolute path (the same rewrite as
+# Windows below; /usr/bin/python3 execs the real interpreter in place, so the server is still a
+# direct child of claude). Re-copied from source on every install, so this converges both ways.
+if [ -n "$GT_MAC_SHIM" ]; then
+  _gt_mcp_files=()
+  i=0
+  while [ "$i" -lt "$PLUGIN_COUNT" ]; do
+    for _f in "$(plugin_cache "$i")/.claude-plugin/plugin.json" \
+              "$MARKETPLACE/plugins/${PLUGIN_NAMES[$i]}/.claude-plugin/plugin.json"; do
+      [ -f "$_f" ] && _gt_mcp_files+=("$_f")
+    done
+    i=$((i + 1))
+  done
+  python3 -B "$SRC/scripts/gt_components.py" localize-mcp --python "$GT_MAC_SHIM" \
+    ${_gt_mcp_files[@]+"${_gt_mcp_files[@]}"} >/dev/null \
+    || echo "  ⚠ could not point the plugins' MCP servers at $GT_MAC_SHIM; they run the PATH python3"
+fi
 
 # 2c. Windows: an MCP server a plugin starts with `python3` (gt-lotr) would run the Microsoft
 # Store stub and never start. Its INSTALLED manifests (cache and marketplace) get the
@@ -2064,7 +2211,9 @@ def save(path, d):
             with open(path, "rb") as src, open(bak, "wb") as dst:
                 dst.write(src.read())
     fd, tmp = tempfile.mkstemp(dir=os.path.dirname(path), prefix=".gt-")
-    with os.fdopen(fd, "w") as fh:
+    # newline="\n" (0.20.1): Windows Python writes CRLF in text mode, and settings.json
+    # flipped between LF and CRLF from one install to the next (usability run, Windows).
+    with os.fdopen(fd, "w", encoding="utf-8", newline="\n") as fh:
         fh.write(json.dumps(d, indent=2) + "\n")
         fh.flush()
         os.fsync(fh.fileno())
@@ -2297,7 +2446,7 @@ if (removed or mod_removed) and os.path.exists(p):
         s_out.write(s_in.read())
 
 fd, tmp = tempfile.mkstemp(dir=os.path.dirname(p), prefix='.gt-')
-with os.fdopen(fd, 'w') as fh:
+with os.fdopen(fd, 'w', encoding='utf-8', newline='\n') as fh:
     fh.write(json.dumps(d, indent=2) + '\n')
     fh.flush()
     os.fsync(fh.fileno())
@@ -2311,7 +2460,12 @@ by_event = {}
 for c in changed:
     ev, sc = c.split('/', 1)
     by_event.setdefault(ev, []).append(sc)
-print('Registered %d hooks in ~/.claude/settings.json:' % len(changed))
+# Both numbers (0.20.1): "Registered 18" here and "all 24 declared hooks are wired" from the
+# gate read as six going missing. The rest are the enforcement hooks, wired against the vault.
+others = len([r for r in regs if r.get('owner') != 'install.sh'])
+print('Registered %d hooks in ~/.claude/settings.json%s:'
+      % (len(changed), ' (%d more, the Core-rule enforcement hooks, are wired against the '
+         'vault: %d in all)' % (others, len(changed) + others) if others else ''))
 for ev in sorted(by_event):
     print('  %-16s %s' % (ev, ', '.join(sorted(by_event[ev]))))
 if removed:
@@ -2386,7 +2540,7 @@ run_machine_migrations() {
     echo "════════════════════════════════════════════════════════════════════════"
     echo "The migrator exited $rc ($( [ "$rc" -eq 2 ] && echo "could not evaluate" || echo "a migration failed" ))."
     echo "The vault step did not run; what this install wrote is put back below."
-    echo "  Status:  python3 \"$mig\" status --release \"$SRC\""
+    echo "  Status:  $U_PY \"$(upath "$mig")\" status --release \"$(upath "$SRC")\""
     exit 7
   fi
   return 0
@@ -2578,7 +2732,7 @@ wire_enforcement_hooks() {  # $1 = vault path
     fi
   else
     echo "⚠ Could not wire the enforcement hooks. Run this, then restart:"
-    echo "  python3 \"$SRC/scripts/vault_init.py\" install-core-rules --vault \"$vault\""
+    echo "  $U_PY \"$(upath "$SRC/scripts/vault_init.py")\" install-core-rules --vault \"$(upath "$vault")\""
   fi
 }
 
@@ -2587,6 +2741,42 @@ if [ -n "$VAULT_PATH" ] && [ -d "$VAULT_PATH" ]; then
   backup_vault_before_writes "$VAULT_PATH"
   wire_enforcement_hooks "$VAULT_PATH"
 fi
+
+# The vault_refresh.py to run (0.20.1). Normally the release's own. On a ROLLBACK the older
+# release's copy knows the tool and hook texts gt shipped up to ITSELF only, so every file a
+# newer release put in the vault matched "no version gt has shipped" and was reported MODIFIED
+# LOCALLY -- 13 false warnings on a rollback to 0.19.2 (usability run M3). So a rollback runs
+# that same script from a scratch copy of the release whose shipped-hashes.json is the union
+# with the newest release's: a newer release's text is then gt's own, and is put back to the
+# rolled-back release's copy, as it should be. The release tree itself is never modified.
+vault_refresh_script() {
+  local newest m
+  newest="$SCRIPT_DIR/$CORE_DIR/$(latest_version "$SCRIPT_DIR/$CORE_DIR")"
+  if [ "$newest" = "$SRC" ] || [ ! -f "$newest/templates/shipped-hashes.json" ] \
+     || [ ! -f "$SRC/templates/shipped-hashes.json" ]; then
+    printf '%s\n' "$SRC/scripts/vault_refresh.py"; return 0
+  fi
+  m="$GT_TMP/refresh-release"
+  if [ ! -f "$m/scripts/vault_refresh.py" ]; then
+    mkdir -p "$m" && cp -R "$SRC/scripts" "$SRC/templates" "$SRC/.claude-plugin" "$m/" \
+      && python3 - "$SRC/templates/shipped-hashes.json" "$newest/templates/shipped-hashes.json" \
+           "$m/templates/shipped-hashes.json" <<'PYEOF' \
+      || { printf '%s\n' "$SRC/scripts/vault_refresh.py"; return 0; }
+import json, sys
+old, new, out = sys.argv[1:4]
+a = json.load(open(old, encoding="utf-8"))
+b = json.load(open(new, encoding="utf-8"))
+for kind, names in b.items():
+    if isinstance(names, dict):
+        mine = a.setdefault(kind, {})
+        for n, hashes in names.items():
+            mine[n] = sorted(set(mine.get(n, [])) | set(hashes))
+with open(out, "w", encoding="utf-8", newline="\n") as fh:
+    json.dump(a, fh, indent=1, sort_keys=True)
+PYEOF
+  fi
+  printf '%s\n' "$m/scripts/vault_refresh.py"
+}
 
 # Ask git, not the filesystem: .git is a FILE for a worktree, a submodule or a
 # --separate-git-dir checkout, and `-d .git` skipped all of those silently.
@@ -2598,7 +2788,7 @@ if [ -n "$VAULT_PATH" ] && git -C "$VAULT_PATH" rev-parse --git-dir >/dev/null 2
   # set core.hooksPath whatever it held -- three ways to lose an owner's edit.
   if [ -f "$SRC/scripts/vault_refresh.py" ]; then
     echo "Refreshing the vault's git hooks and tools..."
-    with_heartbeat "refreshing the vault's tools" python3 "$SRC/scripts/vault_refresh.py" \
+    with_heartbeat "refreshing the vault's tools" python3 "$(vault_refresh_script)" \
         refresh --vault "$VAULT_PATH" 2>&1 \
       || echo "⚠ the vault's git hooks and tools could not be refreshed — run install.sh again to retry"
   fi
@@ -2613,7 +2803,7 @@ if [ -z "$VAULT_PATH" ] || [ ! -d "$VAULT_PATH" ]; then
     echo ""
     echo "Installed without a vault (--no-vault). The Core-rule enforcement hooks are"
     echo "present but NOT wired; they are wired against a vault. Run /gt:gt-init, or"
-    echo "  ./install.sh --vault <path>"
+    echo "  $U_INSTALL --vault <path>"
     echo "when you have one."
   elif [ -t 0 ] && [ -t 1 ]; then
     # A person is watching. Ask; never invent a directory unasked.
@@ -2647,9 +2837,9 @@ if [ -z "$VAULT_PATH" ] || [ ! -d "$VAULT_PATH" ]; then
     echo "This is not a failure — it needs one decision that is not mine to make:"
     echo "WHERE the vault should live. A vault is a plain folder of markdown files."
     echo ""
-    echo "  Already have one?   ./install.sh --vault /path/to/existing-vault"
-    echo "  Want a new one?     ./install.sh --vault \"$DEFAULT_VAULT\""
-    echo "  Deliberately none?  ./install.sh --no-vault"
+    echo "  Already have one?   $U_INSTALL --vault <path-to-existing-vault>"
+    echo "  Want a new one?     $U_INSTALL --vault \"$(upath "$DEFAULT_VAULT")\""
+    echo "  Deliberately none?  $U_INSTALL --no-vault"
     echo ""
     echo "ASK THE USER which they want before re-running. Exit 4 means exactly this."
     echo "════════════════════════════════════════════════════════════════════════"
@@ -2657,6 +2847,48 @@ if [ -z "$VAULT_PATH" ] || [ ! -d "$VAULT_PATH" ]; then
   fi
 fi
 
+
+# Stale socket directories (0.20.1). gt_ipc falls back to /tmp/gt-<uid>-<hash>/ when a home's
+# socket path is too long for AF_UNIX, and nothing removed one once its server was gone: the
+# usability Mac had 36. Removed here only when it is this user's, private (0700), untouched for
+# an hour, and holds nothing but sockets none of which accepts a connection. Quiet otherwise.
+if [ "$(uname -s 2>/dev/null)" = Darwin ] || [ "$(uname -s 2>/dev/null)" = Linux ]; then
+  python3 - <<'PYEOF' || true
+import errno, glob, os, shutil, socket, stat, time
+gone = 0
+for d in glob.glob("/tmp/gt-%d-*" % os.getuid()):
+    try:
+        st = os.lstat(d)
+        if not stat.S_ISDIR(st.st_mode) or st.st_uid != os.getuid() or st.st_mode & 0o077 \
+                or time.time() - st.st_mtime < 3600:
+            continue
+        names = os.listdir(d)
+        if any(not stat.S_ISSOCK(os.lstat(os.path.join(d, n)).st_mode) for n in names):
+            continue
+        live = False
+        for n in names:
+            s = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+            s.settimeout(1)
+            try:
+                s.connect(os.path.join(d, n))
+                live = True
+            except socket.timeout:
+                live = True          # a busy server (full backlog) is still a server
+            except OSError as exc:
+                # Only "nobody is listening" is dead; EAGAIN on a full backlog is not.
+                if exc.errno not in (errno.ECONNREFUSED, errno.ENOENT, errno.ENOTSOCK, errno.EPROTOTYPE):
+                    live = True
+            finally:
+                s.close()
+        if not live:
+            shutil.rmtree(d)
+            gone += 1
+    except OSError:
+        continue
+if gone:
+    print("Removed %d stale gt socket dir(s) under /tmp (no server listening)" % gone)
+PYEOF
+fi
 
 # ── Summary ────────────────────────────────────────────────────────────────
 #
@@ -2729,7 +2961,7 @@ done
 # the skill lists above because they are absent from the cache.
 if [ -n "$MODULE_NAMES" ]; then
   modpy summary "$MODJSON"
-  echo "  (change with ./install.sh --with NAME / --without NAME; see --list-modules)"
+  echo "  (change with $U_INSTALL --with NAME / --without NAME; see --list-modules)"
   echo ""
 fi
 # Commands that left gt for a module since the gt this machine had (computed above).
@@ -2756,7 +2988,9 @@ fi
 # preferences and are never touched: re-running this installer must not undo a ceiling
 # somebody set on purpose.
 if [ -f "$HOME/.claude/vault-config.json" ]; then
+  # Said in words (0.20.1): the raw line named the internal key (parallel_profile, cpu_max).
   python3 "$SRC/scripts/gt_settings.py" detect-machine --write 2>/dev/null \
+    | sed -E 's/^parallel_profile (updated|unchanged): ([0-9]+) core\(s\), ([0-9.]+) GB -> cpu_max ([0-9]+), io_max ([0-9]+)$/This machine: \2 cores, \3 GB — gt runs up to \4 jobs at once (\5 for disk-bound work)/' \
     | sed 's/^/  /' || true
 fi
 
@@ -2851,7 +3085,7 @@ apply_vault_upgrades() {
     printf '%s\n' "$out" | upgrade_pending_list
     [ -n "$attn" ] && printf '%s\n' "$attn"
     echo "  To apply (it backs the vault up first): /gt:gt-upgrade"
-    echo "    or: python3 \"$up\" --vault \"$vault\" run"
+    echo "    or: $U_PY \"$(upath "$up")\" --vault \"$(upath "$vault")\" run"
     echo ""; return 0
   fi
   porcelain=$(git -C "$vault" status --porcelain 2>&1) || {
@@ -2872,7 +3106,7 @@ apply_vault_upgrades() {
       printf '%s\n' "$out" | upgrade_pending_list
       [ -n "$attn" ] && printf '%s\n' "$attn"
       echo "  Commit or stash your changes, then run /gt:gt-upgrade"
-      echo "    or: python3 \"$up\" --vault \"$vault\" run"
+      echo "    or: $U_PY \"$(upath "$up")\" --vault \"$(upath "$vault")\" run"
       echo ""; return 0
     fi
   fi
@@ -3097,7 +3331,7 @@ post_install_gate() {
   # could not run at all is said out loud here, not passed off as a broken install.
   if [ "$rc" -ne 0 ] && [ "$rc" -ne 1 ]; then
     echo "  ⚠ the post-install validation could not run (exit $rc) — run it after restarting:"
-    echo "    python3 \"$doc\" post-install --vault \"$vault\""
+    echo "    $U_PY \"$(upath "$doc")\" post-install --vault \"$(upath "$vault")\""
     return 0
   fi
   if [ "$rc" -eq 1 ]; then
@@ -3108,8 +3342,14 @@ post_install_gate() {
     echo "════════════════════════════════════════════════════════════════════════"
     return 9
   fi
-  echo "  After /gt:gt-upgrade and a Claude Code restart, the full gate (PENDING becomes FAIL):"
-  echo "    python3 \"$doc\" post-install --vault \"$vault\""
+  # Only when something IS pending (0.20.1: the line was printed after a clean gate too).
+  if grep -q '^PENDING' <<<"$out"; then
+    echo "  After /gt:gt-upgrade and a Claude Code restart, run the full gate (a PENDING row"
+    echo "  then has to PASS):"
+  else
+    echo "  To re-run this check later:"
+  fi
+  echo "    $U_PY \"$(upath "$doc")\" post-install --vault \"$(upath "$vault")\""
   return 0
 }
 PI_RC=0

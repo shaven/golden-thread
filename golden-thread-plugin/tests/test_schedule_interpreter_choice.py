@@ -58,6 +58,7 @@ class ChooseCase(Sandbox):
     def setUp(self):
         super().setUp()
         self.m = load_module(SCHED, "gt_schedule_choose")
+        self.m.on_linux = lambda: False              # plists: the launchd backend
         self.m.AGENTS = self.tmp / "LaunchAgents"
         self.m.HOOKS = self.tmp / "hooks"
         self.m.LOGS = self.tmp / "logs"
@@ -103,7 +104,8 @@ class TheRecordIsKept(ChooseCase):
 
     def test_install_sh_asks_to_choose_rather_than_record(self):
         text = (Path(SCRIPTS).parents[2] / "install.sh").read_text(encoding="utf-8")
-        self.assertIn("gt_schedule.py\" choose-interpreter --candidate", text)
+        # 0.20.1: install.sh calls it through a variable, guarded so an older tree degrades.
+        self.assertIn(" choose-interpreter --candidate", text)
         self.assertNotIn("gt_schedule.py\" record-interpreter", text)
 
     def test_a_record_that_no_longer_runs_is_replaced(self):
@@ -254,6 +256,42 @@ class AFailedRewriteLeavesTheJob(ChooseCase):
                          "no temporary file left beside the plist")
 
 
+class TheRefusedAreRecorded(ChooseCase):
+    """0.20.1: interpreter.json lists the candidates macOS refused in the write probe, so
+    install.sh knows whether a bare `python3` is one of them."""
+
+    def doc(self):
+        return json.loads(self.m.INTERPRETER_RECORD.read_text(encoding="utf-8"))
+
+    @skip_on_windows(WIN_LAUNCHD)
+    def test_a_refused_candidate_is_recorded(self):
+        self.m.sandboxed = lambda: False
+        self.m.can_probe = lambda vault: False
+        self.m.writes_ok = lambda py, vault: py == str(self.system)
+        rc, said = self.choose("--candidate", str(self.brew), "--vault", str(self.tmp))
+        self.assertEqual(rc, self.m.OK, said)
+        self.assertEqual(self.doc()["python"], str(self.system))
+        self.assertEqual(self.doc()["refused"], [str(self.brew)])
+        self.assertEqual(self.m.refused_interpreters(), [str(self.brew)])
+
+    @skip_on_windows(WIN_LAUNCHD)
+    def test_the_record_is_rewritten_when_only_refused_changes(self):
+        self.m._record(str(self.system))
+        self.m.sandboxed = lambda: False
+        self.m.can_probe = lambda vault: False
+        self.m.writes_ok = lambda py, vault: py == str(self.system)
+        self.choose("--candidate", str(self.brew), "--vault", str(self.tmp))
+        self.assertEqual(self.doc()["refused"], [str(self.brew)])
+
+    def test_without_a_probe_an_existing_refused_list_is_kept(self):
+        self.m.INTERPRETER_RECORD.write_text(json.dumps(
+            {"python": str(self.system), "refused": [str(self.brew)]}), encoding="utf-8")
+        rc, said = self.choose("--candidate", str(self.brew))        # sandboxed: no probe
+        self.assertEqual(self.doc().get("refused"), [str(self.brew)])
+        self.assertEqual(self.m.main(["record-interpreter", str(self.system)]), self.m.OK)
+        self.assertEqual(self.doc().get("refused"), [str(self.brew)])
+
+
 @skip_on_windows("pwd and launchd are POSIX; Windows reloads nothing (Task Scheduler is "
                  "tested separately)")
 class OnlyTheRealHomeIsReal(ChooseCase):
@@ -305,7 +343,13 @@ class OnlyTheRealHomeIsReal(ChooseCase):
                      ["launchctl", "bootout", "gui/1/com.markethaven.gt-daily"],
                      ["launchctl", "kickstart", "-k", "gui/1/com.markethaven.gt-daily"],
                      ["schtasks", "/Create", "/TN", "gt-daily"],
-                     ["schtasks", "/Delete", "/TN", "gt-daily", "/F"]):
+                     ["schtasks", "/Delete", "/TN", "gt-daily", "/F"],
+                     # 0.20.1: Linux's systemd --user and crontab writes too.
+                     ["systemctl", "--user", "enable", "--now", "x.timer"],
+                     ["systemctl", "--user", "daemon-reload"],
+                     ["systemctl", "--user", "start", "x.service"],
+                     ["systemctl", "--user", "disable", "--now", "x.timer"],
+                     ["crontab", "-"]):
             r = self.m.run(args)
             self.assertEqual(r.returncode, 1, args)
             self.assertIn("refused", r.stderr, args)

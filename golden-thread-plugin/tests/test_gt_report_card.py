@@ -230,6 +230,16 @@ class ReportCard(Sandbox):
         self.assertEqual([f.name for f in self.notice.parent.iterdir()], ["report-card.md"],
                          "atomic write must not leave temp files behind")
 
+    def test_a_manual_run_parks_no_notice(self):
+        """0.20.1: selftest.sh runs the card with no hook payload to prove it works, and that
+        card was parked -- so the first real session after an install opened with a report on
+        the installer's own smoke run. A run with no session prints and parks nothing."""
+        for i in range(8):
+            (self.vault / ("n%d.md" % i)).write_text("x")
+        out = self.card()
+        self.assertIn("8 uncommitted file(s)", out)
+        self.assertFalse(self.notice.exists())
+
     def test_off_writes_no_notice(self):
         self.setting(report_card="off")
         self.assertEqual(self.precompact(), "")

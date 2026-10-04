@@ -346,10 +346,36 @@ class WorkersInProcess(Sandbox):
         self.assertEqual(c(ws[910001], {}, mine=None), "live-session")
         self.assertEqual(c(ws[910003], {}, mine=None), "live-session")
         self.assertEqual(c(ws[910001], {}, mine=910000), "waiting")
-        self.assertEqual(c(ws[910003], {}, mine=910000), "undeclared-working")
+        # 0.20.1: an undeclared shell of THIS live session is an ordinary Bash tool process,
+        # working or idle -- information, never an alert (usability run M8).
+        self.assertEqual(c(ws[910003], {}, mine=910000), "this-session")
         self.assertEqual(c(ws[910003], {910003: {}}, mine=910000), "active")
         idle = dict(ws[910003], cpu=0.1)
-        self.assertEqual(c(idle, {}, mine=910000), "own-idle")
+        self.assertEqual(c(idle, {}, mine=910000), "this-session")
+        # ...but a DECLARED one that went idle is promised work not happening.
+        self.assertEqual(c(idle, {910003: {}}, mine=910000), "declared-stalled")
+
+    def test_live_sessions_shells_are_clean_not_a_decision(self):
+        """M8: the doctor's workers row was never green while any session had a background
+        Bash command -- this session's and other sessions' shells were alerts."""
+        self._live()
+        for mine in (None, 910000):
+            buf = []
+            with mock.patch.object(self.m, "_mine", lambda ws, m=mine: m), \
+                    mock.patch("builtins.print", lambda *a, **k: buf.append(" ".join(map(str, a)))):
+                n = self.m.report()
+            out = "\n".join(buf)
+            self.assertEqual(n, 0, out)
+            self.assertIn("GT workers: clean", out)
+            self.assertNotIn("needing a decision", out)
+
+    def test_long_commands_are_cut_on_a_word_with_an_ellipsis(self):
+        cmd = "for f in " + " ".join("file%02d.txt" % i for i in range(40)) + "; do wc $f; done"
+        short = self.m.short_cmd(cmd, 72)
+        self.assertLessEqual(len(short), 72)
+        self.assertTrue(short.endswith("…"))
+        self.assertTrue(cmd.startswith(short[:-1].rstrip()))
+        self.assertEqual(self.m.short_cmd("a\n  b   c"), "a b c")
 
     def test_policy_reap_runs_report_then_reap_in_one_capture(self):
         real = load_module(SCRIPTS / "gt_settings.py", "gt_settings_for_workers")

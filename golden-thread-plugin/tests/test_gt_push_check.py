@@ -77,9 +77,12 @@ class PushCheck(Sandbox):
         self.commit("second")
         self.config(vault_path=str(self.vault))
         out = self.check()
-        self.assertIn("vault branch 'main' has NO REMOTE", out)
-        self.assertIn("2 commit(s) exist on this disk only", out)
+        # 0.20.1: information, not an alarm -- nothing to push TO is not a fault (M8).
+        self.assertIn("no remote configured — nothing to push", out)
+        self.assertIn("vault branch 'main', 2 commit(s) on this disk only", out)
         self.assertIn("remote add origin", out)
+        self.assertIn("set push_check off", out)
+        self.assertNotIn("NO REMOTE", out)
 
     def test_no_upstream(self):
         self.repo_with_remote(track=False)
@@ -165,7 +168,7 @@ class PushCheck(Sandbox):
         self.git_init(self.vault)
         self.config(vault_path=str(self.vault))
         d = json.loads(self.check("--hook"))
-        self.assertIn("NO REMOTE", d["systemMessage"])
+        self.assertIn("no remote configured", d["systemMessage"])
         self.assertEqual(d["hookSpecificOutput"]["hookEventName"], "SessionStart")
         self.assertEqual(d["hookSpecificOutput"]["additionalContext"], d["systemMessage"])
 

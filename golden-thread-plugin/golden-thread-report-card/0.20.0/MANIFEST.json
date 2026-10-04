@@ -1,10 +1,10 @@
 {
  "files": {
   "scripts/gt_report_card.py": {
-   "bytes": 22244,
-   "sha256": "d90efca9da8f4c9557bf2fccf2f79f60a0781c81793c0f3f6ebf27f0514bbc58"
+   "bytes": 22688,
+   "sha256": "24cdc9ac44c0a69c4ff9e9526022f3f9e276c906d273512089929b17404eb444"
   }
  },
- "generated": "2026-10-03T11:48:14",
+ "generated": "2026-10-04T11:56:51",
  "version": "0.20.0"
 }

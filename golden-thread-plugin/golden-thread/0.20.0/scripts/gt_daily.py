@@ -207,20 +207,79 @@ def by_domain(items, dom):
     return [(k, groups[k]) for k in keys]
 
 
+def _today(date: str) -> bool:
+    return date == datetime.date.today().isoformat()
+
+
+def _mtime_on(path: Path, date: str) -> bool:
+    try:
+        return datetime.date.fromtimestamp(path.stat().st_mtime).isoformat() == date
+    except OSError:
+        return False
+
+
+def _uncommitted(repo: Path, date: str, pathspec):
+    """-> [(status, rel)] for files under `pathspec` that differ from HEAD or are untracked,
+    changed on `date` (by mtime). Only for TODAY: the working tree is the state now.
+
+    0.20.1: the daily note read COMMITS only, but gt writes the vault through the write queue
+    and never commits it -- so a task added with gt_task, or a project created that day, was
+    missing until the owner happened to commit ("0 task(s) added" right after an add, and a
+    real new project left out)."""
+    if not _today(date):
+        return []
+    out = sh(["git", "-C", str(repo), "status", "--porcelain", "-z", "--untracked-files=all",
+              "--", pathspec])
+    if not out:
+        return []
+    rows, parts, i = [], out.split("\0"), 0
+    while i < len(parts):
+        entry = parts[i]
+        i += 1
+        if len(entry) < 4:
+            continue
+        status, rel = entry[:2], entry[3:].replace("\\", "/")
+        if status[0] in "RC":
+            i += 1                      # -z: a rename carries its old path as the next field
+        if _mtime_on(repo / rel, date):
+            rows.append((status, rel))
+    return rows
+
+
+def task_diff(repo: Path, date: str):
+    """The day's task-file diff: today's commits, then (for today) what is changed but not yet
+    committed -- a modified README as `git diff HEAD`, an untracked one as an all-added file."""
+    since, until = day_bounds(date)
+    chunks = [sh(["git", "-C", str(repo), "log", "--since", since, "--until", until,
+                  "--no-merges", "-U0", "-p", "--", TASK_FILES]) or ""]
+    for status, rel in _uncommitted(repo, date, TASK_FILES):
+        if not re.match(r"^Projects/.+/README\.md$", rel):
+            continue
+        if status == "??" or "A" in status:
+            try:
+                text = (repo / rel).read_text(encoding="utf-8", errors="replace")
+            except OSError:
+                continue
+            chunks.append("--- /dev/null\n+++ b/%s\n" % rel
+                          + "".join("+%s\n" % l for l in text.splitlines()))
+        else:
+            chunks.append(sh(["git", "-C", str(repo), "diff", "HEAD", "-U0", "--", rel]) or "")
+    return "\n".join(c for c in chunks if c)
+
+
 def tasks_added(repo: Path, date: str):
     """-> {project: [title, ...]} for open tasks that appeared in today's commits.
 
     From the diff, like tasks_closed. An edited or moved task shows as a removed line and an
     added one; a title that was also removed that day is therefore not counted as new."""
-    since, until = day_bounds(date)
-    out = sh(["git", "-C", str(repo), "log", "--since", since, "--until", until,
-              "--no-merges", "-U0", "-p", "--", TASK_FILES])
+    out = task_diff(repo, date)
     if not out:
         return {}
     added = collections.defaultdict(list)
     removed = collections.defaultdict(set)
     project = None
     for line in out.splitlines():
+        line = line.rstrip("\r")
         if line.startswith("+++ b/Projects/"):
             m = re.match(r"\+\+\+ b/Projects/([^/]+)/", line)
             project = m.group(1) if m else None
@@ -312,17 +371,41 @@ def due_today(vault: Path, date: str):
     return dict(out)
 
 
+# gt's own folder: vault_init scaffolds Projects/golden-thread/ (tools, spool, its README) in
+# every vault, so the commit that creates a vault "added" it. It is not a project the owner
+# started that day (0.20.1: the first daily note on a fresh vault listed it as one).
+SCAFFOLD_PROJECTS = ("golden-thread",)
+
+
+def _project_of_readme(rel: str):
+    """'Projects/a/README.md' -> 'a', 'Projects/a/b/README.md' -> 'a/b'; None for anything else
+    (the Projects index, a dot-folder, gt's own scaffold)."""
+    m = re.match(r"^Projects/(.+)/README\.md$", rel.strip().replace("\\", "/"))
+    if not m:
+        return None
+    slug = m.group(1)
+    parts = slug.split("/")
+    if parts[0] in SCAFFOLD_PROJECTS or any(p.startswith(".") for p in parts):
+        return None
+    return slug
+
+
 def new_projects(repo: Path, date: str):
-    """Slugs whose top-level README was ADDED in today's commits."""
+    """Projects whose README was ADDED that day: in today's commits, or -- for today -- created
+    and not yet committed (the write queue never commits). Sub-projects read `parent/child`.
+    gt's own scaffold is never one."""
     since, until = day_bounds(date)
     out = sh(["git", "-C", str(repo), "log", "--since", since, "--until", until,
               "--no-merges", "--diff-filter=A", "--name-only", "--pretty=format:",
               "--", "Projects"])
+    rels = [l for l in (out or "").splitlines()]
+    rels += [rel for status, rel in _uncommitted(repo, date, "Projects")
+             if status == "??" or "A" in status]
     slugs = []
-    for line in (out or "").splitlines():
-        m = re.match(r"^Projects/([^/]+)/README\.md$", line.strip())
-        if m and m.group(1) not in slugs:
-            slugs.append(m.group(1))
+    for rel in rels:
+        slug = _project_of_readme(rel)
+        if slug and slug not in slugs:
+            slugs.append(slug)
     return sorted(slugs)
 
 
@@ -347,14 +430,13 @@ def tasks_closed(repo: Path, date: str):
     on 2026-09-27 it had not run for two days, so the event log knew about none of the day's
     work. A closed checkbox in a commit is a fact that does not depend on a tool having been run.
     """
-    since, until = day_bounds(date)
-    out = sh(["git", "-C", str(repo), "log", "--since", since, "--until", until,
-              "--no-merges", "-U0", "-p", "--", TASK_FILES])
+    out = task_diff(repo, date)
     if not out:
         return {}
     closed = collections.defaultdict(list)
     project = None
     for line in out.splitlines():
+        line = line.rstrip("\r")
         if line.startswith("+++ b/Projects/"):
             m = re.match(r"\+\+\+ b/Projects/([^/]+)/", line)
             project = m.group(1) if m else None

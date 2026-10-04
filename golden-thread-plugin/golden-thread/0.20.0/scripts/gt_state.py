@@ -214,6 +214,20 @@ def marker_path(session) -> Path:
     return STATE_DIR / ("%s.crossed" % (session or "unknown"))
 
 
+def _first_cannot_tell(session) -> bool:
+    """True the first time this session could not read its context; records that it was said.
+    A marker that cannot be written means "say it" -- never silence by accident."""
+    p = STATE_DIR / ("%s.cannot-tell" % (_short(session) or "unknown"))
+    if p.is_file():
+        return False
+    try:
+        STATE_DIR.mkdir(parents=True, exist_ok=True)
+        p.write_bytes(b"")
+    except OSError:
+        pass
+    return True
+
+
 def already_written(session) -> bool:
     return marker_path(session).is_file()
 
@@ -329,7 +343,13 @@ def do_check(a) -> int:
         # "Cannot tell" is said out loud and is NOT a pass. It exits 0 because this must never
         # block a turn, but it never claims there is room. Not a systemMessage: with no usage
         # module it would be every turn, which is how a user learns to ignore the channel.
-        print("gt-state: cannot tell — %s" % why, file=sys.stderr)
+        # 0.20.1: as a HOOK it is said at most once per session -- stderr every turn was the
+        # same noise by another route ("no usage ledger" on every prompt, Linux) -- and not at
+        # all when there is simply no ledger: the usage module being off is a choice, not a
+        # fault. Run by hand it is always said.
+        if not as_hook or (USAGE_LEDGER.is_file() and _first_cannot_tell(session or
+                                                                          payload.get("session_id"))):
+            print("gt-state: cannot tell — %s" % why, file=sys.stderr)
         if a.json:
             print(json.dumps({"ctx_pct": None, "threshold": limit, "due": None, "why": why,
                               "session": session}))

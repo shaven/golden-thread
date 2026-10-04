@@ -1,6 +1,6 @@
 ---
 name: gt-handoff-handle
-description: "Deprecated alias, removed after 0.18.x — use /gt:gt-handle handoff. Kept working for one release: it does exactly what /gt:gt-handle handoff does (work through the waiting handoffs)."
+description: "Deprecated alias — use /gt:gt-handle handoff. Still works, and will be removed in a future release: it does exactly what /gt:gt-handle handoff does (work through the waiting handoffs)."
 model_intent: balanced
 ---
 
@@ -18,5 +18,5 @@ argument. That section is this command's procedure, moved there unchanged in 0.1
 (verb-first vocabulary: one verb per action, the artifact as its argument), so the result is the
 same. Skip that file's sections for the other artifacts.
 
-This alias has no trigger phrases of its own — they moved to `gt-handle` — and it is removed in the
-release after 0.18.x.
+This alias has no trigger phrases of its own — they moved to `gt-handle` — and it will be removed in a
+future release.

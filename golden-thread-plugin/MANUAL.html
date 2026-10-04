@@ -777,7 +777,8 @@ fresh install of the newest would, so skipping releases is safe:</p>
    (<code>retired.json</code>), after a backup.</li>
 <li>Applies one-time <strong>machine migrations</strong> (<code>gt_machine_migrate.py</code>) — changes under
    <code>~/.claude/</code> a skipped release would have made. Each runs once, judged from the machine's
-   actual state; the first failure stops the install with <code>INSTALL INCOMPLETE</code>.</li>
+   actual state; the first failure stops the install with <code>INSTALL INCOMPLETE</code> and rolls the
+   install back.</li>
 <li>Applies pending <strong>vault upgrades</strong> itself when the vault had no uncommitted changes before
    the install touched it, after a backup. Results are left uncommitted for you to review.
    A vault the same install created gets an initial commit first. A vault holding your own
@@ -799,7 +800,8 @@ once read "+0 lines" over six overwritten ones.</p>
 python3 $SCRIPTS/gt_upgrade.py --vault &lt;vault&gt; status  # vault upgrades pending
 </code></pre>
 <p><strong>Modules (since 0.14.0).</strong> Optional parts of Golden Thread ship as modules — separate plugins in
-the same marketplace, versioned with gt, each declared by a <code>module.json</code>. Seven ship beside gt 0.17.2 (five versioned with gt, their content unchanged since 0.17.1):</p>
+the same marketplace, versioned with gt, each declared by a <code>module.json</code>. <code>bash install.sh
+--list-modules</code> prints the ones in your tree, each with its state and why; at the time of writing:</p>
 <table>
 <thead>
 <tr>
@@ -858,6 +860,12 @@ the same marketplace, versioned with gt, each declared by a <code>module.json</c
 <td>on</td>
 <td><code>/gt-usage:gt-usage</code>, the plan-allowance meter: a session-start hook, an optional status line, and the <code>usage_meter</code> and <code>usage_alert</code> settings</td>
 </tr>
+<tr>
+<td><code>lotr</code></td>
+<td><code>gt-lotr</code></td>
+<td><strong>off</strong></td>
+<td><code>/gt-lotr:gt-lotr</code>, one MCP gateway in front of GitHub, Jira, Microsoft 365 and others</td>
+</tr>
 </tbody>
 </table>
 <pre><code class="language-bash">bash install.sh --list-modules          # each module, its state, and why
@@ -867,7 +875,7 @@ bash install.sh --with farm             # bring one in
 <p><strong>Upgrading from 0.14.0.</strong> <code>/gt:gt-watch</code>, the report card and <code>/gt:gt-farm</code> were part of gt
 until 0.14.0; in 0.15.0 they are modules and the commands are renamed (<code>/gt-watch:gt-watch</code>,
 <code>/gt-farm:gt-farm</code>). The installer tells you where each went, once per command you had:
-<code>Moved: /gt:gt-watch → /gt-watch:gt-watch</code>, with <code>(module watch is off: ./install.sh --with
+<code>Moved: /gt:gt-watch → /gt-watch:gt-watch</code>, with <code>(module watch is off: bash "&lt;plugin-repo&gt;/install.sh" --with
 watch)</code> added when that module is off after the install (the same for <code>/gt:gt-farm</code> and, from
 before 0.14.0, <code>/gt:gt-demo</code>). One <code>install.sh</code> run over 0.14.0 ends where a fresh 0.15.0 install with
 the same module choices would. A machine that had <code>/gt:gt-farm</code> keeps it: a machine
@@ -4764,7 +4772,21 @@ python3 $SCRIPTS/gt_schedule.py install daily --vault &quot;&lt;vault&gt;&quot; 
 python3 $SCRIPTS/gt_schedule.py install sweep --vault &quot;&lt;vault&gt;&quot; --repo TREE
 python3 $SCRIPTS/gt_schedule.py check   daily
 python3 $SCRIPTS/gt_schedule.py remove  daily
+python3 $SCRIPTS/gt_schedule.py migrate-labels      # install.sh runs it; idempotent
 </code></pre>
+<p><strong>Where a job lives (0.20.1).</strong> macOS: a launchd agent. Windows: a Task Scheduler task. Linux:
+a systemd user timer (<code>~/.config/systemd/user/io.goldenthread.gt-&lt;job&gt;.timer</code> and <code>.service</code>), or
+— with no user systemd — a crontab line tagged <code># gt-schedule:&lt;label&gt;</code> (the crontab is backed up
+first and only gt's lines are touched). Until 0.20.1 a Linux "install" wrote a launchd plist
+nothing ran. Every job is labelled <code>io.goldenthread.gt-&lt;job&gt;</code>; a job still under the old
+<code>com.markethaven.gt-&lt;job&gt;</code> label is moved by <code>migrate-labels</code> (which <code>reconcile</code> and install.sh
+run) using its own arguments and schedule, and left exactly as it was if the new registration
+is refused.</p>
+<p><strong>Installed means the scheduler has it (0.20.1).</strong> A refused <code>launchctl bootstrap</code>,
+<code>schtasks /Create</code> or <code>systemctl enable</code> puts the job's files back as they were and prints
+NOT INSTALLED with the scheduler's reason; <code>list</code> does not show it, and the post-install gate's
+<code>daily-job</code> row FAILs a job that is on disk but not registered. <code>remove</code> says "removed" or
+"booted out" only for what actually happened, and exits 1 when the scheduler refused.</p>
 <table>
 <thead>
 <tr>
@@ -5543,15 +5565,19 @@ an actual write probe -- create, write, <code>os.replace</code>, remove in the v
 <code>~/.claude/golden-thread</code>, and open <code>log.md</code> for append -- preferring <code>/usr/bin/python3</code> when it
 is a working 3.8+. It is recorded in <code>~/.claude/golden-thread/interpreter.json</code> and
 <code>~/.claude/golden-thread/python</code>; the hook wrappers and the <code>.py</code> hook commands in
-<code>settings.json</code> use it instead of bare <code>python3</code>. To see where you stand:</p>
+<code>settings.json</code> use it instead of bare <code>python3</code>. Since 0.20.1, when the <code>python3</code> on your PATH
+is one the probe refused, Claude's own shell and the gt-vault MCP server use the chosen one too:
+a <code>python3</code> shim in <code>~/.claude/golden-thread/bin/</code> is put first on PATH for Claude's Bash
+commands at session start (through <code>$CLAUDE_ENV_FILE</code>, as on Windows), and the installed
+gt-vault MCP is started by the interpreter's full path. A <code>python3</code> that passes the probe is
+never overridden, and your own terminal is untouched. To see where you stand:</p>
 <pre><code class="language-bash">python3 ~/.claude/golden-thread/hooks/gt_write_probe.py probe     # PASS/FAIL per interpreter
 /gt:gt-doctor                                                    # the write-probe row
 </code></pre>
 <p>Fix: re-run <code>install.sh</code> (it re-probes and re-records), run gt's tools with the interpreter it
 names, or give that Python Full Disk Access (System Settings &gt; Privacy &amp; Security). A recorded
 interpreter that later disappears (a <code>brew upgrade</code>) shows as <code>badpath</code> in the wiring check
-rather than letting every hook fail open. Commands a skill runs as <code>python3 ...</code> from Claude's
-shell still use your PATH's <code>python3</code>.</p>
+rather than letting every hook fail open.</p>
 <p><strong>A rule in <code>CLAUDE.md</code> seems ignored</strong> — it is read at session start. Added
 mid-session, it applies from the <em>next</em> session. Same for hooks in
 <code>settings.json</code>: open <code>/hooks</code> once or restart.</p>
@@ -5565,11 +5591,28 @@ the finding path; make sure you used the path as the finding reports it.</p>
 <p><strong>"conflict: vault-config.json points to a different vault"</strong> — run
 <code>vault_init.py connect --vault &lt;new-path&gt;</code>.</p>
 <p><strong>A scheduled job fails, or <code>/gt:gt-doctor</code>'s <code>schedule</code> check says FAIL</strong> — read the job's
-<code>.err</code> log the check names. <code>PermissionError</code> on a vault under CloudStorage from a
+<code>.err</code> log the check names. "on disk but not registered" means the scheduler (launchd, Task
+Scheduler, systemd or cron) does not have the job, so it never runs: re-run <code>gt_schedule.py
+install &lt;job&gt; ...</code>, which now says NOT INSTALLED, with the scheduler's reason, when it is
+refused (0.20.1). <code>PermissionError</code> on a vault under CloudStorage from a
 calendar-fired run is the known macOS privacy refusal (0.17.2 reports it; it does not fix it):
 a run kicked from a session succeeds where the scheduled one is refused.</p>
 <p><strong><code>gt_schedule.py install sweep</code> refuses</strong> — expected in 0.17.2. Its pre-flight proves every
 member can run from the hooks dir, and they cannot yet find their packs there.</p>
+<p><strong>The doctor's <code>version</code> row says the plugin source "is gone"</strong> — the folder <code>install.sh</code> ran
+from was deleted or moved (INSTALL.md option C installs from <code>/tmp</code>). Nothing is broken: the
+doctor and the post-install gate check the installed copy in the plugin cache instead. Re-run
+<code>install.sh</code> from wherever the source now lives to re-point the version check (0.20.1).</p>
+<p><strong><code>push</code> says "no remote configured — nothing to push"</strong> — information, not a fault: the vault is
+a git repo with no remote, so its history is on this disk only. Add one to back it up (the
+line prints the two commands) or silence it with <code>gt_settings.py set push_check off</code>.</p>
+<p><strong><code>workers</code> lists shells of this or another session</strong> — they are reported, never a finding,
+while their <code>claude</code> is alive (0.20.1). Only an ORPHAN (its session gone) or a worker you
+DECLARED that has stopped working needs a decision; <code>gt_workers.py reap</code> touches only stalled
+orphans. On native Windows the row says the check is not supported there.</p>
+<p><strong>Removing gt</strong> — <code>bash install.sh --uninstall --check</code>, then <code>bash install.sh --uninstall</code>
+(<code>install.cmd /uninstall</code> on Windows). See <em>Uninstall</em> in INSTALL.md for what it removes and
+keeps; the vault is never touched.</p>
 <p><strong>"no machine id" or "hostname changed" notices</strong> — see
 <a href="#session-identity-which-machine-wrote-a-claim">Session identity</a>. A rename is harmless and
 reported once; a legacy file on a host that no longer matches keeps its claims only while its
