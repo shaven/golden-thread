@@ -457,6 +457,69 @@ SETTINGS = {
             "It is not anti-malware: something already running as you can wait for you to\n"
             "unlock. SECURITY.md says exactly what each level stops (0.20.0)."),
     },
+    "sandbox_mode": {
+        "default": "off",
+        "values": ["off", "on"],
+        "summary": "gt sandbox mode: fence Claude's shell and file tools off the vault and gt's state; reach the vault through gt's MCP and write queue.",
+        "detail": (
+            "off  Claude's shell and file tools reach the vault and gt's state as before  (default)\n"
+            "on   gt_sandbox.py writes into ~/.claude/settings.json (and records what it wrote):\n"
+            "       sandbox.enabled true, allowUnsandboxedCommands false, failIfUnavailable true\n"
+            "       -- Claude Code's OS sandbox around Bash/PowerShell/Monitor and their children\n"
+            "       (Seatbelt on macOS, bubblewrap on Linux and WSL2);\n"
+            "       sandbox.filesystem.denyWrite: the vault, ~/.claude/golden-thread (hooks, state,\n"
+            "       unlock home), the LOTR home and store, ~/.claude/plugins, settings.json and\n"
+            "       vault-config.json; denyRead: the unlock home, LOTR, locked vault folders (and\n"
+            "       the whole vault while sandbox_vault_reads is deny); allowWrite: ~/.gt-inbox,\n"
+            "       the queue inbox; permissions.deny Read(...)/Edit(...) rules for the same\n"
+            "       paths, because the file tools run outside the sandbox\n"
+            "\n"
+            "The vault is then read through gt's vault MCP server (vault_list, vault_read,\n"
+            "vault_search) and written only through the queue (the vault_queue_write tool, or\n"
+            "gt_write_queue.py, which drops its request in ~/.gt-inbox/queue/); the broker\n"
+            "applies it outside the sandbox. Hooks and MCP servers run outside the sandbox by\n"
+            "Claude Code's design, so they keep working. Restart Claude Code after switching.\n"
+            "\n"
+            "NATIVE WINDOWS has no Claude Code sandbox: only the permission rules are written\n"
+            "-- friction, not a boundary. Linux/WSL2 need bubblewrap and socat; without them\n"
+            "turning this on is refused, because failIfUnavailable would stop Claude Code from\n"
+            "starting. Turning it OFF from inside the sandbox fails by design (~/.claude is\n"
+            "write-protected there): run it in a terminal. With gt unlock on, switching it off\n"
+            "needs a fresh confirmation. Not anti-malware: something already running as you\n"
+            "is not fenced. SECURITY.md, 'gt sandbox mode' (0.20.0)."),
+    },
+    "sandbox_vault_reads": {
+        "default": "deny",
+        "values": ["deny", "allow"],
+        "summary": "Under sandbox mode, whether Claude's shell and file tools may also READ the vault.",
+        "detail": (
+            "deny   the vault is read-denied too: Claude reads it only through the vault MCP\n"
+            "       tools, which skip locked folders and cap what one call returns  (default)\n"
+            "allow  the shell and file tools may read the vault (gt's vault scripts keep working\n"
+            "       from Claude's shell); writes stay denied, and locked folders stay unreadable\n"
+            "\n"
+            "Only takes effect while sandbox_mode is on; changing it re-applies the settings.\n"
+            "With deny, gt's own vault tools (gt_tasks, gt_lint, ...) cannot read the vault from\n"
+            "Claude's shell either -- run them in a terminal, or use the MCP tools."),
+    },
+    "vault_mcp": {
+        "default": "auto",
+        "values": ["auto", "on", "off"],
+        "summary": "Whether gt's vault MCP server offers its tools (vault_list/read/search, vault_queue_write).",
+        "detail": (
+            "auto  offered while sandbox_mode is on, otherwise not  (default)\n"
+            "on    always offered, to Claude Code and to any MCP client that starts the server\n"
+            "off   never offered\n"
+            "\n"
+            "The server ships in gt's plugin manifest, so Claude Code starts it with every\n"
+            "session; when its tools are not offered it lists none and reads nothing. It is\n"
+            "read-only: it never writes a vault file -- a write is queued with gt_write_queue's\n"
+            "own validation and decided by the broker. It never returns a file outside the vault\n"
+            "or inside a locked folder, and caps what one call returns. With gt unlock on, reads\n"
+            "need the gt:vault:read scope and are served only to the session's registered vault\n"
+            "server (door mcp_only), never to a process from Claude's shell. Restart Claude Code\n"
+            "after switching (request 2026-10-02-vault-mcp-read-server, 0.20.0)."),
+    },
     "decision_signals": {
         "default": "default",
         "values": None,
@@ -837,7 +900,41 @@ def _save(d):
 # gt:settings:security -- a fresh confirmation the unlock authority raises -- so a session
 # cannot loosen its own guards with one command. With unlock off nothing changes.
 SECURITY_KEYS = ("protected_paths", "test_gate", "foreign_checkout_guard", "component_updates",
-                 "commit_checks", "addon_fixes", "unlock")
+                 "commit_checks", "addon_fixes", "unlock", "sandbox_mode", "sandbox_vault_reads")
+
+
+def _sandbox_switch(name, value, d):
+    """sandbox_mode / sandbox_vault_reads (0.20.0): write or remove the Claude Code settings
+    BEFORE the value is recorded, so vault-config.json never says "on" for settings that were
+    refused. -> None to proceed, else an exit code (the refusal is printed)."""
+    try:
+        import gt_sandbox
+    except ImportError:
+        print("refused: gt_sandbox.py is not beside gt_settings.py; reinstall gt")
+        return 1
+    mode = value if name == "sandbox_mode" else (d.get("sandbox_mode") or "off")
+    reads = value if name == "sandbox_vault_reads" else (d.get("sandbox_vault_reads") or "deny")
+    try:
+        if mode == "on":
+            rep = gt_sandbox.apply(vault=d.get("vault_path"), reads=reads)
+        elif name == "sandbox_mode":
+            rep = gt_sandbox.remove()
+        else:
+            return None                          # reads changed while off: nothing to write
+    except gt_sandbox.SandboxError as e:
+        print("refused: %s" % e)
+        return 1
+    except OSError as e:
+        print("refused: could not write the Claude Code settings (%s). Inside Claude Code's "
+              "sandbox ~/.claude is write-protected by design: run this in a terminal." % e)
+        return 1
+    for c in rep.get("changes") or []:
+        print("  " + c)
+    for n in rep.get("notes") or []:
+        print("  note: " + n)
+    if rep.get("restart"):
+        print("  Restart Claude Code for this to take effect.")
+    return None
 
 
 def _unlock_gate(name):
@@ -1271,6 +1368,10 @@ def set_value(name, value, force=False):
               % CONFIG)
         return 2
     was = get(name)
+    if name in ("sandbox_mode", "sandbox_vault_reads") and (was != value or name == "sandbox_mode"):
+        rc = _sandbox_switch(name, value, dict(d, **{name: value}))
+        if rc is not None:
+            return rc
     d[name] = value
     _save(d)
     print("%s: %s -> %s" % (name, was, value))

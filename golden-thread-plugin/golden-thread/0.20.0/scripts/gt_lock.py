@@ -352,7 +352,26 @@ def cmd_add(ns, vault):
     if not ns.dry_run and rc == 0:
         print("note: earlier plaintext copies (git history, sync version history, backups, "
               "Obsidian's cache) are not removed")
+    if not ns.dry_run:
+        sandbox_refresh()
     return rc
+
+
+def sandbox_refresh():
+    """gt sandbox mode (0.20.0) read-denies every LOCKED vault folder to Claude's shell and file
+    tools. A folder locked or unlocked here changes that list, so the Claude Code settings are
+    re-applied at once when the mode is on. Never fails the lock itself."""
+    try:
+        import gt_sandbox
+        if not gt_sandbox.is_on():
+            return
+        rep = gt_sandbox.apply()
+        if rep.get("changes"):
+            print("gt sandbox mode: the locked-folder rules were updated in "
+                  "~/.claude/settings.json; restart Claude Code")
+    except Exception as e:                               # noqa: BLE001
+        _say("gt sandbox mode is on, but its settings could not be refreshed (%s): run "
+             "gt_sandbox.py apply from a terminal" % type(e).__name__)
 
 
 def cmd_open(ns, vault):
@@ -436,6 +455,7 @@ def cmd_restore(ns, vault):
     if not _has_locked(folder) and os.path.exists(os.path.join(folder, STUB)):
         os.remove(os.path.join(folder, STUB))
     print("restored %s" % rel[:-len(SUFFIX)])
+    sandbox_refresh()
     return 0
 
 

@@ -118,32 +118,47 @@ def methods(auth):
 
     @method
     def register_shim(peer, params, conn=None, rid=None):
+        # role "lotr" (default): gt-lotr's lotr_mcp.py; role "vault" (gt sandbox mode, 0.20.0):
+        # gt's own gt_vault_mcp.py. Each has its own seat, checked against its own installed
+        # file, with the same rules: parent is claude, first wins, a replacement inherits no
+        # grant.
+        role = params.get("role") or "lotr"
+        if role not in ("lotr", "vault"):
+            raise Denied("bad_request", "register_shim role is lotr or vault")
+        seat, had = ("shim", "had_shim") if role == "lotr" else ("vault_shim", "had_vault_shim")
+        what = "gt-lotr lotr_mcp.py" if role == "lotr" else "gt gt_vault_mcp.py"
         chain = gt_ipc.ancestry(peer["pid"], limit=2)
         if len(chain) < 2 or chain[0]["start"] != peer["start"] \
                 or not auth.is_claude(chain[1]):
             raise Denied("not_a_shim", "an MCP shim is started by claude itself; this process "
                          "was not")
-        if not auth.shim_ok(peer):
+        ok = auth.shim_ok(peer) if role == "lotr" else auth.vault_shim_ok(peer)
+        if not ok:
             auth.audit("register_shim", verdict="deny", subject=peer["pid"],
-                       reason="not_the_installed_shim")
-            raise Denied("not_a_shim", "only the installed gt-lotr lotr_mcp.py may take a "
-                         "session's MCP shim seat")
+                       reason="not_the_installed_shim", role=role)
+            raise Denied("not_a_shim", "only the installed %s may take a session's %s seat"
+                         % (what, "MCP shim" if role == "lotr" else "vault MCP"))
         root = {"pid": chain[1]["pid"], "start": chain[1]["start"]}
         s = auth.session_for(root, "claude", params.get("session_id"))
         me = {"pid": peer["pid"], "start": peer["start"]}
         with auth.lock:
-            if s.shim and s.shim != me and gt_ipc.alive(s.shim["pid"], s.shim["start"]):
+            cur = getattr(s, seat)
+            other = s.vault_shim if role == "lotr" else s.shim
+            if other == me:
+                raise Denied("seat_taken", "this process already holds the session's other seat")
+            if cur and cur != me and gt_ipc.alive(cur["pid"], cur["start"]):
                 auth.audit("register_shim", verdict="deny", subject=peer["pid"],
-                           reason="seat_taken", session=root["pid"])
+                           reason="seat_taken", session=root["pid"], role=role)
                 raise Denied("seat_taken", "a shim is already registered for this session")
-            replaced = (s.shim is not None and s.shim != me) or s.had_shim
-            s.shim = me
-            s.had_shim = False
+            replaced = (cur is not None and cur != me) or getattr(s, had)
+            setattr(s, seat, me)
+            setattr(s, had, False)
         if replaced:
             # F7: a new shim never inherits the grant an earlier one held.
-            auth.revoke_key(s.key, "shim_replaced")
-        auth.audit("register_shim", verdict="ok", subject=peer["pid"], session=root["pid"])
-        return {"session": root["pid"]}
+            auth.revoke_key(s.key, "shim_replaced" if role == "lotr" else "vault_shim_replaced")
+        auth.audit("register_shim", verdict="ok", subject=peer["pid"], session=root["pid"],
+                   role=role)
+        return {"session": root["pid"], "role": role}
 
     @method
     def revoke_session(peer, params, conn=None, rid=None):

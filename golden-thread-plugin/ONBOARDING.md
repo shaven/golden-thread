@@ -236,6 +236,25 @@ holds even then, with Touch ID / Hello (L2): every open of a sealed credential n
 or PIN, and so can each consent-tier operation. [`SECURITY.md`](SECURITY.md) says exactly what
 it stops and what it does not.
 
+## Optional: fence the assistant off the vault (gt sandbox mode)
+
+gt sandbox mode ships **off**. Turned on, gt writes Claude Code's own sandbox settings and
+permission rules so the assistant's shell and file tools cannot write the vault or gt's state,
+or read your second factor and credentials; it reads the vault through gt's MCP tools and writes
+only through the write queue. In your own terminal:
+
+```bash
+S=~/.claude/golden-thread/hooks
+python3 $S/gt_settings.py set sandbox_mode on    # Linux / WSL2: needs bubblewrap and socat
+python3 $S/gt_sandbox.py status                  # what it enforces on this platform
+# restart Claude Code; switch off the same way, from a terminal
+```
+
+On macOS, Linux and WSL2 the operating system enforces it around the assistant's shell. On
+native Windows Claude Code has no sandbox, so only the file-tool rules apply: **friction, not a
+boundary**. It does not stop malware running as you. [`SECURITY.md`](SECURITY.md) §8 lists
+exactly what it writes, what it stops and what it does not.
+
 ## Adding a knowledge base (gt-wiki)
 
 If you want a structured wiki alongside your project memory:

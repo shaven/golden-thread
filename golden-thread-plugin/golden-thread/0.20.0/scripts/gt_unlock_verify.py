@@ -169,6 +169,22 @@ def check_hooks(r):
           "the settings/hooks guard and the session register/revoke hooks are wired")
 
 
+def check_sandbox(r):
+    """gt sandbox mode (0.20.0), independent of unlock: what it enforces on THIS platform, whether
+    gt's settings are in place, what Claude Code itself reports, and -- run from Claude's shell --
+    a live probe that the vault refuses a write."""
+    try:
+        import gt_sandbox
+    except ImportError:
+        r.add("sandbox", NC, "gt_sandbox.py is not installed beside this tool")
+        return
+    try:
+        for row in gt_sandbox.verify_rows():
+            r.add(row["check"], row["state"], row["why"])
+    except Exception as e:                       # noqa: BLE001 - a check must not crash verify
+        r.add("sandbox", NC, "the sandbox check could not run (%s)" % type(e).__name__)
+
+
 def main(as_json=False):
     home = C.home()
     r = Run()
@@ -197,6 +213,7 @@ def main(as_json=False):
     else:
         r.add("unlock", NC, "unlock is off, so nothing is gated; turn it on to check more "
                             "(SECURITY.md)")
+    check_sandbox(r)
     fails = [x for x in r.rows if x["state"] == FAIL]
     out = {"level": level, "rows": r.rows, "fail": len(fails),
            "not_checked": sum(1 for x in r.rows if x["state"] == NC)}
@@ -205,7 +222,7 @@ def main(as_json=False):
     else:
         print("level: %s -- %s" % (level["level"], level["why"]))
         for x in r.rows:
-            print("  %-11s %-15s %s" % (x["state"], x["check"], x["why"]))
+            print("  %-11s %-16s %s" % (x["state"], x["check"], x["why"]))
         print("%d FAIL, %d NOT-CHECKED, %d PASS. Unlock is not anti-malware: something already "
               "running as you can wait for you to unlock." % (
                   out["fail"], out["not_checked"], len(r.rows) - out["fail"] - out["not_checked"]))

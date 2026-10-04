@@ -68,6 +68,8 @@ GT_SCOPES = {
     "gt:publish": "unlocked",           # push / tag / release credentials via the broker
     "gt:hub:enroll": "step_up",         # LOTR hub client enrol / revoke
     "gt:lock:*": "unlocked",            # opening a locked vault file
+    "gt:vault:read": "unlocked",        # gt sandbox mode's vault MCP reads (read_without_unlock
+                                        # opens it like a LOTR read; door mcp_only binds it)
 }
 
 
@@ -541,8 +543,8 @@ class Effective:
         alv = _most_specific(floor.get("scopes") or {}, scope) or floor.get("default")
         if alv:
             lv = _stricter(lv, alv)
-        if scope.startswith("lotr:") and scope.endswith(":read") and lv == "unlocked" \
-                and p.get("read_without_unlock"):
+        if (scope.startswith("lotr:") and scope.endswith(":read") or scope == "gt:vault:read") \
+                and lv == "unlocked" and p.get("read_without_unlock"):
             lv = "open"
         return lv
 

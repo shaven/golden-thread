@@ -64,6 +64,16 @@ Tell the user in one line what the broker did: `N applied, N held, N escalated`.
 Generated files keep their own tools and never go through the queue: `log.md` (`gt_log.py
 add`), `decisions.md` (`gt_adr.py allocate` + `merge`), events (`gt_events.py emit`).
 
+**Under gt sandbox mode** (`gt_settings.py get sandbox_mode` is `on`; the session-start line
+says SANDBOX MODE) the shell cannot write the vault, so the queue folder refuses the request
+and `gt_write_queue.py` leaves it in `~/.gt-inbox/queue/` instead, saying so. Prefer the
+gt-vault MCP tool `vault_queue_write` (same ops and fields; it can read the vault, so a
+`replace-section` carries the right base hash, and the broker's decision comes back at once).
+After any `gt_write_queue.py` run, call `vault_queue_drain` instead of `gt_broker.py drain`.
+`gt_log.py`, `gt_adr.py` and `gt_events.py` write the vault and cannot run from the sandboxed
+shell: tell the user which entries to add from a terminal. With sandbox mode off (the default)
+nothing changes.
+
 ## What Gets Written Where
 
 ### research.md — append-only findings

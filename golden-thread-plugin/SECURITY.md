@@ -1,8 +1,9 @@
-# gt security guide — gt unlock
+# gt security guide — gt unlock and gt sandbox mode
 
-Written against **gt v0.20.0** (gt-lotr 0.3.0). Unlock ships **off**. This guide says what it
-does when you turn it on, what it needs, how to set it up on macOS, Windows and Linux, and —
-just as plainly — what it does not protect.
+Written against **gt v0.20.0** (gt-lotr 0.3.0). Unlock and sandbox mode both ship **off**. This
+guide says what each does when you turn it on, what it needs, how to set it up on macOS, Windows
+and Linux, and — just as plainly — what it does not protect. gt sandbox mode, which fences the
+assistant's own shell and file tools off the vault and gt's state, is section 8.
 
 > *"Unlock proves a person was present and limits what agents can do on their own. It is not
 > anti-malware. If something already runs as you, it can wait for you to unlock."*
@@ -45,6 +46,7 @@ What was built, and what each piece really does:
 | **Admin policy floor.** An administrator-owned file that can only tighten; each scope's level is the stricter of yours and the admin's, each by its own most specific rule | A user pattern loosening an organisation's rule | Holds as logic; binding only at L3 |
 | **Fail closed.** With unlock on, an unreadable or missing policy, deleted policy files, a missing factor, an authority that is down or cannot be verified, an unwritable audit log (for writes and secrets), or a policy edited behind gt's back locks every gated action — never the reverse | "Broken" quietly meaning "open" | Friction: deleting the `unlock-on` markers too turns it off |
 | **No gt crypto store.** gt brokers proven stores (1Password, sops+age, Vault, the OS keychains) and uses CryptoKit / DPAPI for sealing; it ships no cipher of its own | Home-made cryptography | Holds |
+| **gt sandbox mode** (section 8, separate from unlock). Claude Code's own OS sandbox (Seatbelt / bubblewrap) around the assistant's shell, plus permission rules on its file tools, keep both off the vault, gt's state, the unlock home and LOTR; the vault is reached through gt's MCP server and write queue | The assistant's shell reading the TOTP seed, rewriting gt's policy, enrolment, hooks or plugin files, or writing the vault directly | **Holds on macOS, Linux and WSL2** for the shell and its children (an OS boundary); native Windows: permission rules only — friction |
 | **Every grant audited.** Each unlock, check, secret read and revocation is one line in `~/.claude/golden-thread/unlock/audit.jsonl`, with its grant id — never a code or a secret value. A write, consent or secret release that cannot be recorded is refused | "What happened while I was unlocked?" | The log is yours: a process of yours can edit it afterwards |
 
 ## 2. How it works
@@ -182,7 +184,9 @@ checked.
 | Root / administrator compromise | Out of scope | Out of scope |
 
 **How a program running as you can still get around the gate at L1/L2** — each is friction,
-documented, and closed only by L3:
+documented, and closed only by L3. With **gt sandbox mode** on (section 8, macOS / Linux / WSL2),
+the assistant's *shell* is fenced off the files most of these routes need — the unlock home,
+gt's hooks and state, the plugin files, LOTR — but every other program of yours is not:
 
 * **Run its own authority.** It can kill the daemon (a signal needs no factor) and start the
   *real* `gt_unlockd.py` against its own home at the same address; gt's clients check the
@@ -363,3 +367,110 @@ python $u verify
 * **Turn it off:** `gt_unlock.py policy disable` (needs your factors) or
   `gt_settings.py set unlock off`. Off, every hook behaves exactly as before 0.20.0.
 * **Check it:** `gt_unlock.py status`, `gt_unlock.py verify`, `gt_unlock.py audit -n 50`.
+
+## 8. gt sandbox mode
+
+`gt_settings.py set sandbox_mode on` (off by default). gt then configures **Claude Code's own
+sandbox and permission rules** so that the assistant's shell and file tools cannot touch the
+vault or gt's state, and the vault is reached only through gt's channels: a read-only MCP
+server and the write queue. It is independent of unlock — on together, unlock also gates the
+MCP server's reads (`gt:vault:read`, door `mcp_only`).
+
+### 8.1 What it writes
+
+Into `~/.claude/settings.json`, through `gt_sandbox.py`, which records every entry it adds (in
+`~/.claude/golden-thread/sandbox/state.json`) so that turning it off removes exactly those and
+nothing of yours. Every key is one the Claude Code documentation names
+(code.claude.com/docs/en/sandboxing, /settings-reference, /permissions, read 2026-10-03):
+
+| Key | Value | Why |
+|---|---|---|
+| `sandbox.enabled` | `true` | The OS sandbox around the Bash, PowerShell and Monitor tools and every process they start |
+| `sandbox.allowUnsandboxedCommands` | `false` | No "retry outside the sandbox" escape hatch: `dangerouslyDisableSandbox` is ignored |
+| `sandbox.failIfUnavailable` | `true` | Claude Code refuses to start rather than silently run commands unsandboxed |
+| `sandbox.filesystem.denyWrite` | the vault; `~/.claude/golden-thread` (hooks, state, the unlock home and its `unlock-on` markers); the unlock socket's directory when it is outside that; `~/.config/gt-lotr` and LOTR's store (`~/.secrets`); `~/.claude/plugins`; `~/.claude/settings.json`; `~/.claude/vault-config.json` | The shell cannot change the vault, gt's hooks and policy, the plugin files the authority trusts, or the settings that turn this off |
+| `sandbox.filesystem.denyRead` | the unlock home (sealed store, `totp.seed`, recovery codes, audit log); LOTR's home and store; every **locked** vault folder; and the **whole vault** while `sandbox_vault_reads` is `deny` (the default) | The shell cannot read the second factor, credentials, or the vault |
+| `sandbox.filesystem.allowWrite` | `~/.gt-inbox` | The one writable place: `gt_write_queue.py` leaves its requests in `~/.gt-inbox/queue/` |
+| `permissions.deny` | `Edit(//<path>/**)` for every write-denied path, `Read(//<path>/**)` for every read-denied path, and `Edit` on any `.claude/settings.json` / `.claude/settings.local.json` | Claude's file tools (Read, Edit, Write, NotebookEdit, Grep, Glob) run **outside** the sandbox and follow permission rules instead |
+
+`Write(...)` and `NotebookEdit(...)` path rules are not written: Claude Code checks file
+permissions against `Edit(path)` and `Read(path)` rules only, and an `Edit` deny covers every
+editing tool. Managed settings are never written; if they override what gt asked for,
+`gt_sandbox.py check`, `gt_unlock.py verify` and `/gt:gt-doctor` say so. A project's own
+`.claude/settings.local.json` that sets `sandbox.enabled false` outranks your user settings in
+that project — the checks report it for the project you run them in.
+
+### 8.2 How the vault is reached
+
+* **Reading:** gt's MCP server `gt-vault` (shipped in gt's plugin manifest; MCP servers run
+  outside the sandbox) offers `vault_search` (index.md first, then pages scored like
+  `/gt:gt-query`, current before expired before superseded), `vault_read` (size-capped at 64 KiB
+  by default, 256 KiB at most, pageable) and `vault_list`. It is read-only, never returns a file
+  outside the vault or inside a locked folder — even named exactly — and marks every result as
+  untrusted data. With unlock on, each read needs `gt:vault:read`, served only to the session's
+  registered `gt_vault_mcp.py` (checked from the kernel and by the installed file's real path,
+  like LOTR's shim); a process from the assistant's shell is refused. By default
+  `read_without_unlock` opens it like a LOTR read; set it false to need an unlock.
+* **Writing:** `vault_queue_write` takes `gt_write_queue.py`'s ops and validation and queues the
+  write; the broker decides it at once (apply, deduplicate, held, escalate, reject) and the
+  result says which. From the shell, `gt_write_queue.py` cannot write the vault's queue folder,
+  so it leaves the request in `~/.gt-inbox/queue/`; `vault_queue_drain` (or `gt_broker.py drain`
+  in a terminal) moves it into the queue. The inbox is writable by anything in the sandbox, so
+  the broker treats each file as untrusted data: it must name this vault, pass the queue's
+  validation (paths inside the vault, no generated files, Sources or Core rules), and is then
+  decided like any request — claims hold it, conflicts and `design.md` / `global-memory` go to
+  you. Symlinks are never followed and an oversized file is never read.
+* **Hooks and the broker** run outside the sandbox by Claude Code's design, so gt's
+  enforcement keeps working.
+
+### 8.3 What it stops, per platform
+
+| Platform | Enforced | Against the assistant's shell |
+|---|---|---|
+| **macOS** | Seatbelt (OS) + permission rules | **A boundary** for the shell and every process it starts: writing the vault or gt's state, reading the unlock home, LOTR or the vault is refused by the kernel |
+| **Linux** | bubblewrap (OS) + permission rules; needs `bubblewrap` and `socat` (gt refuses to turn the mode on without them, because Claude Code would then refuse to start) | Same as macOS |
+| **WSL2** | bubblewrap, as Linux | Same as macOS |
+| **Native Windows** | **Permission rules only** — Claude Code has no sandbox there | **Friction, not a boundary**: the file tools are refused, but a script the assistant runs can still open any file. `/gt:gt-doctor` and `gt_unlock.py verify` say "friction" |
+
+Verified on macOS (2026-10-03) with the sandbox runtime Claude Code builds on
+(`@anthropic-ai/sandbox-runtime` 0.0.78), using the lists gt generates and the working directory
+inside the vault: a write to the vault and a read of a vault page were both refused with
+`Operation not permitted`, a write to `~/.gt-inbox` succeeded, a hard link to a vault file and a
+write through a symlink into the vault were refused, and `gt_write_queue.py` run inside it
+queued to the inbox and was applied by a drain outside. Claude Code's translation of
+`settings.json` into that runtime, and the file-tool permission rules, were checked by
+configuration (`claude sandbox status` reports the sandbox enabled and strict), not by a live
+Claude session.
+
+### 8.4 What it does not stop
+
+* **Malware or any other program running as you.** The fence is around Claude's tools only;
+  your terminal, editors, scheduled jobs and anything else you run are unaffected.
+* **Claude Code's own processes outside the sandbox:** hooks, MCP servers (including LOTR and
+  gt-vault, which can read the vault by design), plugin monitors, the status line. Commands you
+  type at the `!` prompt usually run unsandboxed too.
+* **What the vault MCP returns.** The assistant can still read the vault through it — that is
+  the point; locked folders stay out of reach.
+* **Network exfiltration of what the assistant can read.** gt pre-allows no domain; Claude
+  Code's proxy asks before a sandboxed command reaches a new host (see the sandboxing page on
+  domain fronting).
+* **Native Windows** beyond the file tools (above).
+* A repository whose own `.claude/settings.local.json` loosens the sandbox before you open it.
+
+### 8.5 What changes for you
+
+* Restart Claude Code after switching. Turning it **off** has to be done from a terminal: the
+  sandbox write-protects `~/.claude` from the assistant's shell, by design.
+* gt's vault tools run from the assistant's shell (`gt_tasks`, `gt_lint`, `gt_log`, …) cannot
+  read or write the vault: the assistant uses the MCP tools, or you run them in a terminal.
+  `sandbox_vault_reads allow` gives the shell read access back (writes stay denied).
+* Test receipts, worker declarations and other state under `~/.claude/golden-thread` cannot be
+  written from the shell: run a release's test suite from a terminal.
+* Git over SSH and `open` / `osascript` fail inside Claude Code's sandbox (its troubleshooting
+  section has the workarounds); network hosts are asked for one at a time.
+* Locking or unlocking a vault folder with `gt_lock.py` updates the locked-folder rules at once.
+
+Check it any time: `gt_sandbox.py status`, `gt_sandbox.py check` (drift), `gt_unlock.py verify`
+(rows `sandbox-*`; run it from inside Claude Code and the `sandbox-live` row tries a real write
+to the vault and expects the OS to refuse it), `/gt:gt-doctor` (row `sandbox`).
+

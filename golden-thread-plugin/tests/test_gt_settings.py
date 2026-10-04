@@ -22,6 +22,10 @@ TOOL = SCRIPTS / "gt_settings.py"
 EXPECTED = {
     # 0.20.0: gt unlock, off by default; its source of truth is the unlock policy file.
     "unlock": ("off", ["off", "on"]),
+    # 0.20.0: gt sandbox mode (gt_sandbox.py), its read sub-option, and the vault MCP switch.
+    "sandbox_mode": ("off", ["off", "on"]),
+    "sandbox_vault_reads": ("deny", ["deny", "allow"]),
+    "vault_mcp": ("auto", ["auto", "on", "off"]),
     "component_updates": ("report", ["off", "report", "confirm", "auto"]),
     "version_check": ("report", ["off", "report"]),
     "orphan_check": ("report", ["off", "report", "reap"]),

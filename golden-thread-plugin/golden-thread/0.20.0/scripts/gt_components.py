@@ -472,6 +472,9 @@ HOOK_DIR_SCRIPTS = ("gt_paths.py", "gt_components.py",
                     "gt_unlock_brokers.py", "gt_unlock_sso.py", "gt_unlock_touchid.py",
                     "gt_unlock_hello.py", "gt_unlock_hello.ps1", "gt_unlock_verify.py",
                     "gt_lock.py", "qrcodegen.py", "qrcodegen.LICENSE",
+                    # gt sandbox mode (0.20.0): gt_settings, gt_write_queue, gt_doctor and
+                    # gt_unlock_verify import it from beside themselves.
+                    "gt_sandbox.py",
                     # the Touch ID helper's source: install.sh builds it from here (macOS)
                     "gt-presence.swift")
 

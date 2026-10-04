@@ -8,6 +8,12 @@ model_intent: fast
 
 Look something up in the vault. The vault is the single source of truth — always start here before searching the web or guessing.
 
+**Under gt sandbox mode** (`gt_settings.py get sandbox_mode` is `on`, and the session-start
+line says SANDBOX MODE): the shell and file tools cannot write the vault (and, by default, cannot
+read it). Do every step below through the gt-vault MCP tools instead — `vault_search` and
+`vault_read` (and `vault_list`) for reading, `vault_queue_write` for writing — and skip a vault
+script the shell cannot run, saying so. With sandbox mode off (the default) nothing changes.
+
 ## Steps
 
 **Step 1 — Read vault-config.json**

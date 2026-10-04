@@ -286,6 +286,20 @@ running as you — the assistant's own shell included — can get around it if i
 holds even then, with Touch ID / Hello (L2): every open of a sealed credential needs your finger
 or PIN, and so can each consent-tier operation. <a href="SECURITY.md"><code>SECURITY.md</code></a> says exactly what
 it stops and what it does not.</p>
+<h2 id="optional-fence-the-assistant-off-the-vault-gt-sandbox-mode">Optional: fence the assistant off the vault (gt sandbox mode)</h2>
+<p>gt sandbox mode ships <strong>off</strong>. Turned on, gt writes Claude Code's own sandbox settings and
+permission rules so the assistant's shell and file tools cannot write the vault or gt's state,
+or read your second factor and credentials; it reads the vault through gt's MCP tools and writes
+only through the write queue. In your own terminal:</p>
+<pre><code class="language-bash">S=~/.claude/golden-thread/hooks
+python3 $S/gt_settings.py set sandbox_mode on    # Linux / WSL2: needs bubblewrap and socat
+python3 $S/gt_sandbox.py status                  # what it enforces on this platform
+# restart Claude Code; switch off the same way, from a terminal
+</code></pre>
+<p>On macOS, Linux and WSL2 the operating system enforces it around the assistant's shell. On
+native Windows Claude Code has no sandbox, so only the file-tool rules apply: <strong>friction, not a
+boundary</strong>. It does not stop malware running as you. <a href="SECURITY.md"><code>SECURITY.md</code></a> §8 lists
+exactly what it writes, what it stops and what it does not.</p>
 <h2 id="adding-a-knowledge-base-gt-wiki">Adding a knowledge base (gt-wiki)</h2>
 <p>If you want a structured wiki alongside your project memory:</p>
 <pre><code>/gt-wiki:gt-wiki-init

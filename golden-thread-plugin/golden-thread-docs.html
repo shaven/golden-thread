@@ -659,6 +659,38 @@ kernel, collects your factors itself, and grants a session for 15 idle minutes /
 L2 (Touch ID / Hello in every unlock, credentials sealed). <em>"Unlock proves a person was present
 and limits what agents can do on their own. It is not anti-malware. If something already runs
 as you, it can wait for you to unlock."</em> Setting: <code>unlock</code>. Doctor rows: <code>unlock</code>, <code>security</code>.</p>
+<h2 id="security-gt-sandbox-mode-0200">Security: gt sandbox mode (0.20.0)</h2>
+<p>Off by default. On, Claude Code's own sandbox (macOS, Linux, WSL2) and permission rules keep the
+assistant's shell and file tools off the vault and gt's state; the vault is reached through
+gt's MCP server and the write queue. Native Windows: permission rules only (friction).</p>
+<table>
+<thead>
+<tr>
+<th>Command / tool</th>
+<th>Purpose</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>gt_settings.py set sandbox_mode on\|off</code></td>
+<td>Write / remove the Claude Code settings (restart Claude Code; switch off from a terminal)</td>
+</tr>
+<tr>
+<td><code>gt_sandbox.py status\|plan\|apply\|remove\|check\|verify</code></td>
+<td>Show, preview, (re)write, take out, check drift, self-check</td>
+</tr>
+<tr>
+<td>gt-vault MCP: <code>vault_search</code>, <code>vault_read</code>, <code>vault_list</code></td>
+<td>Read the vault (read-only, capped, never a locked folder)</td>
+</tr>
+<tr>
+<td>gt-vault MCP: <code>vault_queue_write</code>, <code>vault_queue_drain</code></td>
+<td>Queue a write and get the broker's decision; apply what <code>gt_write_queue.py</code> left in <code>~/.gt-inbox/queue/</code></td>
+</tr>
+</tbody>
+</table>
+<p>Settings: <code>sandbox_mode</code>, <code>sandbox_vault_reads</code>, <code>vault_mcp</code>. Doctor row: <code>sandbox</code>; verify rows
+<code>sandbox-*</code>. <code>SECURITY.md</code> §8.</p>
 <h2 id="checks-cadences-and-scheduled-jobs">Checks, Cadences and Scheduled Jobs</h2>
 <p>Scripts with their own command line, shipped with the plugin at
 <code>~/.claude/plugins/cache/golden-thread-plugin/gt/&lt;version&gt;/scripts/</code> rather than in the vault —

@@ -40,6 +40,12 @@ lives with the install choices. Doctor checks **16 → 17** (`model-policy`). Ho
 The full account, one section per theme with the why, is `../CHANGELOG.md` (it travels in gt-src).
 The short version:
 
+- **gt sandbox mode (0.20.0, off by default):** `gt_settings.py set sandbox_mode on` writes Claude
+  Code's sandbox + permission rules into `~/.claude/settings.json` (`gt_sandbox.py`, recorded and
+  cleanly removable); the vault is reached through the new `gt-vault` MCP server
+  (`gt_vault_mcp.py`, in gt's plugin manifest) and the write queue, with `~/.gt-inbox` as the one
+  writable place. Native Windows: permission rules only. SECURITY.md §8.
+
 - **One verb per action** (owner accepted 2026-10-01): `gt-create`, `gt-open`, `gt-list`,
   `gt-handle`, `gt-close`, each taking `project` / `task` / `handoff`. `gt-close project` refuses
   until every open task and handoff is decided, offers graduation, then **archives in place**
@@ -274,6 +280,9 @@ Then, in a Claude Code session on that machine:
   a false positive that blocks a local full-run receipt until you baseline it. Not reshaped.
 - **Should gt's own repo adopt a release pipeline?** It would put `release.sh` and
   `release-pipeline.tsv` at the repo root; `dev/publish.sh` remains the release sequence for now.
+- **gt sandbox mode defaults:** `sandbox_vault_reads deny` makes gt's own vault scripts
+  unusable from the sandboxed shell (the MCP tools replace them); `allow` is the gentler option.
+  The vault MCP process starts in every session even with the mode off (it then lists no tools).
 - **When to release:** the owner says when. Then push straight to main, with no PR.
 
 ## 6. What will be misread if nobody says it
@@ -284,7 +293,10 @@ Then, in a Claude Code session on that machine:
   says why and the skill spawns the 0.19 way. A session started before `gt_model_policy.py apply`
   or an `agent_models` change keeps the definitions it loaded until it is restarted.
 - **The installed gt-lotr `plugin.json` differs from the release on Windows, by design**: its
-  MCP command is the resolved interpreter, not `python3`.
+  MCP command is the resolved interpreter, not `python3`. Since sandbox mode the same holds for
+  gt's own `plugin.json` (its `gt-vault` server).
+- **`gt-vault` shows in `/mcp` with no tools** while sandbox mode is off — `vault_mcp auto`, by
+  design, not a failure.
 
 - **`repo-target` is never a problem.** It is an `i` row on every run where the working directory is
   the vault — that is gt's normal configuration. It exists so a code review is pointed at the

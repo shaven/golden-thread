@@ -366,6 +366,48 @@ def queue_line(vault: Path) -> list[str]:
             "`gt_broker.py drain --vault <vault>`" % (n, "" if n == 1 else "s")]
 
 
+# ------------------------------------------------------------ gt sandbox mode ----
+
+SANDBOX_CONTEXT = (
+    "gt sandbox mode is ON: Claude Code's sandbox and permission rules deny this session's "
+    "shell and file tools %s the vault and gt's state. Skills that say to Read, Grep or "
+    "Edit a vault file, or to run a vault script, must instead use the gt-vault MCP tools: "
+    "vault_search / vault_read / vault_list to read, vault_queue_write to write (the broker "
+    "applies it outside the sandbox and the result says applied, held or escalated). "
+    "gt_write_queue.py from the shell leaves its request in ~/.gt-inbox/queue; vault_queue_drain "
+    "applies it. Do not try to bypass the sandbox.")
+
+
+def sandbox_lines(vault: Path | None):
+    """(lines, context) while gt sandbox mode is on (0.20.0): one line saying so, the inbox count,
+    and the routing note for the model. Two small file reads -- no vault walk at session start."""
+    try:
+        import json as _json
+        cfg = _json.loads((Path.home() / ".claude" / "vault-config.json").read_text(
+            encoding="utf-8"))
+    except Exception:                                    # noqa: BLE001
+        return [], []
+    if str(cfg.get("sandbox_mode") or "").strip().lower() != "on":
+        return [], []
+    reads = str(cfg.get("sandbox_vault_reads") or "deny").strip().lower() != "allow"
+    win = os.name == "nt"
+    line = ("SANDBOX MODE: on -- %s; the vault is reached through the gt-vault MCP tools"
+            % ("native Windows: permission rules only (friction, not a boundary)" if win else
+               "Claude's shell and file tools cannot write the vault%s" % (
+                   " or read it" if reads else "")))
+    inbox = Path.home() / ".gt-inbox" / "queue"
+    try:
+        n = sum(1 for p in inbox.iterdir() if p.suffix == ".json" and not p.name.startswith("."))
+    except OSError:
+        n = 0
+    lines = [line]
+    if n:
+        lines.append("SANDBOX INBOX: %d write request%s waiting in %s -- the vault_queue_drain "
+                     "tool applies %s" % (n, "" if n == 1 else "s", inbox,
+                                         "it" if n == 1 else "them"))
+    return lines, [SANDBOX_CONTEXT % ("both reads of and writes to" if reads else "writes to")]
+
+
 # ---------------------------------------------------------------- state files ----
 
 def new_state_files(seen: dict):
@@ -435,6 +477,9 @@ def build(vault: Path | None, source: str, seen: dict):
                            "/gt:gt-handle handoff deals with them.")
         lines += task_line(vault)
         lines += queue_line(vault)
+    sl, sc = sandbox_lines(vault)
+    lines += sl
+    ctx += sc
     st =new_state_files(seen)
     if st:
         lines.append("SESSION STATE written before a compaction: %s%s"

@@ -116,6 +116,22 @@ may already hold the answer. It reads one file and never a page body; nothing is
 the match threshold or past its 0.8 s budget. Off by default because it costs a little on every
 turn. Turn on with `python3 <base_dir>/../../scripts/gt_settings.py set vault_hints on`.
 
+**`sandbox_mode`** (0.20.0, default `off`) — gt sandbox mode. `on` has `gt_sandbox.py` merge
+Claude Code settings into `~/.claude/settings.json` (recording exactly what it added, so `off`
+removes only that): the OS sandbox (`sandbox.enabled`, `allowUnsandboxedCommands: false`,
+`failIfUnavailable: true`) with the vault, `~/.claude/golden-thread`, the unlock home, LOTR and
+the plugin dirs write-denied and the unlock state / LOTR credentials / locked vault folders
+read-denied, `~/.gt-inbox` as the one writable spot, and matching `Read(...)`/`Edit(...)` deny
+rules for Claude's file tools. The vault is then read through the gt-vault MCP tools and written
+through `vault_queue_write` (or `gt_write_queue.py`, which drops its request in the inbox).
+Native Windows has no Claude Code sandbox: there it writes the permission rules only —
+friction, not a boundary. Linux/WSL2 refuse it without `bubblewrap` and `socat`. Restart Claude
+Code after switching; switching it **off** must be done from a terminal (the sandbox
+write-protects `~/.claude`). `sandbox_vault_reads` (`deny` default / `allow`) says whether the
+shell and file tools may still read the vault; `vault_mcp` (`auto` default / `on` / `off`)
+whether the vault MCP server offers its tools. Status and drift:
+`python3 <base_dir>/../../scripts/gt_sandbox.py status`; SECURITY.md, "gt sandbox mode".
+
 **`model_profile`** (0.19.1) — the model and effort each skill runs at, written into the
 installed copy of every SKILL.md (never the release source). `average` (a new install's
 default): fast skills haiku with no effort setting, balanced sonnet · medium, deep opus · high.

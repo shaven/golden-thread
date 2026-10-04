@@ -5,5 +5,13 @@
   "author": {
     "name": "Stacy Haven",
     "email": "shaven@shavenconsulting.com"
+  },
+  "mcpServers": {
+    "gt-vault": {
+      "command": "python3",
+      "args": [
+        "${CLAUDE_PLUGIN_ROOT}/scripts/gt_vault_mcp.py"
+      ]
+    }
   }
 }

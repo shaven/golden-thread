@@ -54,6 +54,12 @@ Its auto-apply class is closed in the same sense -- every decision above is a de
 comparison of text and hashes, and anything a check cannot decide (contradiction, review
 targets, externally authored free text) goes to a human.
 
+THE SANDBOX INBOX (0.20.0). Under gt sandbox mode, gt_write_queue.py run from Claude's shell leaves
+its request in ~/.gt-inbox/queue/ (the one folder the sandbox lets it write). Each `drain` first
+moves this vault's inbox requests into the queue -- only regular files, addressed to this vault,
+passing gt_write_queue's validation; the rest go to spool/broker/rejected/inbox-*.json; a symlink
+is never followed and a symlinked inbox folder is not read. `status` counts the inbox.
+
 Exit: 0 every request decided (or nothing queued) | 1 something left queued, or another drain
 is running | 2 usage or no vault.
 """
@@ -597,8 +603,133 @@ def _line(row, dry):
                                         row["reason"], tail)
 
 
+# ------------------------------------------------------------------ the sandbox inbox ----
+#
+# gt sandbox mode (0.20.0): a command in Claude Code's sandbox cannot write the vault, so
+# gt_write_queue.py leaves its request in ~/.gt-inbox/queue/ instead (deposit_inbox). That folder
+# is the one place the sandbox lets Claude's shell write, which makes every file in it DATA from
+# an untrusted writer. Each drain, which runs outside the sandbox, moves into this vault's queue
+# only what passes every check below, and the request is then validated AGAIN, decided and
+# logged like any other: claims hold it, conflicts escalate it, design.md / global-memory go to
+# the owner. A file naming another vault is left for that vault's drain.
+
+INBOX_MAX_BYTES = 2 * wq.MAX_CONTENT
+
+
+def inbox_candidates(vault: Path) -> list:
+    """-> [(path, body or None, why or None)] for inbox files addressed to THIS vault, plus the
+    unreadable ones (body None). Reads only; never follows a symlink."""
+    q = wq.inbox_dir()
+    # The inbox folders are gt's own: either one replaced by a symlink (which a sandboxed
+    # process can do -- it may write there) would point the broker at some other folder, e.g.
+    # the vault's own queue, and have it "reject" legitimate requests. A symlinked inbox is not
+    # read at all.
+    if os.path.islink(str(q)) or os.path.islink(str(q.parent)):
+        return []
+    try:
+        names = sorted(n for n in os.listdir(str(q)) if n.endswith(".json") and not n.startswith("."))
+    except OSError:
+        return []
+    try:
+        mine = os.path.realpath(str(vault))
+    except OSError:
+        return []
+    out = []
+    for n in names:
+        p = q / n
+        try:
+            st = os.lstat(str(p))
+        except OSError:
+            continue
+        import stat as _st
+        if not _st.S_ISREG(st.st_mode):
+            out.append((p, None, "not a regular file (a symlink or a device is never read)"))
+            continue
+        if st.st_size > INBOX_MAX_BYTES:
+            out.append((p, None, "larger than %d bytes" % INBOX_MAX_BYTES))
+            continue
+        try:
+            body = json.loads(p.read_text(encoding="utf-8"))
+        except (OSError, UnicodeDecodeError, ValueError) as exc:
+            out.append((p, None, "unreadable (%s)" % exc.__class__.__name__))
+            continue
+        if not (isinstance(body, dict) and body.get("gt_inbox") == 1
+                and isinstance(body.get("vault"), str) and isinstance(body.get("request"), dict)):
+            out.append((p, None, "not a gt inbox request"))
+            continue
+        try:
+            if os.path.realpath(body["vault"]) != mine:
+                continue                            # another vault's: left for its own drain
+        except (OSError, ValueError):
+            continue
+        out.append((p, body, None))
+    return out
+
+
+def pickup_inbox(vault: Path, dry_run: bool = False) -> list:
+    """Move this vault's valid inbox requests into its queue; reject the rest into
+    spool/broker/rejected/ (nothing is deleted unread). -> [row] for what was refused, so the
+    caller can report it; accepted requests are decided by the drain that follows."""
+    rows = []
+    for p, body, why in inbox_candidates(vault):
+        req = body.get("request") if body else None
+        if why is None:
+            why = wq.validate(req, vault)
+        if why is None:
+            if not dry_run:
+                req.pop("_file", None)
+                wq._deposit_queue(vault, req)
+                try:
+                    os.unlink(str(p))
+                except FileNotFoundError:
+                    pass
+            continue
+        if body is None and why.startswith("not a regular file"):
+            # A symlink is never followed: the LINK is removed (its target is untouched).
+            if not dry_run:
+                try:
+                    os.unlink(str(p))
+                except OSError:
+                    pass
+            rows.append({"request": p.stem, "path": None, "op": None, "decision": "reject",
+                         "reason": "inbox: " + why + "; the link was removed", "session": None,
+                         "origin": None})
+            continue
+        if body is None and why.startswith("larger than"):
+            # Never read and never copied into the vault: reported, and left for the owner.
+            rows.append({"request": p.stem, "path": None, "op": None, "decision": "reject",
+                         "reason": "inbox: %s; left in %s for you to remove" % (why, p),
+                         "session": None, "origin": None})
+            continue
+        row = {"ts": _now().isoformat(timespec="seconds"),
+               "request": (req or {}).get("id") if isinstance(req, dict) else p.stem,
+               "path": (req or {}).get("path") if isinstance(req, dict) else None,
+               "section": None, "op": (req or {}).get("op") if isinstance(req, dict) else None,
+               "session": (req or {}).get("session") if isinstance(req, dict) else None,
+               "origin": (req or {}).get("origin") if isinstance(req, dict) else None,
+               "decision": "reject", "reason": "inbox: %s" % why}
+        rows.append(row)
+        if dry_run:
+            continue
+        d = vault / BROKER_REL
+        dest = d / "rejected"
+        dest.mkdir(parents=True, exist_ok=True)
+        try:
+            data = p.read_bytes()
+            (dest / ("inbox-" + p.name)).write_bytes(data)
+            os.unlink(str(p))
+        except OSError:
+            continue
+        with open(d / ("log-%s.jsonl" % _now().strftime("%Y-%m-%d")), "a", encoding="utf-8",
+                  newline="\n") as fh:
+            fh.write(json.dumps(row, ensure_ascii=False) + "\n")
+    return rows
+
+
 def cmd_drain(a, vault: Path) -> int:
-    if not wq.pending(vault):
+    # An oversized inbox file is reported by `status`, never acted on, so it does not count.
+    inbox = [c for c in inbox_candidates(vault) if not (c[2] or "").startswith("larger than")]
+    if not wq.pending(vault) and not inbox:
         if a.json:
             print(json.dumps({"results": [], "left": 0}))
         return 0                                   # an empty queue drains silently
@@ -609,8 +740,9 @@ def cmd_drain(a, vault: Path) -> int:
             print("gt_broker: another drain is running; nothing done", file=sys.stderr)
             return 1
     try:
+        inbox_rows = pickup_inbox(vault, a.dry_run)
         d = Drain(vault, a.dry_run)
-        rows = d.run()
+        rows = inbox_rows + d.run()
     finally:
         if lock is not None:
             lock.close()
@@ -631,10 +763,15 @@ def cmd_drain(a, vault: Path) -> int:
 def cmd_status(a, vault: Path) -> int:
     files = wq.pending(vault)
     oldest = files[0].name[:8] if files else None
+    inbox = len(inbox_candidates(vault))
     if a.json:
-        print(json.dumps({"pending": len(files), "oldest": oldest,
+        print(json.dumps({"pending": len(files), "oldest": oldest, "inbox": inbox,
                           "files": [f.name for f in files]}))
-    elif files:
+        return 0
+    if inbox:
+        print("%d request(s) waiting in the sandbox inbox %s (moved into the queue by the next "
+              "drain)" % (inbox, wq.inbox_dir()))
+    if files:
         print("%d write request(s) queued, oldest %s-%s-%s" % (
             len(files), oldest[:4], oldest[4:6], oldest[6:8]))
         for f in files:

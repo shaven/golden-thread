@@ -124,6 +124,17 @@ def is_lotr_shim(peer, plugins_file=None):
     return runs_installed_script(peer, "gt-lotr", "lotr_mcp.py", plugins_file)
 
 
+def is_vault_shim(peer, plugins_file=None):
+    """Is `peer` the INSTALLED gt plugin's gt_vault_mcp.py -- the only file that may take a
+    session's VAULT seat (gt sandbox mode, 0.20.0)? Same realpath rule as is_lotr_shim."""
+    return runs_installed_script(peer, "gt", "gt_vault_mcp.py", plugins_file)
+
+
+# gt sandbox mode (0.20.0): scopes served, under door mcp_only, only to the session's registered
+# vault MCP server -- never to a process from the session's shell, nor to LOTR's shim.
+VAULT_PREFIX = "gt:vault:"
+
+
 def _sha(data):
     return hashlib.sha256(data).hexdigest()
 
@@ -136,6 +147,8 @@ class Session:
         self.job = job
         self.shim = None                  # {"pid", "start"} -- one live shim per session
         self.had_shim = False             # a registered shim exited; the next one starts bare
+        self.vault_shim = None            # the session's gt vault MCP server (0.20.0), same rules
+        self.had_vault_shim = False
         self.created = time.time()
 
     @property
@@ -179,7 +192,7 @@ class Authority:
 
     def __init__(self, home, *, factors=None, admin_paths=None, trusted_uids=(0,),
                  claude_names=CLAUDE_NAMES, is_claude=None, screen_locked=None, clock=None,
-                 consumer_ok=None, shim_ok=None):
+                 consumer_ok=None, shim_ok=None, vault_shim_ok=None):
         self.home = home
         os.makedirs(home, mode=0o700, exist_ok=True)
         if not IS_WINDOWS:
@@ -197,6 +210,7 @@ class Authority:
         self.is_claude = is_claude or (lambda info: _is_claude(info, self.claude_names))
         self.consumer_ok = consumer_ok or is_lotr_daemon
         self.shim_ok = shim_ok or is_lotr_shim
+        self.vault_shim_ok = vault_shim_ok or is_vault_shim
         self._screen_locked = screen_locked or screen_locked_now
         self._clock = clock or (lambda: (time.time(), time.monotonic()))
         self.lock = threading.RLock()
@@ -414,8 +428,8 @@ class Authority:
         return "%s (pid %s)" % (os.path.basename(path) or "?", pid)
 
     def classify(self, peer, job=None):
-        """-> (kind, session_root_ident, shim_session_or_None). kind: shim | claude |
-        terminal | job. The ancestry walk uses the kernel's parent links (gt_ipc)."""
+        """-> (kind, session_root_ident, shim_session_or_None). kind: shim | vault_shim |
+        claude | terminal | job. The ancestry walk uses the kernel's parent links (gt_ipc)."""
         chain = gt_ipc.ancestry(peer["pid"])
         if not chain or chain[0]["start"] != peer["start"]:
             raise Denied("peer_gone", "the requesting process could not be identified")
@@ -423,6 +437,9 @@ class Authority:
             for s in self.sessions.values():
                 if s.shim and s.shim["pid"] == peer["pid"] and s.shim["start"] == peer["start"]:
                     return "shim", s.root, s
+                v = s.vault_shim
+                if v and v["pid"] == peer["pid"] and v["start"] == peer["start"]:
+                    return "vault_shim", s.root, s
         for info in chain[1:]:
             if self.is_claude(info):
                 return "claude", {"pid": info["pid"], "start": info["start"]}, None
@@ -498,6 +515,11 @@ class Authority:
                 s.had_shim = True
                 if "shim_exit" in lock_on:
                     self.revoke_key(s.key, "shim_exit")
+            if s.vault_shim and not gt_ipc.alive(s.vault_shim["pid"], s.vault_shim["start"]):
+                s.vault_shim = None
+                s.had_vault_shim = True
+                if "shim_exit" in lock_on:
+                    self.revoke_key(s.key, "vault_shim_exit")
             if s.kind != "job" and not gt_ipc.alive(s.root["pid"], s.root["start"]):
                 self.revoke_key(s.key, "session_root_exit")
                 with self.lock:
@@ -667,17 +689,26 @@ class Authority:
             # the review's F4, the broker's scopes too: a secret is bound to the exact
             # requesting process, exactly like lotr:*.
             if (scope.startswith("lotr:") or scope in BROKER_SCOPES) \
-                    and eff.policy.get("door") == "mcp_only" and kind == "claude":
+                    and eff.policy.get("door") == "mcp_only" and kind in ("claude",
+                                                                          "vault_shim"):
                 return self._verdict(False, "mcp_only", "%s is served only to the "
                                      "registered MCP shim (door: mcp_only); a process started "
                                      "from the session's shell is refused"
                                      % ("lotr" if scope.startswith("lotr:") else scope),
                                      None, level, scope, target)
+            # gt sandbox mode (0.20.0): the vault scopes, the same way -- only the session's
+            # registered gt vault MCP server, never Bash and never LOTR's shim.
+            if scope.startswith(VAULT_PREFIX) and eff.policy.get("door") == "mcp_only" \
+                    and kind in ("claude", "shim"):
+                return self._verdict(False, "mcp_only", "%s is served only to the session's "
+                                     "registered gt vault MCP server (door: mcp_only); a "
+                                     "process started from the session's shell is refused"
+                                     % scope, None, level, scope, target)
             # F6: read_without_unlock is for a person at a terminal. A "terminal" peer with
             # no controlling terminal (a double-forked orphan, a daemon) gets the level the
             # scope has WITHOUT that convenience.
-            if level == "open" and kind == "terminal" and scope.startswith("lotr:") \
-                    and not _has_tty(target):
+            if level == "open" and kind == "terminal" \
+                    and scope.startswith(("lotr:", VAULT_PREFIX)) and not _has_tty(target):
                 raw = P.Effective(dict(eff.policy, read_without_unlock=False), [],
                                   True).level(scope)
                 if raw != "open":
@@ -756,6 +787,7 @@ class Authority:
                              "why": "%d unused code(s)" % F.RecoveryFactor().remaining(self.home)}
         with self.lock:
             sess = [{"root": s.root["pid"], "kind": s.kind, "shim": bool(s.shim),
+                     "vault_shim": bool(s.vault_shim),
                      "grant": (self.grants.get(s.key).gid if s.key in self.grants else None)}
                     for s in self.sessions.values()]
         import gt_unlock_seal as S

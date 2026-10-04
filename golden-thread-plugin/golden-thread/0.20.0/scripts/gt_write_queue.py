@@ -17,6 +17,12 @@ to put its write: one JSON request file per write in
 and nothing else. It never touches the target. `gt_broker.py drain` applies the queue later, in
 timestamp order, after checking claims and conflicts; see that tool for what it decides.
 
+UNDER GT SANDBOX MODE (0.20.0) a command in Claude Code's sandbox cannot write the vault, so the
+queue folder refuses it; with `sandbox_mode on` the request goes instead to the queue inbox,
+`~/.gt-inbox/queue/<id>.json`, wrapped with the vault it is for. The next drain outside the
+sandbox (gt's vault MCP server, or `gt_broker.py drain` in a terminal) moves it into the queue
+after the same validation. Outside the sandbox nothing changes.
+
 A session that holds its claim and writes directly is unaffected. The queue is additive.
 
 OPERATIONS (a section is a level-2 heading, `## <heading>`, matched case-insensitively):
@@ -71,6 +77,10 @@ REFUSED_EXACT = {"log.md", "TASKS.md"}
 REFUSED_PREFIXES = ("Sources/", "core-rules/", "Projects/golden-thread/core-rules/",
                     "Projects/golden-thread/sessions/", "Projects/golden-thread/spool/",
                     "Projects/golden-thread/tools/")
+
+INBOX_NOTE = ("queued in the sandbox inbox (gt sandbox mode: this shell cannot write the vault); "
+              "the broker applies it at the next drain outside the sandbox -- the vault MCP's "
+              "vault_queue_drain or vault_queue_write tool, or `gt_broker.py drain` in a terminal")
 
 HEADING = re.compile(r"^##\s+(.+?)\s*#*\s*$")
 ANY_TOP = re.compile(r"^#{1,2}\s")
@@ -325,9 +335,76 @@ def build(vault: Path, rel: str, op: str, content: str, section: str | None, ses
             "hint": hint}
 
 
+def _sandbox_on() -> bool:
+    try:
+        here = str(Path(__file__).resolve().parent)
+        if here not in sys.path:
+            sys.path.insert(0, here)
+        import gt_sandbox                                      # noqa: PLC0415
+        return gt_sandbox.is_on()
+    except Exception:                                          # noqa: BLE001
+        return False
+
+
+def inbox_dir() -> Path:
+    """gt sandbox mode's queue inbox (~/.gt-inbox/queue): the one place a sandboxed command may
+    write. Mirrors gt_sandbox.inbox_queue_dir, so this file needs nothing else to find it."""
+    return Path(os.path.expanduser("~")) / ".gt-inbox" / "queue"
+
+
+def in_inbox(path: Path) -> bool:
+    try:
+        root = os.path.realpath(str(inbox_dir()))
+        return os.path.commonpath([os.path.realpath(str(path)), root]) == root
+    except ValueError:
+        return False
+
+
+def deposit_inbox(vault: Path, req: dict) -> Path:
+    """Leave the request in the queue inbox for the broker (0.20.0, gt sandbox mode). The inbox
+    is outside the vault and writable by anything in Claude's sandbox, so its files are DATA:
+    the broker re-validates each one against the vault it names before queuing it, exactly as
+    it re-validates queued requests at drain time."""
+    q = inbox_dir()
+    q.mkdir(parents=True, exist_ok=True)
+    body = {"gt_inbox": 1, "vault": os.path.realpath(str(vault)), "request": req}
+    base, n = req["id"], 1
+    while (q / (req["id"] + ".json")).exists():
+        n += 1
+        req["id"] = "%s-%d" % (base, n)
+    fd, tmp = tempfile.mkstemp(prefix=".req.", suffix=".tmp", dir=str(q))
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8", newline="\n") as fh:
+            json.dump(body, fh, indent=1, ensure_ascii=False)
+            fh.write("\n")
+        dest = q / (req["id"] + ".json")
+        os.replace(tmp, dest)
+    except OSError:
+        try:
+            os.unlink(tmp)
+        except OSError:
+            pass
+        raise
+    return dest
+
+
 def deposit(vault: Path, req: dict) -> Path:
     """Write the request atomically. The temp name starts with `.` and does not end `.json`,
-    so a concurrent drain never sees a half-written request."""
+    so a concurrent drain never sees a half-written request.
+
+    Under gt sandbox mode (0.20.0) a command in Claude's sandbox cannot write the vault, so the
+    queue folder refuses it (EPERM from Seatbelt, EROFS from bubblewrap). Then -- and only then,
+    and only while sandbox_mode is on -- the request goes to the queue inbox instead
+    (deposit_inbox). Outside the sandbox nothing changes: the queue is written as before."""
+    try:
+        return _deposit_queue(vault, req)
+    except OSError:
+        if not _sandbox_on():
+            raise
+        return deposit_inbox(vault, req)
+
+
+def _deposit_queue(vault: Path, req: dict) -> Path:
     q = queue_dir(vault)
     q.mkdir(parents=True, exist_ok=True)
     base, n = req["id"], 1
@@ -388,10 +465,14 @@ def submit(vault: Path, writes: list, session: str | None = None, origin: str = 
             return ([{"id": None, "path": w["path"], "op": w["op"], "decision": "refused",
                       "reason": why}], None)
         built.append(req)
+    inboxed = False
     for req in built:
-        deposit(vault, req)
+        inboxed = in_inbox(deposit(vault, req)) or inboxed
     results = [{"id": r["id"], "path": r["path"], "op": r["op"], "decision": "queued",
                 "reason": "queued; not yet applied"} for r in built]
+    if inboxed:
+        # Under gt sandbox mode the drain cannot run from here either: it writes the vault.
+        return results, INBOX_NOTE
     if not drain:
         return results, "not drained"
     rows, note = drain_now(vault)
@@ -492,13 +573,19 @@ def main(argv=None) -> int:
     except OSError as exc:
         print("gt_write_queue: could not queue: %s" % exc, file=sys.stderr)
         return 1
+    inboxed = in_inbox(dest)
     if a.json:
-        print(json.dumps({"queued": str(dest), "id": req["id"]}))
+        out = {"queued": str(dest), "id": req["id"]}
+        if inboxed:
+            out.update({"inbox": True, "note": INBOX_NOTE})
+        print(json.dumps(out))
     else:
         print("queued %s %s%s -> %s" % (a.op, req["path"],
                                         (" § " + req["section"]) if req["section"]
                                         else (" :: " + req["key"]) if req.get("key") else "",
-                                        dest.relative_to(vault).as_posix()))
+                                        dest if inboxed else dest.relative_to(vault).as_posix()))
+        if inboxed:
+            print("  " + INBOX_NOTE)
     return 0
 
 

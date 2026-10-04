@@ -160,6 +160,67 @@ regression test that failed on the reviewed commit (`fe571f2`) and passes now:
   ONBOARDING and MANUAL say the same.
 
 
+### gt sandbox mode: the assistant's own tools fenced off the vault (off by default)
+
+(Owner, 2026-10-03 18:47: sandbox mode goes into 0.20.0 after the review fixes; the review had
+shown that against the assistant's own shell the unlock gate is friction.) `sandbox_mode on`
+makes gt configure **Claude Code's own sandbox and permission rules** so the assistant's shell
+and file tools cannot touch the vault or gt's state, and the vault is reached only through gt.
+Every key was checked against code.claude.com/docs (sandboxing, settings-reference,
+permissions) on 2026-10-03.
+
+- **`gt_sandbox.py`** (new, hooks dir) merges into `~/.claude/settings.json`:
+  `sandbox.enabled true`, `allowUnsandboxedCommands false`, `failIfUnavailable true`;
+  `filesystem.denyWrite` for the vault, `~/.claude/golden-thread` (hooks, state, unlock home and
+  markers), LOTR's home and store, `~/.claude/plugins`, `settings.json` and `vault-config.json`;
+  `filesystem.denyRead` for the unlock home, LOTR, locked vault folders and (with
+  `sandbox_vault_reads deny`, the default) the whole vault; `filesystem.allowWrite` for the queue
+  inbox `~/.gt-inbox`; and `permissions.deny` `Read(//…)` / `Edit(//…)` rules for the same paths,
+  because the file tools run outside the sandbox. It records exactly what it added, so `remove`
+  takes out only that; a backup precedes every write; `check` reports drift and any managed or
+  project setting overriding it. `Write(...)`/`NotebookEdit(...)` path rules are not written:
+  Claude Code consults only `Read`/`Edit` path rules.
+- **Native Windows has no Claude Code sandbox**: there gt writes the permission rules only and
+  every report says "friction". Linux and WSL2 need `bubblewrap` and `socat`; without them
+  turning the mode on is refused, because `failIfUnavailable` would stop Claude Code starting.
+- **The vault MCP server `gt-vault`** (`gt_vault_mcp.py`, in gt's plugin manifest; request
+  2026-10-02-vault-mcp-read-server): `vault_search` (index.md first, gt-query scoring,
+  supersession order), `vault_read` (64 KiB default, 256 KiB cap, pageable), `vault_list`,
+  `vault_queue_write` (gt_write_queue's ops and validation; the broker's decision comes back)
+  and `vault_queue_drain`. Read-only; never a file outside the vault or in a locked folder;
+  `readOnlyHint` annotations and `outputSchema` (MCP 2025-06-18+). Its tools are offered per the
+  new `vault_mcp` setting (`auto` = while sandbox mode is on).
+- **Unlock binds it like LOTR**: scope `gt:vault:read`, door `mcp_only`. The server registers
+  at startup as the session's *vault* seat (`register_shim` role `vault`: parent `claude`, the
+  installed file by real path, first wins, a replacement inherits no grant). The assistant's
+  shell and LOTR's shim are refused the scope; the vault seat is refused LOTR and secrets.
+- **Writes from the shell go to the inbox.** Inside the sandbox `gt_write_queue.py` cannot write
+  the vault's queue folder; with sandbox mode on it leaves the request in `~/.gt-inbox/queue/`.
+  Every drain outside the sandbox moves this vault's requests into the queue after the queue's
+  validation and rejects the rest to `spool/broker/rejected/inbox-*`; symlinks are never
+  followed, a symlinked inbox folder is not read, an oversized file is never read.
+- **Folder locks narrowed to the vault** (owner): `gt_lock.py` already refused anything outside
+  the vault; under sandbox mode every locked vault folder is read-denied to the shell and the
+  file tools whatever `sandbox_vault_reads` says, and locking or unlocking a folder re-applies
+  the rules at once.
+- **Reported everywhere:** doctor row `sandbox`; `gt_unlock.py verify` rows `sandbox-mode`,
+  `sandbox-settings`, `sandbox-deps` (Linux), `claude-sandbox` (`claude sandbox status`) and
+  `sandbox-live` (run from Claude's shell, it tries a real vault write and expects the OS to
+  refuse); the session-start surface says `SANDBOX MODE: on` and tells the model to use the MCP
+  tools; gt-open, gt-query and gt-work say what to do under the mode and change nothing when it
+  is off.
+- **Proof:** on macOS, the sandbox runtime Claude Code builds on (`@anthropic-ai/sandbox-runtime`
+  0.0.78) with gt's generated lists and the working directory inside the vault refused a vault
+  write and read (`Operation not permitted`), a hard link to a vault file and a write through a
+  symlink, allowed the inbox, and `gt_write_queue.py` inside it queued to the inbox, applied by a
+  drain outside. Opt-in test: `GT_SRT=<srt> tests/run.sh test_gt_sandbox`.
+- **Not covered:** a live Claude Code session under the mode (the settings translation and the
+  file-tool rules were checked by configuration and `claude sandbox status`, not by a live
+  session); bubblewrap on Linux/WSL2 was not run live; on native Windows the rules are friction.
+  Test receipts and worker declarations under `~/.claude/golden-thread` cannot be written from
+  the sandboxed shell, and gt's vault scripts cannot run there — run them in a terminal. The
+  vault MCP process starts with every session (it lists no tools while off).
+
 ### Claude Code integration: stage agents with their own effort, a pipeline workflow, typed LOTR results
 
 (Owner, 2026-10-03: the 0.20.0 / 0.21.0 split, items 0–4 and 6; plugin-shipped hooks wait for

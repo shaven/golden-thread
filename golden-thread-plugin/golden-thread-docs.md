@@ -283,6 +283,22 @@ L2 (Touch ID / Hello in every unlock, credentials sealed). *"Unlock proves a per
 and limits what agents can do on their own. It is not anti-malware. If something already runs
 as you, it can wait for you to unlock."* Setting: `unlock`. Doctor rows: `unlock`, `security`.
 
+## Security: gt sandbox mode (0.20.0)
+
+Off by default. On, Claude Code's own sandbox (macOS, Linux, WSL2) and permission rules keep the
+assistant's shell and file tools off the vault and gt's state; the vault is reached through
+gt's MCP server and the write queue. Native Windows: permission rules only (friction).
+
+| Command / tool | Purpose |
+|---|---|
+| `gt_settings.py set sandbox_mode on\|off` | Write / remove the Claude Code settings (restart Claude Code; switch off from a terminal) |
+| `gt_sandbox.py status\|plan\|apply\|remove\|check\|verify` | Show, preview, (re)write, take out, check drift, self-check |
+| gt-vault MCP: `vault_search`, `vault_read`, `vault_list` | Read the vault (read-only, capped, never a locked folder) |
+| gt-vault MCP: `vault_queue_write`, `vault_queue_drain` | Queue a write and get the broker's decision; apply what `gt_write_queue.py` left in `~/.gt-inbox/queue/` |
+
+Settings: `sandbox_mode`, `sandbox_vault_reads`, `vault_mcp`. Doctor row: `sandbox`; verify rows
+`sandbox-*`. `SECURITY.md` §8.
+
 ## Checks, Cadences and Scheduled Jobs
 
 Scripts with their own command line, shipped with the plugin at

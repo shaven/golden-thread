@@ -125,6 +125,10 @@ gt-lotr 0.3.0 — the five named with 0.20.0 are versioned with gt and move with
 <p><strong>0.20.0 adds gt unlock</strong>, off by default: agents need your presence (TOTP + Touch ID /
 Windows Hello, optionally Entra ID) for LOTR, credentials, publishing and gt's own guards.
 See <a href="#security-gt-unlock-0200">Security: gt unlock</a> and <a href="SECURITY.md"><code>SECURITY.md</code></a>.
+And <strong>gt sandbox mode</strong>, off by default: Claude Code's own sandbox and permission rules keep
+the assistant's shell and file tools off the vault and gt's state, and the vault is reached
+through gt's read-only MCP server and the write queue (native Windows: permission rules only,
+friction). See <a href="#security-gt-sandbox-mode-0200">Security: gt sandbox mode</a>.
 It also ships each pipeline stage as a plugin agent carrying its own model and effort
 (<code>gt:extract</code> … <code>gt:place</code>), a <code>gt:pipeline-stage</code> workflow with schema-checked output, and
 typed LOTR results; each falls back to the earlier route on an older Claude Code.</p>
@@ -2500,7 +2504,7 @@ anti-malware. If something already runs as you, it can wait for you to unlock."<
 <td>fresh confirmation (<code>guard_protected_paths</code>, before the <code>protected_paths</code> switch)</td>
 </tr>
 <tr>
-<td><code>gt_settings.py set</code> of <code>protected_paths</code>, <code>test_gate</code>, <code>foreign_checkout_guard</code>, <code>component_updates</code>, <code>commit_checks</code>, <code>addon_fixes</code>, <code>unlock</code></td>
+<td><code>gt_settings.py set</code> of <code>protected_paths</code>, <code>test_gate</code>, <code>foreign_checkout_guard</code>, <code>component_updates</code>, <code>commit_checks</code>, <code>addon_fixes</code>, <code>unlock</code>, <code>sandbox_mode</code>, <code>sandbox_vault_reads</code></td>
 <td><code>gt:settings:security</code></td>
 <td>fresh confirmation</td>
 </tr>
@@ -2528,6 +2532,11 @@ anti-malware. If something already runs as you, it can wait for you to unlock."<
 <td>Opening a locked vault file</td>
 <td><code>gt:lock:&lt;folder&gt;</code></td>
 <td>the grant</td>
+</tr>
+<tr>
+<td>A read through gt's vault MCP server (<a href="#security-gt-sandbox-mode-0200">gt sandbox mode</a>)</td>
+<td><code>gt:vault:read</code></td>
+<td>open (<code>read_without_unlock</code>), and served under <code>mcp_only</code> only to the session's registered <code>gt_vault_mcp.py</code> — never the assistant's shell or LOTR's shim</td>
 </tr>
 <tr>
 <td>Ordinary vault work, lint, daily notes, model settings</td>
@@ -2577,6 +2586,133 @@ way (<code>--release</code> requires gt's Developer ID signature), <code>verify 
 use re-checks the record; a mismatch makes Touch ID unavailable. <code>gt_unlock_hello.py available|selftest</code>
 checks Windows Hello at the console. Doctor rows <code>unlock</code> and <code>security</code> report the state and
 run <code>verify</code>.</p>
+<h2 id="security-gt-sandbox-mode-0200">Security: gt sandbox mode (0.20.0)</h2>
+<p><strong>Off by default.</strong> <code>gt_settings.py set sandbox_mode on</code> makes gt configure Claude Code so that
+the assistant's own shell and file tools are fenced off the vault and gt's state, and the vault
+is reached only through gt: a read-only MCP server and the write queue. <code>SECURITY.md</code> §8 is the
+full account — every key written, the per-platform matrix, what it does not stop. This is the
+reference.</p>
+<table>
+<thead>
+<tr>
+<th>Platform</th>
+<th>What is enforced</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>macOS</td>
+<td>Claude Code's sandbox (Seatbelt, OS-enforced) around Bash / PowerShell / Monitor and every child, plus permission rules on the file tools</td>
+</tr>
+<tr>
+<td>Linux, WSL2</td>
+<td>The same with bubblewrap; needs <code>bubblewrap</code> and <code>socat</code> — gt refuses to switch on without them, because <code>failIfUnavailable</code> would stop Claude Code starting</td>
+</tr>
+<tr>
+<td>Native Windows</td>
+<td><strong>Permission rules on the file tools only</strong> — no Claude Code sandbox exists there. Friction, not a boundary</td>
+</tr>
+</tbody>
+</table>
+<h3 id="gt_sandboxpy"><code>gt_sandbox.py</code></h3>
+<p><code>gt_settings.py set sandbox_mode on|off</code> calls it; it is also usable directly (from a terminal —
+inside the sandbox <code>~/.claude</code> is write-protected):</p>
+<table>
+<thead>
+<tr>
+<th>Command</th>
+<th>Does</th>
+<th>Exit</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>status [--json]</code></td>
+<td>on/off, the platform and what it enforces there, the vault-read setting, whether the MCP tools are offered, the inbox path, the drift state</td>
+<td><code>0</code></td>
+</tr>
+<tr>
+<td><code>plan [--json]</code></td>
+<td>the exact keys and entries it would write; writes nothing</td>
+<td><code>0</code> · <code>1</code> no vault</td>
+</tr>
+<tr>
+<td><code>apply [--force]</code></td>
+<td>merges them into <code>~/.claude/settings.json</code> (backup first, atomic write), records what it added in <code>~/.claude/golden-thread/sandbox/state.json</code>, takes out entries it added earlier that are no longer wanted (a moved vault, an unlocked folder). <code>--force</code> writes them on Linux without bubblewrap</td>
+<td><code>1</code> refused</td>
+</tr>
+<tr>
+<td><code>remove</code></td>
+<td>takes out exactly what it added; restores each boolean it changed unless you changed it since</td>
+<td><code>0</code></td>
+</tr>
+<tr>
+<td><code>check [--json]</code></td>
+<td>drift: anything missing, stale, or overridden — by managed settings, by your own <code>sandbox.filesystem.disabled</code>, or by the current project's <code>.claude/settings*.json</code></td>
+<td><code>1</code> drift</td>
+</tr>
+<tr>
+<td><code>verify [--json]</code></td>
+<td>the PASS / FAIL / NOT-CHECKED rows <code>gt_unlock.py verify</code> shows</td>
+<td><code>1</code> a FAIL</td>
+</tr>
+</tbody>
+</table>
+<p>What it writes: <code>sandbox.enabled true</code>, <code>allowUnsandboxedCommands false</code>, <code>failIfUnavailable
+true</code>; <code>filesystem.denyWrite</code> — the vault, <code>~/.claude/golden-thread</code>, LOTR's home and store,
+<code>~/.claude/plugins</code>, <code>settings.json</code>, <code>vault-config.json</code>; <code>filesystem.denyRead</code> — the unlock
+home, LOTR, locked vault folders, and the whole vault unless <code>sandbox_vault_reads</code> is <code>allow</code>;
+<code>filesystem.allowWrite</code> — <code>~/.gt-inbox</code>; and <code>permissions.deny</code> <code>Read(//…)</code> / <code>Edit(//…)</code> rules
+for the same paths plus <code>Edit</code> on any <code>.claude/settings.json</code> and <code>.claude/settings.local.json</code>.
+Native Windows: the permission rules only.</p>
+<h3 id="reaching-the-vault-the-gt-vault-mcp-server">Reaching the vault: the gt-vault MCP server</h3>
+<p><code>gt_vault_mcp.py</code>, in gt's plugin manifest (server <code>gt-vault</code>). Its tools are offered while
+<code>vault_mcp</code> is <code>on</code>, or <code>auto</code> (the default) with sandbox mode on; otherwise it lists none.</p>
+<table>
+<thead>
+<tr>
+<th>Tool</th>
+<th>Does</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>vault_search {query, limit}</code></td>
+<td>index.md lines first, then pages under Knowledge/, Projects/, global-memory/ scored like <code>/gt:gt-query</code> (<code>gt_keyword_recall</code>), current before expired before superseded, each with a snippet and its ladder level</td>
+</tr>
+<tr>
+<td><code>vault_read {path, offset, max_bytes}</code></td>
+<td>one file, 64 KiB by default and 256 KiB at most per call, pageable; its level, and what supersedes it</td>
+</tr>
+<tr>
+<td><code>vault_list {path, limit}</code></td>
+<td>one folder: files with their level, sub-folders, locked folders (never opened)</td>
+</tr>
+<tr>
+<td><code>vault_queue_write {path, op, content, section, key, hint, session}</code></td>
+<td><code>gt_write_queue.py</code>'s ops and validation; the broker decides at once, and the result says apply / deduplicate / held / escalate / reject</td>
+</tr>
+<tr>
+<td><code>vault_queue_drain {}</code></td>
+<td>runs the broker: picks up requests left in <code>~/.gt-inbox/queue/</code>, decides everything queued</td>
+</tr>
+</tbody>
+</table>
+<p>Read-only (it never opens a vault file for writing); nothing outside the vault, nothing in a
+locked folder or a dot-folder, no <code>.age</code> file; every result marked untrusted. With unlock on,
+reads need <code>gt:vault:read</code> for the server itself, which registers at startup as the session's
+vault seat (<code>register_shim</code>, role <code>vault</code>; parent must be <code>claude</code>, file must be the installed
+one).</p>
+<h3 id="writing-from-the-shell-the-queue-inbox">Writing from the shell: the queue inbox</h3>
+<p>Inside the sandbox <code>gt_write_queue.py</code> cannot write the vault's queue folder; with sandbox mode
+on it then leaves the request in <code>~/.gt-inbox/queue/</code> (wrapped with the vault it is for) and
+says so. Every drain outside the sandbox — <code>vault_queue_drain</code>, <code>vault_queue_write</code>,
+<code>gt_broker.py drain</code> in a terminal — moves this vault's requests into its queue after the
+queue's own validation and rejects the rest into <code>spool/broker/rejected/inbox-*.json</code>; a
+symlink is never followed and a symlinked inbox folder is not read. <code>gt_broker.py status</code> counts
+the inbox; the session-start surface line says <code>SANDBOX MODE: on</code> and counts it too.
+<code>replace-section</code> from the shell cannot see the vault, so it carries no base hash and escalates:
+use <code>vault_queue_write</code> for replacements.</p>
 <h2 id="reaching-other-systems">Reaching other systems</h2>
 <p>A session that needs GitHub, Jira, Microsoft 365 or another REST API would otherwise carry one
 MCP server per system, hundreds of operations in its context, and a token per server. The <code>lotr</code>
@@ -3498,6 +3634,24 @@ is registered here and can be switched off.</p>
 <td><code>off</code> · <code>on</code></td>
 <td><code>off</code></td>
 <td>gt unlock (0.20.0): agents need your presence for LOTR, credentials, publishing and gt's guards. The source of truth is the unlock policy, not vault-config.json: <code>set unlock on\|off</code> runs <code>gt_unlock.py policy enable\|disable</code>, which needs your enrolled factors. See <a href="#security-gt-unlock-0200">Security: gt unlock</a></td>
+</tr>
+<tr>
+<td><code>sandbox_mode</code></td>
+<td><code>off</code> · <code>on</code></td>
+<td><code>off</code></td>
+<td>gt sandbox mode (0.20.0): writes Claude Code's sandbox and permission rules into <code>~/.claude/settings.json</code> so the assistant's shell and file tools cannot write the vault or gt's state (nor read the unlock home, LOTR or locked folders); the vault is reached through the gt-vault MCP tools and the write queue. Native Windows: permission rules only (friction). Restart Claude Code after switching; switch off from a terminal. See <a href="#security-gt-sandbox-mode-0200">Security: gt sandbox mode</a></td>
+</tr>
+<tr>
+<td><code>sandbox_vault_reads</code></td>
+<td><code>deny</code> · <code>allow</code></td>
+<td><code>deny</code></td>
+<td>Under sandbox mode, whether the shell and file tools may still READ the vault (writes stay denied; locked folders stay unreadable)</td>
+</tr>
+<tr>
+<td><code>vault_mcp</code></td>
+<td><code>auto</code> · <code>on</code> · <code>off</code></td>
+<td><code>auto</code></td>
+<td>Whether the gt-vault MCP server offers its tools: <code>auto</code> = while sandbox mode is on</td>
 </tr>
 <tr>
 <td><code>protected_paths</code></td>
@@ -5310,6 +5464,16 @@ duplicated across projects' runbooks — the detection step of <code>/gt:gt-runb
 <td>declare checkouts another machine owns (<a href="#foreign-checkouts-a-commit-in-another-machines-checkout">Foreign checkouts</a>)</td>
 <td></td>
 </tr>
+<tr>
+<td><code>gt_sandbox.py status · plan · apply [--force] · remove · check · verify [--json]</code> (hooks dir, 0.20.0)</td>
+<td>gt sandbox mode's Claude Code settings (<a href="#security-gt-sandbox-mode-0200">gt sandbox mode</a>)</td>
+<td><code>1</code> refused, drift or FAIL</td>
+</tr>
+<tr>
+<td><code>gt_vault_mcp.py [--vault V]</code> (0.20.0)</td>
+<td>the gt-vault MCP server over stdio; Claude Code starts it</td>
+<td></td>
+</tr>
 </tbody>
 </table>
 <hr />
@@ -5337,6 +5501,12 @@ member can run from the hooks dir, and they cannot yet find their packs there.</
 <a href="#session-identity-which-machine-wrote-a-claim">Session identity</a>. A rename is harmless and
 reported once; a legacy file on a host that no longer matches keeps its claims only while its
 heartbeat is fresh.</p>
+<p><strong><code>gt_settings.py set sandbox_mode off</code> fails with "could not write"</strong> — expected inside
+Claude Code's sandbox: <code>~/.claude</code> is write-protected there. Run it from a terminal. Turning it
+<strong>on</strong> is refused on Linux / WSL2 without <code>bubblewrap</code> and <code>socat</code>.</p>
+<p><strong>Under sandbox mode a gt script fails with "Operation not permitted"</strong> — it ran in the
+assistant's shell and touched the vault or <code>~/.claude/golden-thread</code>. Use the gt-vault MCP tools,
+run the script in a terminal, or set <code>sandbox_vault_reads allow</code> for reads.</p>
 <p><strong>A handoff keeps being shown</strong> — that is intended until it is dealt with: run
 <code>/gt:gt-handle handoff</code>, mark it handled, or defer it to a date. To see waiting handoffs only in
 their own project, <code>gt_settings.py set handoff_surface project</code>.</p>

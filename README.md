@@ -21,14 +21,17 @@ and blocks it if the rule was broken.
 
 
 > [!IMPORTANT]
-> **0.20.0: gt unlock (off by default) and Windows, finished.** Turned on, agents need your
+> **0.20.0: gt unlock and gt sandbox mode (both off by default), and Windows, finished.** Turned on, agents need your
 > presence — TOTP plus Touch ID (macOS) or Windows Hello, optionally Microsoft Entra ID sign-in —
 > before they use LOTR connections, credentials, publishing or gt's own guards. Callers are
 > identified by the kernel, approvals are hardware signatures gt verifies itself, credentials can
 > be sealed under the Secure Enclave / TPM, and `gt_unlock.py verify` prints the level this machine
 > really runs at. *"Unlock proves a person was present and limits what agents can do on their own.
 > It is not anti-malware. If something already runs as you, it can wait for you to unlock."* Read
-> [`SECURITY.md`](golden-thread-plugin/SECURITY.md) before turning it on. Also: `python3` works in
+> [`SECURITY.md`](golden-thread-plugin/SECURITY.md) before turning it on. **gt sandbox mode** has Claude Code's own sandbox
+> and permission rules keep the assistant's shell and file tools off the vault and gt's state;
+> the vault is read through gt's MCP server and written only through the queue (native Windows:
+> permission rules only — friction, not a boundary). Also: `python3` works in
 > Claude's shell on Windows, every gt write is LF, scheduled jobs run on Task Scheduler, the suite
 > runs on Windows, gt-lotr runs on Windows (0.3.0) with its MCP server started by the installer's
 > Python, and a failed install rolls back. And on a current Claude Code: each pipeline stage is a

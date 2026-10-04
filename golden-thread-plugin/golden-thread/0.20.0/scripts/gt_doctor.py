@@ -2201,6 +2201,7 @@ CHECKS += ("repo-target",)      # 0.18.1: which repo would a repo-scoped command
 CHECKS += ("hooks-schema",)     # 0.18.1: settings.json hooks against Claude Code's events
 CHECKS = CHECKS + ("execution",)        # 0.18.1: gt_bench.health (measured profile, Rosetta)
 CHECKS += ("unlock", "security")        # 0.20.0: gt unlock state + level; its self-check
+CHECKS += ("sandbox",)                  # 0.20.0: gt sandbox mode -- settings drift, platform
 
 
 def _unlock_cli():
@@ -2261,6 +2262,58 @@ def check_security(rep):
         rep.add("security", UNKNOWN, head, detail, fix="python3 %s verify" % cli)
     else:
         rep.add("security", OK, head, detail)
+
+
+def check_sandbox(rep):
+    """gt sandbox mode (0.20.0). Off is a NOTE naming what it would fence. On: OK only when every
+    entry gt needs is in settings.json and nothing overrides it, and the platform has an OS
+    sandbox; native Windows says "friction" (permission rules only) and is never OK-as-boundary.
+    Drift (an entry missing, a managed or project setting overriding gt) is a FAIL."""
+    gs = None
+    for d in (HERE, INSTALLED_HOOKS):              # beside this doctor first, then the install
+        if (d / "gt_sandbox.py").is_file():
+            import importlib.util
+            spec = importlib.util.spec_from_file_location("gt_sandbox", str(d / "gt_sandbox.py"))
+            gs = importlib.util.module_from_spec(spec)
+            sys.path.insert(0, str(d))
+            try:
+                spec.loader.exec_module(gs)
+            except Exception:                       # noqa: BLE001
+                gs = None
+            break
+    if gs is None:
+        rep.add("sandbox", UNKNOWN, "gt_sandbox.py is not installed in the hooks dir")
+        return
+    gt_sandbox = gs
+    try:
+        c = gt_sandbox.check()
+    except Exception as e:                          # noqa: BLE001
+        rep.add("sandbox", UNKNOWN, "the sandbox check could not run (%s)" % type(e).__name__)
+        return
+    mode = c.get("mode")
+    fix = "python3 %s apply   (from a terminal)" % (INSTALLED_HOOKS / "gt_sandbox.py")
+    if c["state"] == "off":
+        rep.add("sandbox", NOTE, "sandbox mode: off -- Claude's shell and file tools can read and "
+                "write the vault and gt's state. gt_settings.py set sandbox_mode on fences them "
+                "(SECURITY.md, 'gt sandbox mode')")
+        return
+    if c["state"] == "stale-off":
+        rep.add("sandbox", WARN, "sandbox mode: off, but %d of gt's entries are still in "
+                "settings.json" % len(c["stale"]), "\n".join(c["stale"][:20]),
+                fix="python3 %s remove" % (INSTALLED_HOOKS / "gt_sandbox.py"))
+        return
+    detail = "\n".join(c["problems"] + c["missing"][:20] + c["stale"][:10] + c["notes"])
+    if c["state"] != "ok":
+        rep.add("sandbox", FAIL, "sandbox mode: ON (%s), settings drifted -- %d missing, %d "
+                "stale, %d override(s)" % (mode, len(c["missing"]), len(c["stale"]),
+                                          len(c["problems"])), detail, fix=fix)
+        return
+    if not gt_sandbox.os_sandbox_supported(mode):
+        rep.add("sandbox", WARN, "sandbox mode: ON (%s) -- permission rules only: friction, not "
+                "a boundary (no Claude Code sandbox on this platform)" % mode, detail)
+        return
+    rep.add("sandbox", OK, "sandbox mode: ON (%s) -- %s" % (mode, gt_sandbox.ENFORCED[mode]),
+            detail)
 
 
 def check_execution(rep):
@@ -2381,6 +2434,8 @@ def main(argv=None):
         check_unlock(rep)
     if "security" in wanted:
         check_security(rep)
+    if "sandbox" in wanted:
+        check_sandbox(rep)
 
     if a.fix:
         fix_wiring(rep, vdir, vault)

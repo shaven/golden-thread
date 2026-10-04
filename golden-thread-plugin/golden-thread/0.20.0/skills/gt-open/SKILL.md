@@ -16,6 +16,12 @@ argument is a project (unchanged).
 
 Use `$GT_VAULT` if it is set (a session pinned to one vault, such as the demo); otherwise read `~/.claude/vault-config.json` for `vault_path`. If missing → tell the user to run `/gt:gt-init` first.
 
+**Under gt sandbox mode** (`gt_settings.py get sandbox_mode` is `on`, and the session-start
+line says SANDBOX MODE): the shell and file tools cannot write the vault (and, by default, cannot
+read it). Do every step below through the gt-vault MCP tools instead — `vault_search` and
+`vault_read` (and `vault_list`) for reading, `vault_queue_write` for writing — and skip a vault
+script the shell cannot run, saying so. With sandbox mode off (the default) nothing changes.
+
 ## Steps
 
 **Step 1 — Find the project**
