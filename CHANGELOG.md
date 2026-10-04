@@ -390,6 +390,26 @@ passes now (`tests/test_inbox_review2.py`, `tests/test_sandbox_review2.py`,
   Windows, an owner step like the hooks. Plugin-shipped workflows (`workflows/` in a plugin) are
   documented, but the docs name no minimum version: gt relies on the Workflow tool being offered.
 
+- **Each stage agent gets a private scratch folder, outside the vault.** Pipeline stage agents
+  (ingest extract / classify / reconcile / draft, promote verify / generalize / place, gt-work's
+  extract-session) shared the run's folder under the vault's `spool/pipeline/<run>/`: per run,
+  not per agent, inside the vault -- the wrong place for extracted raw material -- and a place
+  sandbox mode denies every write to. New `gt_scratch.py`: one folder per run and unit,
+  `~/.gt-scratch/<run>/<stage>-<unit>/`, every level `0700` (Windows: `%LOCALAPPDATA%\gt-scratch`,
+  inheritance removed, owner-only ACL via `icacls`); a symlinked or foreign-owned level is
+  refused, never followed or chmod-ed. `gt_agent_spec.py render --scratch-run R --scratch-unit U`
+  and `gt_ingest_pipeline.py workflow-args` (each item now carries `scratch_dir`, and a
+  skill-rendered prompt without a folder gets one) name it in the prompt, and every stage spec
+  says it is the only place for intermediate files; only the agent's result returns, through the
+  packet. A run's scratch is removed when the run finishes (`draft`, or `promote-plan` with
+  nothing waiting) and by the new `gt_ingest_pipeline.py cleanup <run>`; `status` shows it,
+  `gt_scratch.py check` exits 1 on a finished or vanished run's leftovers, and `/gt:gt-doctor`
+  has a `scratch` row. Sandbox mode adds `~/.gt-scratch` to `sandbox.filesystem.allowWrite`
+  (the vault stays write-denied) and takes it out again on `remove`. The stage agents' tools are
+  unchanged -- all but verify are read-only -- so the folder bounds where they may write; it adds
+  no write tool. The base prompt now reads "Do not write, move or delete any file outside the
+  private scratch folder your prompt may name"; the seven agent definitions are regenerated.
+
 ### Windows, finished; a failed install rolls back; the scheduled jobs keep a working interpreter
 
 (Owner, 2026-10-03: "Finish the work for windows".) 0.19.2 made gt install on Windows; this
@@ -504,7 +524,10 @@ report-card, watch; lockstep modules `requires_gt >=0.20.0,<0.21.0`).
   `shutil.rmtree(..., ignore_errors=True)` silently left every sandbox holding a git repo
   (read-only objects) in `dev/check_wiring_coverage.py` and the shared post-install fixture;
   and `dev/remote-test.sh` never removed its own log (it now keeps it only for a failed run,
-  whose message names it). `GT_TEST_LEAK_CHECK=0` turns the check off for diagnosis; plain
+  whose message names it). On macOS it found one in the product: Apple's `swiftc` shim leaves an
+  empty `TemporaryDirectory.XXXXXX` in `$TMPDIR` on every call, so building the Touch ID helper
+  left two behind per install; `gt_unlock_touchid.py build` now gives both calls a private
+  `TMPDIR` and removes it. `GT_TEST_LEAK_CHECK=0` turns the check off for diagnosis; plain
   `GT_TEST_SERIAL=1` runs are not checked, and tests that put sockets in `/tmp` on purpose
   (the LOTR tests) are outside `TMPDIR` and covered only by their own `tearDown`.
 - **A sandbox never touches the real scheduler.** `gt_schedule.py` took any HOME *inside* the

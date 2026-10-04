@@ -699,8 +699,8 @@ nothing of yours. Every key is one the Claude Code documentation names
 </tr>
 <tr>
 <td><code>sandbox.filesystem.allowWrite</code></td>
-<td><code>~/.gt-inbox</code></td>
-<td>The one writable place: <code>gt_write_queue.py</code> leaves its requests in <code>~/.gt-inbox/queue/</code></td>
+<td><code>~/.gt-inbox</code>; <code>~/.gt-scratch</code></td>
+<td>The two writable places. <code>gt_write_queue.py</code> leaves its requests in <code>~/.gt-inbox/queue/</code>. <code>~/.gt-scratch/&lt;run&gt;/&lt;stage&gt;-&lt;unit&gt;/</code> is each pipeline stage agent's private scratch folder (0700 at every level; <code>gt_scratch.py</code>): intermediate files go there instead of the vault spool, nothing reads them back as instructions, and a finished run's folder is removed. Neither is inside the vault, so <code>denyWrite</code> still covers all of it</td>
 </tr>
 <tr>
 <td><code>permissions.deny</code></td>

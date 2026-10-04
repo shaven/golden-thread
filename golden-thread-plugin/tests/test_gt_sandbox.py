@@ -85,7 +85,10 @@ class Plan(InProcess):
         self.assertIn(str(self.home / ".claude" / "golden-thread" / "unlock").replace("\\", "/"), dr)
         self.assertIn(vault, dr, "sandbox_vault_reads defaults to deny")
         self.assertEqual(p["lists"]["sandbox.filesystem.allowWrite"],
-                         [str(self.home / ".gt-inbox").replace("\\", "/")])
+                         [str(self.home / ".gt-inbox").replace("\\", "/"),
+                          self.gs.sandbox_path(self.gs.scratch_root())])
+        if not IS_WINDOWS:          # Windows' root is %LOCALAPPDATA%\gt-scratch
+            self.assertEqual(self.gs.scratch_root(), str(self.home / ".gt-scratch"))
         for e in dw + dr:
             self.assertFalse(e.startswith("//"), "sandbox paths are plain absolute paths: %s" % e)
         rules = p["lists"]["permissions.deny"]
@@ -165,6 +168,13 @@ class ApplyRemove(InProcess):
         self.assertEqual(self.settings(), before, "remove must leave exactly what was there, "
                          "including the user's own copy of an entry gt also wants")
         self.assertFalse((self.home / ".claude" / "golden-thread" / "sandbox" / "state.json").exists())
+
+    def test_the_scratch_root_is_writable_while_on_and_gone_after_remove(self):
+        scratch = self.gs.sandbox_path(self.gs.scratch_root())
+        self.gs.apply()
+        self.assertIn(scratch, self.settings()["sandbox"]["filesystem"]["allowWrite"])
+        self.gs.remove()
+        self.assertNotIn(scratch, json.dumps(self.settings()))
 
     def test_remove_leaves_a_boolean_the_user_changed_since(self):
         self.gs.apply()

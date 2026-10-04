@@ -410,8 +410,20 @@ def build(dest_dir, source=None):
     if not os.path.isfile(source):
         raise BuildError("helper source not found: %s" % source)
     swiftc = shutil.which("swiftc")
+    # The xcrun shim leaves an empty TemporaryDirectory.XXXXXX in $TMPDIR on EVERY call --
+    # `swiftc --version` included -- so each install left two behind (found by the test
+    # suite's temp-leak check, 0.20.0). Both calls get a private TMPDIR, removed below.
+    scratch = tempfile.mkdtemp(prefix="gt-swiftc.")
+    env = dict(os.environ, TMPDIR=scratch)
+    try:
+        return _build(swiftc, env, dest_dir, source)
+    finally:
+        shutil.rmtree(scratch, ignore_errors=True)
+
+
+def _build(swiftc, env, dest_dir, source):
     if not swiftc or subprocess.run([swiftc, "--version"], stdout=subprocess.DEVNULL,
-                                    stderr=subprocess.DEVNULL).returncode != 0:
+                                    stderr=subprocess.DEVNULL, env=env).returncode != 0:
         raise BuildError("swiftc is not available: install the Xcode Command Line Tools "
                          "(xcode-select --install), or install the signed release helper")
     os.makedirs(dest_dir, mode=0o700, exist_ok=True)
@@ -420,7 +432,7 @@ def build(dest_dir, source=None):
     try:
         out = os.path.join(tmpdir, HELPER_NAME)
         r = subprocess.run([swiftc, "-O", "-o", out, source], stdout=subprocess.PIPE,
-                           stderr=subprocess.STDOUT, timeout=600)
+                           stderr=subprocess.STDOUT, timeout=600, env=env)
         if r.returncode != 0:
             raise BuildError("swiftc failed:\n" + r.stdout.decode("utf-8", "replace")[-2000:])
         r = subprocess.run(["/usr/bin/codesign", "-s", "-", "--force", out],

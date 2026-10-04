@@ -1517,6 +1517,29 @@ workflow's own resume also works. A workflow cannot ask you anything, so every s
 after it returns, exactly as on the per-agent route. Without the Workflow tool, that per-agent
 route is the fallback and runs the same pipeline.
 
+**Each agent's private scratch folder (0.20.0).** The run's spool folder is per run, not per
+agent, and it is inside the vault -- the wrong place for extracted raw material, and a place
+sandbox mode denies every write to. So every agent unit gets its own folder **outside the vault**:
+`~/.gt-scratch/<run>/<stage>-<unit>/`, every level created `0700` (owner only); on Windows
+`%LOCALAPPDATA%\gt-scratch\<run>\<stage>-<unit>\`, inheritance removed and only you granted
+access (`icacls`). The path goes into the agent's prompt, under *Scratch folder*, as the only place
+it may put intermediate files; only its JSON result comes back, through the packet, as before, and
+nothing reads the folder back. The stage agents' own tools are mostly read-only (only verify has a
+shell), so for most of them the folder is a boundary on where they may write, not a new ability.
+
+```bash
+gt_agent_spec.py render verify ... --scratch-run <run> --scratch-unit c01   # Agent-tool route
+gt_ingest_pipeline.py workflow-args <run> --stage extract --json             # each item: scratch_dir
+gt_ingest_pipeline.py status <run>                                           # shows it while present
+gt_ingest_pipeline.py cleanup <run>                                          # an abandoned run
+python3 <plugin>/scripts/gt_scratch.py check --vault <vault>                 # leaks: exit 1
+```
+
+A run's scratch is removed when the run finishes -- `draft` queued its writes, or `promote-plan`
+reached you with nothing waiting -- and by `cleanup <run>` for one you abandon. `gt_scratch.py
+check` (and the `scratch` row of `/gt:gt-doctor`) names any folder a finished or vanished run left
+behind; it never removes anything itself. Sandbox mode allows writes to `~/.gt-scratch` (below).
+
 **`--dry-run` counts wherever it is placed (0.20.0).** `gt_ingest_pipeline.py --dry-run draft …`
 used to write: the subcommand's own default overwrote the global flag, so a preview queued and
 drained a real entry. Now the flag means the same before or after the subcommand.
@@ -2178,7 +2201,8 @@ What it writes: `sandbox.enabled true`, `allowUnsandboxedCommands false`, `failI
 true`; `filesystem.denyWrite` — the vault, `~/.claude/golden-thread`, LOTR's home and store,
 `~/.claude/plugins`, `settings.json`, `vault-config.json`; `filesystem.denyRead` — the unlock
 home, LOTR, locked vault folders, and the whole vault unless `sandbox_vault_reads` is `allow`;
-`filesystem.allowWrite` — `~/.gt-inbox`; and `permissions.deny` `Read(//…)` / `Edit(//…)` rules
+`filesystem.allowWrite` — `~/.gt-inbox` and `~/.gt-scratch` (the stage agents' private scratch
+folders, outside the vault); and `permissions.deny` `Read(//…)` / `Edit(//…)` rules
 for the same paths plus `Edit` on any `.claude/settings.json` and `.claude/settings.local.json`,
 and `Edit` on what Claude Code, your shell or launchd load code from (`~/.claude.json`,
 `~/.claude/{agents,skills,commands,hooks,output-styles}`, `CLAUDE.md`, any `.mcp.json`, shell rc

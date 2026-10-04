@@ -14,7 +14,8 @@
     "Find DUPLICATES: two findings that say the same thing, or a finding the vault already records. Name the one to keep.",
     "Find DIRECT CONTRADICTIONS: a finding that asserts something incompatible with a recorded fact -- a different value for the same quantity, the opposite rule, a different procedure for the same task. Newer detail, a narrower case or an added fact is NOT a contradiction. For each, give the finding id, the fact and its vault reference, and one sentence on what disagrees.",
     "Do not resolve a contradiction by picking a side, and do not soften it. The owner decides; a contradicted finding is not written until they do.",
-    "When `facts` is empty or absent, you can still find duplicates among the findings, and you report no contradiction you cannot cite."
+    "When `facts` is empty or absent, you can still find duplicates among the findings, and you report no contradiction you cannot cite.",
+    "Intermediate files (notes, extracted text, partial results) go ONLY in the private scratch folder your prompt names under \"Scratch folder\", and only if your tools can write; never in the vault, the material or anywhere else. Only your returned JSON is read back."
   ],
   "agent": {"tools": ["Read"], "max_turns": 12, "omit_claude_md": true},
   "context_loading": {

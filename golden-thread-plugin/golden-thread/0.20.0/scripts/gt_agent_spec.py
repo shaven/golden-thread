@@ -4,7 +4,7 @@
     gt_agent_spec.py list [--json] [--vault V] [--specs-dir D]
     gt_agent_spec.py validate <spec-file>
     gt_agent_spec.py resolve --skill S [--path P] [--json] [--vault V] [--specs-dir D]
-    gt_agent_spec.py render <job-type> [--input K=V] [--input-file K=F] [--template] [--json]
+    gt_agent_spec.py render <job-type> [--input K=V] [--input-file K=F] [--template] [--json] [--scratch-run R [--scratch-unit U]]
     gt_agent_spec.py check-output <job-type> <record-file> [--vault V] [--specs-dir D]
     gt_agent_spec.py spool-path <job-type> [--session ID] [--vault V]
     gt_agent_spec.py agents [--write DIR | --check DIR] [--vault V] [--specs-dir D]
@@ -205,7 +205,8 @@ MAX_WALK = 20000
 BASE_PROMPT = (
     "You are a Golden Thread specialist agent. A Golden Thread session spawned you for one job "
     "and will record your result in its vault; you have not seen that session's conversation.\n"
-    "- Do not write, move or delete any file. Return your result; the session records it.\n"
+    "- Do not write, move or delete any file outside the private scratch folder your prompt may "
+    "name. Return your result; the session records it.\n"
     "- Every statement you make carries its evidence: a file path, a section, a command and "
     "what it printed.\n"
     "- Separate what you read from what you inferred. An inference is labelled as one.\n"
@@ -1188,9 +1189,36 @@ def intake_section(scan, template=False):
     return lines
 
 
-def render(spec, inputs, vault=None, template=False):
+SCRATCH_HEADER = "## Scratch folder"
+
+
+def scratch_section(path):
+    """The prompt lines naming an agent's private scratch folder (gt_scratch.py, 0.20.0)."""
+    return [SCRATCH_HEADER, "",
+            "Your private scratch folder for this job: %s" % path,
+            "It is the ONLY place you may put intermediate files (notes, extracted text, partial "
+            "results), and only if your tools can write at all. Never write anywhere else: not "
+            "the vault, not the material you were given, not a temporary directory. Nothing in "
+            "the folder is read back -- your result is the JSON object below, and only that "
+            "returns. gt removes the folder when the run finishes.", ""]
+
+
+def add_scratch(text, path):
+    """A rendered prompt with its scratch section: inserted before `## Inputs` (or appended),
+    and left alone when the prompt already names one."""
+    if SCRATCH_HEADER in text:
+        return text
+    block = "\n".join(scratch_section(path))
+    at = text.find("\n## Inputs\n")
+    if at < 0:
+        return text.rstrip("\n") + "\n\n" + block.rstrip("\n") + "\n"
+    return text[:at + 1] + block + "\n" + text[at + 1:]
+
+
+def render(spec, inputs, vault=None, template=False, scratch=None):
     """-> (prompt text, dict). Raises ValueError on a missing or unknown input, and
-    IntakeRefused when the spec requires the intake scan and the material did not pass it."""
+    IntakeRefused when the spec requires the intake scan and the material did not pass it.
+    `scratch`: the agent's private scratch folder (gt_scratch.unit_dir), named in the prompt."""
     declared = spec["inputs"]
     unknown = sorted(set(inputs) - set(declared))
     if unknown:
@@ -1214,6 +1242,8 @@ def render(spec, inputs, vault=None, template=False):
     out += _tools_section(spec)
     if spec.get("requires_intake_scan"):
         out += ["", "## Intake scan", ""] + intake_section(scan, template)
+    if scratch:
+        out += [""] + scratch_section(scratch)[:-1]
     out += ["", "## Inputs", ""]
     for name, d in declared.items():
         if name in inputs:
@@ -1229,6 +1259,7 @@ def render(spec, inputs, vault=None, template=False):
             "inputs": sorted(inputs), "output_schema": spec["output_schema"],
             "summary_fields": spec.get("summary_fields", list(spec["output_schema"])[:3]),
             "executor": spec.get("executor", "claude"), "intake_scan": scan,
+            "scratch_dir": scratch,
             "record_shape": {"job_type": spec["job_type"], "session_id": "<session id>",
                              "created": "<ISO-8601 time>", "result": "<the agent's JSON>"},
             "prompt": text}
@@ -1483,9 +1514,24 @@ def cmd_render(a):
     if spec.get("alias_of"):
         print("gt_agent_spec: '%s' is the 0.17.10 name of '%s' (kept for one release; use the "
               "new name)" % (a.job_type, spec["alias_of"]), file=sys.stderr)
+    scratch = None
+    if a.scratch_run:
+        # The agent's private scratch folder, created 0700 outside the vault (0.20.0).
+        try:
+            if HERE not in sys.path:
+                sys.path.insert(0, HERE)
+            import gt_scratch
+            scratch = gt_scratch.unit_dir(a.scratch_run, spec.get("stage") or a.job_type,
+                                          a.scratch_unit or "_job")
+        except Exception as exc:                    # ScratchError, OSError
+            print("gt_agent_spec: no scratch folder: %s" % exc, file=sys.stderr)
+            return 1
+    elif a.scratch_unit:
+        print("gt_agent_spec: --scratch-unit needs --scratch-run", file=sys.stderr)
+        return 2
     try:
         text, info = render(spec["data"], map_alias_inputs(spec, _parse_inputs(a)), a.vault,
-                            a.template)
+                            a.template, scratch=scratch)
     except ValueError as exc:
         print("gt_agent_spec: %s" % exc, file=sys.stderr)
         return 2
@@ -1670,6 +1716,11 @@ def build_parser():
                    help="render placeholders for missing required inputs instead of failing")
     p.add_argument("--json", action="store_true",
                    help="the prompt plus tier, context list and output schema, as JSON")
+    p.add_argument("--scratch-run", metavar="RUN",
+                   help="create the agent's private scratch folder for this pipeline run "
+                        "(gt_scratch.py, outside the vault, 0700) and name it in the prompt")
+    p.add_argument("--scratch-unit", metavar="UNIT",
+                   help="with --scratch-run: the unit the folder is for (default _job)")
     p.set_defaults(fn=cmd_render)
 
     p = sub.add_parser("model", parents=[common],

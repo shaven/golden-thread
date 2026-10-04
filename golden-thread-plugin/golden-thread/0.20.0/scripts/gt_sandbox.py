@@ -28,8 +28,11 @@ code.claude.com/docs/en/sandboxing, /settings-reference and /permissions, 2026-1
   sandbox.filesystem.denyRead    the unlock home (sealed store, TOTP seed, recovery codes),
       the LOTR home and store, every LOCKED vault folder (a `.gt-locked` stub), and -- with
       sandbox_vault_reads deny -- the whole vault
-  sandbox.filesystem.allowWrite  the queue inbox, ~/.gt-inbox: the one writable place, where
-      gt_write_queue.py run from Claude's shell leaves its requests for the broker
+  sandbox.filesystem.allowWrite  the queue inbox, ~/.gt-inbox, where gt_write_queue.py run
+      from Claude's shell leaves its requests for the broker; and the stage agents' scratch
+      root, ~/.gt-scratch (gt_scratch.py, 0.20.0): one private 0700 folder per pipeline run and
+      unit for intermediate files, outside the vault. Nothing gt does reads either back as
+      instructions, and denyWrite still covers the vault.
   permissions.deny               Edit(...) on every denyWrite path and Read(...) on every
       denyRead path, for Claude's file tools (Read, Edit, Write, NotebookEdit, Grep, Glob):
       the sandbox does not cover them. Plus Edit on any .claude/settings.json and
@@ -181,9 +184,19 @@ def state_path(h=None):
 
 
 def inbox_dir(h=None):
-    """The one place a sandboxed command may write: ~/.gt-inbox. Queue requests go in its
+    """Where a sandboxed command leaves queue requests: ~/.gt-inbox. Queue requests go in its
     queue/ folder; anything else you put there is yours and gt leaves it alone."""
     return os.path.join(home(h), INBOX_NAME)
+
+
+def scratch_root(h=None):
+    """Where gt's stage agents keep intermediate files (gt_scratch.py, 0.20.0): one private
+    folder per run and unit, outside the vault, so sandbox mode allows writes there."""
+    here = os.path.dirname(os.path.abspath(__file__))
+    if here not in sys.path:
+        sys.path.insert(0, here)
+    import gt_scratch
+    return gt_scratch.root(h)
 
 
 def inbox_queue_dir(h=None):
@@ -405,7 +418,8 @@ def plan(h=None, vault=None, vault_reads=None, mode=None):
         lists["sandbox.filesystem.denyWrite"] = [sandbox_path(p) for p in
                                                  deny_write_dirs + deny_write_files]
         lists["sandbox.filesystem.denyRead"] = [sandbox_path(p) for p in deny_read_dirs]
-        lists["sandbox.filesystem.allowWrite"] = [sandbox_path(inbox)]
+        lists["sandbox.filesystem.allowWrite"] = [sandbox_path(inbox),
+                                                  sandbox_path(scratch_root(h))]
         bools = dict(SANDBOX_BOOLS)
     else:
         bools = {}
@@ -1227,7 +1241,8 @@ def status_text(h=None):
              % ("denied" if setting("sandbox_vault_reads", h) == "deny" else "allowed"),
              "  vault MCP tools (vault_list/read/search/queue_write): %s"
              % ("offered" if vault_mcp_on(h) else "not offered"),
-             "  queue inbox (the one writable place): %s" % inbox_queue_dir(h)]
+             "  queue inbox (writable): %s" % inbox_queue_dir(h),
+             "  stage agents' scratch root (writable, outside the vault): %s" % scratch_root(h)]
     c = check(h)
     lines.append("  settings: %s" % c["state"])
     for x in c["problems"] + c["missing"][:8] + c["stale"][:8]:

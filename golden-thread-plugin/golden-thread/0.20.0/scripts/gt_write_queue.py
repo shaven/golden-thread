@@ -357,8 +357,8 @@ def _sandbox_on() -> bool:
 
 
 def inbox_dir() -> Path:
-    """gt sandbox mode's queue inbox (~/.gt-inbox/queue): the one place a sandboxed command may
-    write. Mirrors gt_sandbox.inbox_queue_dir, so this file needs nothing else to find it."""
+    """gt sandbox mode's queue inbox (~/.gt-inbox/queue): where a sandboxed command leaves its
+    requests (its other writable place is the stage agents' ~/.gt-scratch). Mirrors gt_sandbox.inbox_queue_dir, so this file needs nothing else to find it."""
     return Path(os.path.expanduser("~")) / ".gt-inbox" / "queue"
 
 

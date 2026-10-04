@@ -2202,6 +2202,7 @@ CHECKS += ("hooks-schema",)     # 0.18.1: settings.json hooks against Claude Cod
 CHECKS = CHECKS + ("execution",)        # 0.18.1: gt_bench.health (measured profile, Rosetta)
 CHECKS += ("unlock", "security")        # 0.20.0: gt unlock state + level; its self-check
 CHECKS += ("sandbox",)                  # 0.20.0: gt sandbox mode -- settings drift, platform
+CHECKS += ("scratch",)                  # 0.20.0: stage agents' scratch left by finished runs
 
 
 def _unlock_cli():
@@ -2262,6 +2263,44 @@ def check_security(rep):
         rep.add("security", UNKNOWN, head, detail, fix="python3 %s verify" % cli)
     else:
         rep.add("security", OK, head, detail)
+
+
+def check_scratch(rep, vault):
+    """Stage agents' private scratch folders (gt_scratch.py, 0.20.0): a run that finished or
+    vanished must not leave its scratch -- extracted raw material -- behind. WARN names each,
+    with the command that removes it; nothing is removed here."""
+    gsc = None
+    for d in (HERE, INSTALLED_HOOKS):
+        if (d / "gt_scratch.py").is_file():
+            import importlib.util
+            spec = importlib.util.spec_from_file_location("gt_scratch", str(d / "gt_scratch.py"))
+            gsc = importlib.util.module_from_spec(spec)
+            try:
+                spec.loader.exec_module(gsc)
+            except Exception:                       # noqa: BLE001
+                gsc = None
+            break
+    if gsc is None:
+        rep.add("scratch", UNKNOWN, "gt_scratch.py is not installed in the hooks dir")
+        return
+    if not vault:
+        rep.add("scratch", UNKNOWN, "no vault configured, so finished runs cannot be told apart")
+        return
+    try:
+        runs, bad = gsc.runs(), gsc.leaks(str(vault))
+    except Exception as e:                          # noqa: BLE001
+        rep.add("scratch", UNKNOWN, "the scratch check could not run (%s)" % type(e).__name__)
+        return
+    if bad:
+        rep.add("scratch", WARN, "%d finished or vanished run(s) left scratch under %s"
+                % (len(bad), gsc.root()),
+                "\n".join("%s: %d unit folder(s), %d bytes" % (r["run"], len(r["units"]),
+                                                              r["bytes"]) for r in bad),
+                fix="python3 <plugin>/scripts/gt_ingest_pipeline.py cleanup <run>   (each run "
+                    "above), or rm -rf the folder")
+        return
+    rep.add("scratch", OK, "no scratch left by a finished run (%d run(s) in progress)"
+            % len(runs))
 
 
 def check_sandbox(rep):
@@ -2436,6 +2475,8 @@ def main(argv=None):
         check_security(rep)
     if "sandbox" in wanted:
         check_sandbox(rep)
+    if "scratch" in wanted:
+        check_scratch(rep, vault)
 
     if a.fix:
         fix_wiring(rep, vdir, vault)

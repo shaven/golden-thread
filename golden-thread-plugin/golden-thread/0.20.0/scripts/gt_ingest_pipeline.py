@@ -13,6 +13,7 @@ spool packets that hand work from one stage to the next.
     gt_ingest_pipeline.py status <run> [--json] [--vault V] [--dry-run]
     gt_ingest_pipeline.py workflow-args <run> --stage S [--prompt UNIT=FILE ...] [--json] [--vault V] [--dry-run]
     gt_ingest_pipeline.py packets <run> --stage S --results-file F [--session ID] [--replace] [--json] [--vault V] [--dry-run]
+    gt_ingest_pipeline.py cleanup <run> [--json] [--vault V] [--dry-run]
 
 THE SHAPE (owner, 2026-09-30). Ingest and promote are pipelines of small STATELESS stages, so
 work can be handed off and run in parallel instead of one agent doing everything:
@@ -56,6 +57,16 @@ skill rendered (`--prompt UNIT=FILE`, checked to be a `render` output for that j
 records the workflow's result: each unit checked as `packet` checks it. Units still without a
 packet are what the next `workflow-args` hands out, which is the resume.
 
+SCRATCH FOLDERS (0.20.0). Every agent unit gets a private scratch folder OUTSIDE the vault,
+`~/.gt-scratch/<run>/<stage>-<unit>/` (0700; on Windows under %LOCALAPPDATA% with an owner-only
+ACL; gt_scratch.py), named in its prompt as the only place for intermediate files -- the vault
+spool holds gt's packets and stage files and nothing an agent made. `workflow-args` creates each
+unit's folder and names it in the prompt (`scratch_dir` in the item); `gt_agent_spec.py render
+--scratch-run R --scratch-unit U` does the same for an Agent-tool spawn. A run's scratch is removed
+when it finishes (`draft` wrote its queue, `promote-plan` reached the owner), and by `cleanup
+<run>` when it is abandoned; `status` shows it, and `gt_scratch.py check` reports a finished or
+vanished run's scratch as a leak.
+
 PROMOTIONS STAY HUMAN-APPROVED. promote-plan ends at `awaiting-owner` and this tool has no command
 that applies a promotion: after the owner's yes, the skill queues the writes itself.
 
@@ -82,6 +93,7 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 if HERE not in sys.path:
     sys.path.insert(0, HERE)
 import gt_agent_spec as specs                                    # noqa: E402
+import gt_scratch                                                # noqa: E402
 
 OK, STOP, USAGE, INCOMPLETE = 0, 1, 2, 3
 SPOOL = ("Projects", "golden-thread", "spool", "pipeline")
@@ -579,6 +591,13 @@ def _rendered_by_gt(text, job):
 
 
 def cmd_workflow_args(a):
+    try:
+        return _workflow_args(a)
+    except gt_scratch.ScratchError as exc:
+        return fail("no private scratch folder for the agents: %s" % clean(exc, 300), STOP)
+
+
+def _workflow_args(a):
     """Everything a pipeline-stage workflow needs for one stage, as the JSON to pass it as
     `args`: the stage's JSON Schema (each agent's output is validated against it as it
     returns), and per unit still without a packet: the prompt file, its sha256, and the agent
@@ -615,7 +634,8 @@ def cmd_workflow_args(a):
                     k, _, v = args[i + 1].partition("=")
                     inputs[k] = v
             try:
-                text, _info = specs.render(entry["data"], inputs, vault)
+                text, _info = specs.render(entry["data"], inputs, vault,
+                                           scratch=_scratch_for(a, a.stage, u["unit"]))
             except specs.IntakeRefused as exc:
                 refused.append({"unit": u["unit"], "why": clean(exc, 300)})
                 continue
@@ -653,6 +673,8 @@ def cmd_workflow_args(a):
         model = effort = None            # the definition carries them; passing them is noise
     items = []
     for unit, text in todo:
+        sd = _scratch_for(a, a.stage, unit)
+        text = specs.add_scratch(text, sd)            # a skill-rendered prompt may lack it
         pf = os.path.join(d, "prompts", a.stage, unit_slug(unit) + ".md")
         if not a.dry_run:
             os.makedirs(os.path.dirname(pf), exist_ok=True)
@@ -661,6 +683,7 @@ def cmd_workflow_args(a):
         items.append({"unit": unit, "label": "%s %s" % (job, unit_slug(unit)),
                       "prompt_file": pf.replace(os.sep, "/"),
                       "sha256": hashlib.sha256(text.encode("utf-8")).hexdigest(),
+                      "scratch_dir": sd.replace(os.sep, "/"),
                       "agent_type": atype, "model": model, "effort": effort})
     out = {"workflow": WORKFLOW, "run": a.run, "run_dir": d.replace(os.sep, "/"),
            "stage": a.stage, "job_type": job,
@@ -682,6 +705,46 @@ def cmd_workflow_args(a):
         lines.append("dry run: nothing written")
     emit(a, dict(out, exit=code, dry_run=a.dry_run), lines)
     return code
+
+
+def _scratch_for(a, stage, unit):
+    """The unit's private scratch folder: created (0700, outside the vault) unless a dry run."""
+    return gt_scratch.unit_dir(a.run, stage, unit, create=not a.dry_run)
+
+
+def run_finished(vault, run_id):
+    """True when a run is over -- or gone -- so its scratch is a leak if still there."""
+    return gt_scratch.run_finished(vault, run_id)
+
+
+def _drop_scratch(a, lines):
+    """Remove a finished run's scratch; one line says so. Never fails the stage."""
+    if a.dry_run:
+        return
+    try:
+        if gt_scratch.cleanup(a.run):
+            lines.append("scratch removed: %s" % gt_scratch.run_dir(a.run))
+    except (OSError, gt_scratch.ScratchError) as exc:
+        lines.append("scratch NOT removed (%s): run `cleanup %s`" % (clean(exc, 160), a.run))
+
+
+def cmd_cleanup(a):
+    """Remove an abandoned (or finished) run's scratch folders. The spool is left alone."""
+    if not RUN_RE.match(a.run or "") or ".." in a.run:
+        return fail("%r is not a run id" % clean(a.run, 60))
+    path = gt_scratch.run_dir(a.run)
+    present = os.path.isdir(path)
+    removed = False
+    if present and not a.dry_run:
+        try:
+            removed = gt_scratch.cleanup(a.run)
+        except (OSError, gt_scratch.ScratchError) as exc:
+            return fail("could not remove %s: %s" % (path, clean(exc, 200)), STOP)
+    lines = [("removed the scratch of %s: %s" % (a.run, path)) if removed else
+             ("would remove %s" % path if present else "no scratch for %s" % a.run)]
+    emit(a, {"run": a.run, "path": path.replace(os.sep, "/"), "present": present,
+             "removed": removed, "dry_run": a.dry_run}, lines)
+    return OK
 
 
 def packets(d, stage):
@@ -1091,6 +1154,7 @@ def cmd_draft(a):
     if not stops and not refused:
         lines.append("complete -- no owner prompt was needed (no contradiction, security issue "
                      "or unsafe code)")
+    _drop_scratch(a, lines)                       # the run is over: its agents are done
     emit(a, dict(out, exit=code, dry_run=a.dry_run), lines)
     return code
 
@@ -1189,6 +1253,8 @@ def cmd_promote_plan(a):
     lines.append("OWNER APPROVAL REQUIRED -- nothing has been written. Promotions stay "
                  "human-approved: show each proposal, and queue the writes only for the ones "
                  "the owner says yes to.")
+    if not waiting:
+        _drop_scratch(a, lines)                   # every agent stage is done
     emit(a, dict(out, dry_run=a.dry_run), lines)
     return INCOMPLETE if waiting else OK
 
@@ -1243,6 +1309,8 @@ def run_status(vault, run_id):
         add("approve", "awaiting-owner" if plan else "waiting",
             "" if plan is None else "%d proposal(s)" % len(plan["proposals"]))
         st["verdict"] = "awaiting the owner's approval" if plan else "in progress"
+    sp = gt_scratch.run_dir(run_id)
+    st["scratch"] = {"path": sp.replace(os.sep, "/"), "present": os.path.isdir(sp)}
     return st, None
 
 
@@ -1256,6 +1324,10 @@ def cmd_status(a):
     lines = ["run %s (%s%s)" % (a.run, st["pipeline"],
                                 (", kind %s" % st["kind"]) if st["kind"] else "")]
     lines += ["  %-12s %-15s %s" % (s["stage"], s["state"], s["detail"]) for s in st["stages"]]
+    if st["scratch"]["present"]:
+        lines.append("  scratch      %s%s" % (st["scratch"]["path"],
+                                              "  (the run is finished: `cleanup %s`)" % a.run
+                                              if run_finished(vault, a.run) else ""))
     lines.append(st["verdict"])
     emit(a, st, lines)
     return STOP if st["verdict"].startswith("stopped") else OK
@@ -1391,6 +1463,12 @@ def build_parser():
     p.add_argument("--session", help="the session id")
     p.add_argument("--replace", action="store_true", help="supersede existing packets")
     p.set_defaults(fn=cmd_packets)
+
+    p = sub.add_parser("cleanup", parents=[common],
+                       help="remove a run's private scratch folders (an abandoned run's; a "
+                            "finished run's go by themselves)")
+    p.add_argument("run")
+    p.set_defaults(fn=cmd_cleanup)
     return ap
 
 

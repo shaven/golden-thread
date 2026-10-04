@@ -307,6 +307,9 @@ class Sandbox(unittest.TestCase):
             # test runs would read the developer's real ~/.claude (0.20.0).
             env["USERPROFILE"] = str(self.home)
             env["PYTHONUTF8"] = "1"
+            # gt_scratch's Windows root is %LOCALAPPDATA%, which a sandbox HOME does not move:
+            # without this every pipeline test would write into the real local app data.
+            env["GT_SCRATCH_ROOT"] = str(self.home / "AppData" / "Local" / "gt-scratch")
             # What an installed Windows machine has (install.sh's python3 shim, first on PATH in
             # Git Bash): a `python3` that bash -- hook wrappers, vault git hooks, pipeline steps,
             # gt_demo.sh -- resolves to the real interpreter instead of the Store stub.
