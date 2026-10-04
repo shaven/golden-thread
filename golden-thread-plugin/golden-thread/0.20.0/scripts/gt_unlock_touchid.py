@@ -2,11 +2,22 @@
 """gt_unlock_touchid -- the Touch ID factor: a Secure Enclave key behind the fingerprint (0.20.0).
 
     gt_unlock_touchid.py build --dest DIR [--source FILE]
+    gt_unlock_touchid.py record --helper PATH [--release]
+    gt_unlock_touchid.py verify --helper PATH
 
 `build` compiles gt-presence.swift (beside this file) with `swiftc -O` into DIR/gt-presence and
 ad-hoc signs it. install.sh calls it; it needs the Xcode Command Line Tools and refuses cleanly
 without them. A release machine installs the Developer ID signed helper instead
 (dev/presence-release.sh).
+
+THE INSTALL RECORD (review, 2026-10-03: "Touch ID helper swap"). `build` -- and `record` for a
+binary installed another way -- writes <helper>.install.json: the BUILT binary's sha256 and, for
+a Developer ID signed release binary, its code-signing requirement. Every use of the helper
+(_check_helper) re-hashes it and, when a requirement is recorded, asks codesign to verify it; a
+mismatch, or no record at all, makes Touch ID UNAVAILABLE (never "passed"). `record --release`
+refuses a binary that is not signed by gt's release team. Honest limit: the record sits beside
+the helper in your own directory, so a same-user process that rewrites BOTH defeats the hash
+(not the code-signing requirement of a release binary) -- friction at L1/L2.
 
 How the factor works (the authority is the only caller):
 
@@ -40,6 +51,12 @@ import gt_unlock_crypto as C               # noqa: E402
 import gt_unlock_factors as F              # noqa: E402
 
 HELPER_NAME = "gt-presence"
+RECORD_SUFFIX = ".install.json"
+# The Developer ID team that signs gt's release helper (owner, 2026-10-03 10:55).
+RELEASE_TEAM = "CTM8ZW9QJD"
+RELEASE_REQUIREMENT = ('anchor apple generic and certificate leaf[subject.OU] = "%s"'
+                       % RELEASE_TEAM)
+CODESIGN = "/usr/bin/codesign"
 SOURCE = os.path.join(HERE, "gt-presence.swift")
 MISSING = ("helper missing -- run install.sh with the Xcode Command Line Tools, or install the "
            "signed release helper")
@@ -84,10 +101,11 @@ class TouchIdFactor(F.Factor):
 
     def _check_helper(self, path):
         """The helper must be an absolute path to a regular executable file that only its owner
-        (this user, or root) can write. SECURITY INVARIANT: this is hygiene, not the trust root
-        -- a replaced helper still cannot forge a signature over a fresh challenge, because
-        prove() verifies it here; but it would see what seal() is given, so a helper anybody
-        else can rewrite is refused."""
+        (this user, or root) can write, AND match its install record (sha256, and the recorded
+        code-signing requirement if any). SECURITY INVARIANT: this is not the trust root for
+        PRESENCE -- a replaced helper still cannot forge a signature over a fresh challenge,
+        because prove() verifies it here; but it would see what seal() and unseal() handle, so
+        a helper that is not the one install built (or recorded) is refused."""
         if not path or not os.path.isabs(path):
             raise F.FactorError("unavailable", "the helper path must be absolute")
         try:
@@ -99,6 +117,9 @@ class TouchIdFactor(F.Factor):
         if st.st_mode & (stat.S_IWGRP | stat.S_IWOTH) or st.st_uid not in (os.getuid(), 0):
             raise F.FactorError("unavailable", "the helper %s is writable by others or owned by "
                                 "another user; reinstall it" % path)
+        why = helper_problem(path)
+        if why:
+            raise F.FactorError("unavailable", why)
         return path
 
     def _call(self, cmd, req, record=None, timeout=QUICK_TIMEOUT_S):
@@ -199,7 +220,16 @@ class TouchIdFactor(F.Factor):
         # ("ok", a signature over another message, another key's signature) is worthless.
         if not C.es256_verify(pub, bytes(challenge), sig):
             raise F.FactorError("wrong", "the Touch ID signature does not verify")
-        return True
+        return sig          # truthy; the authority keeps it where an approval must be re-checked
+
+    def verify(self, record, challenge, signature):
+        """Re-check a signature prove() returned, under the enrolled public key (the policy
+        approval, gt_unlockd._approval_problem). No prompt, no helper."""
+        try:
+            pub = _unb64((record or {}).get("public"), "public")
+        except F.FactorError:
+            return False
+        return bool(C.es256_verify(pub, bytes(challenge), bytes(signature)))
 
     def seal(self, record, plaintext):
         if not record or not record.get("agree_public"):
@@ -226,6 +256,63 @@ class TouchIdFactor(F.Factor):
         # AES-GCM authenticated the box inside the helper; the plaintext is returned to the
         # authority only and never logged.
         return _unb64(out.get("plaintext"), "plaintext")
+
+
+# ---------------------------------------------------------------- the install record
+
+def _sha256_file(path):
+    import hashlib
+    h = hashlib.sha256()
+    with open(path, "rb") as f:
+        for chunk in iter(lambda: f.read(1 << 16), b""):
+            h.update(chunk)
+    return h.hexdigest()
+
+
+def _codesign_ok(path, requirement):
+    try:
+        r = subprocess.run([CODESIGN, "--verify", "--strict", "-R=" + requirement, path],
+                           stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=60)
+    except (OSError, subprocess.SubprocessError):
+        return False
+    return r.returncode == 0
+
+
+def record_path(helper):
+    return helper + RECORD_SUFFIX
+
+
+def record_helper(helper, requirement=None):
+    """Write <helper>.install.json for the binary as it is NOW: its sha256 and, optionally,
+    the code-signing requirement it must keep satisfying. -> the record."""
+    rec = {"schema": 1, "sha256": _sha256_file(helper), "requirement": requirement}
+    if requirement and not _codesign_ok(helper, requirement):
+        raise BuildError("%s does not satisfy the requirement %s" % (helper, requirement))
+    F.write_json(record_path(helper), rec)
+    return rec
+
+
+def helper_problem(helper):
+    """None when `helper` matches its install record, else why not (so Touch ID is
+    unavailable). Re-hashed on every call: a swap between uses is caught at the next use."""
+    try:
+        with open(record_path(helper), "r", encoding="utf-8") as f:
+            rec = json.load(f)
+    except (OSError, ValueError):
+        return ("the helper %s has no install record; reinstall gt (install.sh) so the "
+                "helper is built and recorded" % helper)
+    if not isinstance(rec, dict) or not isinstance(rec.get("sha256"), str):
+        return "the helper's install record is damaged; reinstall gt"
+    try:
+        if _sha256_file(helper) != rec["sha256"]:
+            return ("the helper %s does not match the binary install recorded; it may have "
+                    "been replaced -- reinstall gt" % helper)
+    except OSError:
+        return MISSING
+    req = rec.get("requirement")
+    if req and not _codesign_ok(helper, req):
+        return "the helper %s no longer satisfies its code-signing requirement" % helper
+    return None
 
 
 # ---------------------------------------------------------------- building the helper
@@ -264,6 +351,7 @@ def build(dest_dir, source=None):
             raise BuildError("codesign failed:\n" + r.stdout.decode("utf-8", "replace")[-2000:])
         os.chmod(out, 0o755)
         os.replace(out, final)
+        record_helper(final)              # the BUILT binary's hash: _check_helper verifies it
     except subprocess.TimeoutExpired:
         raise BuildError("the helper build timed out")
     finally:
@@ -279,7 +367,28 @@ def main(argv=None):
     b = sub.add_parser("build", help="compile and ad-hoc sign gt-presence")
     b.add_argument("--dest", required=True, help="directory to put gt-presence in")
     b.add_argument("--source", default=None, help="the Swift source (default: beside this file)")
+    r = sub.add_parser("record", help="record an installed helper's sha256 (and signature)")
+    r.add_argument("--helper", required=True)
+    r.add_argument("--release", action="store_true",
+                   help="require (and record) gt's Developer ID release signature")
+    v = sub.add_parser("verify", help="exit 0 when the helper matches its install record")
+    v.add_argument("--helper", required=True)
     ns = ap.parse_args(argv)
+    if ns.cmd == "verify":
+        why = helper_problem(ns.helper)
+        if why:
+            sys.stderr.write("gt_unlock_touchid: %s\n" % why)
+            return 1
+        sys.stdout.write("helper matches its install record\n")
+        return 0
+    if ns.cmd == "record":
+        try:
+            record_helper(ns.helper, RELEASE_REQUIREMENT if ns.release else None)
+        except (BuildError, OSError) as e:
+            sys.stderr.write("gt_unlock_touchid: %s\n" % e)
+            return 2
+        sys.stdout.write("recorded %s\n" % ns.helper)
+        return 0
     try:
         path = build(ns.dest, ns.source)
     except BuildError as e:

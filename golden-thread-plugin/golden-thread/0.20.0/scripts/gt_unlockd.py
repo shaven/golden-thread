@@ -70,37 +70,58 @@ def _is_claude(info, names=CLAUDE_NAMES):
     return any("@anthropic-ai/claude-code" in a for a in args[:3])
 
 
-_PY_OPTS_WITH_VALUE = ("-X", "-W", "-Q")
+def installed_plugins_file():
+    return os.path.join(os.path.expanduser("~"), ".claude", "plugins", "installed_plugins.json")
 
 
-def is_lotr_daemon(peer):
-    """Is `peer` a python process running gt-lotr's lotrd.py as its main script? The one
-    process allowed to resolve a secret ON BEHALF of another (the MCP shim it serves): it uses
-    the value for the downstream call and never returns it to a client (gt-lotr ADR-3).
-
-    INVARIANT: a process from the session's shell asking `secret` with subject=<the shim>
-    would otherwise receive the shim's credential. `python -c`, `python -m`, `python -` and
-    any other script are refused. Residual (documented, L1/L2): code injected INTO a real
-    lotrd (a usercustomize on its path, a patched lotrd.py) runs as lotrd."""
-    args = gt_ipc.process_args(peer.get("pid"))
-    script = None
-    i = 1
-    while i < len(args):
-        a = args[i]
-        if a in ("-c", "-m", "-"):
-            return False
-        if a in _PY_OPTS_WITH_VALUE:
-            i += 2
+def installed_plugin_dirs(name, plugins_file=None):
+    """The install paths Claude Code records for plugin `name` (any marketplace), from
+    ~/.claude/plugins/installed_plugins.json -- realpaths, never raises."""
+    try:
+        with open(plugins_file or installed_plugins_file(), "r", encoding="utf-8") as f:
+            data = json.load(f)
+    except (OSError, ValueError):
+        return []
+    plugins = data.get("plugins") if isinstance(data, dict) else None
+    out = []
+    for key, entries in (plugins or {}).items():
+        if not isinstance(key, str) or key.split("@", 1)[0] != name:
             continue
-        if a.startswith("-"):
-            i += 1
-            continue
-        script = a
-        break
-    if not script or os.path.basename(script) != "lotrd.py":
+        for e in entries if isinstance(entries, list) else [entries]:
+            p = e.get("installPath") if isinstance(e, dict) else None
+            if isinstance(p, str) and os.path.isabs(p):
+                out.append(os.path.realpath(p))
+    return out
+
+
+def runs_installed_script(peer, plugin, script, plugins_file=None):
+    """Is `peer` a python process whose __main__ file IS `<installPath>/scripts/<script>` of an
+    installed `plugin` -- compared by realpath, never by file name?
+
+    INVARIANT (review F5, 2026-10-03): a look-alike -- /tmp/x/lotrd.py with a lotrlib/engine.py
+    beside it -- passed the old file-name check and received the shim's credential. Now only
+    the file Claude Code installed counts. Residual (documented, L1/L2): installed_plugins.json
+    and the installed files are the user's own, so a same-user process can edit them or run the
+    real file with its own arguments; L3 (admin-owned code) closes that."""
+    main = gt_ipc.main_script((peer or {}).get("pid"))
+    if not main:
         return False
-    return os.path.isfile(os.path.join(os.path.dirname(os.path.abspath(script)), "lotrlib",
-                                       "engine.py"))
+    real = os.path.realpath(main)
+    return any(real == os.path.realpath(os.path.join(d, "scripts", script))
+               for d in installed_plugin_dirs(plugin, plugins_file))
+
+
+def is_lotr_daemon(peer, plugins_file=None):
+    """Is `peer` the INSTALLED gt-lotr's lotrd.py? The one process allowed to resolve a secret,
+    or ask for consent, ON BEHALF of another (the MCP shim it serves): it uses the value for the
+    downstream call and never returns it to a client (gt-lotr ADR-3)."""
+    return runs_installed_script(peer, "gt-lotr", "lotrd.py", plugins_file)
+
+
+def is_lotr_shim(peer, plugins_file=None):
+    """Is `peer` the INSTALLED gt-lotr's lotr_mcp.py -- the only file that may take a session's
+    shim seat (review F7)?"""
+    return runs_installed_script(peer, "gt-lotr", "lotr_mcp.py", plugins_file)
 
 
 def _sha(data):
@@ -114,6 +135,7 @@ class Session:
         self.session_id = session_id
         self.job = job
         self.shim = None                  # {"pid", "start"} -- one live shim per session
+        self.had_shim = False             # a registered shim exited; the next one starts bare
         self.created = time.time()
 
     @property
@@ -157,7 +179,7 @@ class Authority:
 
     def __init__(self, home, *, factors=None, admin_paths=None, trusted_uids=(0,),
                  claude_names=CLAUDE_NAMES, is_claude=None, screen_locked=None, clock=None,
-                 consumer_ok=None):
+                 consumer_ok=None, shim_ok=None):
         self.home = home
         os.makedirs(home, mode=0o700, exist_ok=True)
         if not IS_WINDOWS:
@@ -174,13 +196,17 @@ class Authority:
         self.claude_names = tuple(claude_names)
         self.is_claude = is_claude or (lambda info: _is_claude(info, self.claude_names))
         self.consumer_ok = consumer_ok or is_lotr_daemon
+        self.shim_ok = shim_ok or is_lotr_shim
         self._screen_locked = screen_locked or screen_locked_now
         self._clock = clock or (lambda: (time.time(), time.monotonic()))
         self.lock = threading.RLock()
         self.prompt_lock = threading.Lock()
         self.sessions = {}                # key -> Session
         self.grants = {}                  # session key -> Grant
-        self.sealed_cache = {}            # name -> value, cleared with every revocation
+        # (subject pid, subject start, grant id, name) -> (value, monotonic expiry). Only while
+        # the policy's secrets_window_s > 0; per subject AND grant, never global (review F4);
+        # cleared with every revocation.
+        self.sealed_cache = {}
         self.cooldown = {}                # requester root key -> monotonic time
         self.started = time.time()
         w, m = self._clock()
@@ -188,6 +214,8 @@ class Authority:
         self._last_wall = w
         self._policy_stamp = None
         self.eff = None
+        self._was_on = False              # unlock was ON at some point in this daemon's life
+        self._off_by_policy = False       # ... and was turned off through policy_set
         self.reload()
         self.audit("daemon_start", verdict="ok", reason="grants start empty (I3)")
 
@@ -236,8 +264,15 @@ class Authority:
             or (IS_WINDOWS and P._admin_registry() is not None)
         # An unreadable user policy counts as ON (I6): corrupting the file must not be a way
         # to switch unlock off.
-        marker = bool(self.state().get("unlock_on"))
+        marker = bool(self.state().get("unlock_on")) or P.marker_present(self.home)
         enabled = bool((user or {}).get("enabled")) or admin_exists or bool(uprob) or marker
+        # I6: unlock was on in this daemon's life and its files now say otherwise, without a
+        # policy_set turning it off: that is a deletion behind the authority's back.
+        vanished = self._was_on and not enabled and not self._off_by_policy
+        if vanished:
+            enabled = True
+            problems.append("unlock was on and its policy files were removed or rewritten "
+                            "outside gt_unlock.py; everything gated stays locked")
         try:
             merged = P.merge(user if not uprob else None, admin)
         except (P.PolicyError, TypeError, ValueError) as e:
@@ -247,10 +282,14 @@ class Authority:
         # I6: a user policy edited behind the authority's back (not through policy_set) is
         # not trusted until it is approved with a step-up.
         h = self._policy_file_hash()
-        approved = self.state().get("policy_approved")
-        if eff.enabled and h is not None and h != approved:
-            eff.problems.append("policy.json changed outside `gt_unlock.py policy` -- approve "
-                                "it with `gt_unlock.py policy approve` (needs your factors)")
+        if eff.enabled and h is None and not admin_exists and not vanished:
+            eff.problems.append("unlock is on (its marker is present) but policy.json is "
+                                "missing; everything gated stays locked until a policy is set "
+                                "with `gt_unlock.py policy`")
+        elif eff.enabled and h is not None:
+            why = self._approval_problem(h)
+            if why:
+                eff.problems.append(why)
         # I6: K above the usable factors locks; it is never lowered.
         if eff.enabled and not eff.problems:
             prob = self._k_problem(eff.policy)
@@ -258,7 +297,67 @@ class Authority:
                 eff.problems.append(prob)
         self.eff = eff
         self._policy_stamp = stamp
+        if eff.enabled:
+            self._was_on = True
+            self._off_by_policy = False
         return eff
+
+    # ------------------------------------------------------------------ policy approval (I6)
+    def approval_challenge(self, policy_hash, nonce, requester, factor):
+        """The challenge a platform factor signs to approve policy bytes with sha256
+        `policy_hash`: the same construction as every other factor challenge, with purpose
+        "change" and scope "policy:<hash>", so the signature binds exactly those bytes."""
+        return self._challenge(nonce, "change", "policy:" + policy_hash, requester, factor)
+
+    def _approval_problem(self, h):
+        """-> None when policy.json (sha256 `h`) carries a valid approval, else the reason.
+
+        Review F3 (2026-10-03): the approval used to be a plain sha256 in state.json, which any
+        same-user process could write. Where a platform factor (Touch ID / Hello) is enrolled,
+        the approval is now that factor's signature over the policy hash, made during the
+        step-up that approved it, and verified here under the enrolled public key. Without a
+        platform factor (Linux: TOTP only) the hash alone is all there is -- L1, documented.
+        Invalid or missing => the caller fails closed (the most restrictive policy, never
+        "off")."""
+        st = self.state()
+        appr = st.get("policy_approval") if isinstance(st.get("policy_approval"), dict) else {}
+        enrolled = self.enrolment().get("factors") or {}
+        platform = [n for n in P.PLATFORM_FACTORS
+                    if n in enrolled and hasattr(self.factors.get(n), "verify")]
+        if not platform:
+            if h in (st.get("policy_approved"), appr.get("hash")):
+                return None
+            return ("policy.json changed outside `gt_unlock.py policy` -- approve it with "
+                    "`gt_unlock.py policy approve` (needs your factors)")
+        if appr.get("hash") != h:
+            return ("policy.json changed outside `gt_unlock.py policy`, or its approval is not "
+                    "signed -- approve it with `gt_unlock.py policy approve` (needs Touch ID / "
+                    "Windows Hello)")
+        name = appr.get("factor")
+        if name not in platform:
+            return "the policy approval is not signed by an enrolled platform factor"
+        # A Secure Enclave key blob is not bound to the binary that made it (verified on this
+        # Mac 2026-10-03 18:59): a same-user process holding a NON-biometric key's blob can sign
+        # with it at will. Only a key whose use needs a finger / PIN may approve a policy; an
+        # enrolment that says otherwise is refused (fail closed), never trusted.
+        if (enrolled.get(name) or {}).get("biometric", True) is not True \
+                and not getattr(self.factors.get(name), "_test", False):
+            return ("the policy approval is signed by a %s key that needs no finger or PIN; "
+                    "only a biometric key may approve -- re-enrol %s" % (name, name))
+        import base64
+        try:
+            nonce = base64.b64decode(appr.get("nonce") or "", validate=True)
+            sig = base64.b64decode(appr.get("sig") or "", validate=True)
+        except (TypeError, ValueError):
+            return "the policy approval is malformed"
+        ch = self.approval_challenge(h, nonce, str(appr.get("requester") or ""), name)
+        try:
+            ok = bool(self.factors[name].verify(enrolled[name], ch, sig))
+        except Exception:                                     # noqa: BLE001
+            ok = False
+        if not ok:
+            return "the policy approval's %s signature does not verify" % name
+        return None
 
     def usable_factors(self, policy=None):
         policy = policy or self.eff.policy
@@ -287,6 +386,8 @@ class Authority:
 
     # ------------------------------------------------------------------ audit (I8)
     def audit(self, event, **fields):
+        """Append one line. -> True when it was written. A caller that must not act without a
+        record (write / consent / secret verdicts) refuses on False (review, low)."""
         rec = {"ts": time.strftime("%Y-%m-%dT%H:%M:%S%z"), "event": event}
         for k, v in fields.items():
             if v is not None and k not in ("value", "secret", "code", "token", "seed"):
@@ -300,8 +401,9 @@ class Authority:
                 os.write(fd, line)
             finally:
                 os.close(fd)
+            return True
         except OSError:
-            pass
+            return False
 
     # ------------------------------------------------------------------ subjects
     def _ident(self, peer):
@@ -356,7 +458,7 @@ class Authority:
     def revoke_key(self, key, why):
         with self.lock:
             g = self.grants.pop(key, None)
-            self.sealed_cache.clear()
+            self.sealed_cache.clear()          # every revocation empties it (sealed I2)
         if g:
             self.audit("revoke", grant=g.gid, reason=why, session=key[0])
         return g
@@ -393,6 +495,7 @@ class Authority:
         for s in sessions:
             if s.shim and not gt_ipc.alive(s.shim["pid"], s.shim["start"]):
                 s.shim = None
+                s.had_shim = True
                 if "shim_exit" in lock_on:
                     self.revoke_key(s.key, "shim_exit")
             if s.kind != "job" and not gt_ipc.alive(s.root["pid"], s.root["start"]):
@@ -411,8 +514,10 @@ class Authority:
         return hashlib.sha256(b"gt-unlock-challenge\0" + nonce + b"\0" + blob).digest()
 
     def collect(self, ctx, purpose, scope, requester, *, k=None, need_platform=False,
-                use_recovery=False):
-        """Run K factors (I2). -> list of factor names that passed. Raises Denied."""
+                use_recovery=False, evidence=None):
+        """Run K factors (I2). -> list of factor names that passed. Raises Denied.
+        `evidence` (a dict) receives the nonce and each platform factor's signature, for an
+        approval that must be verifiable later (policy approval, F3)."""
         pol = self.eff.policy
         f = pol.get("factors") or {}
         k = int(k if k is not None else f.get("required", 1))
@@ -442,11 +547,16 @@ class Authority:
                          (k, len(set(plan))))
         nonce = secrets.token_bytes(32)
         done = []
+        if evidence is not None:
+            evidence["nonce"], evidence["requester"], evidence["sigs"] = nonce, requester, {}
         for name in plan:
             fac = self.factors.get(name) if name != "recovery" else F.RecoveryFactor()
             ch = self._challenge(nonce, purpose, scope, requester, name)
             try:
-                fac.prove(enrolled.get(name) or {}, ch, ctx)
+                proof = fac.prove(enrolled.get(name) or {}, ch, ctx)
+                if evidence is not None and name in P.PLATFORM_FACTORS \
+                        and isinstance(proof, (bytes, bytearray)):
+                    evidence["sigs"][name] = bytes(proof)
             except F.FactorError as e:
                 self.save_state(ctx.state)
                 self.audit("factor_failed", factor=name, scope=scope, requester=requester,
@@ -479,8 +589,8 @@ class Authority:
 
     def do_unlock(self, session, requester, scope, reason, conn, rid, tty, use_recovery=False):
         """Collect K factors and grant `session`."""
-        text = ("%s asks to unlock gt%s.\n%s" % (
-            requester, " for %s" % scope if scope else "", reason or "")).strip()
+        text = prompt_text("%s asks to unlock gt%s." % (requester, " for %s" % scope
+                                                          if scope else ""), reason)
         lk = self._prompting(session.key)
         try:
             ctx = self._ctx(text, conn, rid, tty)
@@ -512,8 +622,8 @@ class Authority:
             return g
         usable = self.usable_factors()
         plat = [x for x in usable if x in P.PLATFORM_FACTORS]
-        text = ("%s asks for a fresh confirmation for %s.\n%s" % (requester, scope,
-                                                                  reason or "")).strip()
+        text = prompt_text("%s asks for a fresh confirmation for %s." % (requester, scope),
+                           reason)
         lk = self._prompting(session.key)
         try:
             ctx = self._ctx(text, conn, rid, tty)
@@ -551,14 +661,27 @@ class Authority:
                 ok = (job, scope) in allowed and P.unattended_scope_ok(scope)
                 return self._verdict(ok, "unattended" if ok else "not_allowed_unattended",
                                      "job %s %s %s" % (job, "may use" if ok else "may not use",
-                                                       scope), None, level, scope, target)
-            # I4: the door. Under mcp_only only the registered shim gets lotr:*.
-            if scope.startswith("lotr:") and eff.policy.get("door") == "mcp_only" \
-                    and kind == "claude":
-                return self._verdict(False, "mcp_only", "lotr is served only to the "
+                                                       scope), None, level, scope, target,
+                                     must_audit=_must_audit(scope))
+            # I4: the door. Under mcp_only only the registered shim gets lotr:* -- and, since
+            # the review's F4, the broker's scopes too: a secret is bound to the exact
+            # requesting process, exactly like lotr:*.
+            if (scope.startswith("lotr:") or scope in BROKER_SCOPES) \
+                    and eff.policy.get("door") == "mcp_only" and kind == "claude":
+                return self._verdict(False, "mcp_only", "%s is served only to the "
                                      "registered MCP shim (door: mcp_only); a process started "
-                                     "from the session's shell is refused", None, level,
-                                     scope, target)
+                                     "from the session's shell is refused"
+                                     % ("lotr" if scope.startswith("lotr:") else scope),
+                                     None, level, scope, target)
+            # F6: read_without_unlock is for a person at a terminal. A "terminal" peer with
+            # no controlling terminal (a double-forked orphan, a daemon) gets the level the
+            # scope has WITHOUT that convenience.
+            if level == "open" and kind == "terminal" and scope.startswith("lotr:") \
+                    and not _has_tty(target):
+                raw = P.Effective(dict(eff.policy, read_without_unlock=False), [],
+                                  True).level(scope)
+                if raw != "open":
+                    level = raw
             if level == "open":
                 return self._verdict(True, "open", "open scope", None, level, scope, target)
             session = shim_session or self.session_for(root, kind)
@@ -580,16 +703,26 @@ class Authority:
                 else:
                     g = self.step_up(session, g, requester, scope, reason, conn, rid, tty)
             g.last_use = time.monotonic()
-            return self._verdict(True, "granted", "granted", g, level, scope, target)
+            return self._verdict(True, "granted", "granted", g, level, scope, target,
+                                 must_audit=_must_audit(scope))
         except Denied as e:
             return self._verdict(False, e.code, e.message, None, "?", scope, target,
                                  hints=e.hints)
 
-    def _verdict(self, ok, code, message, g, level, scope, target, hints=None):
+    def _verdict(self, ok, code, message, g, level, scope, target, hints=None,
+                 must_audit=False):
         if code != "disabled":
-            self.audit("check", scope=scope, verdict="allow" if ok else "deny", reason=code,
-                       grant=g.gid if g else None, subject=target.get("pid"),
-                       exe=os.path.basename(gt_ipc.process_path(target.get("pid") or 0)))
+            wrote = self.audit("check", scope=scope, verdict="allow" if ok else "deny",
+                               reason=code, grant=g.gid if g else None,
+                               subject=target.get("pid"),
+                               exe=os.path.basename(gt_ipc.process_path(target.get("pid") or 0)))
+            if ok and must_audit and not wrote:
+                # Never act without the record (review, low): a write / consent / secret
+                # allow that cannot be audited is refused.
+                return {"allowed": False, "code": "audit_failed",
+                        "message": "the audit log could not be written, so %s is refused"
+                        % scope, "grant": None, "level": level,
+                        "hints": ["check %s" % self.path("audit.jsonl")]}
         return {"allowed": bool(ok), "code": code, "message": message,
                 "grant": g.gid if g else None, "level": level, "hints": hints or []}
 
@@ -635,6 +768,37 @@ class Authority:
                 "admin_floor": any(os.path.lexists(p) for p in
                                    (self.admin_paths or P.admin_paths())),
                 "needs_reenrol": bool(self.state().get("needs_reenrol"))}
+
+
+BROKER_SCOPES = ("gt:secrets",)
+
+
+def prompt_text(head, claim=None):
+    """Every prompt the authority raises is composed HERE: `head` names the requester (from
+    the kernel) and the scope. A caller's own `reason` is shown only as a quoted, single-line,
+    length-capped claim, labelled as unverified -- it can never write the prompt or pose as
+    the authority's own words. Residual (documented): a same-user process can still race a
+    prompt of its own, or drive the Touch ID helper with its own text."""
+    head = head.strip()
+    claim = " ".join(str(claim or "").split())
+    claim = "".join(ch for ch in claim if ch.isprintable())[:160]
+    if not claim:
+        return head
+    return '%s\nIt says (unverified): "%s"' % (head, claim.replace('"', "'"))
+
+
+def _must_audit(scope):
+    """Scopes whose ALLOW must be on record before anything acts on it."""
+    return scope.endswith((":write", ":consent")) or scope in BROKER_SCOPES \
+        or scope.startswith(("secret:", "gt:"))
+
+
+def _has_tty(ident):
+    info = gt_ipc.process_info((ident or {}).get("pid"))
+    if not info or info.get("start") != (ident or {}).get("start"):
+        return False
+    # None = the platform cannot say (Windows): treated as a terminal, documented.
+    return info.get("tty") is not False
 
 
 def _read_user_at(path):

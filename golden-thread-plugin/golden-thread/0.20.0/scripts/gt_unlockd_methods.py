@@ -6,20 +6,32 @@ method receives the KERNEL-identified peer (gt_ipc) and never trusts an identity
 result or an approval carried in `params` (gt_unlockd invariants I1, I2).
 
 Guards, by method:
-  register_shim       the caller's PARENT must be a `claude` process; one live shim per session
-                      (first wins -- Claude Code starts the shim before the model can run
-                      anything, so an impostor `exec`-ed from Bash later finds the seat taken)
+  register_shim       the caller runs the INSTALLED gt-lotr lotr_mcp.py (realpath; review F7)
+                      and its PARENT is a `claude` process; one live shim per session (first
+                      wins); a shim REPLACING an earlier one (dead or alive) never inherits the
+                      session's grant -- the grant is revoked and the new shim unlocks again
   enroll / unenroll / recovery_new / policy_set / policy_approve
                       "step-up + K": K FRESH factors, ignoring any grant (an agent riding an
-                      unlocked session cannot change what unlocking means). Bootstrap (nothing
-                      enrolled yet) must start with the platform factor where one exists,
-                      because enrolling it needs a physical touch.
-  secret / seal_*     a grant for gt:secrets (or, for a job, the allow-listed secret:<ref>)
-  consent             a live grant, then a platform signature over the op unless inside the
-                      consent window
+                      unlocked session cannot change what unlocking means), with the platform
+                      factor among them where one is usable -- its signature over the policy
+                      hash IS the policy approval (review F3). Bootstrap (nothing enrolled yet)
+                      must start with the platform factor where one exists, because enrolling
+                      it needs a physical touch.
+  secret / seal_*     a grant for gt:secrets held by the REQUESTING process (under mcp_only: the
+                      shim, or lotrd naming the shim; review F4), or for a job the allow-listed
+                      secret:<ref>; a sealed value is opened with a fresh platform factor every
+                      time, or once per secrets_window_s per subject and grant
+  consent             only gt-lotr's installed lotrd may ask (review M1); the prompt text is
+                      composed HERE from the op, never taken from the caller; then a live grant
+                      and a platform signature over the op unless inside the consent window
+  stop                a fresh factor while unlock is on (review F1); `lock` needs nothing --
+                      it only tightens
 """
+import base64
 import hashlib
+import json
 import os
+import re
 import secrets
 import time
 
@@ -42,23 +54,49 @@ def methods(auth):
     def requester(peer):
         return auth.describe(peer["pid"])
 
-    def require_full(peer, purpose, conn, rid, params):
+    def require_full(peer, purpose, conn, rid, params, bind=None, evidence=None):
         """step-up + K: K fresh factors of those enrolled (never fewer than one when any is
-        enrolled). Returns the factor names used, or [] for a permitted bootstrap."""
+        enrolled), the platform factor among them when one is usable. Returns the factor names
+        used, or [] for a permitted bootstrap. `bind` (a policy hash) makes the challenge the
+        policy approval's, and `evidence` receives the platform signature over it (F3)."""
         auth.reload()
         usable = auth.usable_factors()
         if not usable:
             return []
         k = max(1, min(int((auth.eff.policy.get("factors") or {}).get("required", 1)),
                        len(usable)))
+        plat = any(x in P.PLATFORM_FACTORS for x in usable)
         text = "%s asks to change gt unlock: %s" % (requester(peer), purpose)
         lk = auth._prompting(("full", peer["pid"]))
         try:
             ctx = auth._ctx(text, conn, rid, tty(params))
-            return auth.collect(ctx, "change", purpose, requester(peer), k=k,
-                                use_recovery=bool(params.get("recovery")))
+            return auth.collect(ctx, "change", ("policy:" + bind) if bind else purpose,
+                                requester(peer), k=k, need_platform=plat,
+                                use_recovery=bool(params.get("recovery")), evidence=evidence)
         finally:
             lk.release()
+
+    def write_approval(h, used, evidence):
+        """Record the approval of policy bytes with sha256 `h` in state.json: the platform
+        signature when one was made (verified on every load, F3), else the hash (L1)."""
+        st = auth.state()
+        st["policy_approved"] = h
+        sigs = (evidence or {}).get("sigs") or {}
+        name = next((n for n in P.PLATFORM_FACTORS if n in sigs), None)
+        if name:
+            st["policy_approval"] = {
+                "hash": h, "factor": name, "requester": evidence["requester"],
+                "nonce": base64.b64encode(evidence["nonce"]).decode("ascii"),
+                "sig": base64.b64encode(sigs[name]).decode("ascii")}
+        else:
+            st.pop("policy_approval", None)
+        return st
+
+    def need_consumer(peer, what):
+        if not auth.consumer_ok(peer):
+            auth.audit(what, verdict="deny", reason="not_a_consumer", subject=peer.get("pid"))
+            raise Denied("not_a_consumer", "only gt-lotr's installed daemon may ask for %s"
+                         % ("a consent" if what == "consent" else "this"))
 
     @method
     def ping(peer, params, conn=None, rid=None):
@@ -85,6 +123,11 @@ def methods(auth):
                 or not auth.is_claude(chain[1]):
             raise Denied("not_a_shim", "an MCP shim is started by claude itself; this process "
                          "was not")
+        if not auth.shim_ok(peer):
+            auth.audit("register_shim", verdict="deny", subject=peer["pid"],
+                       reason="not_the_installed_shim")
+            raise Denied("not_a_shim", "only the installed gt-lotr lotr_mcp.py may take a "
+                         "session's MCP shim seat")
         root = {"pid": chain[1]["pid"], "start": chain[1]["start"]}
         s = auth.session_for(root, "claude", params.get("session_id"))
         me = {"pid": peer["pid"], "start": peer["start"]}
@@ -93,7 +136,12 @@ def methods(auth):
                 auth.audit("register_shim", verdict="deny", subject=peer["pid"],
                            reason="seat_taken", session=root["pid"])
                 raise Denied("seat_taken", "a shim is already registered for this session")
+            replaced = (s.shim is not None and s.shim != me) or s.had_shim
             s.shim = me
+            s.had_shim = False
+        if replaced:
+            # F7: a new shim never inherits the grant an earlier one held.
+            auth.revoke_key(s.key, "shim_replaced")
         auth.audit("register_shim", verdict="ok", subject=peer["pid"], session=root["pid"])
         return {"session": root["pid"]}
 
@@ -160,12 +208,15 @@ def methods(auth):
 
     @method
     def consent(peer, params, conn=None, rid=None):
+        need_consumer(peer, "consent")                                   # M1
         eff = auth.reload()
         pol = eff.policy
         if not eff.enabled or pol.get("consent_requires_factor") != "platform":
             return {"mode": "none"}
+        op = _consent_op(params.get("op"))
         subject = params.get("subject") or peer
-        if not gt_ipc.alive(subject.get("pid"), subject.get("start")):
+        if not isinstance(subject, dict) or not gt_ipc.alive(subject.get("pid"),
+                                                             subject.get("start")):
             raise Denied("subject_gone", "the subject process is not running")
         kind, root, shim_s = auth.classify(subject)
         if kind == "job":
@@ -176,10 +227,16 @@ def methods(auth):
             raise Denied("locked", "gt is locked; unlock first")
         now = time.monotonic()
         if g.consent_until and now < g.consent_until:
-            auth.audit("consent", grant=g.gid, verdict="allow", reason="window")
+            if not auth.audit("consent", grant=g.gid, verdict="allow", reason="window"):
+                raise Denied("audit_failed", "the audit log could not be written")
             return {"mode": "platform", "approved": True, "grant": g.gid, "window": True}
-        op_hash = str(params.get("op_hash") or "")
-        text = "%s\n\nApprove with Touch ID / Windows Hello." % str(params.get("text") or "")[:600]
+        op_hash = op["hash"]
+        # M1: the text the person approves is composed here, from the op, never by the caller.
+        text = ("gt-lotr asks to run a consent-tier operation:\n  %s %s on %s%s\n  arguments "
+                "sha256 %s\n\nApprove with Touch ID / Windows Hello."
+                % (op["tool"], op["op"], op["connection"],
+                   " as %s" % op["identity"] if op.get("identity") else "",
+                   op["args_sha256"][:16]))
         lk = auth._prompting(session.key)
         try:
             ctx = auth._ctx(text, None, rid, False)
@@ -187,12 +244,14 @@ def methods(auth):
                                 requester(peer), k=1, need_platform=True)
         finally:
             lk.release()
+        if not auth.audit("consent", grant=g.gid, verdict="allow", factors=",".join(used),
+                          reason="op " + op_hash[:16]):
+            raise Denied("audit_failed", "the audit log could not be written")
         window = int(pol.get("consent_window_s") or 0)
         if window:
             g.consent_until = min(now + window, g.created + g.ttl)
-        auth.audit("consent", grant=g.gid, verdict="allow", factors=",".join(used),
-                   reason="op " + op_hash[:16])
-        return {"mode": "platform", "approved": True, "grant": g.gid, "window": False}
+        return {"mode": "platform", "approved": True, "grant": g.gid, "window": False,
+                "op_hash": op_hash}
 
     # ---------------------------------------------------------- secrets
     def _secret_gate(peer, params, conn, rid, ref):
@@ -226,26 +285,43 @@ def methods(auth):
         scheme, target = ref.split(":", 1)
         if scheme == "sealed":
             import gt_unlock_seal as S
-            with auth.lock:
-                cached = auth.sealed_cache.get(target)
-            if cached is None:
-                ctx = auth._ctx("Open the sealed credential %s" % target, conn, rid, tty(params))
+            if not S.NAME.match(target):              # the name goes into the prompt text
+                raise Denied("bad_name", "a sealed name is one plain segment")
+            # Owner decision 2026-10-03 18:37: a fresh platform factor for EVERY unseal, or
+            # once per secrets_window_s -- per subject and per grant, never global (F4).
+            win = int(auth.eff.policy.get("secrets_window_s") or 0)
+            who = params.get("subject") or peer
+            key = (who.get("pid"), who.get("start"), v.get("grant"), target)
+            now = time.monotonic()
+            value = None
+            if win and v.get("grant"):
+                with auth.lock:
+                    hit = auth.sealed_cache.get(key)
+                    if hit and hit[1] > now:
+                        value = hit[0]
+                    elif hit:
+                        auth.sealed_cache.pop(key, None)
+            if value is None:
+                ctx = auth._ctx("%s asks to open the sealed credential %s"
+                                % (requester(peer), target), conn, rid, tty(params))
                 try:
-                    cached = S.get(auth.home, target, auth.enrolment(), auth.factors, ctx)
+                    value = S.get(auth.home, target, auth.enrolment(), auth.factors, ctx)
                 except S.SealError as e:
                     raise Denied(e.code, e.message)
-                with auth.lock:
-                    if v.get("grant") in {g.gid for g in auth.grants.values()}:
-                        auth.sealed_cache[target] = cached
-            value = cached
+                if win and v.get("grant"):
+                    with auth.lock:
+                        if v.get("grant") in {g.gid for g in auth.grants.values()}:
+                            auth.sealed_cache[key] = (value, now + win)
         else:
             import gt_unlock_brokers as B
             try:
                 value = B.resolve(ref)
             except B.BrokerError as e:
                 raise Denied(e.code, e.message)
-        auth.audit("secret_resolve", ref=ref, grant=v.get("grant"), verdict="allow",
-                   subject=(params.get("subject") or peer).get("pid"))
+        if not auth.audit("secret_resolve", ref=ref, grant=v.get("grant"), verdict="allow",
+                          subject=(params.get("subject") or peer).get("pid")):
+            raise Denied("audit_failed", "the audit log could not be written, so the secret "
+                         "is not released")
         return {"value": value, "grant": v.get("grant")}
 
     @method
@@ -261,8 +337,7 @@ def methods(auth):
             out = S.put(auth.home, name, value, auth.enrolment(), auth.factors, ctx)
         except S.SealError as e:
             raise Denied(e.code, e.message)
-        with auth.lock:
-            auth.sealed_cache.pop(name, None)
+        _drop_cached(name)
         auth.audit("seal_put", ref="sealed:%s" % name, grant=v.get("grant"), verdict="ok")
         return out
 
@@ -277,10 +352,14 @@ def methods(auth):
         name = params.get("name")
         v = _secret_gate(peer, dict(params, job=None), conn, rid, "sealed:%s" % name)
         ok = S.remove(auth.home, name)
-        with auth.lock:
-            auth.sealed_cache.pop(name, None)
+        _drop_cached(name)
         auth.audit("seal_rm", ref="sealed:%s" % name, grant=v.get("grant"), verdict="ok")
         return {"removed": ok}
+
+    def _drop_cached(name):
+        with auth.lock:
+            for k in [k for k in auth.sealed_cache if k[3] == name]:
+                auth.sealed_cache.pop(k, None)
 
     # ---------------------------------------------------------- enrolment
     def _bootstrap_ok(name):
@@ -396,18 +475,26 @@ def methods(auth):
             prob = auth._k_problem(merged)
             if prob:
                 raise Denied("enrol_first", prob)
+        new = {k: v for k, v in new.items() if k != P.ADMIN_FLOOR_KEY}
+        data = (json.dumps(new, indent=2, sort_keys=True) + "\n").encode("utf-8")
+        h = _sha(data)
+        evidence = {}
+        used = []
         if eff.enabled or merged.get("enabled"):
             # Turning unlock on proves the factors work before anything is locked; changing
-            # or turning it off needs the same proof (step-up + K).
-            used = require_full(peer, "change the unlock policy", conn, rid, params)
+            # or turning it off needs the same proof (step-up + K) -- and the platform
+            # factor's signature over THESE bytes is the approval (F3).
+            used = require_full(peer, "change the unlock policy", conn, rid, params, bind=h,
+                                evidence=evidence)
             if not used:
                 raise Denied("enrol_first", "enrol your factors before turning unlock on")
-        data = (__import__("json").dumps(new, indent=2, sort_keys=True) + "\n").encode("utf-8")
         F.write_private(auth.path("policy.json"), data)
-        st = auth.state()
-        st["policy_approved"] = _sha(data)
+        st = write_approval(h, used, evidence)
         st["unlock_on"] = bool(merged.get("enabled"))     # see gt_unlock_policy.enabled_at
         auth.save_state(st)
+        P.set_marker(auth.home, bool(merged.get("enabled")))
+        if not merged.get("enabled"):
+            auth._off_by_policy = True
         auth.reload()
         auth.audit("policy_set", verdict="ok", enabled=bool(merged.get("enabled")))
         return {"enabled": bool(merged.get("enabled"))}
@@ -417,13 +504,16 @@ def methods(auth):
         h = auth._policy_file_hash()
         if h is None:
             raise Denied("no_policy", "there is no policy.json to approve")
-        require_full(peer, "approve a policy.json edited outside gt_unlock.py", conn, rid,
-                     params)
-        st = auth.state()
-        st["policy_approved"] = h
+        evidence = {}
+        used = require_full(peer, "approve a policy.json edited outside gt_unlock.py", conn,
+                            rid, params, bind=h, evidence=evidence)
+        st = write_approval(h, used, evidence)
         pol = F.read_json(auth.path("policy.json")) or {}
         st["unlock_on"] = bool(pol.get("enabled"))
         auth.save_state(st)
+        P.set_marker(auth.home, bool(pol.get("enabled")))
+        if not pol.get("enabled"):
+            auth._off_by_policy = True
         auth.audit("policy_approve", verdict="ok")
         return {"approved": True}
 
@@ -439,6 +529,22 @@ def methods(auth):
 
     @method
     def stop(peer, params, conn=None, rid=None):
+        # F1: stopping frees the authority's address. While unlock is on that needs a fresh
+        # factor (the platform one where usable). It is friction, not a boundary: a same-user
+        # process can still kill the daemon -- which is why every client now verifies the
+        # server it reaches (gt_unlock_client), and a restart revokes every grant.
+        eff = auth.reload()
+        usable = auth.usable_factors() if eff.enabled else []
+        if usable:
+            plat = any(x in P.PLATFORM_FACTORS for x in usable)
+            lk = auth._prompting(("stop", peer["pid"]))
+            try:
+                ctx = auth._ctx("%s asks to stop the gt unlock authority (every grant is "
+                                "revoked)" % requester(peer), conn, rid, tty(params))
+                auth.collect(ctx, "stop", "gt:unlock:stop", requester(peer), k=1,
+                             need_platform=plat)
+            finally:
+                lk.release()
         auth.revoke_all("daemon_stop")
         ev = getattr(auth, "stop", None)
         if ev is not None:
@@ -446,6 +552,27 @@ def methods(auth):
         return {"stopping": True}
 
     return m
+
+
+_OP_FIELD = re.compile(r"^[^\x00-\x1f\x7f]{1,200}$")
+
+
+def _consent_op(op):
+    """Validate the op a consent is for and compute its hash HERE (M1). -> dict."""
+    if not isinstance(op, dict):
+        raise Denied("bad_request", "consent needs the op: {tool, connection, op, args_sha256}")
+    out = {}
+    for k in ("tool", "connection", "op", "args_sha256"):
+        v = op.get(k)
+        if not isinstance(v, str) or not _OP_FIELD.match(v):
+            raise Denied("bad_request", "consent op.%s must be a plain string" % k)
+        out[k] = v
+    ident = op.get("identity")
+    if isinstance(ident, str) and _OP_FIELD.match(ident):
+        out["identity"] = ident
+    out["hash"] = hashlib.sha256("|".join([out["tool"], out["connection"], out["op"],
+                                           out["args_sha256"]]).encode("utf-8")).hexdigest()
+    return out
 
 
 def auth_version():

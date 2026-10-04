@@ -44,7 +44,8 @@ def registry_getter_for(path):
         with lock:
             m = os.stat(path).st_mtime_ns
             if state["reg"] is None or m != state["mtime"]:
-                state["reg"] = Registry.load(path)
+                # the hub's live reload checks ownership and mode every time (review M2)
+                state["reg"] = Registry.load(path, check_perms=True)
                 state["mtime"] = m
             return state["reg"]
     return get

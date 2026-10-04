@@ -13,8 +13,10 @@ TWO FILES
          Its EXISTENCE turns unlock on, whatever the user file says.
 
 THE MERGE ONLY TIGHTENS (invariant): enabled = OR; required factors = max; allowed factors =
-intersection; ttl/idle/fresh/consent window = min; each scope's level = the stricter of the
-two; read_without_unlock = AND; the unattended allow-list = the admin's when it sets one, else
+intersection; ttl/idle/fresh/consent window/secrets window = min; each scope's level = the
+stricter of the user's level and the ADMIN FLOOR's, each found by its own most-specific match
+(Effective.level -- a user pattern of any specificity can never loosen an admin pattern of any
+other: the review's F2, 2026-10-03); read_without_unlock = AND; the unattended allow-list = the admin's when it sets one, else
 the user's (an admin list can only remove entries); SSO settings the admin pins replace the
 user's; `locked_keys` names top-level keys the user cannot set at all.
 
@@ -46,6 +48,14 @@ _RANK = {lv: i for i, lv in enumerate(LEVELS)}
 FACTORS = ("totp", "touchid", "hello", "sso", "recovery")
 PLATFORM_FACTORS = ("touchid", "hello")
 LOCK_ON = ("screen_lock", "sleep", "session_end", "daemon_restart", "shim_exit")
+MAX_SECRETS_WINDOW_S = 900          # "a short window": at most 15 minutes
+# The merged policy carries the admin's own scope patterns under this key, so the level of a
+# scope can be computed against the admin floor separately (F2). Never taken from a user file.
+ADMIN_FLOOR_KEY = "admin_floor_scopes"
+# Written by the authority when unlock is turned on through it, removed only when it is turned
+# off through it. Two copies: one in the unlock home, one beside it, so removing the whole home
+# (policy, state and all) still leaves unlock reading as ON -- and then failing closed.
+MARKER = "unlock-on"
 
 # Scopes gt itself checks. Anything a user or another tool asks for that is not here falls to
 # the default level (`unlocked`).
@@ -93,6 +103,10 @@ def default_policy(platform=None):
         # consent_window_s seconds within the grant.
         "consent_requires_factor": "none",
         "consent_window_s": 0,                   # 0 = every consent op asks again
+        # Owner decision 2026-10-03 18:37: a sealed value is opened with a fresh Touch ID /
+        # Hello EVERY time (0, the default), or once per this many seconds per subject and
+        # grant -- never cached beyond it, never shared between processes.
+        "secrets_window_s": 0,
         "door": "mcp_only",
         "unattended": {"allowed": []},           # [{"job": name, "scope": scope}, ...]
         "locked_keys": [],
@@ -157,6 +171,10 @@ def validate(p):
     w = p.get("consent_window_s")
     if not isinstance(w, int) or isinstance(w, bool) or w < 0:
         raise PolicyError("consent_window_s must be an integer >= 0")
+    w = p.get("secrets_window_s")
+    if not isinstance(w, int) or isinstance(w, bool) or not 0 <= w <= MAX_SECRETS_WINDOW_S:
+        raise PolicyError("secrets_window_s must be an integer 0-%d (0 = a fresh factor for "
+                          "every unseal)" % MAX_SECRETS_WINDOW_S)
     for e in (p.get("unattended") or {}).get("allowed") or []:
         if not isinstance(e, dict) or not e.get("job") or not e.get("scope"):
             raise PolicyError("unattended.allowed entries are {job, scope}")
@@ -373,6 +391,8 @@ def enabled_at(unlock_dir, admin=None):
                 return True
         if IS_WINDOWS and _admin_registry() is not None:
             return True
+        if marker_present(unlock_dir):
+            return True
         try:
             with open(os.path.join(unlock_dir, "state.json"), "r", encoding="utf-8") as f:
                 if json.load(f).get("unlock_on"):
@@ -388,6 +408,38 @@ def enabled_at(unlock_dir, admin=None):
         return True
 
 
+def marker_paths(unlock_dir):
+    """The two `unlock-on` markers for an unlock home: inside it, and beside it."""
+    unlock_dir = os.path.abspath(unlock_dir)
+    return [os.path.join(unlock_dir, MARKER),
+            os.path.join(os.path.dirname(unlock_dir), "." + os.path.basename(unlock_dir)
+                         + "-" + MARKER)]
+
+
+def marker_present(unlock_dir):
+    """True when either marker exists. Deleting policy.json and state.json therefore never
+    reads as "off" (review F3): the authority sees unlock on with no policy and fails closed.
+    A same-user process can delete the markers too -- that is friction, documented at L1/L2."""
+    return any(os.path.lexists(p) for p in marker_paths(unlock_dir))
+
+
+def set_marker(unlock_dir, on):
+    """Write (on) or remove (off) both markers. Called by the authority only."""
+    for p in marker_paths(unlock_dir):
+        try:
+            if on:
+                os.makedirs(os.path.dirname(p), exist_ok=True)
+                fd = os.open(p, os.O_WRONLY | os.O_CREAT | getattr(os, "O_BINARY", 0), 0o600)
+                try:
+                    os.write(fd, b"unlock was turned on through the gt unlock authority\n")
+                finally:
+                    os.close(fd)
+            else:
+                os.unlink(p)
+        except OSError:
+            pass
+
+
 def enabled_fast(home=None, admin=None):
     """The hot-path question every hook asks first: is unlock on at all? A few stat() calls
     and small JSON reads (see enabled_at)."""
@@ -401,7 +453,9 @@ def _stricter(a, b):
 def merge(user, admin):
     """The effective policy: defaults <- user <- (admin, tightening only). Pure function."""
     base = default_policy()
-    eff = _deep(base, user or {})
+    user = {k: v for k, v in (user or {}).items() if k != ADMIN_FLOOR_KEY}
+    eff = _deep(base, user)
+    eff.pop(ADMIN_FLOOR_KEY, None)
     if admin is None:
         return validate(eff)
     locked = set(admin.get("locked_keys") or [])
@@ -432,6 +486,12 @@ def merge(user, admin):
     if "default_scope_level" in admin:
         eff["default_scope_level"] = _stricter(eff["default_scope_level"],
                                                admin["default_scope_level"])
+    # F2: keep the admin's own patterns (and its default) so level() can find the admin's
+    # most-specific match on its own and never let a more specific USER pattern loosen it.
+    floor = {k: v for k, v in (admin.get("scopes") or {}).items() if v in LEVELS}
+    eff[ADMIN_FLOOR_KEY] = {"scopes": floor,
+                            "default": admin.get("default_scope_level")
+                            if admin.get("default_scope_level") in LEVELS else None}
     if "read_without_unlock" in admin:
         eff["read_without_unlock"] = bool(eff["read_without_unlock"]) and \
             bool(admin["read_without_unlock"])
@@ -440,6 +500,8 @@ def merge(user, admin):
         eff["step_up"]["fresh_s"] = min(eff["step_up"]["fresh_s"], int(st["fresh_s"]))
     if "consent_window_s" in admin:
         eff["consent_window_s"] = min(eff["consent_window_s"], int(admin["consent_window_s"]))
+    if "secrets_window_s" in admin:
+        eff["secrets_window_s"] = min(eff["secrets_window_s"], int(admin["secrets_window_s"]))
     if admin.get("consent_requires_factor") == "platform":
         eff["consent_requires_factor"] = "platform"
     if admin.get("door") == "mcp_only":
@@ -467,23 +529,34 @@ class Effective:
         return self.enabled and bool(self.problems)
 
     def level(self, scope):
-        """The level for `scope`: the most specific matching pattern wins; among equally
-        specific patterns, the STRICTER. With read_without_unlock, lotr reads are `open`
+        """The level for `scope`. Two answers, each by its OWN most-specific match (among
+        equally specific patterns, the stricter): the merged policy's, and the admin floor's.
+        The stricter of the two wins, so no user pattern of any specificity loosens an admin
+        pattern of any other (review F2). With read_without_unlock, lotr reads are `open`
         unless a pattern makes them stricter than `unlocked`."""
         p = self.policy
-        best, best_spec = None, -1
-        for pat, lv in (p.get("scopes") or {}).items():
-            if fnmatch.fnmatchcase(scope, pat):
-                spec = len(pat.replace("*", ""))
-                if spec > best_spec:
-                    best, best_spec = lv, spec
-                elif spec == best_spec:
-                    best = _stricter(best, lv)
-        lv = best or p.get("default_scope_level", "unlocked")
+        lv = _most_specific(p.get("scopes") or {}, scope) or p.get("default_scope_level",
+                                                                  "unlocked")
+        floor = p.get(ADMIN_FLOOR_KEY) or {}
+        alv = _most_specific(floor.get("scopes") or {}, scope) or floor.get("default")
+        if alv:
+            lv = _stricter(lv, alv)
         if scope.startswith("lotr:") and scope.endswith(":read") and lv == "unlocked" \
                 and p.get("read_without_unlock"):
             lv = "open"
         return lv
+
+
+def _most_specific(scopes, scope):
+    best, best_spec = None, -1
+    for pat, lv in scopes.items():
+        if fnmatch.fnmatchcase(scope, pat):
+            spec = len(pat.replace("*", ""))
+            if spec > best_spec:
+                best, best_spec = lv, spec
+            elif spec == best_spec:
+                best = _stricter(best, lv)
+    return best
 
 
 def load(home=None, admin_file_paths=None, trusted_uids=(0,)):

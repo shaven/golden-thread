@@ -24,6 +24,7 @@ level stops and what it does not.
     gt_unlock.py policy enable|disable|approve
     gt_unlock.py policy set FILE
     gt_unlock.py policy consent none|platform [--window SECONDS]
+    gt_unlock.py policy secrets-window SECONDS     (0 = a fresh Touch ID / Hello per unseal)
     gt_unlock.py policy unattended add|remove JOB SCOPE
     gt_unlock.py policy sso --client-id ID [--tenant T] [--pin-subject OID]
     gt_unlock.py seal put NAME            (the value is read from stdin, never argv)
@@ -411,6 +412,16 @@ def cmd_policy(ns):
         if ns.window is not None:
             p["consent_window_s"] = ns.window
         return _set_policy(p)
+    if a == "secrets-window":
+        # Owner decision 2026-10-03 18:37: 0 (the default) = every sealed open asks for the
+        # platform factor; N = once per N seconds per process and grant, never longer.
+        try:
+            p["secrets_window_s"] = int(ns.args[0])
+        except (IndexError, ValueError):
+            sys.stderr.write("gt_unlock policy secrets-window SECONDS (0-%d)\n"
+                             % P.MAX_SECRETS_WINDOW_S)
+            return 2
+        return _set_policy(p)
     if a == "sso":
         if not ns.client_id:
             sys.stderr.write("gt_unlock policy sso --client-id ID [--tenant T] "
@@ -589,11 +600,17 @@ def cmd_daemon(ns):
         print("authority running" if ok else "the authority did not start")
         return 0 if ok else 1
     if ns.action == "stop":
+        # While unlock is on, stopping needs a fresh factor (review F1): the authority asks for
+        # it -- Touch ID / Hello, or a code typed here.
         try:
-            C.call("stop", {}, start=False)
+            C.call("stop", {"tty": True}, start=False, answer=C.tty_answer)
             print("authority stopping (every grant revoked)")
-        except gt_ipc.IpcError:
-            print("authority not running")
+        except gt_ipc.IpcError as e:
+            if e.code == "unreachable":
+                print("authority not running")
+                return 0
+            print("authority NOT stopped (%s): %s" % (e.code, e.message))
+            return 1
         return 0
     up = gt_ipc.alive_at(C.address(), timeout=1.0)
     print("authority %s at %s" % ("running" if up else "not running", C.address()))
@@ -645,7 +662,7 @@ def build_parser():
     s.add_argument("event", choices=["session-start", "session-end"])
     s = sub.add_parser("policy")
     s.add_argument("action", choices=["show", "enable", "disable", "approve", "set", "consent",
-                                      "unattended", "sso"])
+                                      "secrets-window", "unattended", "sso"])
     s.add_argument("args", nargs="*")
     s.add_argument("--json", action="store_true")
     s.add_argument("--window", type=int)

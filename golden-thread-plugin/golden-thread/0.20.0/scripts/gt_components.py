@@ -142,7 +142,12 @@ def policy():
     return _registry_get("component_updates", _raw())
 
 
-def build_manifest(version_dir, groups=("hooks", "scripts", "templates", "packs")):
+# agents/ and workflows/ joined in 0.20.0 (review, low): an agent definition decides which tools
+# a stage agent gets, and a workflow script runs; drift checks must see an edit to either.
+MANIFEST_GROUPS = ("hooks", "scripts", "templates", "packs", "agents", "workflows")
+
+
+def build_manifest(version_dir, groups=MANIFEST_GROUPS):
     """Hash every shipped file. Written to <version_dir>/MANIFEST.json."""
     files = {}
     for g in groups:
@@ -195,7 +200,7 @@ def build_manifest(version_dir, groups=("hooks", "scripts", "templates", "packs"
 # packs/ is data, but it is the INPUT to security controls (ignore, secrets, classify)
 # and is model-reachable for runbook/vocabulary, so a mismatch refuses like code rather
 # than warning like an inert file (security review, 2026-09-16).
-EXECUTABLE_PREFIXES = ("hooks/", "scripts/", "packs/")
+EXECUTABLE_PREFIXES = ("hooks/", "scripts/", "packs/", "agents/", "workflows/")
 
 VERIFY_CLEAN = 0        # manifest describes the tree (or only uncommitted edits differ)
 VERIFY_EXECUTABLE = 3   # a committed file that RUNS disagrees -> refuse
@@ -1492,7 +1497,12 @@ def packs_installed_path(rel, version, cache_plugin="gt"):
     that defines what counts as a credential and what an ignore path is, so a silent edit to an
     installed one is a change to a security control."""
     parts = rel.split("/")              # manifest keys are "/" on every platform
-    if len(parts) < 2 or parts[0] != "packs":
+    # workflows/ (0.20.0) lives in the plugin cache exactly like packs. agents/ does too, but
+    # its INSTALLED copies are rewritten on purpose (gt_model_policy apply writes model and
+    # effort into them), so a hash cannot judge them: gt_agent_spec `resolve` compares each
+    # installed definition with the one it should be and falls back when it is not. The
+    # manifest still pins agents/ in the source tree (verify-source, the release gate).
+    if len(parts) < 2 or parts[0] not in ("packs", "workflows"):
         return None
     return os.path.join(os.path.expanduser(
         "~/.claude/plugins/cache/golden-thread-plugin/%s" % cache_plugin), version, rel)
@@ -1900,11 +1910,25 @@ def localize_mcp(paths, python):
             changed.append((p, name))
             touched = True
         if touched:
-            tmp = p + ".tmp"
-            with open(tmp, "w", encoding="utf-8", newline="\n") as fh:
-                json.dump(data, fh, indent=2)
-                fh.write("\n")
-            os.replace(tmp, p)
+            # mkstemp + atomic replace (review, low): a fixed "<file>.tmp" is a name another
+            # process could plant first -- a symlink would have been written through.
+            import tempfile
+            fd, tmp = tempfile.mkstemp(prefix=".plugin.json.", dir=os.path.dirname(p) or ".")
+            try:
+                with os.fdopen(fd, "w", encoding="utf-8", newline="\n") as fh:
+                    json.dump(data, fh, indent=2)
+                    fh.write("\n")
+                try:
+                    os.chmod(tmp, os.stat(p).st_mode & 0o777)   # keep the file's own mode
+                except OSError:
+                    pass
+                os.replace(tmp, p)
+            except BaseException:
+                try:
+                    os.unlink(tmp)
+                except OSError:
+                    pass
+                raise
     return changed
 
 

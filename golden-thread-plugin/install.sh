@@ -1754,15 +1754,23 @@ if [ -d "$SRC/hooks" ]; then
   # identical build is already in place. A Developer ID signed release binary installed with a
   # `gt-presence.release` marker beside it is never rebuilt over.
   # Without swiftc nothing fails: gt unlock still offers TOTP and says Touch ID is unavailable.
+  # 0.20.0 review ("helper swap"): an existing binary is KEPT only when it matches its install
+  # record (gt-presence.install.json: the built binary's sha256, and for a release binary its
+  # Developer ID requirement) -- a binary nobody recorded is rebuilt, never trusted, and every
+  # use re-checks the record (gt_unlock_touchid._check_helper).
   if [ "$(uname -s)" = Darwin ] && [ -f "$GT_HOOKS/gt_unlock_touchid.py" ] \
      && [ -f "$GT_HOOKS/gt-presence.swift" ]; then
     _gtp_bin="$HOME/.claude/golden-thread/bin"
     _gtp_sum=$(shasum -a 256 "$GT_HOOKS/gt-presence.swift" 2>/dev/null | cut -d' ' -f1)
-    if [ -x "$_gtp_bin/gt-presence" ] && [ -f "$_gtp_bin/gt-presence.release" ]; then
+    _gtp_ok() { python3 -B "$GT_HOOKS/gt_unlock_touchid.py" verify --helper "$_gtp_bin/gt-presence" >/dev/null 2>&1; }
+    if [ -x "$_gtp_bin/gt-presence" ] && [ -f "$_gtp_bin/gt-presence.release" ] \
+       && { _gtp_ok || python3 -B "$GT_HOOKS/gt_unlock_touchid.py" record --release --helper "$_gtp_bin/gt-presence" >/dev/null 2>&1; }; then
       echo "Touch ID helper → $_gtp_bin/gt-presence (signed release binary, kept)"
-    elif [ -x "$_gtp_bin/gt-presence" ] && [ "$(cat "$_gtp_bin/gt-presence.source-sha256" 2>/dev/null)" = "$_gtp_sum" ]; then
+    elif [ -x "$_gtp_bin/gt-presence" ] && [ ! -f "$_gtp_bin/gt-presence.release" ] \
+       && [ "$(cat "$_gtp_bin/gt-presence.source-sha256" 2>/dev/null)" = "$_gtp_sum" ] && _gtp_ok; then
       echo "Touch ID helper → $_gtp_bin/gt-presence (unchanged)"
-    elif python3 -B "$GT_HOOKS/gt_unlock_touchid.py" build --dest "$_gtp_bin" >/dev/null 2>&1; then
+    elif rm -f "$_gtp_bin/gt-presence.release" \
+       && python3 -B "$GT_HOOKS/gt_unlock_touchid.py" build --dest "$_gtp_bin" >/dev/null 2>&1; then
       printf '%s\n' "$_gtp_sum" > "$_gtp_bin/gt-presence.source-sha256"
       echo "Touch ID helper → $_gtp_bin/gt-presence (built here, ad-hoc signed)"
     else

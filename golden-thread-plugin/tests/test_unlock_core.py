@@ -612,26 +612,32 @@ class Sealed(AuthorityCase):
     """Phase 2: sealed creds are unreadable while locked; the cache dies with the grant."""
 
     def test_sealed_secret_needs_a_grant_and_the_cache_dies_on_lock(self):
+        """0.20.0 review: the broker serves the REQUESTING process (the shim under mcp_only),
+        every unseal is its own platform factor by default, and a window's cache is per
+        subject and grant and dies with the grant."""
         self.standard()
         shim = self.child()
         self.call(shim, "register_shim")
-        bash = self.child()
-        r = self.call(bash, "seal_put", {"name": "github", "value": "tok-123", "tty": True},
+        r = self.call(shim, "seal_put", {"name": "github", "value": "tok-123", "tty": True},
                       answers=[self.code()])
         self.assertIn("result", r, r)
         with open(os.path.join(self.home, "sealed", "github.blob"), encoding="utf-8") as f:
             blob = f.read()
         self.assertNotIn("tok-123", blob)
-        self.call(bash, "lock")
+        self.call(shim, "lock")
         self.auth.cooldown.clear()
-        r = self.call(bash, "secret", {"ref": "sealed:github", "request": False})
+        r = self.call(shim, "secret", {"ref": "sealed:github", "request": False})
         self.assertIn("error", r)
         self.assertEqual(r["error"]["code"], "locked")
-        r = self.call(bash, "secret", {"ref": "sealed:github", "tty": True},
+        r = self.call(shim, "secret", {"ref": "sealed:github", "tty": True},
                       answers=[self.code(30)])
         self.assertEqual(r["result"]["value"], "tok-123")
-        self.assertEqual(self.auth.sealed_cache.get("github"), "tok-123")
-        self.call(bash, "lock")
+        self.assertEqual(self.auth.sealed_cache, {}, "secrets_window_s 0: nothing is cached")
+        self.set_policy(secrets_window_s=30)
+        r = self.call(shim, "secret", {"ref": "sealed:github"})
+        self.assertEqual(r["result"]["value"], "tok-123")
+        self.assertEqual([k[3] for k in self.auth.sealed_cache], ["github"])
+        self.call(shim, "lock")
         self.assertEqual(self.auth.sealed_cache, {})
 
 

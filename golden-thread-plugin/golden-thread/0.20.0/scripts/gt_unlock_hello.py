@@ -37,7 +37,12 @@ SECURITY INVARIANTS (each is restated where it is enforced)
   I6  powershell.exe is run by absolute path from %SystemRoot%, never resolved through PATH.
 
 usage: gt_unlock_hello.py available
+       gt_unlock_hello.py typecheck
        gt_unlock_hello.py selftest [--no-seal] [--keep]
+
+`typecheck` runs the helper's non-interactive self-check: every WinRT type, enum and method
+overload the helper calls is resolved and an IBuffer round trip is made, WITHOUT calling Windows
+Hello -- no prompt, safe over SSH.
 """
 import argparse
 import base64
@@ -362,7 +367,17 @@ class HelloFactor(F.Factor):
         if not verify(record.get("scheme") or "pkcs1v15", pub, bytes(challenge), sig):
             raise F.FactorError("wrong", "the Windows Hello signature does not verify against "
                                          "the enrolled key")
-        return True
+        return sig          # truthy; the authority keeps it where an approval must be re-checked
+
+    def verify(self, record, challenge, signature):
+        """Re-check a signature prove() returned, under the enrolled key and pinned scheme (the
+        policy approval, gt_unlockd._approval_problem). No prompt, no helper."""
+        try:
+            pub, _name = self._record_key(record)
+        except F.FactorError:
+            return False
+        return bool(verify(record.get("scheme") or "pkcs1v15", pub, bytes(challenge),
+                           bytes(signature)))
 
     # -- sealed store
     def _dp(self):
@@ -432,7 +447,7 @@ def selftest(seal=True, keep=False):
         _emit("enroll", ok=True, scheme=rec["scheme"], seal_capable=rec["seal_capable"],
               modulus_bits=C.rsa_public(base64.b64decode(rec["public"]))[0].bit_length())
         ch = secrets.token_bytes(32)
-        _emit("prove", ok=fac.prove(rec, ch, ctx))
+        _emit("prove", ok=bool(fac.prove(rec, ch, ctx)))
         bad = HelloFactor(runner=lambda op, p: {"signature": base64.b64encode(
             bytes(256)).decode()}, key_name=SELFTEST_KEY)
         try:
@@ -467,6 +482,8 @@ def main(argv=None):
     sub = ap.add_subparsers(dest="cmd")
     sub.required = True
     sub.add_parser("available", help="is Windows Hello usable for this user?")
+    sub.add_parser("typecheck", help="bind every WinRT type and method the helper uses "
+                   "(no Hello call, no prompt)")
     st = sub.add_parser("selftest", help="live proof with a throwaway key (Hello prompts)")
     st.add_argument("--no-seal", action="store_true", help="skip the seal/unseal round trip")
     st.add_argument("--keep", action="store_true", help="keep the throwaway key afterwards")
@@ -475,6 +492,15 @@ def main(argv=None):
         ok, why = HelloFactor().available()
         _emit("available", ok=ok, detail=why)
         return 0 if ok else 2
+    if a.cmd == "typecheck":
+        try:
+            ans = run_powershell("typecheck", {}, timeout=120)
+        except F.FactorError as e:
+            _emit("typecheck", ok=False, code=e.code, detail=e.message)
+            return 1
+        _emit("typecheck", ok=ans.get("typecheck") == "ok", types=ans.get("types"),
+              methods=ans.get("methods"))
+        return 0 if ans.get("typecheck") == "ok" else 1
     return selftest(seal=not a.no_seal, keep=a.keep)
 
 

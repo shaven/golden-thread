@@ -66,11 +66,22 @@ def _admin_registry_set():
         return False
 
 
+def _markers(home):
+    # The same two `unlock-on` markers as gt_unlock_policy.marker_paths (duplicated so U2
+    # holds when gt's client cannot be loaded): in the unlock home, and beside it.
+    home = os.path.abspath(home)
+    return [os.path.join(home, "unlock-on"),
+            os.path.join(os.path.dirname(home), "." + os.path.basename(home) + "-unlock-on")]
+
+
 def _home_on(home):
-    """policy.json says enabled, or the authority's `unlock_on` marker in state.json says it
-    was turned on through the authority (gt_unlock_policy.enabled_at: a policy.json edited to
-    "enabled": false behind the authority's back does not switch anything off); an unreadable
+    """policy.json says enabled, or the authority's `unlock-on` markers (beside and inside the
+    home) or its `unlock_on` flag in state.json say it was turned on through the authority
+    (gt_unlock_policy.enabled_at: a policy.json edited to "enabled": false, or deleted with
+    state.json, behind the authority's back does not switch anything off); an unreadable
     policy counts as ON (fail closed)."""
+    if any(os.path.lexists(p) for p in _markers(home)):
+        return True
     try:
         with open(os.path.join(home, "state.json"), "r", encoding="utf-8") as f:
             if json.load(f).get("unlock_on"):

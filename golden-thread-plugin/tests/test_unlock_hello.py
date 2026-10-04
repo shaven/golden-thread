@@ -166,7 +166,9 @@ class HelloProve(unittest.TestCase):
     def test_honest_signature_verifies(self):
         fac, rec, helper = enrolled()
         ch = secrets.token_bytes(32)
-        self.assertIs(fac.prove(rec, ch, CTX), True)
+        sig = fac.prove(rec, ch, CTX)
+        self.assertTrue(fac.verify(rec, ch, sig))        # the verified signature comes back
+        self.assertFalse(fac.verify(rec, secrets.token_bytes(32), sig))
         self.assertEqual(helper.signed()[-1], ch)        # signed EXACTLY the challenge
         self.assertEqual(helper.calls[-1][1]["name"], "gt-unlock")
 
@@ -248,7 +250,8 @@ class HelloPss(unittest.TestCase):
         rec = fac.enroll(CTX)
         self.assertEqual((rec["scheme"], rec["seal_capable"]), ("pss", False))
         self.assertIn("randomised", rec["seal_note"])
-        self.assertIs(fac.prove(rec, secrets.token_bytes(32), CTX), True)
+        ch = secrets.token_bytes(32)
+        self.assertTrue(fac.verify(rec, ch, fac.prove(rec, ch, CTX)))
         with self.assertRaises(F.FactorError) as cm:
             fac.seal(rec, b"secret")
         self.assertEqual(cm.exception.code, "unavailable")
@@ -371,6 +374,36 @@ class HelloHelperPlumbing(unittest.TestCase):
                    "X509SubjectPublicKeyInfo", "RequestSignAsync"):
             self.assertIn(op.encode(), raw)
 
+    def test_ps1_declares_every_winrt_type_it_uses(self):
+        """Live finding 2026-10-03 (gt-win11, owner's PIN): enrolment failed with
+        MethodArgumentConversionInvalidCastArgument right after the prompt. Every [Windows.*]
+        type the helper names must be loaded explicitly with ContentType = WindowsRuntime, and
+        the calls that pass WinRT objects go through reflection (Invoke-WinRT)."""
+        import re
+        text = (SCRIPTS / "gt_unlock_hello.ps1").read_text(encoding="ascii")
+        declared = set(re.findall(r"\[(Windows\.[A-Za-z0-9_.]+), [A-Za-z0-9_.]+, "
+                                  r"ContentType = WindowsRuntime\]", text))
+        used = set(re.findall(r"\[(Windows\.[A-Za-z0-9_.]+)\]", text))
+        self.assertTrue(declared, "no WinRT type is loaded explicitly")
+        self.assertEqual(used - declared, set(), "used but never loaded")
+        for name in ("KeyCredential", "IBuffer", "CryptographicPublicKeyBlobType"):
+            self.assertTrue(any(d.endswith("." + name) for d in declared), name)
+        # no WinRT object goes through PowerShell's method binder after the first await
+        for call in ("$r.Credential.RetrievePublicKey(", "$r.Credential.RequestSignAsync(",
+                     "$Buf::EncodeToBase64String(", "$Buf::DecodeFromBase64String("):
+            self.assertNotIn(call, text)
+        self.assertIn("'typecheck'", text)
+        self.assertIn("trap {", text)
+        # PowerShell variables are case-insensitive: assigning $op anywhere would hit the
+        # ValidateSet on the -Op parameter (found on gt-win11 by the typecheck run, 2026-10-03)
+        self.assertEqual(re.findall(r"(?i)\$op\b(?!\w)(?=\s*=)", text), [])
+        self.assertEqual([m for m in re.findall(r"(?i)\$op\b", text) if m != "$Op"], [])
+
+    def test_typecheck_cli_is_offered(self):
+        r = subprocess.run([PYTHON, str(SCRIPTS / "gt_unlock_hello.py"), "--help"],
+                           capture_output=True, text=True, timeout=60)
+        self.assertIn("typecheck", r.stdout)
+
     @unittest.skipIf(IS_WINDOWS, "POSIX path of the real factor")
     def test_real_factor_is_unavailable_off_windows(self):
         self.assertEqual(H.HelloFactor().available(), (False, "Windows Hello is Windows only"))
@@ -386,6 +419,25 @@ class HelloWindows(unittest.TestCase):
     def test_ps1_available_op_really_runs(self):
         ans = H.run_powershell("available", {}, timeout=90)
         self.assertIsInstance(ans.get("supported"), bool, ans)
+
+    def test_ps1_typecheck_binds_every_type_and_method_without_hello(self):
+        """The non-prompting self-check: types, enums, overloads, the AsTask bridges and an
+        IBuffer round trip through the reflection path -- no Windows Hello call."""
+        ans = H.run_powershell("typecheck", {}, timeout=120)
+        self.assertEqual(ans.get("typecheck"), "ok", ans)
+        self.assertIn("KeyCredential.RequestSignAsync", ans["methods"])
+        self.assertIn("KeyCredential.RetrievePublicKey", ans["methods"])
+
+    def test_ps1_refuses_a_non_base64_challenge_before_hello(self):
+        old = os.environ.get("GT_UNLOCK_NO_UI")
+        os.environ["GT_UNLOCK_NO_UI"] = "0"
+        try:
+            with self.assertRaises(F.FactorError) as cm:
+                H.run_powershell("sign", {"name": "gt-unlock-no-such-key-test",
+                                          "challenge": "!!"}, timeout=90)
+        finally:
+            os.environ["GT_UNLOCK_NO_UI"] = old if old is not None else "1"
+        self.assertEqual(cm.exception.code, "malformed", cm.exception.message)
 
     def test_ps1_rejects_a_bad_key_name(self):
         # The ps1 refuses the name before any Windows Hello call, so no prompt can follow; the

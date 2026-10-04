@@ -127,7 +127,7 @@ def _pick(params, keys):
     return {k: params[k] for k in keys if k in params and params[k] is not None}
 
 
-def dispatch(holder, method, params, client_id, subject=None):
+def dispatch(holder, method, params, client_id, subject=None, remote=False):
     """Run one method for `client_id`. Returns the result; raises GatewayError.
 
     `subject` is the local caller's kernel identity, given only while gt unlock is on (the
@@ -139,6 +139,9 @@ def dispatch(holder, method, params, client_id, subject=None):
         params = {}
     if not isinstance(params, dict):
         raise GatewayError("bad_request", "params must be a JSON object")
+    if remote and client_id in (None, "", "local"):
+        # Review M2: a hub (HTTP) caller is never the local caller, whatever id it carries.
+        raise GatewayError("unauthorized", "a hub client is never the local caller")
     if method == "ping":
         return {"pong": True, "version": VERSION}
     if subject is not None and method in ("find", "status", "catalog"):
@@ -167,10 +170,10 @@ def dispatch(holder, method, params, client_id, subject=None):
     raise GatewayError("unknown_method", f"no method {method!r}", hints=list(METHODS))
 
 
-def _answer(holder, method, params, client_id, subject=None):
+def _answer(holder, method, params, client_id, subject=None, remote=False):
     """dispatch() with every failure folded into an {"error"} dict. Never raises."""
     try:
-        return {"result": dispatch(holder, method, params, client_id, subject)}
+        return {"result": dispatch(holder, method, params, client_id, subject, remote)}
     except GatewayError as e:
         return {"error": e.to_dict()}
     except Exception as e:                      # noqa: BLE001 - the server must keep serving
@@ -446,6 +449,8 @@ class _HttpHandler(BaseHTTPRequestHandler):
         except Exception as e:                  # noqa: BLE001
             return self._reply(500, {"error": _internal(e)})
         cid = (client or {}).get("id", client_id) if isinstance(client, dict) else client_id
+        if not cid or str(cid).lower() == "local":
+            return self._err(401, "unauthorized", "a hub client is never the local caller")
 
         try:
             length = int(self.headers.get("Content-Length") or 0)
@@ -463,7 +468,7 @@ class _HttpHandler(BaseHTTPRequestHandler):
             return self._err(400, "bad_request", "body is not JSON")
         if not isinstance(params, dict):
             return self._err(400, "bad_request", "params must be a JSON object")
-        self._reply(200, _answer(self.server.holder, method, params, cid))
+        self._reply(200, _answer(self.server.holder, method, params, cid, remote=True))
 
 
 class _HttpServer(ThreadingHTTPServer):

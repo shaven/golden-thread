@@ -19,6 +19,9 @@ never exits until stdin closes.
     ITSELF ("unlock", reason naming the tool, connection and op). The AUTHORITY raises the
     prompts (Touch ID / Windows Hello / its own TOTP dialog); the shim never sees, carries or
     forwards a factor. Then the call is retried ONCE -- never a loop.
+  * a result refused with "mcp_only" (the authority does not know this process as the shim:
+    it restarted, which forgets every session) makes the shim register again, then retry --
+    once (review F7, 2026-10-03: it used to stay unregistered, leaving the seat free).
 
 0.3.0 (gt 0.20.0), always: tools/list carries an outputSchema per tool for a client that
 negotiated MCP 2025-06-18 or later (tools_for); results already carried the envelope as
@@ -289,6 +292,11 @@ class Shim:
     def _call_once_more_if_locked(self, name, params):
         result = self._request_call(params)
         err = result.get("error") if isinstance(result, dict) else None
+        if isinstance(err, dict) and err.get("code") in ("mcp_only", "not_registered"):
+            # The authority restarted (or never saw us): take the seat again, retry ONCE.
+            if self.register() is not None:
+                result = self._request_call(params)
+                err = result.get("error") if isinstance(result, dict) else None
         if not (isinstance(err, dict) and err.get("code") == "locked"):
             return result
         # Locked: ask the authority to unlock THIS shim (it raises the prompts), then retry

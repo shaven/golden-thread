@@ -12,6 +12,13 @@ Used by gt's hooks, gt_unlock.py, gt-lotr and the credential broker. Three rules
     fail-open hook rule.
   * A CLIENT ASKS, IT NEVER ASSERTS. Nothing here can tell the authority that a factor passed;
     a code typed at the client's own terminal is sent for the AUTHORITY to verify.
+  * A CLIENT VERIFIES THE SERVER (review F1, 2026-10-03). Before a request is sent, the process
+    serving the authority's address is identified from the kernel (macOS LOCAL_PEERTOKEN, Linux
+    SO_PEERCRED, Windows GetNamedPipeServerProcessId) and its __main__ file must be the
+    INSTALLED gt_unlockd.py, by realpath. A fake server bound after the real one stopped --
+    "allowed" for everything -- is refused: code "server_unverified", never allowed. Residual,
+    documented: a same-user process can run the REAL gt_unlockd.py with its own home; at
+    L1/L2 that is friction, not a boundary.
 """
 import os
 import subprocess
@@ -93,17 +100,71 @@ def start_daemon(h=None, wait=START_WAIT_S):
     return False
 
 
-def call(method, params=None, *, h=None, start=True, answer=None, timeout=5.0):
-    """One request. Raises gt_ipc.IpcError (code "unreachable" when no authority answers)."""
-    h = h or home()
-    addr = address(h)
+def server_scripts():
+    """The files a real authority runs: this client's own gt_unlockd.py and the installed hooks
+    directory's (where install.sh puts gt's unlock scripts) -- realpaths."""
+    out = {os.path.realpath(os.path.join(HERE, "gt_unlockd.py"))}
+    out.add(os.path.realpath(os.path.join(os.path.expanduser("~"), ".claude", "golden-thread",
+                                          "hooks", "gt_unlockd.py")))
+    return out
+
+
+def _test_server_pid():
+    """GT_UNLOCK_TEST_SERVER_PID names an in-process test authority. Honoured ONLY while the
+    unlock home is relocated -- which home() allows only while the REAL home's unlock is off --
+    so it can never vouch for a server when real unlock is on."""
+    v = os.environ.get("GT_UNLOCK_TEST_SERVER_PID")
+    env = os.environ.get("GT_UNLOCK_HOME")
+    if not v or not env or os.path.abspath(env) == os.path.abspath(P.unlock_home()) \
+            or P.enabled_fast():
+        return None
     try:
-        c = gt_ipc.connect(addr, timeout=timeout, answer=answer)
+        return int(v)
+    except ValueError:
+        return None
+
+
+def verify_server(client):
+    """Raise IpcError("server_unverified") unless the process serving `client` runs the
+    installed gt_unlockd.py (realpath of its __main__ file)."""
+    peer = gt_ipc.peer_of(client)
+    if peer is None:
+        raise gt_ipc.IpcError("server_unverified", "the process serving the unlock authority's "
+                              "address could not be identified; refusing it")
+    if _test_server_pid() is not None and peer["pid"] == _test_server_pid():
+        return
+    main = gt_ipc.main_script(peer["pid"])
+    if not main or os.path.realpath(main) not in server_scripts():
+        raise gt_ipc.IpcError("server_unverified", "the process serving the unlock authority's "
+                              "address is not gt_unlockd.py (pid %s); refusing it" % peer["pid"],
+                              ["gt_unlock.py daemon status", "a process of yours may be "
+                               "impersonating the authority"])
+
+
+def connect(h=None, timeout=5.0, answer=None):
+    """A VERIFIED connection to the authority (see the module rules). Raises IpcError."""
+    c = gt_ipc.connect(address(h or home()), timeout=timeout, answer=answer)
+    try:
+        verify_server(c)
     except gt_ipc.IpcError:
+        c.close()
+        raise
+    return c
+
+
+def call(method, params=None, *, h=None, start=True, answer=None, timeout=5.0):
+    """One request. Raises gt_ipc.IpcError (code "unreachable" when no authority answers,
+    "server_unverified" when what answers is not the authority)."""
+    h = h or home()
+    try:
+        c = connect(h, timeout=timeout, answer=answer)
+    except gt_ipc.IpcError as e:
+        if e.code == "server_unverified":
+            raise
         if not start or not start_daemon(h):
             raise gt_ipc.IpcError("unreachable", "the unlock authority is not running",
                                   ["gt_unlock.py daemon start"])
-        c = gt_ipc.connect(addr, timeout=timeout, answer=answer)
+        c = connect(h, timeout=timeout, answer=answer)
     try:
         return c.call(method, params or {})
     finally:
@@ -130,6 +191,7 @@ def check(scope, *, request=False, reason="", subject=None, job=None, h=None, an
     try:
         return call("check", params, h=h, start=start, answer=answer)
     except gt_ipc.IpcError as e:
+        # never allowed: unreachable, server_unverified, or the authority's own refusal
         return {"allowed": False, "code": "unreachable" if e.code == "unreachable" else e.code,
                 "message": e.message, "grant": None, "level": "?",
                 "hints": e.hints or ["gt_unlock.py daemon start"]}

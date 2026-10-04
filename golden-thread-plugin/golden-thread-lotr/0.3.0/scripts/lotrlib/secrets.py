@@ -203,11 +203,20 @@ def brokered(ref):
     return isinstance(ref, str) and ref.split(":", 1)[0] in BROKERED
 
 
-def _brokered(ref, subject):
+def _brokered(ref, subject, job=None):
     from . import unlock
+    if not unlock.enabled():
+        # Review (low): with unlock OFF a brokered ref used to ask -- and so START -- the
+        # authority. Off means no daemon: a brokered ref is refused, naming why.
+        raise GatewayError("unlock_off", f"secret {ref}: brokered refs are resolved only by gt "
+                           "unlock's authority, and gt unlock is off",
+                           hints=["turn gt unlock on (gt_unlock.py policy ...), or use a "
+                                  "file:/keychain:/env: ref"])
     params = {"ref": ref}
     if subject is not None:
         params["subject"] = subject
+    elif job:
+        params["job"] = job
     try:
         res = unlock.call("secret", params)
     except GatewayError as e:
@@ -219,12 +228,13 @@ def _brokered(ref, subject):
     return value
 
 
-def resolve(ref, *, store_dir=None, subject=None):
+def resolve(ref, *, store_dir=None, subject=None, job=None):
     """Return the secret value for `ref`. Raises GatewayError naming the ref, never the value.
-    `subject` (brokered schemes only) is the kernel-identified process the value is for."""
+    `subject` (brokered schemes only) is the kernel-identified process the value is for; `job`
+    (a hub client's `lotr-hub:<id>`) is asked instead when there is no local subject."""
     scheme, target = _split(ref)
     if scheme in BROKERED:
-        return _brokered(ref, subject)
+        return _brokered(ref, subject, job)
     if scheme in ("file", "store"):
         value = _read_file(ref, _file_path(scheme, target, store_dir))
         field = _field(target)[1] if scheme == "file" else None

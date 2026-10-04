@@ -19,6 +19,14 @@ export const meta = {
 // spool, a sanitised unit name), so nothing from the material reaches the agent's task message.
 
 const STAGES = ['extract', 'classify', 'reconcile', 'draft', 'verify', 'generalize', 'place']
+const SPOOL_TAIL = '/Projects/golden-thread/spool/pipeline/'
+
+// gt_ingest_pipeline.unit_slug, exactly: the unit's file name in the run's prompts directory.
+function unitSlug(unit) {
+  if (unit === '.' || unit === '') return '_root'
+  const s = unit.replace(/^\/+|\/+$/g, '').replace(/[^A-Za-z0-9._-]+/g, '__')
+  return s.slice(0, 120) || '_unit'
+}
 
 function bad(why) {
   throw new Error('pipeline-stage: ' + why + ' -- run it with the JSON `gt_ingest_pipeline.py workflow-args <run> --stage <stage> --json` printed')
@@ -29,8 +37,13 @@ if (!STAGES.includes(args.stage)) bad('unknown stage ' + JSON.stringify(args.sta
 if (typeof args.job_type !== 'string' || !(args.job_type === args.stage || args.job_type.startsWith(args.stage + '-'))) bad('job_type does not belong to the stage')
 if (!args.schema || args.schema.type !== 'object' || typeof args.schema.properties !== 'object') bad('no stage schema')
 if (!Array.isArray(args.items)) bad('no items')
+// The prompt file must be EXACTLY <run_dir>/prompts/<stage>/<unit_slug(unit)>.md, with run_dir
+// the run's own spool directory (review 2026-10-03: a substring check let any path through).
+if (typeof args.run !== 'string' || !/^[A-Za-z0-9][A-Za-z0-9._-]*$/.test(args.run)) bad('bad run id')
+if (typeof args.run_dir !== 'string' || !args.run_dir.endsWith(SPOOL_TAIL + args.run) || args.run_dir.split('/').some((p) => p === '..' || p === '.')) bad('run_dir is not the run\'s spool directory')
 for (const it of args.items) {
-  if (!it || typeof it.unit !== 'string' || typeof it.prompt_file !== 'string' || !it.prompt_file.includes('/prompts/' + args.stage + '/')) bad('an item without a unit or a prompt file in the run spool')
+  if (!it || typeof it.unit !== 'string' || typeof it.prompt_file !== 'string') bad('an item without a unit or a prompt file')
+  if (it.prompt_file !== args.run_dir + '/prompts/' + args.stage + '/' + unitSlug(it.unit) + '.md') bad('a prompt file that is not its unit\'s file in the run spool')
 }
 
 phase('Stage')

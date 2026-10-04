@@ -99,9 +99,12 @@ class Engine:
 
     # -- helpers ---------------------------------------------------------------------------
 
-    def _client(self, client_id):
+    def _client(self, client_id, remote=False):
         """The policy subject for a caller. Local callers are NOT exempt (ADR-5): they get the
-        allow list and tier ceiling from gateway.json `local`, like an enrolled client."""
+        allow list and tier ceiling from gateway.json `local`, like an enrolled client.
+        INVARIANT (review M2): a REMOTE caller is never the local one, whatever id it carries."""
+        if remote and client_id in (None, "", LOCAL_CLIENT):
+            raise GatewayError("unauthorized", "a hub client is never the local caller")
         if client_id in (None, LOCAL_CLIENT):
             loc = self.settings.get("local") or {}
             return {"id": LOCAL_CLIENT, "allow": loc.get("allow", ["*"]),
@@ -130,11 +133,12 @@ class Engine:
 
     # -- find ------------------------------------------------------------------------------
 
-    def find(self, query="", connection=None, limit=8, detail="summary", client_id=None):
+    def find(self, query="", connection=None, limit=8, detail="summary", client_id=None,
+             remote=False):
         try:
             with self._lock:
                 self.reload_if_changed()
-                client = self._client(client_id)
+                client = self._client(client_id, remote)
                 if connection:
                     self.registry.connection(connection)  # unknown -> error with hints
                 hits = self.index.search(query or "", connection=connection,
@@ -171,12 +175,12 @@ class Engine:
     # -- call ------------------------------------------------------------------------------
 
     def call(self, tool, connection, op, args=None, select=None, cursor=None, client_id=None,
-             subject=None):
+             subject=None, remote=False):
         args = dict(args or {})
         base = {"tool": tool, "connection": connection, "op": op,
                 "client": client_id or LOCAL_CLIENT, "args_sha256": _args_hash(args),
                 "grant": None, "pid": (subject or {}).get("pid")}
-        local = client_id in (None, LOCAL_CLIENT)
+        local = not remote and client_id in (None, LOCAL_CLIENT)
         tier = None
         identity = None
         try:
@@ -186,7 +190,7 @@ class Engine:
                     raise GatewayError("bad_tool", f"tool must be one of {', '.join(TOOLS)}")
                 conn = self.registry.connection(connection)
                 identity = conn.get("identity")
-                client = self._client(client_id)
+                client = self._client(client_id, remote)
                 prof = profiles.for_connection(conn)
                 recipe = self._recipe(op, conn)
                 if recipe:
@@ -220,12 +224,19 @@ class Engine:
                     mode = (self.settings.get("local") or {}).get("confirm", "auto")
                     text = confirm_mod.describe(connection, identity, op, args,
                                                 client_id or LOCAL_CLIENT)
-                    g = self._consent(mode, text, base, subject if local else None)
+                    g = self._consent(mode, text, base, subject if local else None, identity)
                     base["grant"] = base["grant"] or g
+                if tier in ("write", "consent") and not audit.writable(self.home):
+                    # Never act without the record (review, low): the audit line is written
+                    # after the call, so an unwritable log refuses a write BEFORE it runs.
+                    raise GatewayError("audit_failed", "the audit log cannot be written, so "
+                                       f"this {tier} operation is refused",
+                                       hints=[str(self.home / "state" / "audit.jsonl")])
                 factory = self._connection_factory
                 if conn.get("kind") == "mcp" and factory is HttpConnection:
                     factory = McpConnection           # 0.2.0: an SSO/OAuth MCP downstream
-                resolver = self._secret_resolver or self._brokered_resolver(subject)
+                resolver = self._secret_resolver or self._brokered_resolver(
+                    subject, None if local else client_id)
                 http = factory(
                     conn, prof, **({"secret_resolver": resolver} if resolver else {}))
                 result = None
@@ -267,7 +278,7 @@ class Engine:
         return u.check(f"lotr:{connection}:{tier}", subject, request=False,
                        reason=f"{tool} {op} on {connection}")
 
-    def _consent(self, mode, text, base, subject):
+    def _consent(self, mode, text, base, subject, identity=None):
         """The consent step. With the authority's consent_requires_factor "platform", a Touch
         ID / Windows Hello signature over THIS op (raised by the authority) is the confirmation;
         otherwise the 0.2.0 path (local.confirm: dialog / refuse / none) runs unchanged.
@@ -275,13 +286,16 @@ class Engine:
         -> the grant id the authority approved under, or None."""
         u = self._unlock
         if subject is not None and u.enabled():
-            op_hash = hashlib.sha256("|".join(
-                [base["tool"], base["connection"], base["op"], base["args_sha256"]])
-                .encode("utf-8")).hexdigest()
+            # The authority composes the prompt text and the op hash itself from these fields
+            # (review M1): nothing a caller writes is shown to the person approving.
+            op = {"tool": base["tool"], "connection": base["connection"], "op": base["op"],
+                  "args_sha256": base["args_sha256"]}
+            if identity:
+                op["identity"] = str(identity)
             try:
                 res = u.call("consent", {"subject": {"pid": subject["pid"],
                                                      "start": subject["start"]},
-                                         "op_hash": op_hash, "text": text})
+                                         "op": op})
             except GatewayError as e:
                 if e.code in ("locked", "failed_closed", "unreachable", "unlock_unavailable",
                               "subject_gone", "unattended"):
@@ -305,17 +319,21 @@ class Engine:
         confirm_mod.confirm(mode, text, dialog=self._dialog)
         return None
 
-    def _brokered_resolver(self, subject):
-        """None (the connection's default resolver, as 0.2.0) unless a subject is known; then
-        a resolver that names the subject to the authority for brokered schemes."""
-        if subject is None:
+    def _brokered_resolver(self, subject, hub_client=None):
+        """None (the connection's default resolver, as 0.2.0) unless a subject or a hub client
+        is known. A LOCAL caller's brokered refs are asked for ON BEHALF of its kernel-identified
+        subject. A HUB client's are asked as the unattended job `lotr-hub:<client>` (review M3:
+        they were resolved under lotrd's own identity) -- so only an allow-list entry
+        {"job": "lotr-hub:<client>", "scope": "secret:<ref>"} in the unlock policy opens one."""
+        if subject is None and not hub_client:
             return None
         from . import secrets as secrets_mod
-        subj = {"pid": subject["pid"], "start": subject["start"]}
+        subj = {"pid": subject["pid"], "start": subject["start"]} if subject else None
+        job = None if subj else "lotr-hub:%s" % hub_client
 
         def resolve(ref):
             if secrets_mod.brokered(ref):
-                return secrets_mod.resolve(ref, subject=subj)
+                return secrets_mod.resolve(ref, subject=subj, job=job)
             return secrets_mod.resolve(ref)
         return resolve
 

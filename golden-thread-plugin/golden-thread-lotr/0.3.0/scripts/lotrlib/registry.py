@@ -14,6 +14,7 @@ import difflib
 import hashlib
 import hmac
 import json
+import os
 import re
 # The stdlib module, not lotrlib.secrets: inside a package an absolute import is absolute.
 import secrets as _stdsecrets
@@ -177,12 +178,20 @@ def _validate_mcp(entry, where):
     return None
 
 
+# The engine's name for the LOCAL caller (engine.LOCAL_CLIENT). An enrolled hub client by this
+# name would be treated as the local caller -- gateway.json's `local` rules instead of its own
+# allow list and tier ceiling (review M2, 2026-10-03) -- so it is refused everywhere.
+RESERVED_CLIENT_IDS = ("local",)
+
+
 def _validate_client(c, zone):
     if not isinstance(c, dict):
         raise _bad("client must be an object")
     cid = c.get("id")
     if not isinstance(cid, str) or not CLIENT_ID.match(cid):
         raise _bad(f"client id {cid!r} is invalid (letters, digits, . _ -)")
+    if cid.lower() in RESERVED_CLIENT_IDS:
+        raise _bad(f"client id {cid!r} is reserved for the local caller")
     if c.get("zone") != zone:
         raise _bad(f"client {cid}: zone {c.get('zone')!r} does not match registry zone {zone!r}")
     if not isinstance(c.get("secret_sha256"), str) or not SHA256_HEX.match(c["secret_sha256"]):
@@ -194,6 +203,25 @@ def _validate_client(c, zone):
         raise _bad(f"client {cid}: max_tier must be one of {', '.join(TIERS)}")
     if c.get("revoked") is not None and not isinstance(c.get("revoked"), str):
         raise _bad(f"client {cid}: revoked must be null or a timestamp")
+
+
+def _check_private_file(path):
+    """registry.json is the hub's authority on who may call: it must be this user's and mode
+    600 (review M2: the hub reloaded it with no check). POSIX only -- native Windows has no mode
+    bits; the profile directory's ACL is what protects it there (config.check_private)."""
+    if os.name == "nt":
+        return
+    try:
+        st = os.stat(path)
+    except FileNotFoundError:
+        return                      # read_json names the missing file
+    except OSError as e:
+        raise GatewayError("insecure_perms", f"cannot check {path}: {e.strerror}")
+    if st.st_uid != os.getuid() or st.st_mode & 0o077:
+        raise GatewayError("insecure_perms",
+                           f"{path} must be owned by this user and mode 600 (it is "
+                           f"{oct(st.st_mode & 0o777)}); the gateway refuses to trust it",
+                           hints=[f"chmod 600 {path}"])
 
 
 def _sha256(secret):
@@ -215,7 +243,12 @@ class Registry:
                 f"clients={len(self.clients)}>")
 
     @classmethod
-    def load(cls, path):
+    def load(cls, path, check_perms=False):
+        """`check_perms` (the hub's live reload, lotrd.registry_getter_for): refuse a registry
+        that is not this user's mode-600 file. The engine's own load already passed
+        config.check_private for the whole home."""
+        if check_perms:
+            _check_private_file(path)
         data = read_json(path)
         if not isinstance(data, dict):
             raise _bad(f"{path}: top level must be an object")
@@ -294,7 +327,8 @@ class Registry:
 
         Only the sha256 is stored. The caller must hand the secret to the machine and drop it.
         """
-        if not isinstance(client_id, str) or not CLIENT_ID.match(client_id):
+        if not isinstance(client_id, str) or not CLIENT_ID.match(client_id) \
+                or client_id.lower() in RESERVED_CLIENT_IDS:
             raise GatewayError("registry_invalid", f"client id {client_id!r} is invalid")
         existing = self.clients.get(client_id)
         if existing is not None and not existing.get("revoked"):

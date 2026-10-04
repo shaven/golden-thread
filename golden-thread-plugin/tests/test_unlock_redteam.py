@@ -87,27 +87,47 @@ class FromTheSessionShell(AuthorityCase):
                 p.wait(5)
                 p.stdin.close()
 
-    def test_a_lotrd_main_script_is_a_consumer(self):
+    def test_only_the_installed_lotrd_is_a_consumer(self):
+        """Review F5 (2026-10-03): this test used to assert that a temp-dir lotrd.py with a
+        lotrlib/engine.py beside it PASSED -- a file-name check any shell could satisfy. Now a
+        consumer runs <installPath>/scripts/lotrd.py of gt-lotr as installed_plugins.json
+        records it, by realpath; the same file anywhere else is refused."""
         import gt_unlockd as D
+        import shutil
         import tempfile
         d = tempfile.mkdtemp(prefix="gtlotrd-")
-        os.makedirs(os.path.join(d, "lotrlib"))
-        open(os.path.join(d, "lotrlib", "engine.py"), "w").close()
-        with open(os.path.join(d, "lotrd.py"), "w", encoding="utf-8", newline="\n") as f:
-            f.write("import time\ntime.sleep(30)\n")
-        p = subprocess.Popen([PYTHON, "-B", os.path.join(d, "lotrd.py")])
         try:
-            deadline = time.monotonic() + 5
-            ok = False
-            while time.monotonic() < deadline and not ok:
-                pi = gt_ipc.process_info(p.pid)
-                ok = bool(pi) and D.is_lotr_daemon({"pid": p.pid, "start": pi["start"]})
-                time.sleep(0.1)
-            self.assertTrue(ok)
+            plugin = os.path.join(d, "cache", "gt-lotr", "0.3.0")
+            os.makedirs(os.path.join(plugin, "scripts", "lotrlib"))
+            fake = os.path.join(d, "fake")
+            os.makedirs(os.path.join(fake, "lotrlib"))
+            for root in (os.path.join(plugin, "scripts"), fake):
+                open(os.path.join(root, "lotrlib", "engine.py"), "w").close()
+                with open(os.path.join(root, "lotrd.py"), "w", encoding="utf-8",
+                          newline="\n") as f:
+                    f.write("import time\ntime.sleep(30)\n")
+            plugins = os.path.join(d, "installed_plugins.json")
+            with open(plugins, "w", encoding="utf-8") as f:
+                json.dump({"version": 2, "plugins": {"gt-lotr@golden-thread-plugin": [
+                    {"scope": "user", "installPath": plugin, "version": "0.3.0"}]}}, f)
+            verdicts = {}
+            for name, script in (("installed", os.path.join(plugin, "scripts", "lotrd.py")),
+                                 ("look-alike", os.path.join(fake, "lotrd.py"))):
+                p = subprocess.Popen([PYTHON, "-B", script])
+                try:
+                    deadline = time.monotonic() + 5
+                    ok = False
+                    while time.monotonic() < deadline and not ok:
+                        pi = gt_ipc.process_info(p.pid)
+                        ok = bool(pi) and D.is_lotr_daemon({"pid": p.pid, "start": pi["start"]},
+                                                           plugins_file=plugins)
+                        time.sleep(0.1)
+                    verdicts[name] = ok
+                finally:
+                    p.kill()
+                    p.wait(5)
+            self.assertEqual(verdicts, {"installed": True, "look-alike": False})
         finally:
-            p.kill()
-            p.wait(5)
-            import shutil
             shutil.rmtree(d, True)
 
     def test_forged_subject_is_refused(self):
@@ -177,9 +197,12 @@ class FromTheSessionShell(AuthorityCase):
         with open(os.path.join(self.home, "sealed", "gh.blob"), encoding="utf-8") as f:
             self.assertNotIn("tok-xyz", f.read())
         self.call(self.shim, "lock")
+        r = self.call(self.shim, "secret", {"ref": "sealed:gh", "request": False})
+        self.assertEqual(r["error"]["code"], "locked")
+        # and a shell child never gets as far as "locked": the broker is the shim's (F4)
         bash = self.child()
         r = self.call(bash, "secret", {"ref": "sealed:gh", "request": False})
-        self.assertEqual(r["error"]["code"], "locked")
+        self.assertEqual(r["error"]["code"], "mcp_only")
 
     def test_prompt_flood_is_throttled(self):
         bash = self.child()

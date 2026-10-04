@@ -92,10 +92,13 @@ def _mac_bsdinfo(pid):
     raw = buf.raw
     # 12 uint32 (flags, status, xstatus, pid, ppid, uid, gid, ruid, rgid, svuid, svgid, rfu),
     # comm[16], name[32], 6 x 32-bit, then start tv_sec / tv_usec as uint64 at offset 120.
+    # comm[16] at 48, name[32] at 64, then nfiles, pgid, pjobc, e_tdev (108), e_tpgid, nice.
     ppid, uid = struct.unpack_from("=II", raw, 16)
     comm = raw[48:64].split(b"\0", 1)[0].decode("utf-8", "replace")
+    tdev, = struct.unpack_from("=I", raw, 108)
     sec, usec = struct.unpack_from("=QQ", raw, 120)
-    return {"ppid": ppid, "uid": uid, "comm": comm, "start": "%d.%06d" % (sec, usec)}
+    return {"ppid": ppid, "uid": uid, "comm": comm, "start": "%d.%06d" % (sec, usec),
+            "tty": tdev not in (0xFFFFFFFF, 0)}
 
 
 def _linux_stat(pid):
@@ -110,7 +113,9 @@ def _linux_stat(pid):
         return None
     rest = data[rp + 2:].split()
     try:
-        return {"ppid": int(rest[1]), "comm": data[lp + 1:rp], "start": rest[19]}
+        # state ppid pgrp session tty_nr ...: tty_nr 0 = no controlling terminal
+        return {"ppid": int(rest[1]), "comm": data[lp + 1:rp], "start": rest[19],
+                "tty": int(rest[4]) != 0}
     except (IndexError, ValueError):
         return None
 
@@ -292,8 +297,10 @@ def _win_parent(pid):
 
 
 def process_info(pid):
-    """{pid, ppid, start, comm} for a live process, or None when it is gone or unreadable.
-    `start` is an opaque string that changes when a pid is reused: compare it, never parse it."""
+    """{pid, ppid, start, comm, tty} for a live process, or None when it is gone or unreadable.
+    `start` is an opaque string that changes when a pid is reused: compare it, never parse it.
+    `tty` is True when the process has a controlling terminal, False when it has none, None
+    where the platform cannot say (Windows)."""
     try:
         pid = int(pid)
     except (TypeError, ValueError):
@@ -304,19 +311,21 @@ def process_info(pid):
         b = _mac_bsdinfo(pid)
         if not b:
             return None
-        return {"pid": pid, "ppid": b["ppid"], "start": b["start"], "comm": b["comm"]}
+        return {"pid": pid, "ppid": b["ppid"], "start": b["start"], "comm": b["comm"],
+                "tty": b["tty"]}
     if IS_LINUX:
         s = _linux_stat(pid)
         if not s:
             return None
-        return {"pid": pid, "ppid": s["ppid"], "start": s["start"], "comm": s["comm"]}
+        return {"pid": pid, "ppid": s["ppid"], "start": s["start"], "comm": s["comm"],
+                "tty": s["tty"]}
     if IS_WINDOWS:
         t = _win_times(pid)
         if not t or not t["alive"]:
             return None
         p = _win_parent(pid) or {}
         return {"pid": pid, "ppid": p.get("ppid"), "start": t["start"],
-                "comm": p.get("comm") or ""}
+                "comm": p.get("comm") or "", "tty": None}
     return None
 
 
@@ -385,15 +394,58 @@ def process_args(pid):
 _win_args_cache = {}
 
 
+def _win_cmdline_nt(pid):
+    """The command line of `pid` from the kernel (NtQueryInformationProcess, class 60
+    ProcessCommandLineInformation, Windows 8.1+), or None. Fast: no child process."""
+    try:
+        import ctypes
+        from ctypes import wintypes as wt
+        w = _w()
+        nt = ctypes.WinDLL("ntdll")
+        nt.NtQueryInformationProcess.restype = ctypes.c_long
+        nt.NtQueryInformationProcess.argtypes = [wt.HANDLE, ctypes.c_int, ctypes.c_void_p,
+                                                 wt.ULONG, ctypes.POINTER(wt.ULONG)]
+        h = w.OpenProcess(_PROCESS_QUERY_LIMITED_INFORMATION, False, int(pid))
+        if not h:
+            return None
+        try:
+            size = wt.ULONG(0)
+            nt.NtQueryInformationProcess(h, 60, None, 0, ctypes.byref(size))
+            if not size.value or size.value > 1 << 20:
+                return None
+            buf = ctypes.create_string_buffer(size.value)
+            if nt.NtQueryInformationProcess(h, 60, buf, size, ctypes.byref(size)) != 0:
+                return None
+
+            class US(ctypes.Structure):
+                _fields_ = [("Length", wt.USHORT), ("MaximumLength", wt.USHORT),
+                            ("Buffer", ctypes.c_void_p)]
+            us = US.from_buffer(buf)
+            if not us.Buffer or not us.Length:
+                return None
+            return ctypes.wstring_at(us.Buffer, us.Length // 2)
+        finally:
+            w.CloseHandle(h)
+    except (OSError, AttributeError, ValueError):
+        return None
+
+
 def _win_args(pid):
-    """argv of a Windows process: its command line from WMI (PowerShell, ~1 s, cached per pid +
-    start time), split by the shell's own CommandLineToArgvW."""
+    """argv of a Windows process: its command line from the kernel (NtQueryInformationProcess),
+    else from WMI (PowerShell, ~1 s), cached per pid + start time, split by the shell's own
+    CommandLineToArgvW."""
     info = process_info(pid)
     if not info:
         return []
     key = (pid, info["start"])
     if key in _win_args_cache:
         return _win_args_cache[key]
+    line = _win_cmdline_nt(pid)
+    if line:
+        out = _split_win(line)
+        if out and process_info(pid) and process_info(pid)["start"] == info["start"]:
+            _win_args_cache[key] = out
+        return out
     import subprocess
     root = os.environ.get("SystemRoot") or r"C:\Windows"
     ps = os.path.join(root, "System32", "WindowsPowerShell", "v1.0", "powershell.exe")
@@ -407,6 +459,13 @@ def _win_args(pid):
         return []
     if not line:
         return []
+    out = _split_win(line)
+    if out and process_info(pid) and process_info(pid)["start"] == info["start"]:
+        _win_args_cache[key] = out
+    return out
+
+
+def _split_win(line):
     import ctypes
     from ctypes import wintypes as wt
     sh = ctypes.WinDLL("shell32", use_last_error=True)
@@ -417,12 +476,60 @@ def _win_args(pid):
     if not arr:
         return []
     try:
-        out = [arr[i] for i in range(n.value)]
+        return [arr[i] for i in range(n.value)]
     finally:
         ctypes.WinDLL("kernel32").LocalFree(ctypes.cast(arr, ctypes.c_void_p))
-    if process_info(pid) and process_info(pid)["start"] == info["start"]:
-        _win_args_cache[key] = out
-    return out
+
+
+_PY_OPTS_WITH_VALUE = ("-X", "-W", "-Q")
+
+
+def main_script(pid):
+    """The ABSOLUTE path of the file a python process `pid` runs as __main__, or None: None for
+    `python -c`, `python -m`, `python -` (stdin), an interpreter with no script, or a process
+    whose argv cannot be read. The path is resolved against the process's own working directory
+    only when it is already absolute; a relative script path gives None (it cannot be pinned).
+
+    Used to tell gt's own processes from look-alikes BY WHICH FILE THEY RUN (gt_unlockd's
+    consumer / shim / server checks): the caller compares os.path.realpath() of this with the
+    realpath of the installed file. A same-user process can still run the REAL file with its
+    own arguments or environment -- that residual is documented (SECURITY.md, L1/L2)."""
+    args = process_args(pid)
+    i = 1
+    while i < len(args):
+        a = args[i]
+        if a in ("-c", "-m", "-"):
+            return None
+        if a in _PY_OPTS_WITH_VALUE:
+            i += 2
+            continue
+        if a.startswith("-"):
+            i += 1
+            continue
+        if not os.path.isabs(a):
+            return None
+        return a
+    return None
+
+
+def peer_of(client):
+    """{pid, start} of the process SERVING a connected Client, from the kernel -- macOS
+    LOCAL_PEERTOKEN, Linux SO_PEERCRED (both report the listener's process), Windows
+    GetNamedPipeServerProcessId -- or None when it cannot be told. A client that must know it
+    reached the real server (gt_unlock_client) refuses None."""
+    conn = getattr(client, "_conn", None)
+    try:
+        if IS_WINDOWS:
+            spid = getattr(conn, "server_pid", None)
+            info = process_info(spid) if spid else None
+            return {"pid": int(spid), "start": info["start"]} if info else None
+        sock = getattr(conn, "sock", None)
+        if sock is None:
+            return None
+        p = unix_peer(sock)
+        return {"pid": p["pid"], "start": p["start"]} if p else None
+    except (OSError, ValueError, KeyError, TypeError):
+        return None
 
 
 def alive(pid, start):
@@ -906,12 +1013,13 @@ def _connect_pipe(name, timeout):
         w.CloseHandle(h)
         raise IpcError("server_refused", "the process serving %s does not run as this user"
                        % name)
-    return _ClientPipe(h)
+    return _ClientPipe(h, int(spid.value))
 
 
 class _ClientPipe(_PipeConn):
-    def __init__(self, h):
+    def __init__(self, h, server_pid=None):
         super().__init__(h, None)
+        self.server_pid = server_pid
 
     def close(self):
         _w().CloseHandle(self.h)

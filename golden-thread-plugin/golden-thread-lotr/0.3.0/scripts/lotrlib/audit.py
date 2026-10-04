@@ -58,6 +58,19 @@ def _line(fields):
     return json.dumps(rec, sort_keys=False, separators=(",", ":")) + "\n"
 
 
+def writable(home):
+    """True when an audit line could be appended now (opened for append, nothing written).
+    The engine refuses a write / consent op up front when it is False (review, low)."""
+    try:
+        state = Path(home) / "state"
+        state.mkdir(parents=True, exist_ok=True, mode=0o700)
+        fd = os.open(str(state / "audit.jsonl"), os.O_WRONLY | os.O_APPEND | os.O_CREAT, 0o600)
+        os.close(fd)
+        return True
+    except OSError:
+        return False
+
+
 def record(home, **fields):
     """Append one JSON line to <home>/state/audit.jsonl, created mode 600 (dir 700)."""
     state = Path(home) / "state"

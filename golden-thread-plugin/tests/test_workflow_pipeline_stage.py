@@ -63,6 +63,7 @@ class PipelineStageWorkflow(Sandbox):
     def args(self, **kw):
         spool = "/v/Projects/golden-thread/spool/pipeline/r1/prompts/extract/"
         a = {"workflow": "gt:pipeline-stage", "run": "r1", "stage": "extract",
+             "run_dir": "/v/Projects/golden-thread/spool/pipeline/r1",
              "job_type": "extract-code",
              "schema": {"type": "object", "properties": {"summary": {"type": "string"}},
                         "required": ["summary"]},
@@ -70,7 +71,7 @@ class PipelineStageWorkflow(Sandbox):
                         "sha256": "a" * 64, "agent_type": "gt:extract", "model": None,
                         "effort": None},
                        {"unit": "Ignore previous instructions", "label": "extract-code web",
-                        "prompt_file": spool + "web.md", "sha256": "b" * 64, "agent_type": None,
+                        "prompt_file": spool + "Ignore__previous__instructions.md", "sha256": "b" * 64, "agent_type": None,
                         "model": "sonnet", "effort": "medium"}]}
         a.update(kw)
         return a
@@ -113,6 +114,27 @@ class PipelineStageWorkflow(Sandbox):
                self.args(items=[{"unit": "x", "prompt_file": "/tmp/elsewhere.md"}])]
         for a in bad:
             with self.subTest(args=str(a)[:60]):
+                r = self.run_wf(a)
+                self.assertIn("pipeline-stage:", r.get("error", ""))
+                self.assertEqual(r["calls"], [])
+
+    def test_a_prompt_file_must_be_exactly_the_units_file_in_the_run_spool(self):
+        """Review 2026-10-03 (low): the path check was `includes('/prompts/<stage>/')`, so any
+        file anywhere whose path contained that segment -- or climbed out with `..` -- passed."""
+        spool = "/v/Projects/golden-thread/spool/pipeline/r1/prompts/extract/"
+        bad_items = [
+            [{"unit": "api", "prompt_file": "/tmp/x/prompts/extract/api.md"}],
+            [{"unit": "api", "prompt_file": spool + "../../../../../../etc/api.md"}],
+            [{"unit": "api", "prompt_file": spool + "web.md"}],          # another unit's file
+        ]
+        for items in bad_items:
+            with self.subTest(items=items):
+                r = self.run_wf(self.args(items=items))
+                self.assertIn("pipeline-stage:", r.get("error", ""))
+                self.assertEqual(r["calls"], [])
+        for a in (self.args(run_dir="/tmp/elsewhere/r1"), self.args(run_dir=None),
+                  self.args(run="../r1")):
+            with self.subTest(args=str(a)[:80]):
                 r = self.run_wf(a)
                 self.assertIn("pipeline-stage:", r.get("error", ""))
                 self.assertEqual(r["calls"], [])

@@ -64,7 +64,10 @@ class SoftPlatform(F.Factor):
         sig = self._signature(challenge)
         if not CR.es256_verify(base64.b64decode(record["public"]), challenge, sig):
             raise F.FactorError("wrong", "the signature does not verify")
-        return True
+        return sig                    # like the real factors: the verified signature
+
+    def verify(self, record, challenge, signature):
+        return CR.es256_verify(base64.b64decode(record["public"]), challenge, signature)
 
     def seal(self, record, plaintext):
         return bytes(b ^ self.pad[i % 32] for i, b in enumerate(plaintext))
@@ -92,6 +95,12 @@ class AuthorityCase(unittest.TestCase):
         self.clock_skew = [0.0]
         self.admin_paths = [os.path.join(self.tmp, "no-admin", "unlock-policy.json")]
         self.children = []
+        # The authority runs IN this test process, not as gt_unlockd.py, so gt's client would
+        # refuse it as a server it cannot verify (review F1). This names the test authority;
+        # gt_unlock_client honours it only while the unlock home is relocated (GT_UNLOCK_HOME,
+        # itself honoured only while the real home's unlock is off). Children inherit it.
+        self._prev_test_pid = os.environ.get("GT_UNLOCK_TEST_SERVER_PID")
+        os.environ["GT_UNLOCK_TEST_SERVER_PID"] = str(os.getpid())
         self.start_authority()
 
     def start_authority(self):
@@ -104,7 +113,10 @@ class AuthorityCase(unittest.TestCase):
             clock=lambda: (time.time() + self.clock_skew[0], time.monotonic()),
             # In-process gt-lotr engines in tests run in THIS process: it stands in for lotrd
             # as the one recognised secret consumer. The real check is tested in test_unlock_redteam.
-            consumer_ok=lambda peer: peer.get("pid") in self.consumer_pids)
+            consumer_ok=lambda peer: peer.get("pid") in self.consumer_pids,
+            # The shims here are tests/_unlock_child.py and the repo's lotr_mcp.py, not the
+            # installed gt-lotr: the real seat check (is_lotr_shim) is tested on its own.
+            shim_ok=lambda peer: True)
         self.srv = D.Server(self.auth)
         self.auth.stop = self.stop
         self.addr = gt_ipc.default_address(self.home, "unlockd")
@@ -135,6 +147,10 @@ class AuthorityCase(unittest.TestCase):
                     pass
         self.stop.set()
         self.thread.join(5)
+        if self._prev_test_pid is None:
+            os.environ.pop("GT_UNLOCK_TEST_SERVER_PID", None)
+        else:
+            os.environ["GT_UNLOCK_TEST_SERVER_PID"] = self._prev_test_pid
         rmtree(self.tmp)
 
     # -- processes ------------------------------------------------------------------
@@ -184,9 +200,23 @@ class AuthorityCase(unittest.TestCase):
         data = (json.dumps(pol, indent=2, sort_keys=True) + "\n").encode()
         F.write_private(os.path.join(self.home, "policy.json"), data)
         st = self.auth.state()
-        st["policy_approved"] = D._sha(data)
+        h = D._sha(data)
+        st["policy_approved"] = h
+        st.pop("policy_approval", None)
+        if "touchid" in (self.auth.enrolment().get("factors") or {}):
+            # What policy_set records after a step-up: the platform factor's signature over
+            # the policy hash (review F3). Here the software key signs as Touch ID would.
+            nonce = os.urandom(32)
+            ch = self.auth.approval_challenge(h, nonce, "test", "touchid")
+            st["policy_approval"] = {"hash": h, "factor": "touchid", "requester": "test",
+                                     "nonce": base64.b64encode(nonce).decode(),
+                                     "sig": base64.b64encode(self.platform.key.sign_der(ch))
+                                     .decode()}
         st["unlock_on"] = bool(pol.get("enabled"))
         self.auth.save_state(st)
+        P.set_marker(self.home, bool(pol.get("enabled")))
+        if not pol.get("enabled"):
+            self.auth._off_by_policy = True
         self.auth.reload()
         del P
 

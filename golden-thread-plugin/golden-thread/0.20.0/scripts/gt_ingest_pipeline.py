@@ -662,7 +662,8 @@ def cmd_workflow_args(a):
                       "prompt_file": pf.replace(os.sep, "/"),
                       "sha256": hashlib.sha256(text.encode("utf-8")).hexdigest(),
                       "agent_type": atype, "model": model, "effort": effort})
-    out = {"workflow": WORKFLOW, "run": a.run, "stage": a.stage, "job_type": job,
+    out = {"workflow": WORKFLOW, "run": a.run, "run_dir": d.replace(os.sep, "/"),
+           "stage": a.stage, "job_type": job,
            "schema": specs.json_schema(entry["data"]), "items": items, "refused": refused,
            "done": sorted(have), "agent_why": why}
     if not a.dry_run:

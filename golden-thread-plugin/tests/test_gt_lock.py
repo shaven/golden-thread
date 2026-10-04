@@ -375,6 +375,8 @@ class RealAuthorityGate(AuthorityCase):
         env = {k: v for k, v in os.environ.items() if not k.startswith(("CLAUDE", "GT_"))}
         env.update(UNLOCK_TEST_ENV)            # never a real prompt, never a started daemon
         env.update({"HOME": str(home), "USERPROFILE": str(home), "GT_UNLOCK_HOME": self.home,
+                    # the in-process test authority (gt_unlock_client verifies its server)
+                    "GT_UNLOCK_TEST_SERVER_PID": str(os.getpid()),
                     "GT_AGE_IDENTITY": str(ident), "GT_AGE": str(Path(tmp) / "no-age")})
         p = subprocess.run([PYTHON, str(LOCK), "open", str(vault / "Secrets" / "x.md.age"),
                             "--vault", str(vault)], stdin=subprocess.DEVNULL,

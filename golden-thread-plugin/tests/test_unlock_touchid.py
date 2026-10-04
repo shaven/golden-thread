@@ -76,6 +76,9 @@ def write_fake(name, body):
     with open(path, "w", encoding="utf-8", newline="\n") as f:
         f.write("#!/bin/sh\ncat >/dev/null\n" + body + "\n")
     os.chmod(path, 0o755)
+    # Recorded, as install records a helper it built (0.20.0 review): these tests are about
+    # what the helper SAYS, so it must get past the install-record check first.
+    T.record_helper(path)
     return path
 
 
@@ -105,7 +108,12 @@ class SignAndVerify(HelperCase):
         self.assertEqual(r["helper"], _STATE["helper"])
 
     def test_prove_verifies_a_real_secure_enclave_signature(self):
-        self.assertIs(self.fac.prove(self.rec, os.urandom(32), ctx()), True)
+        ch = os.urandom(32)
+        sig = self.fac.prove(self.rec, ch, ctx())
+        # prove() returns the verified signature (kept for the policy approval) ...
+        self.assertTrue(self.fac.verify(self.rec, ch, sig))
+        # ... which verifies over exactly that challenge and nothing else
+        self.assertFalse(self.fac.verify(self.rec, os.urandom(32), sig))
 
     def test_es256_verify_accepts_real_se_der_and_rejects_other_messages(self):
         """First cross-check of the pure-Python verifier against hardware output."""
@@ -253,6 +261,17 @@ class BuildCli(unittest.TestCase):
             self.assertFalse(os.path.exists(os.path.join(d, "bin", "gt-presence")))
         finally:
             rmtree(d)
+
+    def test_build_records_the_built_binary(self):
+        why = _skip_reason()
+        if why:
+            self.skipTest(why)
+        if "build_error" in _STATE:
+            self.skipTest("the helper did not build here: " + _STATE["build_error"])
+        self.assertIsNone(T.helper_problem(_STATE["helper"]))
+        r = subprocess.run([PYTHON, str(SCRIPTS / "gt_unlock_touchid.py"), "verify", "--helper",
+                            _STATE["helper"]], capture_output=True, text=True, timeout=60)
+        self.assertEqual(r.returncode, 0, r.stderr)
 
     def test_build_cli_produces_a_signed_helper(self):
         why = _skip_reason()

@@ -31,12 +31,25 @@ class DaemonEndToEnd(Sandbox):
     def tearDown(self):
         self.run_cmd([PYTHON, CLI, "daemon", "stop"], timeout=30)
         addr = gt_ipc.default_address(str(self.uhome), "unlockd")
+        if gt_ipc.alive_at(addr, timeout=0.3):
+            # With unlock ON `daemon stop` needs a fresh factor (review F1), which no test
+            # answers. A same-user process can always end the daemon by signal -- that is the
+            # documented residual -- and the test cleans up that way.
+            self._signal_daemon()
         deadline = time.monotonic() + 10
         while gt_ipc.alive_at(addr, timeout=0.3) and time.monotonic() < deadline:
             time.sleep(0.1)
         leaked = gt_ipc.alive_at(addr, timeout=0.3)
         super().tearDown()
         self.assertFalse(leaked, "the test leaked a running unlock daemon")
+
+    def _signal_daemon(self):
+        import signal
+        try:
+            with open(self.uhome / "unlockd.pid", encoding="utf-8") as f:
+                os.kill(int(f.read().strip()), signal.SIGTERM)
+        except (OSError, ValueError):
+            pass
 
     def client(self, answers=()):
         q = list(answers)
@@ -76,6 +89,11 @@ class DaemonEndToEnd(Sandbox):
         self.assertEqual(g["factors"], ["totp"])
         r = self.run_cmd([PYTHON, CLI, "lock"], timeout=60)
         self.assertIn("1 grant", r.stdout)
+        # F1: with unlock on, `daemon stop` without a factor leaves the authority running
+        r = self.run_cmd([PYTHON, CLI, "daemon", "stop"], timeout=60)
+        self.assertEqual(r.returncode, 1, r.stdout + r.stderr)
+        self.assertIn("NOT stopped", r.stdout)
+        self.assertTrue(gt_ipc.alive_at(gt_ipc.default_address(str(self.uhome), "unlockd")))
         r = self.run_cmd([PYTHON, CLI, "audit", "-n", "50"], timeout=60)
         events = [json.loads(x)["event"] for x in r.stdout.splitlines() if x.startswith("{")]
         for e in ("enroll", "policy_set", "grant", "revoke"):
