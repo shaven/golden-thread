@@ -6,6 +6,8 @@ model_intent: balanced
 
 # Golden Thread — Brief a repo
 
+**Under gt sandbox mode (preview)** (the session-start line says SANDBOX MODE): this skill's shell steps are refused — each refused tool prints one line with the exact command. Instead, read the project's notes with `vault_read` / `vault_search` / `vault_list`; the drain is `vault_queue_drain`, and the the `gt_log` entry line is one to ask the user to run. With sandbox mode off (the default) nothing changes.
+
 The outward axis of PROTOCOL.md, *Graduating a fact out to a repo*, as a tool. A project's
 `CLAUDE.md` is committed to its repo root, where every Claude Code session in that code reads
 it with no vault and no plugin. This drafts that section from the vault; a person decides what

@@ -6,6 +6,8 @@ model_intent: balanced
 
 # Golden Thread Init
 
+**Under gt sandbox mode (preview)** (the session-start line says SANDBOX MODE): this skill's shell steps are refused — each refused tool prints one line with the exact command. Instead, ask the user to run `vault_init.py` from a terminal: it creates and rewires the vault, which the sandbox fences. With sandbox mode off (the default) nothing changes.
+
 Set up the Golden Thread vault and connect it to a project. Idempotent — safe to re-run on an existing setup.
 
 ## Steps

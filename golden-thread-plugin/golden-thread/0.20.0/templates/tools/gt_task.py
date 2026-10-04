@@ -435,6 +435,12 @@ def through_queue(vault: Path, rel: str, op: str, content: str, section=None, ba
     try:
         req = queue_request(vault, rel, op, content, section, base_raw)
     except OSError as exc:
+        try:
+            import gt_errors as _gte                     # beside this file (0.20.1)
+            if _gte.is_denial(exc) and _gte.in_sandbox():
+                raise                                    # one sandbox line from gt_errors.run
+        except ImportError:
+            pass
         return 3, "could not queue the write to %s: %s" % (rel, exc)
     broker = find_broker()
     rows, note = drain(vault, broker)
@@ -776,4 +782,11 @@ def main(argv=None) -> int:
 
 
 if __name__ == "__main__":
-    sys.exit(main())
+    # A refusal from the OS -- gt sandbox mode, or a macOS interpreter refusal -- is one line
+    # naming the next step, not a traceback (0.20.1, B4). gt_errors sits beside this file.
+    try:
+        sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+        import gt_errors as _gte
+    except ImportError:
+        _gte = None
+    raise SystemExit(_gte.run(main, "gt_task") if _gte else main())

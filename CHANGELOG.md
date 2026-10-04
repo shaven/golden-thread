@@ -642,6 +642,75 @@ and nothing said so.
   running sandbox mode reports one missing entry in `gt_sandbox.py check` until
   `gt_sandbox.py apply` runs again.
 
+### Sandbox mode is a preview: refusals say what to do, and the sharp edges are closed
+
+The 0.20 usability run (2026-10-04) drove every skill under sandbox mode. The fence held; the
+work inside it did not. The owner's decision: sandbox mode ships as a **preview** in this
+release, labelled so in `gt_settings`, `/gt:gt-doctor`, `gt_unlock.py verify`, `gt_sandbox.py
+status`, the session-start line, SECURITY.md §8 and the manual, each naming what works
+(`/gt:gt-open`, `/gt:gt-query`, `/gt:gt-work`'s writes, every `vault_*` MCP tool,
+`gt_write_queue.py`) and what does not yet (the other skills' shell steps). Full skill support
+moves to 0.20.2.
+
+- **One line, not a traceback (finding B4).** `gt_tasks`, `gt_task`, `gt_lint`,
+  `gt_promote_detect`, `gt_adr allocate`, `vault_init create-project`, `gt_closeout`,
+  `gt_broker drain`, `gt_log add` and `gt_events` died in Python tracebacks when the sandbox
+  refused them. Each now prints one line — what was refused, why ("sandbox mode: the vault is
+  written only through the queue / gt-vault MCP", plus the read half when
+  `sandbox_vault_reads` is deny), and the next step: the MCP tool where one exists
+  (`vault_queue_drain` for the drain), else "run this from a terminal:" and the exact command
+  with real paths — and exits 5. The shared helper is `gt_errors.py`, shipped byte-identical in
+  the hooks dir and the vault's tools folder (a test fails the build when the copies differ).
+- **No Full Disk Access advice for a sandbox refusal.** `gt_log` blamed the interpreter (the
+  macOS provenance refusal of 0.20.0) for what was the sandbox. The two are told apart by where
+  the tool runs — sandbox mode on and the process is Claude Code's (`CLAUDECODE`, or
+  `SANDBOX_RUNTIME`), not native Windows — never by the error, which is the same EPERM.
+- **No litter.** Under the sandbox `safe_write` stops at the first refusal instead of falling
+  back to a sidecar and a `~/.claude/pending_*` file that nothing inside the sandbox could
+  replay. Outside it, the fallback stays, and its replay hint names the interpreter and the
+  full path of `safe_write.py` (it said `python3 safe_write.py replay`). A refused `log.md`
+  now says, in the same one line, that the entry is safe in the spool and gives the `merge`
+  command.
+- **`gt_write_queue.py` reaches the inbox even when the sandbox refuses a `stat` of the vault**
+  (sandbox_vault_reads deny); it died in `find_vault` before the fallback built for exactly
+  this. `gt_broker.py drain` / `status` on a queue the OS will not list is a refusal, no longer
+  "nothing queued".
+- **The session-start line no longer sends the model to the shell drain.** Under sandbox mode
+  `WRITE QUEUE` names `vault_queue_drain` (no hook drains — SessionStart and Stop only read)
+  and the terminal command; the model's context says never to run `gt_broker.py drain` from
+  the shell. Outside sandbox mode the drain command carries real paths instead of `<vault>`.
+  The claims guard's queue-first denial names the hooks dir instead of `<gt scripts>`, and
+  under sandbox mode routes to `vault_queue_write`.
+- **A short note in 17 skills** saying what to use under sandbox mode (the MCP tool, or the
+  command to give the user).
+- **`gt_sandbox.py apply` with the setting off is refused (finding M1)** with the
+  `gt_settings.py set sandbox_mode on` command. It used to write the deny rules while the
+  setting — and so the gt-vault MCP (`vault_mcp auto`) — stayed off: after a restart the vault
+  was unreachable, and gt unlock's confirmation had been skipped. `remove` always works.
+- **A rollback cannot strand sandbox mode or unlock (finding M3).** `install.sh <older>` asks
+  the newest `gt_sandbox.py rollback-check` before its first write; a release without
+  `gt_sandbox.py` / `gt_unlock.py` (before 0.20.0) is refused while either is on, or gt's
+  sandbox entries remain, with the exact commands that switch them off. A rollback to 0.20.0
+  passes.
+- **The Linux prerequisites are run, not found (finding M13).** gt executes
+  `bwrap --ro-bind / / true` and `socat -V`; on Ubuntu 24.04 AppArmor makes bwrap fail with
+  "setting up uid map: Permission denied" while on PATH, and 0.20.0 then wrote
+  `failIfUnavailable` and Claude Code refused to start. The refusal names the fix (the package
+  command for the distribution found — apt, dnf, yum, pacman, zypper, apk — or the AppArmor
+  setting), comes before gt unlock asks for a code (M6), and no longer suggests a `--force`
+  that `gt_settings` does not take. `gt_sandbox.py apply --force` writes the rest but never
+  `failIfUnavailable`, and records that it withheld it.
+- **The PowerShell tool is guarded (finding M10).** `guard_session_claims` looked only at
+  Bash, so `>>`, `>`, `Set-Content`, `Add-Content`, `Out-File`, `Tee-Object`, `New-Item`,
+  `Copy-Item` / `Move-Item` and `[IO.File]::Write*` / `StreamWriter` put text into vault
+  content past Core rule 1, whose enforcement is "validated". They are read now, with
+  `Set-Location` / `cd` followed and a path built from a variable left alone (fail open, like
+  Bash). `guard_vault_writes` covers PowerShell too (`& python C:\…\gt_adr.py migrate`,
+  `python.exe`, `py`, `$env:GT_VAULT = …`).
+- **Wording.** `gt_sandbox.py status` no longer says vault reads are denied while the mode is
+  off; the gt-vault server's "off (the vault_mcp setting)" names the real cause (with
+  `vault_mcp auto`, sandbox mode being off).
+
 ## gt 0.19.2 — 2026-10-03
 
 **gt installs on native Windows** (owner, 2026-10-03). Proven on a Windows 11 VM (Git for

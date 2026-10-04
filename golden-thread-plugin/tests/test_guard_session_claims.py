@@ -22,6 +22,7 @@ import shutil
 import subprocess
 import sys
 import unittest
+from pathlib import Path
 
 from _harness import Sandbox, HOOKS, SCRIPTS, PYTHON, IS_WINDOWS
 
@@ -405,7 +406,9 @@ class QueueFirstTest(GuardTestBase):
         reason = hso["permissionDecisionReason"]
         self.assertIn("queue first", reason)
         self.assertIn("gt_write_queue.py", reason)
-        self.assertIn("gt_broker.py drain", reason)
+        # 0.20.1: the commands carry real, quoted paths (the hooks dir), not `<gt scripts>`.
+        self.assertIn('gt_broker.py" drain --vault', reason)
+        self.assertNotIn("<gt scripts>", reason)
 
     def test_every_write_tool_on_vault_content_is_denied_unclaimed(self):
         for rel in ("Projects/alpha/research.md", "Projects/alpha/design.md", "INBOX.md",
@@ -483,6 +486,97 @@ class QueueFirstTest(GuardTestBase):
                     'echo "unbalanced', "2>&1 >/dev/null ls"):
             with self.subTest(cmd=cmd):
                 self.assertAllow(self.bash(cmd, cwd=self.tmp))
+
+
+class PowerShellQueueFirstTest(GuardTestBase):
+    """0.20.1 (usability finding M10): Claude Code's PowerShell tool is a shell too. Until 0.20.1
+    the guard looked only at Bash, so `>>`, Set-Content, Out-File, New-Item -Value, Copy-Item /
+    Move-Item and [IO.File]::Write* put text into vault content past Core rule 1 -- whose
+    enforcement is "validated". Each shape below was allowed by 0.20.0."""
+
+    def setUp(self):
+        super().setUp()
+        self.vault = self.tmp / "vault"
+        (self.vault / SESSIONS).mkdir(parents=True)
+        (self.vault / "Projects" / "alpha").mkdir(parents=True)
+        self.config(vault_path=str(self.vault))
+
+    def ps(self, command, cwd=None):
+        payload = {"session_id": "caller", "hook_event_name": "PreToolUse",
+                   "tool_name": "PowerShell", "tool_input": {"command": command},
+                   "cwd": str(cwd or self.tmp)}
+        return self.guard_raw(json.dumps(payload))
+
+    def p(self, path):
+        # PowerShell's own spelling: native separators on Windows, "/" elsewhere (pwsh).
+        return str(path) if IS_WINDOWS else Path(path).as_posix()
+
+    def test_powershell_writes_into_vault_content_are_denied(self):
+        t = self.p(self.vault / "Projects" / "alpha" / "research.md")
+        d = self.p(self.vault / "Projects" / "alpha")
+        src = self.p(self.tmp / "a.md")
+        for cmd in (f'"x" >> {t}', f"'x' > '{t}'", f'Write-Error x 2> "{t}"', f"echo x *>> '{t}'",
+                    f"Set-Content -Path '{t}' -Value x", f"Set-Content '{t}' x",
+                    f"sc {t} x", f'Add-Content -LiteralPath "{t}" -Value x',
+                    f"ac -Path:{t} -Value x", f"'x' | Out-File -FilePath '{t}' -Append",
+                    f"'x' | Out-File '{t}'", f"'x' | Tee-Object -FilePath '{t}'",
+                    f"New-Item -Path '{t}' -Value x", f"ni '{t}' -Value x -Force",
+                    f"New-Item -ItemType File -Path '{d}' -Name research.md -Value x",
+                    f"Copy-Item '{src}' -Destination '{t}'", f"Copy-Item '{src}' '{t}'",
+                    f"Move-Item -Path '{src}' -Destination '{t}'", f"cpi '{src}' '{t}'",
+                    f"[IO.File]::WriteAllText('{t}', 'x')",
+                    f'[System.IO.File]::AppendAllText("{t}", "x")',
+                    f"[IO.File]::WriteAllLines('{t}', @('a','b'))",
+                    f"[IO.File]::Copy('{src}', '{t}')",
+                    f"$w = [System.IO.StreamWriter]::new('{t}'); $w.Write('x'); $w.Close()",
+                    f"$w = New-Object System.IO.StreamWriter('{t}')",
+                    f"Microsoft.PowerShell.Management\\Set-Content -Path '{t}' -Value x",
+                    f"Get-Date; Set-Content -Path '{t}' -Value x"):
+            with self.subTest(cmd=cmd):
+                hso = self.ps(cmd)
+                self.assertDeny(hso, cmd)
+                self.assertIn("a PowerShell write", hso["permissionDecisionReason"])
+
+    def test_a_set_location_into_the_vault_is_followed(self):
+        v = self.p(self.vault)
+        for cmd in (f"Set-Location '{v}'; 'x' >> INBOX.md",
+                    f"cd '{v}/Projects'; Set-Content alpha/research.md x",
+                    f"Push-Location '{v}'; Add-Content -Path index.md -Value x"):
+            with self.subTest(cmd=cmd):
+                self.assertDeny(self.ps(cmd, cwd=self.tmp))
+        self.assertDeny(self.ps("'x' > INBOX.md", cwd=self.vault), "relative to the cwd")
+
+    def test_powershell_reads_and_writes_elsewhere_are_allowed(self):
+        t = self.p(self.vault / "Projects" / "alpha" / "research.md")
+        s = self.p(self.tmp / "scratch")
+        for cmd in (f"Get-Content '{t}'", f"Select-String x '{t}'",
+                    f"Copy-Item '{t}' '{self.p(self.tmp / 'copy.md')}'",
+                    f"'x' > '{self.p(self.tmp / 'scratch.md')}'",
+                    'Set-Content "$env:TEMP/x.md" x', "Set-Content -Path $p -Value x",
+                    f"Set-Content (Join-Path $v 'INBOX.md') x",
+                    'Write-Output "a > Projects/alpha/research.md"',
+                    f"New-Item -ItemType Directory -Path '{self.p(self.vault / 'Projects' / 'beta')}'",
+                    f"Set-Content '{self.p(self.vault / 'Projects' / 'alpha' / 'data.json')}' x",
+                    "'x' 2>&1 | Out-Null", f"Set-Location '{s}'; 'x' > INBOX.md",
+                    "'unbalanced", f"[IO.File]::ReadAllText('{t}')",
+                    f"[IO.File]::Copy('{t}', '{self.p(self.tmp / 'c.md')}')"):
+            with self.subTest(cmd=cmd):
+                self.assertAllow(self.ps(cmd, cwd=self.vault))
+
+    def test_the_deny_names_real_paths_not_placeholders(self):
+        r = self.ps(f"Set-Content '{self.p(self.vault / 'INBOX.md')}' x")["permissionDecisionReason"]
+        self.assertNotIn("<gt scripts>", r)
+        # The hooks dir, however the wrapper spelled it (Git Bash may say /c/Users/...).
+        self.assertRegex(r, r"golden-thread[\\/]+hooks[\\/]+gt_broker\.py\" drain")
+
+    @unittest.skipIf(IS_WINDOWS, "native Windows has no Claude Code sandbox: the shell route stands")
+    def test_under_sandbox_mode_the_deny_routes_to_the_mcp_not_the_shell_drain(self):
+        """B4: under gt sandbox mode the shell cannot run the drain, so telling the model to run
+        it was a dead end."""
+        self.config(vault_path=str(self.vault), sandbox_mode="on")
+        r = self.ps(f"Set-Content '{self.p(self.vault / 'INBOX.md')}' x")["permissionDecisionReason"]
+        self.assertIn("vault_queue_write", r)
+        self.assertNotIn("drain --vault", r)
 
 
 class GuardWithSessionToolTest(GuardTestBase):

@@ -6,6 +6,8 @@ model_intent: balanced
 
 # Golden Thread Optimize
 
+**Under gt sandbox mode (preview)** (the session-start line says SANDBOX MODE): this skill's shell steps are refused — each refused tool prints one line with the exact command. Instead, read with `vault_read` / `vault_search` / `vault_list`; ask the user to run `gt_optimize.py` (and any `--demote` / `--archive` / `--supersede`) and the `gt_log` entry from a terminal. With sandbox mode off (the default) nothing changes.
+
 Memory is read into every session. A duplicated fact is paid for on every turn, in every
 project, forever — this finds that waste. It never removes anything: what it writes is a
 demotion, an archive of old research entries, or a supersede mark, and each leaves a pointer.

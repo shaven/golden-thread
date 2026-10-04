@@ -317,4 +317,11 @@ def main():
 
 
 if __name__ == "__main__":
-    raise SystemExit(main())
+    # A refusal from the OS -- gt sandbox mode, or a macOS interpreter refusal -- is one line
+    # naming the next step, not a traceback (0.20.1, B4). gt_errors sits beside this file.
+    try:
+        sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+        import gt_errors as _gte
+    except ImportError:
+        _gte = None
+    raise SystemExit(_gte.run(main, "gt_closeout") if _gte else main())

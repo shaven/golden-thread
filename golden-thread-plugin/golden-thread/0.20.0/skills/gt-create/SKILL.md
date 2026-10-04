@@ -6,6 +6,8 @@ model_intent: balanced
 
 # Golden Thread Create
 
+**Under gt sandbox mode (preview)** (the session-start line says SANDBOX MODE): this skill's shell steps are refused — each refused tool prints one line with the exact command. Instead, write files through `vault_queue_write` (it applies at once); ask the user to run `vault_init` (create-project), `gt_task` (add) and the `gt_log` entry from a terminal. With sandbox mode off (the default) nothing changes.
+
 One verb for making things. The artifact is the first argument:
 
 | invoked as | creates |

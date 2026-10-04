@@ -676,8 +676,8 @@ gt's MCP server and the write queue. Native Windows: permission rules only (fric
 <td>Write / remove the Claude Code settings (restart Claude Code; switch off from a terminal)</td>
 </tr>
 <tr>
-<td><code>gt_sandbox.py status\|plan\|apply\|remove\|check\|verify\|managed</code></td>
-<td>Show, preview, (re)write, take out, check drift and loosening keys, self-check, print the admin-required config</td>
+<td><code>gt_sandbox.py status\|plan\|apply\|remove\|check\|verify\|managed\|rollback-check</code></td>
+<td>Show, preview, re-apply (only while <code>sandbox_mode</code> is on), take out, check drift and loosening keys, self-check, print the admin-required config, refuse a rollback that could not remove them. Sandbox mode is a preview in 0.20.1</td>
 </tr>
 <tr>
 <td>gt-vault MCP: <code>vault_search</code>, <code>vault_read</code>, <code>vault_list</code></td>

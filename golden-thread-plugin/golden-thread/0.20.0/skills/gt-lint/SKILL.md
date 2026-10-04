@@ -6,6 +6,8 @@ model_intent: balanced
 
 # Golden Thread Lint
 
+**Under gt sandbox mode (preview)** (the session-start line says SANDBOX MODE): this skill's shell steps are refused — each refused tool prints one line with the exact command. Instead, read with `vault_read` / `vault_search` / `vault_list` and apply fixes through `vault_queue_write`; ask the user to run `gt_lint` from a terminal for the full report. With sandbox mode off (the default) nothing changes.
+
 Health check for the vault. Run periodically to catch structural drift.
 
 ## Steps

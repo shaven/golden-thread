@@ -6,6 +6,8 @@ model_intent: fast
 
 # Golden Thread — List
 
+**Under gt sandbox mode (preview)** (the session-start line says SANDBOX MODE): this skill's shell steps are refused — each refused tool prints one line with the exact command. Instead, read `TASKS.md` and the handoffs with `vault_read` / `vault_search` / `vault_list`, or ask the user to run `gt_task` (list) from a terminal. With sandbox mode off (the default) nothing changes.
+
 Read-only. Nothing is changed and no project is opened. The artifact is the first argument:
 
 | invoked as | shows |

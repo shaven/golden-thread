@@ -212,6 +212,29 @@ class GuardVaultWrites(GuardBase):
                           "merge-project moves files; it must say which vault")
 
 
+class PowerShellIsAShellToo(GuardBase):
+    """0.20.1 (usability finding M10): the PowerShell tool runs the same vault tools, and 0.20.0
+    looked only at Bash -- `& python C:\\...\\gt_adr.py migrate` named no vault and passed."""
+
+    def ps(self, command):
+        return self.decide(command, tool="PowerShell")
+
+    def test_an_untargeted_mutator_from_powershell_is_denied(self):
+        for cmd in (r"& python C:\Users\me\vault\Projects\golden-thread\tools\gt_adr.py migrate proj",
+                    r'& "C:\Program Files\Python312\python.exe" tools\gt_log.py add "x"',
+                    "py tools/gt_tasks.py", "python3 tools/gt_adr.py merge proj; Get-Date",
+                    "Get-Date; & python .\\tools\\gt_closeout.py ask p"):
+            with self.subTest(cmd=cmd):
+                self.assertEqual(self.ps(cmd).get("permissionDecision"), "deny", cmd)
+
+    def test_naming_the_vault_from_powershell_allows(self):
+        for cmd in (r"& python C:\x\gt_adr.py migrate proj --vault C:\copy",
+                    "$env:GT_VAULT = 'C:/copy'; python tools/gt_adr.py merge proj",
+                    "python tools/gt_log.py status", "Get-Content tools/gt_adr.py"):
+            with self.subTest(cmd=cmd):
+                self.assertNotIn("permissionDecision", self.ps(cmd), cmd)
+
+
 class HeredocsAreDataNotCommands(GuardBase):
     """2026-09-12: the guard denied a command that was WRITING a script containing the
     text of a vault-tool call. A guard that fires on a quoted mention is one people

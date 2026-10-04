@@ -6,6 +6,8 @@ model_intent: balanced
 
 # Golden Thread Route
 
+**Under gt sandbox mode (preview)** (the session-start line says SANDBOX MODE): this skill's shell steps are refused — each refused tool prints one line with the exact command. Instead, read with `vault_read` / `vault_search` / `vault_list`, write through `vault_queue_write`, and use `vault_queue_drain` instead of `gt_broker.py drain`. With sandbox mode off (the default) nothing changes.
+
 **Where does this belong, and am I in the right place to be doing it?**
 
 Every other `/gt:*` skill fires at a session boundary — `gt-open` at the start,

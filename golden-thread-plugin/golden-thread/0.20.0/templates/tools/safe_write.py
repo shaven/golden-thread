@@ -151,6 +151,16 @@ def refusal_line(path, exc, python=None):
     replacing the vault's log.md on 2026-10-03 where /usr/bin/python3 did not. The same
     wording as gt_write_probe.eperm_message, kept here because this file runs from the vault
     without gt's hooks dir on its path."""
+    try:
+        _here = os.path.dirname(os.path.abspath(__file__))
+        if _here not in sys.path:
+            sys.path.insert(0, _here)
+        import gt_errors as _gte
+        if _gte.in_sandbox():
+            # gt sandbox mode (0.20.1): a route, not a permission -- never Full Disk Access.
+            return _gte.sandbox_line(path, exc)
+    except ImportError:
+        pass
     import errno as _errno
     import json as _json
     python = python or sys.executable or "python3"
@@ -171,6 +181,21 @@ def refusal_line(path, exc, python=None):
             "(System Settings > Privacy & Security)."
             % (path, os.strerror(code) if code else exc, _errno.errorcode.get(code, "error"),
                python, tail, fix, python))
+
+
+def _sandbox_refusal(target, exc):
+    """-> a PermissionError carrying gt_errors' one line when `exc` is gt sandbox mode refusing
+    this write from Claude's shell (0.20.1), else None. Never raises."""
+    try:
+        here = os.path.dirname(os.path.abspath(__file__))
+        if here not in sys.path:
+            sys.path.insert(0, here)
+        import gt_errors as _gte
+        if _gte.is_denial(exc) and _gte.in_sandbox():
+            return _gte.refused(target, exc)
+    except Exception:                               # noqa: BLE001
+        pass
+    return None
 
 
 def is_refusal(exc):
@@ -397,8 +422,10 @@ def write(target, data, mode="w"):
                 fh.write(data)
             _attribute(target, "direct")
             return target, "direct"
-        except Exception:
-            pass
+        except Exception as exc:
+            refused = _sandbox_refusal(target, exc)
+            if refused is not None:
+                raise refused
         if isinstance(data, str):
             data = data.encode("utf-8")
         data = _existing_bytes(target) + data
@@ -429,7 +456,8 @@ def write(target, data, mode="w"):
         # caller asked for, and `why` is the only account of why it had to be.
         # (`exc` is unbound once this clause ends, so the reason is kept as text.)
         why = _describe(exc)
-        if is_refusal(exc):
+        sandbox_refused = _sandbox_refusal(target, exc)
+        if sandbox_refused is None and is_refusal(exc):
             # The OS refused this interpreter (0.20.0): say which one and the fix, once,
             # before the fallbacks -- they may land the bytes somewhere else, and the user
             # still needs to know why the real target refused.
@@ -438,6 +466,11 @@ def write(target, data, mode="w"):
             except Exception:                       # pragma: no cover
                 pass
 
+    if sandbox_refused is not None:
+        # gt sandbox mode (0.20.1): the sandbox refuses every rung below too, and a sidecar
+        # or ledger copy left behind is litter nothing in the sandbox can replay. Nothing
+        # is written; the caller's one line says to run the command from a terminal.
+        raise sandbox_refused
     _warn_degraded(target, why)
 
     # 2. direct write in place -- TRUNCATING. The bytes reach `target`, but the file

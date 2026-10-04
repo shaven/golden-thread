@@ -109,7 +109,15 @@ def find_vault(explicit: str | None) -> Path | None:
     if not cand:
         return None
     p = Path(cand).expanduser()
-    return p if p.is_dir() else None
+    try:
+        return p if p.is_dir() else None
+    except OSError:
+        # gt sandbox mode with sandbox_vault_reads deny (0.20.1, B4): Claude's sandbox refuses
+        # even a stat of the vault. The vault is named (flag, env or config), so trust the name:
+        # deposit() then reaches the inbox fallback instead of dying here in a traceback.
+        if _sandbox_on():
+            return p
+        raise
 
 
 def queue_dir(vault: Path) -> Path:
@@ -337,12 +345,22 @@ def build(vault: Path, rel: str, op: str, content: str, section: str | None, ses
             # Did the target exist when this was queued? If it is gone at drain time it was moved
             # or deleted meanwhile, and the broker escalates rather than recreate it at the old
             # path (owner question, 2026-10-01).
-            "target_existed": (vault / rel).is_file(),
+            "target_existed": _is_file(vault / rel),
             "base_sha256": (current_base(vault, rel, section) if op in ("replace-section",
                                                                          "replace-file")
                             else current_base(vault, rel, None, key) if op == "set-property"
                             else None),
             "hint": hint}
+
+
+def _is_file(p: Path):
+    """True / False, or None when the OS will not say (a read-denied vault under gt sandbox
+    mode): the broker then skips the moved-or-deleted check, as for a request queued before
+    the field existed."""
+    try:
+        return p.is_file()
+    except OSError:
+        return None
 
 
 def _sandbox_on() -> bool:
@@ -600,4 +618,11 @@ def main(argv=None) -> int:
 
 
 if __name__ == "__main__":
-    raise SystemExit(main())
+    # A refusal from the OS -- gt sandbox mode, or a macOS interpreter refusal -- is one line
+    # naming the next step, not a traceback (0.20.1, B4). gt_errors sits beside this file.
+    try:
+        sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+        import gt_errors as _gte
+    except ImportError:
+        _gte = None
+    raise SystemExit(_gte.run(main, "gt_write_queue", mcp="vault_queue_write") if _gte else main())

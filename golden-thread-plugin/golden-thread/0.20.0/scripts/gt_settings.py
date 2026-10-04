@@ -460,8 +460,14 @@ SETTINGS = {
     "sandbox_mode": {
         "default": "off",
         "values": ["off", "on"],
-        "summary": "gt sandbox mode: fence Claude's shell and file tools off the vault and gt's state; reach the vault through gt's MCP and write queue.",
+        "summary": "gt sandbox mode (preview): fence Claude's shell and file tools off the vault and gt's state; reach the vault through gt's MCP and write queue.",
         "detail": (
+            "PREVIEW in 0.20.1: the fence holds, but most skills still run vault scripts from\n"
+            "Claude's shell (gt_log, gt_tasks, gt_adr, gt_lint, gt_broker drain, vault_init ...),\n"
+            "and those are refused -- each prints one line naming the gt-vault MCP tool or the\n"
+            "exact command to run in a terminal. gt-open, gt-query and gt-work's writes go\n"
+            "through the gt-vault MCP. Full skill support is planned for 0.20.2.\n"
+            "\n"
             "off  Claude's shell and file tools reach the vault and gt's state as before  (default)\n"
             "on   gt_sandbox.py writes into ~/.claude/settings.json (and records what it wrote):\n"
             "       sandbox.enabled true, allowUnsandboxedCommands false, failIfUnavailable true\n"
@@ -1350,6 +1356,18 @@ def set_value(name, value, force=False):
             return 2
         if msg:
             print("  " + msg)
+    if name == "sandbox_mode" and value == "on":
+        # A sandbox that cannot run here is refused BEFORE gt unlock asks for codes (0.20.1,
+        # finding M6: the bwrap check came after two TOTP codes, and suggested a --force this
+        # command does not take).
+        try:
+            import gt_sandbox
+            gt_sandbox.preflight()
+        except ImportError:
+            pass
+        except gt_sandbox.SandboxError as e:
+            print("refused: %s" % e)
+            return 1
     if name in SECURITY_KEYS:
         refusal = _unlock_gate(name)
         if refusal:

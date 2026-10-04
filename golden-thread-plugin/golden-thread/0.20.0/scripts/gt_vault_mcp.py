@@ -482,6 +482,23 @@ def tools_offered(h=None):
         return False
 
 
+def off_reason(h=None):
+    """Why no tools are offered, naming the setting that decides it (0.20.1, WORDING): with the
+    default vault_mcp auto it is sandbox_mode being off, not vault_mcp."""
+    try:
+        import gt_sandbox
+        v = gt_sandbox.setting("vault_mcp", h)
+    except Exception:                                    # noqa: BLE001
+        v = None
+    if v == "off":
+        return ("gt-vault: off (vault_mcp is off); no tools. gt_settings.py set vault_mcp auto "
+                "(or on) offers them.")
+    if v == "auto":
+        return ("gt-vault: off (vault_mcp auto follows sandbox_mode, which is off); no tools. "
+                "gt_settings.py set vault_mcp on offers them without sandbox mode.")
+    return "gt-vault: off (the vault_mcp setting); no tools."
+
+
 def tools_for(protocol, offered=True):
     if not offered:
         return []
@@ -557,7 +574,7 @@ class Server:
                                         "capabilities": {"tools": {"listChanged": False}},
                                         "serverInfo": SERVER_INFO,
                                         "instructions": INSTRUCTIONS if self.offered() else
-                                        "gt-vault: off (the vault_mcp setting); no tools."})
+                                        off_reason()})
             if method == "ping":
                 return self.reply(mid, {})
             if method == "tools/list":

@@ -660,6 +660,25 @@ sandbox and permission rules</strong> so that the assistant's shell and file too
 vault or gt's state, and the vault is reached only through gt's channels: a read-only MCP
 server and the write queue. It is independent of unlock — on together, unlock also gates the
 MCP server's reads (<code>gt:vault:read</code>, door <code>mcp_only</code>).</p>
+<blockquote>
+<p><strong>Preview in 0.20.1.</strong> The fence is what this section says it is. What is not finished is the
+work inside it: most skills still run gt's vault scripts from the assistant's shell, and the
+sandbox refuses those. <strong>Works under sandbox mode:</strong> <code>/gt:gt-open</code>, <code>/gt:gt-query</code> and the
+writes of <code>/gt:gt-work</code> (through the gt-vault MCP), every <code>vault_*</code> MCP tool, and
+<code>gt_write_queue.py</code> (it leaves its request in the inbox). <strong>Does not work yet:</strong> the shell steps
+of the other skills — <code>gt_log.py add</code>, <code>gt_tasks.py</code>, <code>gt_task.py</code>, <code>gt_adr.py allocate</code>,
+<code>gt_closeout.py</code>, <code>gt_lint.py</code>, <code>gt_promote_detect.py</code>, <code>vault_init.py</code>, <code>gt_broker.py drain</code>.
+Each refused tool prints <strong>one line</strong>: what was refused, why (“sandbox mode: the vault is
+written only through the queue / gt-vault MCP”), and the next step — the MCP tool where one
+exists (<code>vault_queue_drain</code> for the drain), otherwise the exact command, with real paths, to
+run from a terminal. Nothing is left half-written (no sidecar or pending file to replay).
+With <code>sandbox_vault_reads deny</code> the vault copies of the tools cannot even be opened, so Python
+itself refuses them; each skill says what to use instead. Full skill support is planned for
+0.20.2.</p>
+<p>Before 0.20.1 these tools died in Python tracebacks, and <code>gt_log.py</code> advised Full Disk Access
+— advice for a different refusal (macOS refusing an interpreter a file). The two are told
+apart by where the tool runs: sandbox mode on and the process is Claude Code's.</p>
+</blockquote>
 <h3 id="81-what-it-writes">8.1 What it writes</h3>
 <p>Into <code>~/.claude/settings.json</code>, through <code>gt_sandbox.py</code>, which records every entry it adds (in
 <code>~/.claude/golden-thread/sandbox/state.json</code>) so that turning it off removes exactly those and
@@ -750,8 +769,12 @@ itself.</p>
 <li><strong>Writing:</strong> <code>vault_queue_write</code> takes <code>gt_write_queue.py</code>'s ops and validation and queues the
   write; the broker decides it at once (apply, deduplicate, held, escalate, reject) and the
   result says which. From the shell, <code>gt_write_queue.py</code> cannot write the vault's queue folder,
-  so it leaves the request in <code>~/.gt-inbox/queue/</code>; <code>vault_queue_drain</code> (or <code>gt_broker.py drain</code>
-  in a terminal) moves it into the queue. The inbox is writable by anything in the sandbox, so
+  so it leaves the request in <code>~/.gt-inbox/queue/</code> — even when the sandbox refuses a <code>stat</code> of
+  the vault itself (0.20.1); <code>vault_queue_drain</code> (or <code>gt_broker.py drain</code> in a terminal) moves
+  it into the queue. <strong>No hook drains the queue</strong>, at SessionStart, Stop or anywhere else: under
+  sandbox mode the drain runs outside the sandbox only through the gt-vault MCP or from your
+  terminal, and the session-start <code>WRITE QUEUE</code> line says so instead of naming the shell
+  command (which the sandbox refuses). The inbox is writable by anything in the sandbox, so
   the broker treats each file as untrusted data. It opens the inbox folder once, refusing it if
   it (or <code>~/.gt-inbox</code>) is a symlink, and opens each file <strong>relative to that folder handle with
   no symlink following</strong> (<code>O_NOFOLLOW</code>; a FIFO cannot block it), checks the <strong>open file</strong> — a
@@ -795,7 +818,7 @@ itself.</p>
 </tr>
 <tr>
 <td><strong>Linux</strong></td>
-<td>bubblewrap (OS) + permission rules; needs <code>bubblewrap</code> and <code>socat</code> (gt refuses to turn the mode on without them, because Claude Code would then refuse to start)</td>
+<td>bubblewrap (OS) + permission rules; needs <code>bubblewrap</code> and <code>socat</code> that <strong>run</strong> — gt executes <code>bwrap --ro-bind / / true</code> and <code>socat -V</code> (0.20.1; on Ubuntu 24.04 AppArmor makes an unprivileged bwrap fail with “setting up uid map: Permission denied” although it is on PATH). gt refuses to turn the mode on when either fails, before gt unlock asks for a code, with the fix (the package command for your distribution, or the AppArmor setting), because with <code>failIfUnavailable</code> Claude Code would refuse to start; <code>gt_sandbox.py apply --force</code> writes the rest but never <code>failIfUnavailable</code></td>
 <td>Same as macOS</td>
 </tr>
 <tr>
@@ -851,8 +874,17 @@ in its own process, which the sandbox does not wrap.</p>
 <ul>
 <li>Restart Claude Code after switching. Turning it <strong>off</strong> has to be done from a terminal: the
   sandbox write-protects <code>~/.claude</code> from the assistant's shell, by design.</li>
+<li>The setting is the one way on. <code>gt_sandbox.py apply</code> run by itself while <code>sandbox_mode</code> is off
+  is refused with the command to use (0.20.1): it used to write the deny rules while the setting
+  — and with it the gt-vault MCP (<code>vault_mcp auto</code>) — stayed off, so after a restart the vault
+  was unreachable, and it skipped gt unlock's confirmation. <code>gt_sandbox.py remove</code> always works.</li>
+<li><strong>Rolling back</strong> to a gt older than 0.20.0 (which has no <code>gt_sandbox.py</code> and no
+  <code>gt_unlock.py</code>) is refused by <code>install.sh</code> while sandbox mode or gt unlock is on, or while
+  gt's sandbox entries are still in <code>settings.json</code>, with the exact commands to switch them off
+  first (0.20.1): the older release could never remove them. A rollback to 0.20.0 is allowed.</li>
 <li>gt's vault tools run from the assistant's shell (<code>gt_tasks</code>, <code>gt_lint</code>, <code>gt_log</code>, …) cannot
-  read or write the vault: the assistant uses the MCP tools, or you run them in a terminal.
+  read or write the vault: the assistant uses the MCP tools, or you run them in a terminal —
+  each tool's one-line refusal names the command (see the preview note above).
   <code>sandbox_vault_reads allow</code> gives the shell read access back (writes stay denied).</li>
 <li>Test receipts, worker declarations and other state under <code>~/.claude/golden-thread</code> cannot be
   written from the shell: run a release's test suite from a terminal.</li>

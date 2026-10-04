@@ -6,6 +6,8 @@ model_intent: balanced
 
 # Golden Thread — Close
 
+**Under gt sandbox mode (preview)** (the session-start line says SANDBOX MODE): this skill's shell steps are refused — each refused tool prints one line with the exact command. Instead, read with `vault_read` / `vault_search` / `vault_list` and write page edits through `vault_queue_write`; ask the user to run `gt_close.py`, the `gt_log` entry and `gt_tasks.py` from a terminal. With sandbox mode off (the default) nothing changes.
+
 The close verb, with the artifact as its argument (0.18.1):
 
 | invoked as | closes |

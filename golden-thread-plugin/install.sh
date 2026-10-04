@@ -1321,6 +1321,20 @@ checksum_block
 [ -n "$PICK_NOTES" ] && printf '%s' "$PICK_NOTES"
 [ -n "$SKIP_NOTES" ] && printf '%s' "$SKIP_NOTES"
 
+# ── A rollback must not strand gt sandbox mode or gt unlock (0.20.1, finding M3) ────────────
+# A release without gt_sandbox.py (before 0.20.0) cannot remove the deny rules sandbox mode
+# wrote into ~/.claude/settings.json, and one without gt_unlock.py cannot turn unlock off: the
+# rolled-back machine kept the vault locked from Claude with no undo. Checked HERE, before the
+# first write, by the NEWEST gt_sandbox.py in this tree (the one that knows both features);
+# it prints the exact commands that switch them off first.
+_gt_newest_sb="$SCRIPT_DIR/$CORE_DIR/$(latest_version "$SCRIPT_DIR/$CORE_DIR")/scripts/gt_sandbox.py"
+if [ -f "$_gt_newest_sb" ] && { [ ! -f "$SCRIPT_DIR/$CORE_DIR/$VERSION/scripts/gt_sandbox.py" ] \
+     || [ ! -f "$SCRIPT_DIR/$CORE_DIR/$VERSION/scripts/gt_unlock.py" ]; }; then
+  if ! python3 -B "$_gt_newest_sb" rollback-check --target "$SCRIPT_DIR/$CORE_DIR/$VERSION"; then
+    exit 1
+  fi
+fi
+
 # ── Rollback: a failed install leaves the machine as it was (0.20.0) ─────────────
 #
 # Until 0.19.2 a failure after the first write left a half-installed machine ("nothing is
