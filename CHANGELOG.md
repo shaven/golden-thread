@@ -221,6 +221,99 @@ permissions) on 2026-10-03.
   the sandboxed shell, and gt's vault scripts cannot run there — run them in a terminal. The
   vault MCP process starts with every session (it lists no tools while off).
 
+### After the independent re-review (2026-10-04): the inbox, the sandbox settings, orphans, replay
+
+A second, fresh-context review of 0.20.0 (HEAD `efa0620`) found ways round sandbox mode and
+unlock: two high, four medium, five low. Each is fixed, or reported where it cannot be prevented
+at L1/L2, and each demonstrated bypass is now a regression test that fails against `efa0620` and
+passes now (`tests/test_inbox_review2.py`, `tests/test_sandbox_review2.py`,
+`tests/test_unlock_review2_regressions.py`). SECURITY.md is corrected to match.
+
+**What you will notice**
+
+- **A hand-started lotrd needs `python3 -I`.** With unlock on, gt trusts its own Python
+  processes only under an isolated interpreter (L1, below). gt starts its own with `-I`; a
+  `lotrd.py` you start yourself without it is refused until you restart it with
+  `python3 -I lotrd.py …`.
+- **Terminals that start a non-login shell need an unlock for reads.** `read_without_unlock`
+  (LOTR reads, `gt:vault:read`) now needs a login shell above the requesting process (H2,
+  below). Terminal, iTerm2, sshd and tmux start one; GNOME Terminal's default does not.
+- **`gt_sandbox.py check` reports more**, in your user settings and the project's: every key that
+  loosens the sandbox (M1). A user `excludedCommands` that used to pass is now a problem.
+- **Sandbox mode also sets `permissions.disableBypassPermissionsMode "disable"`** (restored when
+  you turn the mode off) and denies the file tools a set of config files (M2).
+- **`vault_queue_write` no longer takes a `session` argument**, and inbox requests wait while any
+  live session holds a claim on their path (M4).
+
+**The findings**
+
+- **H1 — the queue inbox could copy a file the sandbox denies into the vault.** The broker
+  checked an inbox file with `lstat` and then re-opened it by name, so a writer in the sandbox
+  could swap in a symlink (or swap the inbox folder) between the two, and the reject path copied
+  the target — the TOTP seed, in the review — into `spool/broker/rejected/`, where `vault_read`
+  served it. The broker now opens the inbox folder once with `O_DIRECTORY|O_NOFOLLOW`, opens each
+  file relative to it with `O_NOFOLLOW|O_NONBLOCK`, checks the open file (regular, one link,
+  size cap), reads it once, bounded, uses only those bytes, and unlinks through the folder
+  handle. A hard link and a FIFO are refused unread. Windows (no sandbox there) refuses links and
+  reparse points and requires the open handle to be the listed file, inside the inbox. Proven
+  deterministically (the swap is injected between check and open) and live under the sandbox
+  runtime (`H1LiveRace`), where the pre-fix broker leaked the seed. A request id is now one
+  plain name: an inbox body's `../../x` id no longer becomes a path outside the queue.
+- **H2 — an orphan could give itself a terminal and read without unlocking.** `setsid` +
+  `openpty` + `TIOCSCTTY` gave a double-forked process a controlling terminal, which was all
+  `read_without_unlock` asked for. A "terminal" caller now also needs a login shell above it
+  (argv[0] starting with `-`, or `-l` / `--login`); on Windows an intact parent chain reaching a
+  shell or terminal host (`gt_ipc.is_login_shell`, `interactive_chain`). The re-review's harness
+  runs live as the test. Still possible, documented: a process of yours starting its own login
+  shell.
+- **M1 — a repository's settings could loosen the sandbox unreported.** `check` looked at two
+  keys in the working directory only. It now reports, as problems naming the file, every
+  loosening key — `sandbox.enabled false`, `allowUnsandboxedCommands`, `excludedCommands`,
+  `ignoreViolations`, Unix-socket and Mach-lookup entries, the `enableWeaker…` switches,
+  `allowAppleEvents`, `allowLocalBinding`, `filesystem.disabled`, `additionalDirectories`, an
+  allow entry re-opening a denied region, a project `disableBypassPermissionsMode` other than
+  `disable` — in your user settings and in the project's `.claude/settings.json` (working
+  directory) and `.claude/settings.local.json` (working directory and git root). Only managed
+  settings or `claude --settings` make the sandbox admin-required, so that Claude Code ignores
+  a project's loosening keys; new `gt_sandbox.py managed [--out FILE]` prints that configuration
+  (gt never writes managed settings). With it in place, `check` reports project keys as notes.
+- **M2 — the file tools could plant code outside the fence.** Edit denies now cover
+  `~/.claude.json`, `~/.claude/{settings.local.json,CLAUDE.md,agents,skills,commands,hooks,
+  output-styles}`, any `.mcp.json` and project `.claude/{agents,skills,commands,hooks,workflows}`,
+  the shell rc files, `~/Library/LaunchAgents` (macOS) and `~/.config/{systemd/user,autostart}`
+  (Linux, WSL2) — not all of `~/.claude`, where auto-memory and plans are written. Bypass mode is
+  disabled while the mode is on.
+- **M3 — an older signed policy approval could be replayed.** The approval now signs
+  `policy:<sha256>:serial=N:ts=T`; the authority keeps the highest accepted serial in memory and
+  in `approval-floor.json`, and refuses a lower one (or the same serial for other policy
+  bytes). Restoring an older policy with its `state.json` fails closed, also after a restart and
+  after the floor file is deleted while it runs. Approvals made before this count as serial 0
+  until the first new one.
+- **M4 — inbox and MCP requests chose their own session and origin.** The broker stamps inbox
+  requests origin `inbox` (a body's `farm` is kept: stricter) and session `unknown-inbox`, so no
+  live session's claim lets one through (Core rule 1); `vault_queue_write` stamps the server's
+  own session id and ignores a `session` argument.
+- **L1 — `PYTHONPATH` / `sitecustomize` ran code inside the real installed file.** Trusted peers
+  (`lotrd.py`, `lotr_mcp.py`, `gt_vault_mcp.py`, and the `gt_unlockd.py` a client connects to)
+  must run with `-I` (or `-E` and `-s`); an unreadable command line is refused. Refusals name
+  injection variables, never values (macOS, Linux). gt's launchers pass `-I`: both plugin.json
+  MCP entries, `start_daemon`, the doctor's lotrd smoke test; Windows servers keep UTF-8 with
+  `-X utf8`. Still possible, documented: modifying the interpreter or its site-packages.
+- **L2 — `vault_search` followed symlinks out of the vault.** Every result, and `index.md`, is
+  resolved and checked like a `vault_read` path.
+- **L3 — inbox rejects could spam the vault.** At most 50 rejected copies are kept; past that,
+  logged and deleted.
+- **L4 — the vault seat and LOTR's shim shared one grant.** Grants are per seat: approving a
+  vault read no longer unlocks `lotr:*`, or the other way round. Lock, session end, sleep and
+  screen lock still revoke every seat; a shim ending revokes only its own. `status` gains
+  `vault_grant`.
+- **L5 — the Touch ID helper was hashed, then executed by path.** Each use reads it once without
+  following symlinks, hashes exactly those bytes, writes them to a private 0700 folder, checks
+  the signing requirement on the copy, runs the copy and deletes it; a swap after the check runs
+  nothing. Still possible, documented: rewriting the helper and its install record together.
+- **Not verified live:** the Touch ID tests need an unlocked Mac (Secure Enclave error -25308 on
+  a locked one, on the old build too); the private-copy path is covered with a stub helper.
+
 ### Claude Code integration: stage agents with their own effort, a pipeline workflow, typed LOTR results
 
 (Owner, 2026-10-03: the 0.20.0 / 0.21.0 split, items 0–4 and 6; plugin-shipped hooks wait for

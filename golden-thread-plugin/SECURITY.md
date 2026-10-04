@@ -29,6 +29,14 @@ An independent security review of 0.20.0 (2026-10-03) reproduced seven bypasses 
 a same-user process. Each was fixed, and each is now a regression test
 (`tests/test_unlock_review_regressions.py`, `tests/test_lotr_review_regressions.py`); what
 cannot be fixed without L3 is written down in section 4 instead of being claimed away.
+A second, fresh-context review (2026-10-04) found more: the sandbox's inbox could be raced into
+copying a read-denied file (the TOTP seed) into the vault, an orphan could give itself a terminal
+and read without unlocking, an older signed policy approval could be replayed, a repository's
+own settings could loosen the sandbox unreported, the file tools could plant code where Claude
+Code or your shell loads it, and requests could name a session they do not belong to. Each is
+fixed or, where it cannot be prevented at L1/L2, reported and written down here; each
+demonstrated bypass is a regression test (`tests/test_inbox_review2.py`,
+`tests/test_sandbox_review2.py`, `tests/test_unlock_review2_regressions.py`).
 
 What was built, and what each piece really does:
 
@@ -36,17 +44,17 @@ What was built, and what each piece really does:
 |---|---|---|
 | **Kernel peer identity.** Every caller is identified by the operating system (macOS audit token with the process version, Linux `SO_PEERCRED` + start time, Windows named-pipe client pid + creation time + user SID) — never by anything the caller says | A process cannot pretend to be another live process | Holds |
 | **The client checks the server.** Before sending anything, gt's client asks the kernel which process serves the authority's address and refuses it unless it runs the installed `gt_unlockd.py` | A fake "allow everything" server bound after the real one stopped is refused | Friction: a process of yours can run the *real* `gt_unlockd.py` with its own state |
-| **Signatures, not booleans.** Touch ID and Windows Hello sign a fresh challenge with a hardware key (Secure Enclave / TPM); gt verifies the signature itself in Python | A fake helper that answers "ok"; a replayed old approval | Holds for presence. The helper is checked against the hash install recorded before each use |
+| **Signatures, not booleans.** Touch ID and Windows Hello sign a fresh challenge with a hardware key (Secure Enclave / TPM); gt verifies the signature itself in Python | A fake helper that answers "ok"; a replayed old approval | Holds for presence. Before each use the helper is read once, hashed against what install recorded, and run from a private copy of exactly those bytes, so a swap after the check runs nothing |
 | **Sealed credentials** (`sealed:` refs). Encrypted at rest under a biometric hardware key; **every open needs your finger or PIN** (or once per `secrets_window_s`, per process and grant, never shared) | Credential theft from disk; reading a sealed value without you touching the sensor | **Holds at L2.** Once opened, the value is in the requesting program's memory |
 | **Biometric consent** (`consent_requires_factor: platform`). A touch over each consent-tier operation, composed by the authority from the operation itself | A screen-control agent clicking "approve" | **Holds at L2**, as long as you read what the prompt names |
 | **The `mcp_only` door.** LOTR and the credential broker serve only the MCP connection Claude Code started (the installed `lotr_mcp.py`, child of `claude`) — not a command run in the assistant's shell | The assistant using LOTR or your secrets through Bash by accident or by habit | Friction (section 4) |
 | **Only the authority asks.** Every prompt is composed by gt's unlock authority, naming who is asking and for what; a caller's own reason appears only as a quoted, unverified claim. A client can request an unlock; it can never claim one | An agent typing "approved" on your behalf | Holds; a process can still show a look-alike prompt of its own |
-| **Grants in memory only**, bound to one session and revoked on idle (15 min), TTL (8 h), screen lock, sleep, clock rollback, the session or MCP shim ending (a replacement shim starts with nothing), and `gt_unlock.py lock` | A forgotten unlocked session staying open | Holds for timing; see section 4 for who can use a live grant |
-| **Policy approval signed by your platform factor.** A policy edited behind gt's back is not trusted until approved with a step-up, and on macOS / Windows the approval is a Touch ID / Hello signature over the policy itself | Rewriting `policy.json` and its approval to open everything | Friction: a process of yours can rewrite your enrolment too (section 4). TOTP-only (Linux): a hash, L1 |
+| **Grants in memory only**, bound to one session and one seat (the session's vault MCP server holds its own grant, apart from LOTR's shim and the shell, so approving one does not unlock the other) and revoked on idle (15 min), TTL (8 h), screen lock, sleep, clock rollback, the session or MCP shim ending (a replacement shim starts with nothing), and `gt_unlock.py lock` | A forgotten unlocked session staying open | Holds for timing; see section 4 for who can use a live grant |
+| **Policy approval signed by your platform factor.** A policy edited behind gt's back is not trusted until approved with a step-up, and on macOS / Windows the approval is a Touch ID / Hello signature over the policy itself, a monotonic serial and its time; the authority keeps the highest serial it has accepted, so an older signed approval restored with its policy fails closed | Rewriting `policy.json` and its approval to open everything | Friction: a process of yours can rewrite your enrolment too (section 4). TOTP-only (Linux): a hash, L1 |
 | **Admin policy floor.** An administrator-owned file that can only tighten; each scope's level is the stricter of yours and the admin's, each by its own most specific rule | A user pattern loosening an organisation's rule | Holds as logic; binding only at L3 |
 | **Fail closed.** With unlock on, an unreadable or missing policy, deleted policy files, a missing factor, an authority that is down or cannot be verified, an unwritable audit log (for writes and secrets), or a policy edited behind gt's back locks every gated action — never the reverse | "Broken" quietly meaning "open" | Friction: deleting the `unlock-on` markers too turns it off |
 | **No gt crypto store.** gt brokers proven stores (1Password, sops+age, Vault, the OS keychains) and uses CryptoKit / DPAPI for sealing; it ships no cipher of its own | Home-made cryptography | Holds |
-| **gt sandbox mode** (section 8, separate from unlock). Claude Code's own OS sandbox (Seatbelt / bubblewrap) around the assistant's shell, plus permission rules on its file tools, keep both off the vault, gt's state, the unlock home and LOTR; the vault is reached through gt's MCP server and write queue | The assistant's shell reading the TOTP seed, rewriting gt's policy, enrolment, hooks or plugin files, or writing the vault directly | **Holds on macOS, Linux and WSL2** for the shell and its children (an OS boundary); native Windows: permission rules only — friction |
+| **gt sandbox mode** (section 8, separate from unlock). Claude Code's own OS sandbox (Seatbelt / bubblewrap) around the assistant's shell, plus permission rules on its file tools, keep both off the vault, gt's state, the unlock home and LOTR, and the file tools off every file Claude Code, your shell or launchd loads code from; the vault is reached through gt's MCP server and write queue | The assistant's shell reading the TOTP seed, rewriting gt's policy, enrolment, hooks or plugin files, or writing the vault directly | **Holds on macOS, Linux and WSL2** for the shell and its children (an OS boundary) **while nothing loosens it**: a repository's own `.claude/settings*.json` can, unless the sandbox is admin-required through managed settings or `claude --settings` (section 8.4); `gt_sandbox.py check` reports every loosening key. Native Windows: permission rules only — friction |
 | **Every grant audited.** Each unlock, check, secret read and revocation is one line in `~/.claude/golden-thread/unlock/audit.jsonl`, with its grant id — never a code or a secret value. A write, consent or secret release that cannot be recorded is refused | "What happened while I was unlocked?" | The log is yours: a process of yours can edit it afterwards |
 
 ## 2. How it works
@@ -66,7 +74,8 @@ What was built, and what each piece really does:
 1. A session starts. gt registers it with the authority; the LOTR MCP connection Claude Code
    starts registers itself as that session's one shim. The authority accepts it only when the
    kernel says its parent is `claude` **and** the process runs the installed gt-lotr
-   `lotr_mcp.py` (by real path, from Claude Code's `installed_plugins.json`). A second shim is
+   `lotr_mcp.py` (by real path, from Claude Code's `installed_plugins.json`) under an isolated
+   interpreter (`python -I`, below). A second shim is
    refused while the first is alive; a shim that replaces a dead one starts with no grant. If
    the authority restarts, the shim registers again on its next call. On Windows the installer
    points the MCP command at the Python interpreter itself rather than at a launcher script
@@ -84,9 +93,17 @@ What was built, and what each piece really does:
 5. Fifteen idle minutes, eight hours, your screen locking, the lid closing, or the session
    ending: the grant is gone and the next call asks again.
 
-Reads of LOTR connections can stay open (`read_without_unlock`, on by default) — for a process
-at a terminal. A process with no controlling terminal (a daemon, a double-forked orphan) does
-not get that convenience. Writes and anything gated need the grant. Consent-tier operations
+Reads of LOTR connections can stay open (`read_without_unlock`, on by default) — for a person
+at a terminal. The requesting process must have a controlling terminal **and** a login shell
+above it (argv[0] starting with `-`, or `-l` / `--login` — what login(1), sshd, Terminal,
+iTerm2 and tmux start). An orphan (re-parented to launchd or init, no login shell above it)
+never gets it, even after giving itself a terminal with `setsid` + `openpty` + `TIOCSCTTY` (the
+2026-10-04 re-review did exactly that against 0.20.0's first build; it is now a regression
+test). On Windows the parent chain must be intact and reach an interactive shell or terminal
+host. This is a convenience, not a boundary: a process of yours can start its own login shell
+(`bash -lc`, `script`, a scripted Terminal window). For a boundary set `read_without_unlock`
+false. Terminals that start non-login shells (GNOME Terminal's default) need an unlock for
+these reads. Writes and anything gated need the grant. Consent-tier operations
 (send, merge, delete) still get LOTR's own confirmation, and you can require a Touch ID / Hello
 approval per operation instead (`gt_unlock.py policy consent platform --window 300` approves
 consent operations for five minutes, then asks again). Stopping the authority while unlock is
@@ -198,23 +215,41 @@ gt's hooks and state, the plugin files, LOTR — but every other program of your
   with it (a Secure Enclave key is not bound to the program that made it). An approval by a key
   the enrolment marks as needing no finger is refused — the marking itself is your file.
   Deleting the policy and its state fails closed while the `unlock-on` markers exist; deleting
-  the markers too turns unlock off.
+  the markers too turns unlock off. Restoring an *older* signed policy with its `state.json`
+  does not work: the approval signs a serial and its time, and the authority refuses a serial
+  below the highest it has accepted (kept in memory and in `approval-floor.json`). Approvals
+  made before this check count as serial 0 until the first new one. Rewriting the floor file
+  and restarting the authority rolls it back; while the authority runs, the in-memory floor
+  holds.
 * **Read the TOTP seed** (`totp.seed`). At L1 that is the whole unlock: it can compute a code
   and unlock its own session — and, being in the same session as the shim, the shim's.
 * **Look like gt's own processes.** The shim seat and the credential consumer are checked by
   the real path of the file a process runs; a process of yours can run the real file with its
   own input. A replacement shim starts with no grant, and the first shim keeps its seat while
-  it lives.
+  it lives. The real file can also be made to run someone else's code: before 0.20.0's re-review
+  fix, `PYTHONPATH` pointing at a `sitecustomize.py` ran arbitrary code inside the real file,
+  under its trusted identity. Now every trusted Python process (`lotrd.py`, `lotr_mcp.py`,
+  `gt_vault_mcp.py`, `gt_unlockd.py`) must also run under an isolated interpreter: gt starts
+  each with `python -I`, and the authority and its clients refuse a peer whose command line
+  lacks `-I` (or both `-E` and `-s`), or cannot be read. On macOS and Linux a refusal names
+  the injection variables it saw, never their values; on Windows the environment is not read
+  and only the flag check applies. **Start a hand-run lotrd with `python3 -I lotrd.py …`** — one
+  started without it is no longer trusted while unlock is on. Not covered: a process of yours
+  that modifies the interpreter or its site-packages (Homebrew's are writable by you).
 * **Leave the session.** A double-forked process is not a descendant of `claude`, so the
   `mcp_only` door does not apply to it; it gets no read without unlock, and any unlock it asks
-  for is a prompt naming it. On Windows, where there is no controlling terminal to check, it
-  still gets reads without unlock.
+  for is a prompt naming it — even if it gives itself a terminal (above). On Windows, where
+  there is no controlling terminal, its broken parent chain is what refuses it.
 * **Claim a scheduled job's name** (`GT_JOB`) from outside a session and use that job's
   allow-listed, narrow, read-only scope. List only what you would accept that for.
-* **Swap the Touch ID helper.** The helper is hashed at install and re-checked before every
-  use; a process that rewrites the helper *and* its install record can watch what is sealed or
-  opened afterwards (not forge your presence; a release binary's Developer ID signature is
-  checked too).
+* **Swap the Touch ID helper.** The helper is hashed at install. Each use reads it once
+  through a no-follow descriptor, hashes exactly those bytes against the install record, writes
+  them to a fresh private 0700 folder, checks the code-signing requirement on that copy, runs
+  the copy and deletes it, so swapping the helper between the check and the run runs nothing.
+  But the record is your own file: a process that rewrites the helper *and* its install record
+  can watch what is sealed or opened afterwards (not forge your presence; a release binary's
+  Developer ID signature is checked too), and a process of yours could in principle race the
+  private copy.
 * **Edit the audit log** after the fact, and the hooks' settings guard sees only Claude Code's
   Write/Edit tools, not a shell command writing `settings.json`.
 
@@ -391,14 +426,29 @@ nothing of yours. Every key is one the Claude Code documentation names
 | `sandbox.filesystem.denyWrite` | the vault; `~/.claude/golden-thread` (hooks, state, the unlock home and its `unlock-on` markers); the unlock socket's directory when it is outside that; `~/.config/gt-lotr` and LOTR's store (`~/.secrets`); `~/.claude/plugins`; `~/.claude/settings.json`; `~/.claude/vault-config.json` | The shell cannot change the vault, gt's hooks and policy, the plugin files the authority trusts, or the settings that turn this off |
 | `sandbox.filesystem.denyRead` | the unlock home (sealed store, `totp.seed`, recovery codes, audit log); LOTR's home and store; every **locked** vault folder; and the **whole vault** while `sandbox_vault_reads` is `deny` (the default) | The shell cannot read the second factor, credentials, or the vault |
 | `sandbox.filesystem.allowWrite` | `~/.gt-inbox` | The one writable place: `gt_write_queue.py` leaves its requests in `~/.gt-inbox/queue/` |
-| `permissions.deny` | `Edit(//<path>/**)` for every write-denied path, `Read(//<path>/**)` for every read-denied path, and `Edit` on any `.claude/settings.json` / `.claude/settings.local.json` | Claude's file tools (Read, Edit, Write, NotebookEdit, Grep, Glob) run **outside** the sandbox and follow permission rules instead |
+| `permissions.deny` | `Edit(//<path>/**)` for every write-denied path, `Read(//<path>/**)` for every read-denied path, and `Edit` on any `.claude/settings.json` / `.claude/settings.local.json`; plus `Edit` on every file Claude Code, your login shell or launchd loads code or configuration from: `~/.claude.json`, `~/.claude/{settings.local.json, CLAUDE.md, agents, skills, commands, hooks, output-styles}`, any `.mcp.json` and any project `.claude/{agents,skills,commands,hooks,workflows}`, the shell rc files (`.zshrc`, `.zshenv`, `.zprofile`, `.zlogin`, `.bashrc`, `.bash_profile`, `.bash_login`, `.profile`), `~/Library/LaunchAgents` (macOS) and `~/.config/systemd/user` / `~/.config/autostart` (Linux, WSL2) | Claude's file tools (Read, Edit, Write, NotebookEdit, Grep, Glob) run **outside** the sandbox and follow permission rules instead; without the second group they could plant code that runs later outside every fence. Not all of `~/.claude` is denied: Claude Code's own auto-memory and plans live there |
+| `permissions.disableBypassPermissionsMode` | `"disable"` | No `--dangerously-skip-permissions` / bypass mode while the fence is up; restored to its earlier value when the mode is turned off |
 
 `Write(...)` and `NotebookEdit(...)` path rules are not written: Claude Code checks file
 permissions against `Edit(path)` and `Read(path)` rules only, and an `Edit` deny covers every
 editing tool. Managed settings are never written; if they override what gt asked for,
-`gt_sandbox.py check`, `gt_unlock.py verify` and `/gt:gt-doctor` say so. A project's own
-`.claude/settings.local.json` that sets `sandbox.enabled false` outranks your user settings in
-that project — the checks report it for the project you run them in.
+`gt_sandbox.py check`, `gt_unlock.py verify` and `/gt:gt-doctor` say so.
+
+**Settings merge, so other files can loosen the fence.** A repository's `.claude/settings.json`
+(loaded from the working directory) and `.claude/settings.local.json` (loaded from the git
+root) merge with your user settings, and can loosen the sandbox in that project:
+`sandbox.enabled false`, `allowUnsandboxedCommands true`, `excludedCommands`,
+`ignoreViolations`, Unix-socket and Mach-lookup entries, `enableWeakerNestedSandbox` /
+`enableWeakerNetworkIsolation`, `additionalDirectories`, or an `allowRead` / `allowWrite` /
+Edit or Read allow rule that re-opens a region gt denies (a narrower allow wins over a wider
+deny). `gt_sandbox.py check` reports every such key as a problem, naming the file — in your
+user settings too, so a user `excludedCommands` is no longer a pass. It **reports; it cannot
+prevent.** Claude Code ignores a repository's loosening keys only when the sandbox is
+**admin-required**: `allowUnsandboxedCommands: false` set in **managed settings** or passed with
+**`claude --settings <file>`** (Claude Code v2.1.285 or later; user settings alone never make it
+admin-required). `gt_sandbox.py managed` prints that configuration for `managed-settings.json`,
+or saves it with `--out <file>` for `claude --settings`; gt never writes managed settings
+itself.
 
 ### 8.2 How the vault is reached
 
@@ -406,8 +456,9 @@ that project — the checks report it for the project you run them in.
   outside the sandbox) offers `vault_search` (index.md first, then pages scored like
   `/gt:gt-query`, current before expired before superseded), `vault_read` (size-capped at 64 KiB
   by default, 256 KiB at most, pageable) and `vault_list`. It is read-only, never returns a file
-  outside the vault or inside a locked folder — even named exactly — and marks every result as
-  untrusted data. With unlock on, each read needs `gt:vault:read`, served only to the session's
+  outside the vault or inside a locked folder — even named exactly, and for `vault_search` even
+  when a symlink in the vault points there (each result, and `index.md`, is resolved and
+  checked the way `vault_read` checks a path) — and marks every result as untrusted data. With unlock on, each read needs `gt:vault:read`, served only to the session's
   registered `gt_vault_mcp.py` (checked from the kernel and by the installed file's real path,
   like LOTR's shim); a process from the assistant's shell is refused. By default
   `read_without_unlock` opens it like a LOTR read; set it false to need an unlock.
@@ -416,10 +467,29 @@ that project — the checks report it for the project you run them in.
   result says which. From the shell, `gt_write_queue.py` cannot write the vault's queue folder,
   so it leaves the request in `~/.gt-inbox/queue/`; `vault_queue_drain` (or `gt_broker.py drain`
   in a terminal) moves it into the queue. The inbox is writable by anything in the sandbox, so
-  the broker treats each file as untrusted data: it must name this vault, pass the queue's
-  validation (paths inside the vault, no generated files, Sources or Core rules), and is then
-  decided like any request — claims hold it, conflicts and `design.md` / `global-memory` go to
-  you. Symlinks are never followed and an oversized file is never read.
+  the broker treats each file as untrusted data. It opens the inbox folder once, refusing it if
+  it (or `~/.gt-inbox`) is a symlink, and opens each file **relative to that folder handle with
+  no symlink following** (`O_NOFOLLOW`; a FIFO cannot block it), checks the **open file** — a
+  regular file with exactly one link, within the size cap — and reads it once, bounded. Those
+  bytes are the only ones it uses, for accepting and rejecting alike, and it removes the file
+  through the same folder handle; it never re-opens an inbox path. So a sandboxed writer racing
+  the broker cannot swap in a symlink, a hard link or another folder to have a file it may not
+  read copied into the vault (the 2026-10-04 review demonstrated exactly that against 0.20.0's
+  first build, with the TOTP seed; it is now a regression test, deterministic and live under
+  the sandbox runtime). A request must name this vault and pass the queue's validation (paths
+  inside the vault, no generated files, Sources or Core rules, a plain request id). The broker
+  then **stamps** it: origin `inbox` (a body that said `farm` keeps `farm`, which is stricter)
+  and session `unknown-inbox`, whatever the body claimed — a writer in the sandbox cannot speak
+  for a session, so **no live session's claim lets an inbox request through** (Core rule 1),
+  not even the claim of the session running the drain; it waits until the claim ends. It is
+  then decided like any request — conflicts and `design.md` / `global-memory` go to you.
+  Rejected inbox files are kept in `spool/broker/rejected/` up to 50; past that they are logged
+  and deleted. An oversized file is never read and is left for you. `vault_queue_write` stamps
+  its requests the same way, with the MCP server's own session id: a tool call cannot name
+  another session to write through its claim. Native Windows has no sandbox, so there the inbox
+  is not a boundary at all: the broker still refuses links and reparse points and checks that
+  the open file is the one it listed, inside the inbox, but Claude's shell can open your files
+  directly anyway.
 * **Hooks and the broker** run outside the sandbox by Claude Code's design, so gt's
   enforcement keeps working.
 
@@ -427,7 +497,7 @@ that project — the checks report it for the project you run them in.
 
 | Platform | Enforced | Against the assistant's shell |
 |---|---|---|
-| **macOS** | Seatbelt (OS) + permission rules | **A boundary** for the shell and every process it starts: writing the vault or gt's state, reading the unlock home, LOTR or the vault is refused by the kernel |
+| **macOS** | Seatbelt (OS) + permission rules | **A boundary** for the shell and every process it starts: writing the vault or gt's state, reading the unlock home, LOTR or the vault is refused by the kernel — as long as no settings file loosens it (8.1) and gt's own channels hold (the inbox broker reads only what the writer could; see 8.2) |
 | **Linux** | bubblewrap (OS) + permission rules; needs `bubblewrap` and `socat` (gt refuses to turn the mode on without them, because Claude Code would then refuse to start) | Same as macOS |
 | **WSL2** | bubblewrap, as Linux | Same as macOS |
 | **Native Windows** | **Permission rules only** — Claude Code has no sandbox there | **Friction, not a boundary**: the file tools are refused, but a script the assistant runs can still open any file. `/gt:gt-doctor` and `gt_unlock.py verify` say "friction" |
@@ -440,7 +510,11 @@ write through a symlink into the vault were refused, and `gt_write_queue.py` run
 queued to the inbox and was applied by a drain outside. Claude Code's translation of
 `settings.json` into that runtime, and the file-tool permission rules, were checked by
 configuration (`claude sandbox status` reports the sandbox enabled and strict), not by a live
-Claude session.
+Claude session. On 2026-10-04 the same runtime ran the review's inbox race for real
+(`tests/test_inbox_review2.py`, `H1LiveRace`): a writer inside it swapped an inbox file for a
+symlink to the TOTP seed about 8,000 times while the broker drained about 11,000 times outside —
+nothing reached the vault, where the pre-fix broker copied the seed in in the same test; the
+runtime itself refused a hard link to the seed.
 
 ### 8.4 What it does not stop
 
@@ -455,7 +529,9 @@ Claude session.
   Code's proxy asks before a sandboxed command reaches a new host (see the sandboxing page on
   domain fronting).
 * **Native Windows** beyond the file tools (above).
-* A repository whose own `.claude/settings.local.json` loosens the sandbox before you open it.
+* **A repository's own settings loosening the sandbox** (8.1) — unless you make it
+  admin-required with managed settings or `claude --settings` (`gt_sandbox.py managed`).
+  `gt_sandbox.py check` reports it; it does not prevent it.
 
 ### 8.5 What changes for you
 

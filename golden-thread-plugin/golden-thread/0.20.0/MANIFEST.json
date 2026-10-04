@@ -189,8 +189,8 @@
    "sha256": "7f1e040ddc69177ed2c23590474da44794b6b15bc7d496da76bb709dd81ad8bd"
   },
   "scripts/gt_broker.py": {
-   "bytes": 42123,
-   "sha256": "537b8c060f0ea1e1e884b69c7df2cc567e700504f44cbbf8d75c08150cbdefee"
+   "bytes": 52694,
+   "sha256": "36d8af182f36c3afa1af2bc9592bb7ab4511d20b74345bb20cd3b391c4687ea4"
   },
   "scripts/gt_catchup.py": {
    "bytes": 10635,
@@ -217,8 +217,8 @@
    "sha256": "8977a8959becdac7aa565eee5dd877752ebc0ddf3d8f807453f663819e214365"
   },
   "scripts/gt_components.py": {
-   "bytes": 105958,
-   "sha256": "40008bbfb2302078476e78440028401c7ad63a533d437f39cc9da70d42c91ce7"
+   "bytes": 106384,
+   "sha256": "8b9ce2b683c9fe35024b3235a0cef4a8a0466c6f3c9d77beb2a38ead18d31675"
   },
   "scripts/gt_context.py": {
    "bytes": 10260,
@@ -237,8 +237,8 @@
    "sha256": "5e44883a367e6f4b50b8dd83428b20ffeaf2619a32a7cc9d2cda2343f92bec17"
   },
   "scripts/gt_doctor.py": {
-   "bytes": 118860,
-   "sha256": "71bc90f0021578f15d99b891be7228cae05d437243a6c4bdc64bd49aaa05bfed"
+   "bytes": 118866,
+   "sha256": "5cfc9e4aebcb04226276e6eec6edd54dc52687055461399e80fbbe44dbbc7a6a"
   },
   "scripts/gt_entities.py": {
    "bytes": 5423,
@@ -265,8 +265,8 @@
    "sha256": "57b31588104a1151c46171f234572864e252b56805262044d03b9116d6ef7e5f"
   },
   "scripts/gt_ipc.py": {
-   "bytes": 38620,
-   "sha256": "3b6af3648abcddeea4eaff71471edd39cd671a1bdf8a3f5e0929df227034964d"
+   "bytes": 44195,
+   "sha256": "597df38f90e56974662a8020d799690550d43c0208c455eb80293f9e48fcc102"
   },
   "scripts/gt_keyword_recall.py": {
    "bytes": 4846,
@@ -365,8 +365,8 @@
    "sha256": "784d297d1d953e90ec5fc69d2b7c443d88d4a50aba256b15f15cbdda8aed9264"
   },
   "scripts/gt_sandbox.py": {
-   "bytes": 40767,
-   "sha256": "d168f2bec879a9d8b52c3eb332683e28799ba2a2132bc78c4200641315da5229"
+   "bytes": 61396,
+   "sha256": "8d44dd4728e52e95fc11dd896f902401a160e2cb4574469b8d8b511de673abac"
   },
   "scripts/gt_scan.py": {
    "bytes": 11363,
@@ -429,8 +429,8 @@
    "sha256": "a645cf946b1345e4476c97308ae9a947800a5caf2a75565aad498e0fcc90dafe"
   },
   "scripts/gt_unlock_client.py": {
-   "bytes": 8529,
-   "sha256": "7b4e2adce218897cf5a293f90eb5ed231ed8bd0913f7742e66c0a89431d31cb0"
+   "bytes": 9362,
+   "sha256": "98a0a1130bff35481bc82f168c55600823fb10523b1cd1affc7a57e30d56f259"
   },
   "scripts/gt_unlock_crypto.py": {
    "bytes": 13026,
@@ -465,20 +465,20 @@
    "sha256": "a74b91e2c4cd1b0d84baeea0159883accbe8aa862cdd67d56c1904f4ef2b738d"
   },
   "scripts/gt_unlock_touchid.py": {
-   "bytes": 19436,
-   "sha256": "f9cbb1b3a3a66d4f1d46e6b85abd5dd0a642b9af650365147fae10515091155a"
+   "bytes": 23318,
+   "sha256": "168e21550b8cbdb4a7c610c219a71c9ef45c2d66d7221acd4d05293a7dd3c48e"
   },
   "scripts/gt_unlock_verify.py": {
    "bytes": 10351,
    "sha256": "17aa2eed740b0e5dcc22802c1b3fc118f9b55d4456f26974d37750570b4bbcde"
   },
   "scripts/gt_unlockd.py": {
-   "bytes": 48109,
-   "sha256": "e468a1cb9c87a41ccab9e72175e207132c5c369fdb2a341880b574a2e7a737b9"
+   "bytes": 55023,
+   "sha256": "95aa0f7e0a420108c98bc4307a763d7796c1c2bf7a11d56844ca0c811f14ad95"
   },
   "scripts/gt_unlockd_methods.py": {
-   "bytes": 29374,
-   "sha256": "210ee255c183c1355be6fe65e073791cb108ad5ed8599301c05122a2fe461f42"
+   "bytes": 30324,
+   "sha256": "2ee8835d264a7610accdc61b9cfbd53a573e6dd235658c90b768d3a09843118d"
   },
   "scripts/gt_upgrade.py": {
    "bytes": 50713,
@@ -489,8 +489,8 @@
    "sha256": "84a0974b67815db9db0ee2be3f6a0fa3a81288b7b43b590691c88a28447ab1da"
   },
   "scripts/gt_vault_mcp.py": {
-   "bytes": 32844,
-   "sha256": "c3da2ac7f7c84015d0e1fa2ecc74da6b03df31ee34f84238ec6564b45eba4eb6"
+   "bytes": 34149,
+   "sha256": "708ea8dda2a1cd8c03140388346615d76c26bd51429b42eda5308219dac50a10"
   },
   "scripts/gt_version_check.py": {
    "bytes": 16608,
@@ -501,8 +501,8 @@
    "sha256": "ee0cbd8179ec59ce87a4463348a3b37303647f8d7a7f6a18d9b85cb33cf7b049"
   },
   "scripts/gt_write_queue.py": {
-   "bytes": 27168,
-   "sha256": "93bd7613eddbab94537b4c246a8605b8b652ec5c5753ce41bad8d1c87cb85997"
+   "bytes": 27933,
+   "sha256": "aa7d83f2013b29f44cdc6b6448faa3c89d5f0d1b9fa177e33336070f0951b619"
   },
   "scripts/qrcodegen.LICENSE": {
    "bytes": 1549,
@@ -769,7 +769,7 @@
    "sha256": "ca6e34c9d9e846dedd1de0e812b421930bb86c33c9166e662c2fbf9b11756bc2"
   }
  },
- "generated": "2026-10-03T20:47:51",
+ "generated": "2026-10-04T02:08:34",
  "hooks": [
   {
    "args": [

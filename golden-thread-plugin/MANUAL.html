@@ -2496,7 +2496,7 @@ anti-malware. If something already runs as you, it can wait for you to unlock."<
 <tr>
 <td>LOTR read / write / consent</td>
 <td><code>lotr:&lt;conn&gt;:read\|write\|consent</code></td>
-<td>reads open (<code>read_without_unlock</code>), writes and consent need the grant; LOTR's consent confirmation still runs</td>
+<td>reads open (<code>read_without_unlock</code>) to a process with a controlling terminal and a login shell above it — never an orphan, even one that opened its own terminal; a terminal that starts a non-login shell needs an unlock; writes and consent need the grant; LOTR's consent confirmation still runs</td>
 </tr>
 <tr>
 <td>Editing <code>~/.claude/settings.json</code>, <code>vault-config.json</code>, <code>~/.claude/golden-thread/</code></td>
@@ -2553,18 +2553,23 @@ authority raises), <code>touchid</code> (<code>gt-presence</code>, Secure Enclav
 <code>hello</code> (<code>gt_unlock_hello.ps1</code>, TPM, RS256 checked in Python), <code>sso</code> (Entra ID, PKCE +
 loopback, ID token checked in Python), <code>recovery</code> (one code = one factor, forces re-enrolment).
 Defaults when on: 2 factors including Touch ID (macOS) / Hello (Windows); 1 (TOTP) on Linux.
-A grant is held in memory, bound to the session's <code>claude</code> process (LOTR and broker scopes
-only to its registered MCP shim: <code>door: mcp_only</code>), and ends after 15 min idle, 8 h, the shim
+A grant is held in memory, bound to the session's <code>claude</code> process and to one seat — the
+session's vault MCP server has its own grant, apart from LOTR's shim and the shell (LOTR and
+broker scopes only to its registered MCP shim: <code>door: mcp_only</code>) — and ends after 15 min idle, 8 h, the shim
 or session ending, screen lock, sleep, clock rollback, <code>lock</code> or an authority restart. The shim
-seat is taken only by the installed gt-lotr <code>lotr_mcp.py</code> (real path) started by <code>claude</code>; a
+seat is taken only by the installed gt-lotr <code>lotr_mcp.py</code> (real path, under <code>python -I</code>) started by <code>claude</code>; a
 replacement shim starts with no grant; after a restart the shim registers again. Every client
 checks that the process serving the authority's address runs the installed <code>gt_unlockd.py</code>
-(kernel peer identity) and refuses anything else (<code>server_unverified</code>). A "terminal" caller
-with no controlling terminal gets no reads without unlock. What all of this does <strong>not</strong> stop
+(kernel peer identity) under an isolated interpreter (<code>-I</code>, or <code>-E</code> and <code>-s</code>) and refuses
+anything else (<code>server_unverified</code>). A "terminal" caller gets reads without unlock only with a
+controlling terminal and a login shell above it (macOS / Linux) or an intact parent chain to a
+shell or terminal host (Windows); an orphan never does. What all of this does <strong>not</strong> stop
 — a program running as you that sets out to get around it — is listed in <code>SECURITY.md</code> §4.</p>
 <p>State lives in <code>~/.claude/golden-thread/unlock/</code> (700): <code>policy.json</code>, <code>enrolment.json</code> (public
 keys only), <code>state.json</code> (TOTP replay/lockout, policy approval — on macOS / Windows a Touch ID /
-Hello signature over the policy, verified on every load; on TOTP-only machines a hash, L1),
+Hello signature over the policy, a serial and its time, verified on every load; on TOTP-only
+machines a hash, L1), <code>approval-floor.json</code> (the highest approval serial accepted: an older
+approval restored is refused),
 <code>totp.seed</code> (readable by any program running as you — at L1 that is the whole unlock),
 <code>recovery.json</code> (hashes), <code>sealed/</code>, <code>audit.jsonl</code>, and the <code>unlock-on</code> marker (a second copy,
 <code>~/.claude/golden-thread/.unlock-unlock-on</code>, sits beside the directory: while either exists,
@@ -2648,13 +2653,18 @@ inside the sandbox <code>~/.claude</code> is write-protected):</p>
 </tr>
 <tr>
 <td><code>check [--json]</code></td>
-<td>drift: anything missing, stale, or overridden — by managed settings, by your own <code>sandbox.filesystem.disabled</code>, or by the current project's <code>.claude/settings*.json</code></td>
+<td>drift: anything missing, stale, or overridden — by managed settings, or by any key that loosens the sandbox in your user settings or the current project's <code>.claude/settings.json</code> / <code>.claude/settings.local.json</code> (working directory and git root): <code>enabled false</code>, <code>allowUnsandboxedCommands true</code>, <code>excludedCommands</code>, <code>ignoreViolations</code>, Unix-socket / Mach-lookup entries, the <code>enableWeaker…</code> switches, <code>additionalDirectories</code>, an allow entry re-opening a denied region. It reports; only managed settings or <code>claude --settings</code> make the sandbox admin-required, so that Claude Code ignores a project's loosening keys</td>
 <td><code>1</code> drift</td>
 </tr>
 <tr>
 <td><code>verify [--json]</code></td>
 <td>the PASS / FAIL / NOT-CHECKED rows <code>gt_unlock.py verify</code> shows</td>
 <td><code>1</code> a FAIL</td>
+</tr>
+<tr>
+<td><code>managed [--out FILE] [--json]</code></td>
+<td>prints the admin-required configuration (gt's plan plus <code>allowUnsandboxedCommands false</code>, the weakening switches off, <code>disableBypassPermissionsMode "disable"</code>) for <code>managed-settings.json</code>, and the <code>claude --settings &lt;file&gt;</code> command; <code>--out</code> writes only the file you name, never <code>settings.json</code></td>
+<td><code>0</code></td>
 </tr>
 </tbody>
 </table>
@@ -2663,8 +2673,11 @@ true</code>; <code>filesystem.denyWrite</code> — the vault, <code>~/.claude/go
 <code>~/.claude/plugins</code>, <code>settings.json</code>, <code>vault-config.json</code>; <code>filesystem.denyRead</code> — the unlock
 home, LOTR, locked vault folders, and the whole vault unless <code>sandbox_vault_reads</code> is <code>allow</code>;
 <code>filesystem.allowWrite</code> — <code>~/.gt-inbox</code>; and <code>permissions.deny</code> <code>Read(//…)</code> / <code>Edit(//…)</code> rules
-for the same paths plus <code>Edit</code> on any <code>.claude/settings.json</code> and <code>.claude/settings.local.json</code>.
-Native Windows: the permission rules only.</p>
+for the same paths plus <code>Edit</code> on any <code>.claude/settings.json</code> and <code>.claude/settings.local.json</code>,
+and <code>Edit</code> on what Claude Code, your shell or launchd load code from (<code>~/.claude.json</code>,
+<code>~/.claude/{agents,skills,commands,hooks,output-styles}</code>, <code>CLAUDE.md</code>, any <code>.mcp.json</code>, shell rc
+files, <code>~/Library/LaunchAgents</code>, systemd user units and autostart); and
+<code>permissions.disableBypassPermissionsMode "disable"</code>. Native Windows: the permission rules only.</p>
 <h3 id="reaching-the-vault-the-gt-vault-mcp-server">Reaching the vault: the gt-vault MCP server</h3>
 <p><code>gt_vault_mcp.py</code>, in gt's plugin manifest (server <code>gt-vault</code>). Its tools are offered while
 <code>vault_mcp</code> is <code>on</code>, or <code>auto</code> (the default) with sandbox mode on; otherwise it lists none.</p>
@@ -2689,8 +2702,8 @@ Native Windows: the permission rules only.</p>
 <td>one folder: files with their level, sub-folders, locked folders (never opened)</td>
 </tr>
 <tr>
-<td><code>vault_queue_write {path, op, content, section, key, hint, session}</code></td>
-<td><code>gt_write_queue.py</code>'s ops and validation; the broker decides at once, and the result says apply / deduplicate / held / escalate / reject</td>
+<td><code>vault_queue_write {path, op, content, section, key, hint}</code></td>
+<td><code>gt_write_queue.py</code>'s ops and validation; the broker decides at once, and the result says apply / deduplicate / held / escalate / reject. The request carries the server's own session id — a call cannot name another session (a <code>session</code> argument is ignored)</td>
 </tr>
 <tr>
 <td><code>vault_queue_drain {}</code></td>
@@ -2698,8 +2711,9 @@ Native Windows: the permission rules only.</p>
 </tr>
 </tbody>
 </table>
-<p>Read-only (it never opens a vault file for writing); nothing outside the vault, nothing in a
-locked folder or a dot-folder, no <code>.age</code> file; every result marked untrusted. With unlock on,
+<p>Read-only (it never opens a vault file for writing); nothing outside the vault (a symlink out
+of it is not followed, by <code>vault_search</code> either), nothing in a locked folder or a dot-folder,
+no <code>.age</code> file; every result marked untrusted. With unlock on,
 reads need <code>gt:vault:read</code> for the server itself, which registers at startup as the session's
 vault seat (<code>register_shim</code>, role <code>vault</code>; parent must be <code>claude</code>, file must be the installed
 one).</p>
@@ -2708,8 +2722,12 @@ one).</p>
 on it then leaves the request in <code>~/.gt-inbox/queue/</code> (wrapped with the vault it is for) and
 says so. Every drain outside the sandbox — <code>vault_queue_drain</code>, <code>vault_queue_write</code>,
 <code>gt_broker.py drain</code> in a terminal — moves this vault's requests into its queue after the
-queue's own validation and rejects the rest into <code>spool/broker/rejected/inbox-*.json</code>; a
-symlink is never followed and a symlinked inbox folder is not read. <code>gt_broker.py status</code> counts
+queue's own validation and rejects the rest into <code>spool/broker/rejected/inbox-*.json</code> (at most
+50 kept; past that, logged and deleted). Each file is opened once without following symlinks,
+checked on the open file (regular, one link, size-capped) and read once — a symlink, hard link
+or FIFO is never read — and a symlinked inbox folder is not read. Every inbox request is
+stamped origin <code>inbox</code> and session <code>unknown-inbox</code>, whatever it says, so a live session's claim
+holds it (Core rule 1) until the claim ends. <code>gt_broker.py status</code> counts
 the inbox; the session-start surface line says <code>SANDBOX MODE: on</code> and counts it too.
 <code>replace-section</code> from the shell cannot see the vault, so it carries no base hash and escalates:
 use <code>vault_queue_write</code> for replacements.</p>
@@ -2746,7 +2764,7 @@ lotr consent CONN OP k=v …               # consent tier: sending mail, merging
 <p><strong>The admin plane: only on the machine that holds the registry.</strong> These commands edit files on
 that machine, are refused in <code>client</code> mode and never travel over the network.</p>
 <pre><code class="language-bash">lotr --zone personal init --mode local|hub|client
-python3 &lt;gt-lotr&gt;/scripts/lotrd.py --zone personal           # the daemon
+python3 -I &lt;gt-lotr&gt;/scripts/lotrd.py --zone personal        # the daemon (-I: with unlock on, one started without it is not trusted)
 lotr add-http github@personal --profile github --base-url https://api.github.com \
     --identity &quot;me @ github.com&quot; --auth bearer --token-ref keychain:gt-lotr/github-personal
 lotr add-mcp jira@personal --endpoint https://&lt;mcp-host&gt;/mcp --identity &quot;me @ &lt;host&gt;&quot; \
@@ -5465,7 +5483,7 @@ duplicated across projects' runbooks — the detection step of <code>/gt:gt-runb
 <td></td>
 </tr>
 <tr>
-<td><code>gt_sandbox.py status · plan · apply [--force] · remove · check · verify [--json]</code> (hooks dir, 0.20.0)</td>
+<td><code>gt_sandbox.py status · plan · apply [--force] · remove · check · verify · managed [--json]</code> (hooks dir, 0.20.0)</td>
 <td>gt sandbox mode's Claude Code settings (<a href="#security-gt-sandbox-mode-0200">gt sandbox mode</a>)</td>
 <td><code>1</code> refused, drift or FAIL</td>
 </tr>
