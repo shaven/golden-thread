@@ -174,15 +174,31 @@ if IS_WINDOWS:
 # How gt writes a .py hook COMMAND on this platform (gt_components.hook_python): `python3 -B`
 # everywhere but native Windows, where `python3` is the Store stub and the command names the
 # interpreter by absolute "/" path, in UTF-8 mode.
+# On macOS (0.20.0) an install that recorded an interpreter for hooks (the one that passed the
+# write probe, in <home>/.claude/golden-thread/python) names it instead: py_hook_prefix(home).
 PY_HOOK_PREFIX = ([Path(PYTHON).as_posix(), "-X", "utf8", "-B"] if IS_WINDOWS
                   else ["python3", "-B"])
 
 
-def py_hook_command(script, *args):
-    """The settings.json command gt writes for a .py hook at `script`, quoted as gt quotes it."""
+def py_hook_prefix(home=None):
+    """The interpreter part of a .py hook command for an install under `home`."""
+    if IS_WINDOWS or sys.platform != "darwin" or home is None:
+        return list(PY_HOOK_PREFIX)
+    rec = Path(home) / ".claude" / "golden-thread" / "python"
+    try:
+        py = rec.read_text(encoding="utf-8").splitlines()[0].strip()
+    except (OSError, IndexError):
+        return list(PY_HOOK_PREFIX)
+    return [py, "-B"] if py and os.path.isabs(py) and os.access(py, os.X_OK) \
+        else list(PY_HOOK_PREFIX)
+
+
+def py_hook_command(script, *args, home=None):
+    """The settings.json command gt writes for a .py hook at `script`, quoted as gt quotes it.
+    `home`: the sandbox HOME the install ran under (macOS names its recorded interpreter)."""
     import shlex
     path = str(script).replace("\\", "/") if IS_WINDOWS else str(script)
-    return " ".join(shlex.quote(x) for x in PY_HOOK_PREFIX + [path] + list(args))
+    return " ".join(shlex.quote(x) for x in py_hook_prefix(home) + [path] + list(args))
 
 
 # gt-lotr 0.3.0 runs on native Windows (its local door is gt core's named pipe, gt_ipc), so the

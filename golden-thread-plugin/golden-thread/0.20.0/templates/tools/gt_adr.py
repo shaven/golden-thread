@@ -78,6 +78,7 @@ nothing and got a clean report from a check that never ran.
        lines no ADR slot holds, a round trip that would not reproduce the file, or
        a target being rewritten underneath the merge
     4  decisions.md EXISTS but cannot be read; nothing was written (gt_spool.Unreadable)
+    5  the OS refused the write (EPERM/EACCES); one line names the interpreter and the fix
 
 2 and 3 are deliberately different. 2 says run the other command; 3 says no command
 will do it, because renumbering or discarding someone's lines is not a step a script
@@ -755,6 +756,11 @@ def main(argv=None):
               "(or wait for the sync client to finish), then run `merge`." % exc,
               file=sys.stderr)
         return 4
+    except S.WriteRefused as exc:
+        # The OS refused the write (0.20.0): one line naming the interpreter and the fix,
+        # not a traceback. Nothing was written; the spool still holds every entry.
+        print(exc.strerror or str(exc), file=sys.stderr)
+        return 5
 
 
 if __name__ == "__main__":

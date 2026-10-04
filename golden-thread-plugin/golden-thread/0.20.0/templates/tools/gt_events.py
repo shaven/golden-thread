@@ -991,8 +991,13 @@ def main(argv=None):
     for key, default in (("vault", None), ("id", None), ("dry_run", False)):
         if not hasattr(args, key):
             setattr(args, key, default)
-    return {"emit": cmd_emit, "merge": cmd_merge, "validate": cmd_validate,
-            "list": cmd_list, "backfill": cmd_backfill}[args.cmd](args)
+    try:
+        return {"emit": cmd_emit, "merge": cmd_merge, "validate": cmd_validate,
+                "list": cmd_list, "backfill": cmd_backfill}[args.cmd](args)
+    except S.WriteRefused as exc:
+        # The OS refused the write (0.20.0): one line, not a traceback; the spool keeps it.
+        print(exc.strerror or str(exc), file=sys.stderr)
+        return 5
 
 
 if __name__ == "__main__":

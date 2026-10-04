@@ -75,6 +75,7 @@ from __future__ import annotations
 import argparse
 import datetime
 import difflib
+import errno
 import hashlib
 import json
 import os
@@ -182,6 +183,18 @@ def _render_replace(lines, section, content):
     h, end = rng
     tail = lines[end:]
     return lines[:h + 1] + [""] + content.strip("\n").split("\n") + ([""] if tail else []) + tail
+
+
+def _refusal(path, exc):
+    """gt_write_probe.eperm_message: one line, the interpreter and the fix (0.20.0)."""
+    try:
+        here = os.path.dirname(os.path.abspath(__file__))
+        if here not in sys.path:
+            sys.path.insert(0, here)
+        import gt_write_probe
+        return gt_write_probe.eperm_message(path, exc)
+    except Exception:                                            # noqa: BLE001
+        return "the OS refused the write (%s) running %s" % (exc, sys.executable)
 
 
 def _atomic_replace(path: Path, text: str, expect_sha: str | None) -> bool:
@@ -585,7 +598,16 @@ class Drain:
         if self.dry:
             self.record(r, "apply", "would write")
             return True
-        if not _atomic_replace(path, new, fsha):
+        try:
+            written = _atomic_replace(path, new, fsha)
+        except OSError as exc:
+            if getattr(exc, "errno", None) not in (errno.EPERM, errno.EACCES):
+                raise
+            # The OS refused this interpreter (0.20.0): HELD, with one line naming it and the
+            # fix -- never a traceback, and the request stays queued for the next drain.
+            self.record(r, "held", _refusal(path, exc))
+            return False
+        if not written:
             self.record(r, "held", "the file changed while the broker was writing it")
             return False
         self.record(r, "apply", "written")

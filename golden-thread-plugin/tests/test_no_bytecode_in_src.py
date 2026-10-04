@@ -14,7 +14,7 @@ import subprocess
 import unittest
 from pathlib import Path
 
-from _harness import GT, PY_HOOK_PREFIX, PYTHON, Sandbox, load_module
+from _harness import GT, PYTHON, Sandbox, load_module, py_hook_prefix
 
 
 def snapshot(root):
@@ -73,8 +73,8 @@ class NoBytecodeInSrc(Sandbox):
         self.assertTrue(rows)
         for r in rows:
             with self.subTest(script=r["script"], event=r["event"]):
-                self.assertEqual(shlex.split(r["command"])[:len(PY_HOOK_PREFIX)], PY_HOOK_PREFIX,
-                                 r["command"])
+                pre = py_hook_prefix(self.home)
+                self.assertEqual(shlex.split(r["command"])[:len(pre)], pre, r["command"])
 
     def test_hook_commands_leave_gt_src_and_the_hooks_dir_untouched(self):
         for r in self.hook_commands():

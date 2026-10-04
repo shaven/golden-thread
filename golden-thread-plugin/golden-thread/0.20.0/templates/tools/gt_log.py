@@ -31,6 +31,8 @@ project closeout, which is the kind of breakage nobody attributes to a log merge
        generated and has no baseline (run `migrate`)
     3  log.md changed underneath the merge three times; nothing was written
     4  log.md exists but cannot be read; nothing was written  (gt_spool.Unreadable)
+    5  the OS refused the write (EPERM/EACCES: on macOS, a com.apple.provenance file can refuse
+       one interpreter and not another); one line names the interpreter and the fix
 
 `add` spools first and then merges, and it returns the MERGE's code: through 0.16.4 it
 discarded it, so on an un-migrated vault it printed `REFUSED: ...` and `spooled -> ...`
@@ -329,6 +331,11 @@ def main(argv=None):
               "(or wait for the sync client to finish), then run `merge`." % exc,
               file=sys.stderr)
         return 4
+    except S.WriteRefused as exc:
+        # The OS refused the write (0.20.0): one line naming the interpreter and the fix,
+        # not a traceback. Nothing was written; the spool still holds every entry.
+        print(exc.strerror or str(exc), file=sys.stderr)
+        return 5
 
 
 if __name__ == "__main__":

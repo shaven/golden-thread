@@ -478,6 +478,9 @@ HOOK_DIR_SCRIPTS = ("gt_paths.py", "gt_components.py",
                     # stage agents' private scratch folders (0.20.0): gt_sandbox allows
                     # writes to their root and gt_doctor reports leaks, both from here.
                     "gt_scratch.py",
+                    # can this Python write where gt writes? (0.20.0): gt_schedule's
+                    # choose-interpreter, the broker's EPERM line and gt_doctor import it.
+                    "gt_write_probe.py",
                     # the Touch ID helper's source: install.sh builds it from here (macOS)
                     "gt-presence.swift")
 
@@ -1210,7 +1213,7 @@ def module_hook_files(plugin_root, home=None, gt_version=None, include_off=False
     return out
 
 
-def hook_python():
+def hook_python(home=None):
     """-> the interpreter part of a settings.json hook command, as a list.
 
     ["python3"] everywhere but native Windows, where Claude Code runs hook commands through
@@ -1220,8 +1223,28 @@ def hook_python():
     mode (`-X utf8`): otherwise its stdout is cp1252 and the first "⚠" a hook prints is a
     UnicodeEncodeError instead of a message."""
     if os.name != "nt" or not sys.executable:
-        return ["python3"]
+        rec = _recorded_mac_python(home) if sys.platform == "darwin" else None
+        return [rec] if rec else ["python3"]
     return [_cmd_path(sys.executable), "-X", "utf8"]
+
+
+def _recorded_mac_python(home=None):
+    """macOS (0.20.0): the interpreter install.sh recorded for hooks, tools and jobs -- the one
+    that passed gt's write probe (gt_schedule.py choose-interpreter) -- read from the file the
+    hook wrappers read (~/.claude/golden-thread/python). macOS can refuse Homebrew's python3
+    writes it allows /usr/bin/python3 (com.apple.provenance; the vault's log.md, 2026-10-03), so
+    a .py hook command names the recorded one. None when there is no usable record: `python3`.
+    A recorded interpreter that later disappears is reported, not silent: check_wiring flags
+    a command whose interpreter path no longer exists as `badpath`."""
+    p = (os.path.join(home, ".claude", "golden-thread", "python") if home
+         else os.path.join(os.path.dirname(INSTALLED_HOOKS), "python"))
+    try:
+        with open(p, encoding="utf-8") as fh:
+            py = fh.readline().strip()
+    except OSError:
+        return None
+    return py if py and os.path.isabs(py) and os.path.isfile(py) and os.access(py, os.X_OK) \
+        else None
 
 
 def _cmd_path(p):
@@ -1259,7 +1282,7 @@ def hook_commands(version_dir, plugin_root=None, home=None):
         # Shell scripts execute directly; .py files are run through python3 so the
         # entry does not depend on the file keeping its +x bit through a sync.
         parts = ([target] if reg["script"].endswith(".sh")
-                 else hook_python() + ["-B", target]) + argv
+                 else hook_python(home) + ["-B", target]) + argv
         # Quote every part: the plugin source lives under a path containing a space
         # ("Golden Thread"), and an unquoted argument split on it so the checker was
         # handed "Golden" and reported a bogus no-manifest drift on every start.
@@ -1354,6 +1377,14 @@ def check_wiring(version_dir, settings_path=None, owner=None, plugin_root=None, 
         # POSIX path always keeps its "/", so nothing changes on macOS or Linux.
         if (argv and argv[0] != reg["script"] and argv[0].endswith(reg["script"])
                 and "/" not in argv[0]):
+            rows.append({"script": reg["script"], "event": reg["event"],
+                         "owner": reg.get("owner", ""), "state": "badpath",
+                         "detail": argv[0]})
+            continue
+        # An interpreter named by absolute path (macOS's recorded one, Windows's) that is gone
+        # -- a `brew upgrade` removes python@3.9 -- means every .py hook fails open (0.20.0).
+        if argv and os.path.isabs(argv[0]) and not reg["script"].endswith(".sh") \
+                and not os.path.exists(argv[0]):
             rows.append({"script": reg["script"], "event": reg["event"],
                          "owner": reg.get("owner", ""), "state": "badpath",
                          "detail": argv[0]})

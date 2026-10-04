@@ -250,7 +250,7 @@ class InstallTest(Sandbox):
         reg = self.registered()
         for (event, script), (_module, args) in MODULE_OWNED.items():
             hit = [c for c in reg.get(event, []) if script in c]
-            want = py_hook_command(hooks_dir / script, *args)
+            want = py_hook_command(hooks_dir / script, *args, home=self.home)
             self.assertEqual(hit, [want], "%s/%s: %s" % (event, script, reg.get(event)))
             self.assertTrue((hooks_dir / script).is_file(), script)
         self.assertFalse((self.cache() / "scripts" / "gt_watch.py").exists())

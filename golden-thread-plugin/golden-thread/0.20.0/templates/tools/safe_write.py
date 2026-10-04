@@ -144,6 +144,41 @@ def _replace(src, dst, tries=50, pause=0.02):
             time.sleep(pause)
 
 
+def refusal_line(path, exc, python=None):
+    """ONE line for a write the OS refused (EPERM / EACCES), naming the interpreter and the
+    fix -- instead of a traceback (0.20.0). On macOS a file carrying com.apple.provenance or a
+    privacy-protected folder refuses some interpreters: Homebrew's python3.9 got EPERM
+    replacing the vault's log.md on 2026-10-03 where /usr/bin/python3 did not. The same
+    wording as gt_write_probe.eperm_message, kept here because this file runs from the vault
+    without gt's hooks dir on its path."""
+    import errno as _errno
+    import json as _json
+    python = python or sys.executable or "python3"
+    rec = None
+    try:
+        with open(os.path.join(os.path.expanduser("~"), ".claude", "golden-thread",
+                               "interpreter.json"), encoding="utf-8") as fh:
+            rec = _json.load(fh).get("python")
+    except Exception:
+        rec = None
+    code = getattr(exc, "errno", None) or 0
+    fix = ("run gt with the interpreter it recorded (%s)" % rec if rec and rec != python
+           else "run gt with /usr/bin/python3" if sys.platform == "darwin"
+           and python != "/usr/bin/python3" else "check the file's permissions")
+    tail = (" -- on macOS a file carrying com.apple.provenance or a privacy-protected folder "
+            "refuses some interpreters" if sys.platform == "darwin" else "")
+    return ("gt: cannot write %s: %s (%s), running %s%s. Fix: %s, or give %s Full Disk Access "
+            "(System Settings > Privacy & Security)."
+            % (path, os.strerror(code) if code else exc, _errno.errorcode.get(code, "error"),
+               python, tail, fix, python))
+
+
+def is_refusal(exc):
+    import errno as _errno
+    return isinstance(exc, OSError) and getattr(exc, "errno", None) in (_errno.EPERM,
+                                                                        _errno.EACCES)
+
+
 def _attribute(target, strategy):
     if _gt_edits is None:
         return
@@ -394,6 +429,14 @@ def write(target, data, mode="w"):
         # caller asked for, and `why` is the only account of why it had to be.
         # (`exc` is unbound once this clause ends, so the reason is kept as text.)
         why = _describe(exc)
+        if is_refusal(exc):
+            # The OS refused this interpreter (0.20.0): say which one and the fix, once,
+            # before the fallbacks -- they may land the bytes somewhere else, and the user
+            # still needs to know why the real target refused.
+            try:
+                sys.stderr.write(refusal_line(target, exc) + "\n")
+            except Exception:                       # pragma: no cover
+                pass
 
     _warn_degraded(target, why)
 

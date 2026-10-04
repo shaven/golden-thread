@@ -6,10 +6,13 @@
 # design, so each hook would have done NOTHING, silently: no Core rules injected, no
 # guard run, and a session that reads exactly like a healthy one.
 #
-# WHAT: on Windows only, `python3` becomes the interpreter install.sh resolved and checked,
-# in UTF-8 mode, with \r stripped from its stdout (native Windows Python writes CRLF). On
-# macOS and Linux this file does nothing at all -- $OSTYPE is a shell variable, so the
-# check costs no process.
+# WHAT: on Windows, `python3` becomes the interpreter install.sh resolved and checked,
+# in UTF-8 mode, with \r stripped from its stdout (native Windows Python writes CRLF).
+# On macOS (0.20.0), `python3` becomes the interpreter install.sh recorded in ../python --
+# the one that passed gt's write probe -- when that file names an executable: macOS can
+# refuse Homebrew's python3 writes it allows /usr/bin/python3 (a file carrying
+# com.apple.provenance; the vault's log.md, 2026-10-03). No record: unchanged. On Linux this
+# file does nothing at all -- $OSTYPE is a shell variable, so the check costs no process.
 #
 # WHERE THE INTERPRETER COMES FROM, first hit wins:
 #   1. $GT_PYTHON, when the caller already resolved one (install.sh exports it);
@@ -23,6 +26,14 @@
 # `set -u` here changes nothing: every wrapper that sources this file has already set it.
 set -u
 case "${OSTYPE:-}" in
+  darwin*)
+    if [ -z "${GT_PYTHON:-}" ] && [ -r "${HERE:-.}/../python" ]; then
+      IFS= read -r GT_PYTHON < "${HERE:-.}/../python" || true
+    fi
+    if [ -n "${GT_PYTHON:-}" ] && [ -x "$GT_PYTHON" ]; then
+      python3() { "$GT_PYTHON" "$@"; }
+    fi
+    ;;
   msys*|cygwin*)
     if [ -z "${GT_PYTHON:-}" ] && [ -r "${HERE:-.}/../python" ]; then
       IFS= read -r GT_PYTHON < "${HERE:-.}/../python" || true

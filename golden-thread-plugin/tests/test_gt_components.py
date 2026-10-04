@@ -57,6 +57,10 @@ def py_argv(command):
     n = len(PY_HOOK_PREFIX)
     if argv[:n] == PY_HOOK_PREFIX:
         return ["python3", "-B"] + argv[n:]
+    # macOS (0.20.0): an install's recorded interpreter, by absolute path.
+    if len(argv) > 1 and os.path.isabs(argv[0]) and os.path.basename(argv[0]).startswith(
+            "python") and argv[1] == "-B":
+        return ["python3", "-B"] + argv[2:]
     return argv
 
 
@@ -834,7 +838,7 @@ class ExistingInstallEntriesBelongToTheModule(ModuleBase):
         # what an older gt wrote: exactly the command the module resolves to (with the `-B`
         # every python hook carries since 0.19.1; wiring is matched by script, so an entry
         # written without it still reads as wired)
-        old_cmd = py_hook_command(self.installed / "gt_moved.py", "--hook")
+        old_cmd = py_hook_command(self.installed / "gt_moved.py", "--hook", home=self.home)
         mine = [r for r in self.registrations() if r.get("module") == "mover"]
         self.assertEqual([r["command"] for r in mine], [old_cmd])
         out = self.check()

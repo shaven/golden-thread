@@ -5517,6 +5517,25 @@ duplicated across projects' runbooks — the detection step of <code>/gt:gt-runb
 <hr />
 <h2 id="troubleshooting">Troubleshooting</h2>
 <p><strong>"vault-config.json not found"</strong> — run <code>/gt:gt-init</code>.</p>
+<p><strong>"Operation not permitted" writing the vault on macOS (EPERM).</strong> macOS can refuse one Python
+writes it allows another: a file carrying <code>com.apple.provenance</code>, or a privacy-protected folder.
+Seen 2026-10-03: Homebrew's <code>python3.9</code> -- the default <code>python3</code> on that Mac -- could not replace
+the vault's <code>log.md</code>, while <code>/usr/bin/python3</code> could. Since 0.20.0 gt words this as one line
+naming the interpreter and the fix (<code>gt_log.py</code> exits <code>5</code>; the broker holds the request; nothing
+is half-written), and <code>install.sh</code> picks ONE interpreter for hooks, tools and scheduled jobs by
+an actual write probe -- create, write, <code>os.replace</code>, remove in the vault and in
+<code>~/.claude/golden-thread</code>, and open <code>log.md</code> for append -- preferring <code>/usr/bin/python3</code> when it
+is a working 3.8+. It is recorded in <code>~/.claude/golden-thread/interpreter.json</code> and
+<code>~/.claude/golden-thread/python</code>; the hook wrappers and the <code>.py</code> hook commands in
+<code>settings.json</code> use it instead of bare <code>python3</code>. To see where you stand:</p>
+<pre><code class="language-bash">python3 ~/.claude/golden-thread/hooks/gt_write_probe.py probe     # PASS/FAIL per interpreter
+/gt:gt-doctor                                                    # the write-probe row
+</code></pre>
+<p>Fix: re-run <code>install.sh</code> (it re-probes and re-records), run gt's tools with the interpreter it
+names, or give that Python Full Disk Access (System Settings &gt; Privacy &amp; Security). A recorded
+interpreter that later disappears (a <code>brew upgrade</code>) shows as <code>badpath</code> in the wiring check
+rather than letting every hook fail open. Commands a skill runs as <code>python3 ...</code> from Claude's
+shell still use your PATH's <code>python3</code>.</p>
 <p><strong>A rule in <code>CLAUDE.md</code> seems ignored</strong> — it is read at session start. Added
 mid-session, it applies from the <em>next</em> session. Same for hooks in
 <code>settings.json</code>: open <code>/hooks</code> once or restart.</p>

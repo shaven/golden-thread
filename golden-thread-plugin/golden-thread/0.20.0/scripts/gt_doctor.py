@@ -2203,6 +2203,7 @@ CHECKS = CHECKS + ("execution",)        # 0.18.1: gt_bench.health (measured prof
 CHECKS += ("unlock", "security")        # 0.20.0: gt unlock state + level; its self-check
 CHECKS += ("sandbox",)                  # 0.20.0: gt sandbox mode -- settings drift, platform
 CHECKS += ("scratch",)                  # 0.20.0: stage agents' scratch left by finished runs
+CHECKS += ("write-probe",)              # 0.20.0: can each Python write where gt writes?
 
 
 def _unlock_cli():
@@ -2263,6 +2264,56 @@ def check_security(rep):
         rep.add("security", UNKNOWN, head, detail, fix="python3 %s verify" % cli)
     else:
         rep.add("security", OK, head, detail)
+
+
+def check_write_probe(rep, vault):
+    """Can each candidate Python write where gt writes -- the vault and ~/.claude/golden-thread
+    (gt_write_probe.py, 0.20.0)? On macOS a com.apple.provenance file can refuse one interpreter
+    and not another (Homebrew's python3.9 got EPERM on the vault's log.md, 2026-10-03). FAIL
+    when the one gt uses is refused; WARN when only another candidate is; PASS/FAIL per
+    interpreter in the detail, and which one gt uses."""
+    wp = None
+    for d in (HERE, INSTALLED_HOOKS):
+        if (d / "gt_write_probe.py").is_file():
+            import importlib.util
+            spec = importlib.util.spec_from_file_location("gt_write_probe",
+                                                          str(d / "gt_write_probe.py"))
+            wp = importlib.util.module_from_spec(spec)
+            try:
+                spec.loader.exec_module(wp)
+            except Exception:                       # noqa: BLE001
+                wp = None
+            break
+    if wp is None:
+        rep.add("write-probe", UNKNOWN, "gt_write_probe.py is not installed in the hooks dir")
+        return
+    try:
+        r = wp.probe(str(vault) if vault else None)
+    except Exception as e:                          # noqa: BLE001
+        rep.add("write-probe", UNKNOWN, "the write probe could not run (%s)" % type(e).__name__)
+        return
+    if not r["places"]:
+        rep.add("write-probe", UNKNOWN, "nothing to probe: no vault and no ~/.claude/golden-thread")
+        return
+    detail = "\n".join("%s %-16s %s  (%s)" % ("PASS" if x["ok"] else "FAIL", x["label"],
+                                               x["python"], ", ".join(
+                                                   "%s %s" % kv for kv in x["results"].items()))
+                       for x in r["rows"])
+    uses = r["uses"]
+    used = next((x for x in r["rows"]
+                 if os.path.realpath(x["python"]) == os.path.realpath(uses or "")), None)
+    if used is None:
+        rep.add("write-probe", UNKNOWN, "gt uses %s, which could not be probed" % uses, detail)
+    elif not used["ok"]:
+        rep.add("write-probe", FAIL, "gt uses %s and it cannot write where gt writes" % uses,
+                detail, fix="re-run install.sh (it records an interpreter that passes), or give "
+                            "%s Full Disk Access (System Settings > Privacy & Security)" % uses)
+    elif not all(x["ok"] for x in r["rows"]):
+        rep.add("write-probe", WARN, "gt uses %s: PASS; another python here is refused -- run gt "
+                "tools with %s, not bare python3" % (uses, uses), detail)
+    else:
+        rep.add("write-probe", OK, "gt uses %s: every candidate writes the %s"
+                % (uses, " and ".join(p["name"] for p in r["places"])), detail)
 
 
 def check_scratch(rep, vault):
@@ -2477,6 +2528,8 @@ def main(argv=None):
         check_sandbox(rep)
     if "scratch" in wanted:
         check_scratch(rep, vault)
+    if "write-probe" in wanted:
+        check_write_probe(rep, vault)
 
     if a.fix:
         fix_wiring(rep, vdir, vault)

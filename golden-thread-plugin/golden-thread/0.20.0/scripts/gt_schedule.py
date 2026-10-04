@@ -733,6 +733,21 @@ def can_probe(vault):
             and shutil.which("launchctl") is not None)
 
 
+def writes_ok(py, vault):
+    """The write probe (gt_write_probe.py), run BY `py`: create, write, os.replace, remove in
+    the vault and in gt's home, and open the vault's log.md for append. -> True / False.
+    macOS only (0.20.0): a file carrying com.apple.provenance refuses some interpreters --
+    Homebrew's python3.9 got EPERM replacing log.md where /usr/bin/python3 did not."""
+    here = os.path.dirname(os.path.abspath(__file__))
+    if here not in sys.path:
+        sys.path.insert(0, here)
+    import gt_write_probe as wp
+    spots = [(vault, os.path.join(vault, "log.md"))] if vault and os.path.isdir(vault) else []
+    if LOGS.is_dir():
+        spots.append((str(LOGS), None))
+    return all(wp.probe_one(py, d, f) == "pass" for d, f in spots)
+
+
 def do_choose_interpreter(a) -> int:
     given = [os.path.abspath(os.path.expanduser(c)) for c in a.candidate]
     cands = [c for c in preferred_candidates(given) if qualifies(c)]
@@ -743,6 +758,22 @@ def do_choose_interpreter(a) -> int:
     rec = recorded_interpreter()
     vault = a.vault or configured_vault()
     rc = OK
+    # ONE interpreter for hooks, tools and jobs (0.20.0): on macOS it must also pass the write
+    # probe in a normal process, not only under launchd. Never from a test/sandbox: the vault
+    # it would name is the real one (HOME here is the module's, not the sandbox's).
+    if sys.platform == "darwin" and not on_windows() and not a.no_probe and not sandboxed():
+        writable = [c for c in cands if writes_ok(c, vault)]
+        for c in cands:
+            if c not in writable:
+                print("gt-schedule: %s cannot write where gt writes (macOS refused it: a "
+                      "com.apple.provenance file or privacy protection) -- passed over" % c)
+        if writable:
+            cands = writable
+        else:
+            print("gt-schedule: no candidate passed the write probe; keeping %s. Give it Full "
+                  "Disk Access in System Settings > Privacy & Security" % cands[0],
+                  file=sys.stderr)
+            rc = PROBLEM
     if not a.no_probe and can_probe(vault):
         chosen = None
         for c in cands:

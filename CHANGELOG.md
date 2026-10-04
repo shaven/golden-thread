@@ -486,6 +486,28 @@ report-card, watch; lockstep modules `requires_gt >=0.20.0,<0.21.0`).
   python.org's `python` works); hooks under a logged-in Claude Code for Windows are still an
   owner step.
 
+- **macOS: one interpreter for hooks, tools and jobs, chosen by a write probe.** macOS can
+  refuse one Python writes it allows another (a file carrying `com.apple.provenance`, a
+  privacy-protected folder): on 2026-10-03 Homebrew's `python3.9`, the default `python3` there,
+  got `[Errno 1] Operation not permitted` replacing the vault's `log.md` and rewriting worktree
+  files while `/usr/bin/python3` succeeded -- and gt's hooks and tools ran bare `python3`.
+  New `gt_write_probe.py`: run BY each candidate, it creates, writes, `os.replace`s and removes a
+  file in the vault and in `~/.claude/golden-thread`, and opens `log.md` for append without
+  writing. `gt_schedule.py choose-interpreter` (which `install.sh` runs) now passes over a
+  candidate that fails it on macOS -- in a normal process, not only under launchd -- still
+  preferring `/usr/bin/python3` with no record; `install.sh` writes the choice to
+  `~/.claude/golden-thread/python`, which `hooks/gt_python.sh` now reads on macOS too, and the
+  `.py` hook commands in `settings.json` name it instead of `python3`. A recorded interpreter
+  that disappears is a `badpath` in the wiring check, never a silent fail-open. EPERM/EACCES in
+  the write helpers is one line naming the interpreter and the fix, not a traceback:
+  `gt_spool.write_if_changed` raises `WriteRefused` (a `PermissionError`), `gt_log.py`,
+  `gt_adr.py` and `gt_events.py` exit `5` with that line, `safe_write.py` says it before falling
+  back, and the broker HOLDS the request with it. `/gt:gt-doctor` has a `write-probe` row:
+  PASS/FAIL per interpreter and which one gt uses (all platforms). Linux and Windows are
+  otherwise unchanged. Not covered: a skill's own `python3 ...` command run from Claude's shell
+  still uses the PATH's `python3`. The refusal could not be reproduced on demand on the
+  publishing Mac (the 2026-10-03 condition had cleared), so the tests simulate the EPERM.
+
 ### Test receipts name the gates that ran
 
 - **`-j` no longer turns a full run into a subset.** `tests/run.sh` treated any argument as a

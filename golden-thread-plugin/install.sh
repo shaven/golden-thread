@@ -1798,6 +1798,18 @@ if [ -d "$SRC/hooks" ]; then
       python3 -B "$GT_HOOKS/gt_schedule.py" reconcile || true
     fi
   fi
+  # macOS (0.20.0): the SAME interpreter for the hook wrappers and the settings.json hook
+  # commands. `python3` is often Homebrew's, and macOS can refuse it writes (a file carrying
+  # com.apple.provenance) that /usr/bin/python3 is allowed: the vault's log.md, 2026-10-03.
+  # choose-interpreter picked one that passed the write probe; hooks/gt_python.sh reads it here.
+  if [ "$(uname -s 2>/dev/null)" = Darwin ] && [ -f "$GT_HOOKS/../interpreter.json" ]; then
+    _gt_rec=$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["python"])' \
+      "$GT_HOOKS/../interpreter.json" 2>/dev/null) || _gt_rec=""
+    if [ -n "$_gt_rec" ] && [ -x "$_gt_rec" ]; then
+      printf '%s\n' "$_gt_rec" > "$GT_HOOKS/../python"
+      echo "  hooks and tools run $_gt_rec (it passed gt's write probe)"
+    fi
+  fi
 
   # Files an OLDER release put in the hooks dir that this one no longer ships (0.13.0).
   # An upgrade must CONVERGE on what a fresh install of this release leaves, so legacy

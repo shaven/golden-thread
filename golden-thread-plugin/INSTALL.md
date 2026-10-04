@@ -286,6 +286,32 @@ hooks answer, and that the new vault lints clean. Nothing on your machine is tou
 Run it before publishing a fork; to publish a versioned zip, run `bash package.sh` and
 attach `golden-thread-plugin.zip` to a release.
 
+### macOS: "Operation not permitted" writing the vault
+
+macOS can refuse one Python writes it allows another: a file carrying `com.apple.provenance`, or a privacy-protected folder.
+Seen 2026-10-03: Homebrew's `python3.9` -- the default `python3` on that Mac -- could not replace
+the vault's `log.md`, while `/usr/bin/python3` could. Since 0.20.0 gt words this as one line
+naming the interpreter and the fix (`gt_log.py` exits `5`; the broker holds the request; nothing
+is half-written), and `install.sh` picks ONE interpreter for hooks, tools and scheduled jobs by
+an actual write probe -- create, write, `os.replace`, remove in the vault and in
+`~/.claude/golden-thread`, and open `log.md` for append -- preferring `/usr/bin/python3` when it
+is a working 3.8+. It is recorded in `~/.claude/golden-thread/interpreter.json` and
+`~/.claude/golden-thread/python`; the hook wrappers and the `.py` hook commands in
+`settings.json` use it instead of bare `python3`. To see where you stand:
+
+```bash
+python3 ~/.claude/golden-thread/hooks/gt_write_probe.py probe     # PASS/FAIL per interpreter
+/gt:gt-doctor                                                    # the write-probe row
+```
+
+Fix: re-run `install.sh` (it re-probes and re-records), run gt's tools with the interpreter it
+names, or give that Python Full Disk Access (System Settings > Privacy & Security). A recorded
+interpreter that later disappears (a `brew upgrade`) shows as `badpath` in the wiring check
+rather than letting every hook fail open. Commands a skill runs as `python3 ...` from Claude's
+shell still use your PATH's `python3`.
+
+See *Troubleshooting* in [`MANUAL.md`](MANUAL.md) for the same note.
+
 ---
 
 ## Connecting to an Existing Obsidian Vault
