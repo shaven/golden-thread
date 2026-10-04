@@ -19,7 +19,9 @@ goes into every audit line, refusals included. While it is off, nothing here cha
 import hashlib
 import json
 import os
+import secrets as _pysecrets
 import threading
+import time
 from pathlib import Path
 
 from . import audit, confirm as confirm_mod, policy, profiles, recipes as recipes_mod, shaping
@@ -35,6 +37,8 @@ TOOLS = ("call_read", "call_write", "call_consent")
 TIER_RANK = {"read": 0, "write": 1, "consent": 2}
 SHIPPED_RECIPES = Path(__file__).resolve().parents[2] / "templates" / "recipes"
 LOCAL_CLIENT = "local"
+CURSOR_TTL = 600        # seconds a next-page cursor stays valid
+CURSOR_MAX = 256        # cursors held in memory at once
 
 
 def _max_tier(a, b):
@@ -55,6 +59,7 @@ class Engine:
         self._secret_resolver = secret_resolver
         self._connection_factory = connection_factory or HttpConnection
         self._lock = threading.RLock()
+        self._cursors = {}       # opaque id -> {"raw", "conn", "client", "op", "exp"}; memory only
         self._stamp = None
         self._load()
 
@@ -188,6 +193,10 @@ class Engine:
                 self.reload_if_changed()
                 if tool not in TOOLS:
                     raise GatewayError("bad_tool", f"tool must be one of {', '.join(TOOLS)}")
+                if cursor and tool != "call_read":
+                    raise GatewayError("cursor_needs_read", "a cursor continues a read, so only "
+                                       "call_read accepts one",
+                                       ["call again without a cursor, or use call_read to page"])
                 conn = self.registry.connection(connection)
                 identity = conn.get("identity")
                 client = self._client(client_id, remote)
@@ -220,6 +229,10 @@ class Engine:
                     # use this connection at this tier at all (mcp_only, locked, step-up).
                     base["grant"] = self._gate(connection, tier, subject, tool, op)
                 policy.check_client(client, connection, tier)
+                entry = self._take_cursor(cursor, connection, client_id or LOCAL_CLIENT,
+                                          op) if cursor else None
+                if entry and tier != "read":
+                    raise GatewayError("bad_cursor", "a cursor can only continue a read")
                 if tier == "consent":
                     mode = (self.settings.get("local") or {}).get("confirm", "auto")
                     text = confirm_mod.describe(connection, identity, op, args,
@@ -239,9 +252,15 @@ class Engine:
                     subject, None if local else client_id)
                 http = factory(
                     conn, prof, **({"secret_resolver": resolver} if resolver else {}))
+                if entry:
+                    self._check_cursor_target(conn, http, entry["raw"])
                 result = None
                 for i, (opd, a) in enumerate(plan):
-                    result = http.call(opd, a, cursor=cursor if i == len(plan) - 1 else None)
+                    result = http.call(opd, a, cursor=entry["raw"] if entry and i == len(plan) - 1
+                                       else None)
+                result = dict(result)
+                result["next_cursor"] = self._issue_cursor(
+                    result.get("next_cursor"), tier, connection, client_id or LOCAL_CLIENT, op)
             data, notes = self._shape(result.get("data"), prof, select,
                                        bool(result.get("next_cursor")))
             notes = list(result.get("notes") or []) + list(notes)
@@ -337,6 +356,46 @@ class Engine:
                 return secrets_mod.resolve(ref, subject=subj, job=job)
             return secrets_mod.resolve(ref)
         return resolve
+
+    # -- cursors: the next-page request lives here, never in the caller's hands ------------
+
+    def _issue_cursor(self, raw, tier, connection, client, op):
+        """Swap a connection's next-page token for an opaque random id held in memory, bound
+        to (connection, seat, op) and an expiry. Only a read ever gets one."""
+        if not raw or tier != "read":
+            return None
+        now = time.time()
+        for k in [k for k, v in self._cursors.items() if v["exp"] <= now]:
+            del self._cursors[k]
+        while len(self._cursors) >= CURSOR_MAX:
+            del self._cursors[next(iter(self._cursors))]
+        cid = "gtc_" + _pysecrets.token_urlsafe(24)
+        self._cursors[cid] = {"raw": raw, "conn": connection, "client": client, "op": op,
+                              "exp": now + CURSOR_TTL}
+        return cid
+
+    def _take_cursor(self, cursor, connection, client, op):
+        bad = GatewayError("bad_cursor", "the cursor is not one this gateway issued to you "
+                           "for this operation, or it expired",
+                           ["call again without a cursor to start from the first page"])
+        e = self._cursors.get(cursor) if isinstance(cursor, str) else None
+        if not e or e["exp"] <= time.time():
+            self._cursors.pop(cursor, None) if isinstance(cursor, str) else None
+            raise bad
+        if (e["conn"], e["client"], e["op"]) != (connection, client, op):
+            raise bad
+        return e
+
+    def _check_cursor_target(self, conn, http, raw):
+        """The cursor's target gets the same checks as any call: host/base (normalised, no
+        string prefix) and policy as a GET of that path -- deny, or any non-read, refuses."""
+        target = getattr(http, "cursor_target", None)
+        if target is None:
+            return
+        rel = target(raw)
+        if policy.classify(conn, {"method": "GET", "path": rel}) != "read":
+            raise GatewayError("op_denied", f"the cursor points at GET {rel}, which policy on "
+                               f"{conn.get('id')} does not allow as a read")
 
     def _classify(self, conn, opd, args):
         probe = {"name": opd.get("name"), "method": opd["method"], "path": opd["path"],

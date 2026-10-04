@@ -41,6 +41,20 @@ When shaping cut an unpaged list (e.g. Graph events as one array, 20 of 30), the
 the cursor". It now reports shown/total and, with no cursor, says to narrow the query or fetch a
 smaller page; with a `next_cursor` it says to use it.
 
+### gt-lotr: cursors can no longer be forged, and the raw twins of send and merge are consent (review findings)
+
+- **Forged cursors.** A cursor was unsigned base64 JSON accepted by any tool, so `call_write` plus a
+  forged cursor read an arbitrary path past the read/write split and `policy.deny`. Cursors are now
+  opaque random ids held in the daemon, bound to connection, seat and operation, expiring after ten
+  minutes, issued only for reads and accepted only by `call_read`. The target is normalised (no
+  `..`, `//`, encoded dots, backslash, userinfo, other port) and classified as a `GET` under the same
+  policy before it is fetched.
+- **Consent twins.** `PUT .../merge/`, `/repositories/{id}/pulls/N/merge`, Graph send forms
+  (`users/x/sendMail`, message `send|forward|reply|replyAll|createReply|createForward`), `POST
+  /$batch`, GraphQL `mergePullRequest` / `enablePullRequestAutoMerge`, and every HTTP `DELETE` are
+  consent, not write. Other destructive endpoints on a generic connection stay write unless you add
+  `policy.consent` globs.
+
 ### gt unlock: agents need your presence for what matters (off by default)
 
 (Owner, 2026-10-03: "I want to be able to sleep at night that I am not putting out something

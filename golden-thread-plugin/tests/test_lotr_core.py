@@ -420,8 +420,10 @@ class TestPolicy(unittest.TestCase):
         c = self.conn()
         self.assertEqual(policy.classify(c, {"method": "GET", "path": "/x"}), "read")
         self.assertEqual(policy.classify(c, {"method": "head", "path": "/x"}), "read")
-        for m in ("POST", "PUT", "PATCH", "DELETE"):
+        for m in ("POST", "PUT", "PATCH"):
             self.assertEqual(policy.classify(c, {"method": m, "path": "/x"}), "write")
+        # 0.20.1: DELETE is consent on every connection, not a plain write
+        self.assertEqual(policy.classify(c, {"method": "DELETE", "path": "/x"}), "consent")
         self.assertEqual(policy.classify(c, {}), "write")   # unknown -> write
 
     def test_order_deny_consent_write_read(self):
@@ -524,6 +526,81 @@ class TestPolicy(unittest.TestCase):
                          "write")
         self.assertEqual(classify(None, c, opd, {"body": {"query": ro}}), "read")
         self.assertEqual(classify(None, c, opd, {"query": {"a": 1}}), "write")
+
+    def _raw(self, method, path, profile="github", **over):
+        return policy.classify(dict(self.conn(), profile=profile),
+                               dict({"name": None, "method": method, "path": path}, **over))
+
+    def test_consent_twins_of_send_and_merge(self):
+        """Raw spellings of what a curated consent op does are consent too (review 0.20.1)."""
+        rows = [
+            ("graph", "POST", "/users/x@y.com/sendMail"),
+            ("graph", "POST", "/me/sendmail/"),
+            ("graph", "POST", "/me/messages/AAA/send"),
+            ("graph", "POST", "/me/messages/AAA/forward"),
+            ("graph", "POST", "/me/messages/AAA/reply"),
+            ("graph", "POST", "/me/messages/AAA/replyAll"),
+            ("graph", "POST", "/me/messages/AAA/createReply"),
+            ("graph", "POST", "/me/messages/AAA/createForward/"),
+            ("graph", "POST", "/me/mailFolders/inbox/messages/AAA/send"),
+            ("graph", "POST", "/users/u@x.org/messages/AAA/SEND"),
+            ("graph", "POST", "/$batch"),
+            ("graph", "POST", "/%24batch"),
+            ("graph", "POST", "/v1.0/$batch"),
+            ("github", "PUT", "/repos/o/r/pulls/1/merge/"),
+            ("github", "PUT", "/repos/o/r/pulls/1/MERGE"),
+            ("github", "PUT", "/repos/o/r//pulls/1/merge"),
+            ("github", "PUT", "/repositories/123/pulls/1/merge"),
+            ("github", "PUT", "/repositories/123/pulls/1/merge/"),
+            ("github", "PUT", "/repos/o/r/pulls/1/%6Derge"),
+            ("github", "DELETE", "/repos/o/r/git/refs/heads/x"),
+            ("graph", "DELETE", "/me/messages/AAA"),
+            ("jira", "DELETE", "/rest/api/3/issue/X-1"),
+            ("generic", "DELETE", "/anything"),
+            ("generic", "PUT", "/repos/o/r/pulls/1/merge"),
+        ]
+        for prof, m, path in rows:
+            self.assertEqual(self._raw(m, path, prof), "consent", f"{m} {path}")
+
+    def test_consent_twins_negatives(self):
+        for prof, m, path, want in [
+            ("graph", "GET", "/me/sendMail", "read"),
+            ("graph", "GET", "/me/messages/AAA/send", "read"),
+            ("graph", "GET", "/$batch", "read"),
+            ("github", "GET", "/repos/o/r/pulls/1/merge", "read"),   # "is it merged?" is a read
+            ("github", "HEAD", "/repos/o/r/pulls/1/merge", "read"),
+            ("github", "POST", "/repos/o/r/issues/1/comments", "write"),
+            ("github", "POST", "/repos/o/r/pulls", "write"),
+            ("graph", "POST", "/me/messages", "write"),
+            ("graph", "POST", "/me/messages/AAA/move", "write"),
+            ("graph", "PATCH", "/me/messages/AAA", "write"),
+            ("generic", "POST", "/things", "write"),
+            ("generic", "PUT", "/things/1", "write"),
+        ]:
+            self.assertEqual(self._raw(m, path, prof), want, f"{m} {path}")
+
+    def test_consent_twins_keep_curated_tiers_and_owner_policy(self):
+        # an explicit op tier is untouched (MCP ops, curated ops)
+        self.assertEqual(self._raw("DELETE", "/x", tier="write"), "write")
+        self.assertEqual(self._raw("POST", "/me/sendMail", "graph", tier="consent"), "consent")
+        c = dict(self.conn(deny=["DELETE /x*"]), profile="github")
+        self.assertEqual(policy.classify(c, {"method": "DELETE", "path": "/xy"}), "deny")
+        c = dict(self.conn(), profile="generic")
+        c["policy"] = {"consent": [], "write": ["DELETE /scratch/*"], "deny": [], "read": []}
+        self.assertEqual(policy.classify(c, {"method": "DELETE", "path": "/scratch/1"}), "write")
+
+    def test_graphql_merge_mutation_is_consent_other_mutations_write(self):
+        for q in ["mutation { mergePullRequest(input: {pullRequestId: \"x\"}) { clientMutationId } }",
+                  "mutation M { m: mergePullRequest(input: {}) { x } }",
+                  "mutation { enablePullRequestAutoMerge(input: {}) { x } }",
+                  "fragment F on X {id}\nmutation M { a mergePullRequest(input:{}) {x} }",
+                  "mutation { mergePullRequest(input: {}"]:
+            self.assertEqual(self._gql(q), "consent", q)
+        for q in ["mutation { addComment(input: {body: \"mergePullRequest\"}) { x } }",
+                  "mutation { closePullRequest(input: {}) { x } }",
+                  "mutation { a } # mergePullRequest"]:
+            self.assertEqual(self._gql(q), "write", q)
+        self.assertEqual(self._gql("query { mergePullRequest }"), "read")
 
     def test_allowed_through(self):
         cases = {"call_read": {"read"}, "call_write": {"read", "write"},

@@ -8,6 +8,7 @@ place is treated as a write (fail towards the more guarded tier, never towards r
 """
 import fnmatch
 import re
+import urllib.parse
 
 from .errors import GatewayError
 
@@ -137,6 +138,61 @@ def _graphql_tier(query):
     return "read" if ops == 1 else "write"
 
 
+# GraphQL fields that merge a pull request: a mutation naming one needs the owner's consent.
+_GQL_MERGE_FIELDS = ("mergePullRequest", "enablePullRequestAutoMerge")
+
+
+def _graphql_final(query):
+    """_graphql_tier plus consent: a document that is not provably a read and names a merge
+    mutation is `consent`; every other mutation stays `write`. Unparsable text that mentions a
+    merge field anywhere is `consent` too (fail towards the more guarded tier)."""
+    tier = _graphql_tier(query)
+    if tier == "read" or not isinstance(query, str):
+        return tier
+    toks = _gql_tokens(query)
+    if toks is None:
+        return "consent" if any(f in query for f in _GQL_MERGE_FIELDS) else "write"
+    if any(k == "name" and v in _GQL_MERGE_FIELDS for k, v, _ in toks):
+        return "consent"
+    return "write"
+
+
+# Raw endpoints that do what a curated consent op does, spelled another way. Matched on the
+# normalised path (query dropped, percent-decoded, lower-cased, "//" collapsed, trailing "/"
+# dropped) for every connection profile, so a lookalike path on a generic REST connection is
+# guarded too. Anything else destructive on a generic connection stays `write` unless the owner
+# adds `policy.consent` globs.
+_TWIN_PATHS = tuple(re.compile(p) for p in (
+    r"^/repos/[^/]+/[^/]+/pulls/[^/]+/merge$",                          # GitHub merge
+    r"^/repositories/[^/]+/pulls/[^/]+/merge$",                         # ... by repository id
+    r"^/(me|users/[^/]+)/sendmail$",                                    # Graph send
+    r"^/(me|users/[^/]+)(/mailfolders/[^/]+)*/messages/[^/]+/"
+    r"(send|forward|reply|replyall|createreply|createforward)$",        # Graph send-ish
+    r"^(/v[0-9.]+)?/\$batch$",                                          # Graph batch can carry sends
+))
+
+
+def _norm_path(path):
+    p = urllib.parse.urlsplit(str(path or "")).path
+    for _ in range(4):
+        q = urllib.parse.unquote(p)
+        if q == p:
+            break
+        p = q
+    p = re.sub(r"/+", "/", p.lower())
+    return p.rstrip("/") or "/"
+
+
+def _consent_twin(op):
+    method = (op.get("method") or "").upper()
+    if method == "DELETE":
+        return True
+    if method in ("", "GET", "HEAD"):
+        return False
+    path = _norm_path(op.get("path"))
+    return any(rx.match(path) for rx in _TWIN_PATHS)
+
+
 def classify(conn, op):
     """Return "deny" | "consent" | "write" | "read" for `op` on `conn`, in SPEC order."""
     policy = conn.get("policy") or {}
@@ -146,9 +202,11 @@ def classify(conn, op):
             return verdict
     if op.get("tier") in TIERS:
         return op["tier"]
+    if _consent_twin(op):
+        return "consent"
     query = op.get("graphql_query")
     if isinstance(query, str) and query.strip():
-        return _graphql_tier(query)
+        return _graphql_final(query)
     method = (op.get("method") or "").upper()
     if method in ("GET", "HEAD"):
         return "read"

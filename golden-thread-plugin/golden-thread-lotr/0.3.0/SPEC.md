@@ -175,7 +175,13 @@ def check_client(client: dict, conn_id: str, tier: str) -> None
 3. `policy.write` → write.
 4. `policy.read` → read.
 5. Profile override `op["tier"]`.
-6. GraphQL: `graphql_query` is lexed whole (comments and strings removed); read only if it holds exactly one operation, a `query` or the `{...}` shorthand, plus fragment definitions. Mutation, subscription, several operations, or anything unparsable → write. An explicit `body` is classified in place of `query`.
+5b. Consent twins (no explicit op tier): `DELETE` on any connection; a non-GET raw path that
+   normalises (query dropped, percent-decoded, lower-cased, `//` collapsed, trailing `/` dropped) to
+   a GitHub pull merge (`/repos/o/r/pulls/N/merge`, `/repositories/ID/pulls/N/merge`), a Graph
+   send (`/me|users/X/sendMail`, `.../messages/ID/send|forward|reply|replyAll|createReply|
+   createForward`) or `/$batch` → consent. Other destructive endpoints on a generic connection stay
+   write unless the owner adds `policy.consent` globs.
+6. GraphQL: `graphql_query` is lexed whole (comments and strings removed); read only if it holds exactly one operation, a `query` or the `{...}` shorthand, plus fragment definitions. Mutation, subscription, several operations, or anything unparsable → write, except a document naming a `mergePullRequest` / `enablePullRequestAutoMerge` mutation → consent. An explicit `body` is classified in place of `query`.
 7. Method: GET/HEAD → read; anything else → write.
 
 Unknown → write.

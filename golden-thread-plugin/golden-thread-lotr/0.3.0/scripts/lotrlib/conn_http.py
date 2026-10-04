@@ -151,16 +151,50 @@ class HttpConnection:
                 [f"allowed hosts: {', '.join(self.hosts) or '(none)'}"])
 
     def _check_cursor_url(self, url):
-        parts = urllib.parse.urlsplit(url)
+        """Normalise and check a next-page target; returns its path relative to the base URL.
+
+        Never a string-prefix test: the path is split into segments (percent-decoding until
+        stable) and any `.`/`..`, empty (`//`), backslash or control character is refused, as is
+        userinfo, another scheme, host, or port. What is left is provably under the base URL.
+        """
+        bad = GatewayError("bad_cursor",
+                           f"the cursor does not point under {self.conn.get('id')}'s base URL",
+                           ["call again without a cursor to start from the first page"])
+        try:
+            parts = urllib.parse.urlsplit(url)
+            port = parts.port
+        except ValueError:
+            raise bad
         host = (parts.hostname or "").lower()
-        path = parts.path or "/"
-        prefix_ok = (not self._base_prefix or path == self._base_prefix
-                     or path.startswith(self._base_prefix + "/"))
+        base = urllib.parse.urlsplit(self.base_url)
+        default = {"http": 80, "https": 443}
         if (parts.scheme.lower() != self._base_scheme or host not in self.hosts
-                or not prefix_ok):
-            raise GatewayError("bad_cursor",
-                               f"the cursor does not point under {self.conn.get('id')}'s base URL",
-                               ["call again without a cursor to start from the first page"])
+                or "@" in parts.netloc or (port or default.get(parts.scheme.lower())) !=
+                (base.port or default.get(self._base_scheme))):
+            raise bad
+        raw = parts.path or "/"
+        text = raw
+        for _ in range(4):
+            nxt = urllib.parse.unquote(text)
+            if nxt == text:
+                break
+            text = nxt
+        if "\\" in text or any(ord(c) < 32 or ord(c) == 127 for c in text):
+            raise bad
+        segs = text.split("/")[1:] if text.startswith("/") else None
+        if segs is None or any(s in (".", "..") for s in segs):
+            raise bad
+        if any(s == "" for s in segs[:-1]):
+            raise bad
+        pre = [s for s in self._base_prefix.split("/") if s]
+        if segs[:len(pre)] != pre:
+            raise bad
+        rel = "/" + "/".join(segs[len(pre):])
+        return rel
+
+    def cursor_target(self, cursor):
+        """The relative path a cursor would fetch (raises bad_cursor), for the policy check."""
+        return self._check_cursor_url(_decode_cursor(cursor))
 
     # -- request building --------------------------------------------------------------
     def _build(self, op, args):

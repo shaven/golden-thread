@@ -105,7 +105,16 @@ host. This is a convenience, not a boundary: a process of yours can start its ow
 (`bash -lc`, `script`, a scripted Terminal window). For a boundary set `read_without_unlock`
 false. Terminals that start non-login shells (GNOME Terminal's default) need an unlock for
 these reads. Writes and anything gated need the grant. Consent-tier operations
-(send, merge, delete) still get LOTR's own confirmation, and you can require a Touch ID / Hello
+still get LOTR's own confirmation. Consent is: the curated `send_mail` and `merge_pull`; the raw
+spellings of the same acts (`PUT /repos/o/r/pulls/N/merge` and `/repositories/ID/pulls/N/merge`,
+trailing slash or case aside; Graph `sendMail` and a message's `send`, `forward`, `reply`,
+`replyAll`, `createReply`, `createForward`; Graph `POST /$batch`, which can carry a send); a
+GraphQL mutation naming `mergePullRequest` or `enablePullRequestAutoMerge`; and an HTTP `DELETE`
+on any connection. Any other destructive endpoint on a generic REST connection is only a write
+unless you add `policy.consent` globs to the connection (for example
+`"consent": ["POST /v1/payments/*", "PUT /admin/*"]`, matched as `METHOD /path`).
+Pagination cursors are held in the daemon, bound to the connection, seat and operation, expire
+after ten minutes, and only `call_read` accepts one. and you can require a Touch ID / Hello
 approval per operation instead (`gt_unlock.py policy consent platform --window 300` approves
 consent operations for five minutes, then asks again). Stopping the authority while unlock is
 on needs a fresh factor; `gt_unlock.py lock` never does.
