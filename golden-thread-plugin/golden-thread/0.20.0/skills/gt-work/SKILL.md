@@ -552,9 +552,8 @@ and the same three stop rules as /gt:gt-ingest, with no approval prompt otherwis
    scanned): tell the user the kind and location as printed, never the content, and write
    nothing until they have dealt with it.
 2. **Extract.** With `agent_specialization` on, one `extract-session` subagent per segment, in
-   parallel (`gt_agent_spec.py render extract-session --input path=<segment file>
-   --scratch-run <run> --scratch-unit seg-NN`: a private scratch folder outside the vault,
-   the only place the agent may put intermediate files), spawned as
+   parallel (`gt_agent_spec.py render extract-session --input path=<segment file>`; the
+   agent is read-only, so it gets no scratch folder), spawned as
    `gt_agent_spec.py model extract-session` says (the `gt:extract` agent type with no model
    when it names one and your Agent tool offers it, else its alias as the Agent tool `model`;
    or all segments at once through the `gt:pipeline-stage` workflow, as gt-ingest describes), each

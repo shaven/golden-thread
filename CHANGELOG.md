@@ -390,25 +390,34 @@ passes now (`tests/test_inbox_review2.py`, `tests/test_sandbox_review2.py`,
   Windows, an owner step like the hooks. Plugin-shipped workflows (`workflows/` in a plugin) are
   documented, but the docs name no minimum version: gt relies on the Workflow tool being offered.
 
-- **Each stage agent gets a private scratch folder, outside the vault.** Pipeline stage agents
-  (ingest extract / classify / reconcile / draft, promote verify / generalize / place, gt-work's
-  extract-session) shared the run's folder under the vault's `spool/pipeline/<run>/`: per run,
-  not per agent, inside the vault -- the wrong place for extracted raw material -- and a place
-  sandbox mode denies every write to. New `gt_scratch.py`: one folder per run and unit,
+- **A stage agent that can write gets a private scratch folder, outside the vault.** Pipeline
+  stage agents (ingest extract / classify / reconcile / draft, promote verify / generalize /
+  place, gt-work's extract-session) shared the run's folder under the vault's
+  `spool/pipeline/<run>/`: per run, not per agent, inside the vault -- the wrong place for
+  extracted raw material -- and a place sandbox mode denies every write to. New `gt_scratch.py`:
+  one folder per run and unit,
   `~/.gt-scratch/<run>/<stage>-<unit>/`, every level `0700` (Windows: `%LOCALAPPDATA%\gt-scratch`,
   inheritance removed, owner-only ACL via `icacls`); a symlinked or foreign-owned level is
   refused, never followed or chmod-ed. `gt_agent_spec.py render --scratch-run R --scratch-unit U`
-  and `gt_ingest_pipeline.py workflow-args` (each item now carries `scratch_dir`, and a
-  skill-rendered prompt without a folder gets one) name it in the prompt, and every stage spec
-  says it is the only place for intermediate files; only the agent's result returns, through the
-  packet. A run's scratch is removed when the run finishes (`draft`, or `promote-plan` with
+  and `gt_ingest_pipeline.py workflow-args` (each item carries `scratch_dir`, and a
+  skill-rendered prompt without a folder gets one) name it in the prompt as the only place for
+  intermediate files; only the agent's result returns, through the packet. **Only an agent whose
+  tools can write gets one** (owner, 2026-10-04: "only give them a scratch folder if they
+  actually have write capability"): `gt_agent_spec.WRITE_TOOLS` (Bash, PowerShell, Write, Edit,
+  NotebookEdit) is the one list, checked against each stage spec's `agent.tools`, so today only
+  verify (a shell) qualifies. A read-only stage gets no folder, no scratch text in its prompt or
+  its agent definition, and no `scratch_dir`; `render --scratch-run` on one says so on stderr and
+  carries on, and a stage spec whose `prompt_delta` names a scratch folder fails validation,
+  because the folder comes from the tools, not from spec text. A run's scratch is removed when the run finishes (`draft`, or `promote-plan` with
   nothing waiting) and by the new `gt_ingest_pipeline.py cleanup <run>`; `status` shows it,
   `gt_scratch.py check` exits 1 on a finished or vanished run's leftovers, and `/gt:gt-doctor`
   has a `scratch` row. Sandbox mode adds `~/.gt-scratch` to `sandbox.filesystem.allowWrite`
   (the vault stays write-denied) and takes it out again on `remove`. The stage agents' tools are
-  unchanged -- all but verify are read-only -- so the folder bounds where they may write; it adds
-  no write tool. The base prompt now reads "Do not write, move or delete any file outside the
-  private scratch folder your prompt may name"; the seven agent definitions are regenerated.
+  unchanged; the folder bounds where verify may write and adds no write tool. Verify's base
+  prompt reads "Do not write, move or delete any file outside the private scratch folder your
+  prompt may name"; every read-only agent's still reads "Do not write, move or delete any file";
+  the seven agent definitions are regenerated. An ingest run, whose agents are all read-only,
+  never has scratch; `status`, `cleanup` and the doctor row treat none as normal.
 
 ### Windows, finished; a failed install rolls back; the scheduled jobs keep a working interpreter
 

@@ -702,7 +702,7 @@ nothing of yours. Every key is one the Claude Code documentation names
 <tr>
 <td><code>sandbox.filesystem.allowWrite</code></td>
 <td><code>~/.gt-inbox</code>; <code>~/.gt-scratch</code></td>
-<td>The two writable places. <code>gt_write_queue.py</code> leaves its requests in <code>~/.gt-inbox/queue/</code>. <code>~/.gt-scratch/&lt;run&gt;/&lt;stage&gt;-&lt;unit&gt;/</code> is each pipeline stage agent's private scratch folder (0700 at every level; <code>gt_scratch.py</code>): intermediate files go there instead of the vault spool, nothing reads them back as instructions, and a finished run's folder is removed. Neither is inside the vault, so <code>denyWrite</code> still covers all of it</td>
+<td>The two writable places. <code>gt_write_queue.py</code> leaves its requests in <code>~/.gt-inbox/queue/</code>. <code>~/.gt-scratch/&lt;run&gt;/&lt;stage&gt;-&lt;unit&gt;/</code> is the private scratch folder of a pipeline stage agent whose tools can write (0700 at every level; <code>gt_scratch.py</code>). Which agents qualify is derived from each stage spec's tool list against one list, <code>gt_agent_spec.WRITE_TOOLS</code>; today only verify (a shell) does, and a read-only stage gets no folder and no scratch text in its prompt. Intermediate files go there instead of the vault spool, nothing reads them back as instructions, and a finished run's folder is removed. Neither is inside the vault, so <code>denyWrite</code> still covers all of it</td>
 </tr>
 <tr>
 <td><code>permissions.deny</code></td>

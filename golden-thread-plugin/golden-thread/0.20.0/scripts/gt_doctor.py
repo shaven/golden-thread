@@ -2351,8 +2351,10 @@ def check_scratch(rep, vault):
                 fix="python3 <plugin>/scripts/gt_ingest_pipeline.py cleanup <run>   (each run "
                     "above), or rm -rf the folder")
         return
-    rep.add("scratch", OK, "no scratch left by a finished run (%d run(s) in progress)"
-            % len(runs))
+    # Only a stage whose agent can write gets a folder (gt_agent_spec.WRITE_TOOLS), so most
+    # runs -- every ingest -- never have one: zero is the normal count, not a missing check.
+    rep.add("scratch", OK, "no scratch left by a finished run (%d run(s) in progress hold "
+            "scratch; only stages whose agents can write get any)" % len(runs))
 
 
 def check_sandbox(rep):

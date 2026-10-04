@@ -12,7 +12,9 @@ WHY. A pipeline stage agent (ingest extract / classify / reconcile / draft, prom
 generalize / place, gt-work's extract-session) used to have nowhere of its own for intermediate
 files: the run's spool folder is per RUN, not per agent, and it is INSIDE the vault -- the wrong
 place for extracted raw material, and a place gt sandbox mode denies every write to. Each unit of
-each stage now gets its own folder:
+a stage whose agent CAN write -- a tool in gt_agent_spec.WRITE_TOOLS, decided from the stage
+spec's tool list; today only verify, which has a shell -- now gets its own folder. A read-only
+stage gets none, and its prompt never mentions one (owner, 2026-10-04):
 
     POSIX    ~/.gt-scratch/<run>/<stage>-<unit>/     every level created 0700, owner only
     Windows  %LOCALAPPDATA%\\gt-scratch\\<run>\\<stage>-<unit>\\   inheritance removed, the

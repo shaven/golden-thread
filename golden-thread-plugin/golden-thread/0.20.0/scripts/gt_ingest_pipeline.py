@@ -57,12 +57,15 @@ skill rendered (`--prompt UNIT=FILE`, checked to be a `render` output for that j
 records the workflow's result: each unit checked as `packet` checks it. Units still without a
 packet are what the next `workflow-args` hands out, which is the resume.
 
-SCRATCH FOLDERS (0.20.0). Every agent unit gets a private scratch folder OUTSIDE the vault,
-`~/.gt-scratch/<run>/<stage>-<unit>/` (0700; on Windows under %LOCALAPPDATA% with an owner-only
-ACL; gt_scratch.py), named in its prompt as the only place for intermediate files -- the vault
-spool holds gt's packets and stage files and nothing an agent made. `workflow-args` creates each
-unit's folder and names it in the prompt (`scratch_dir` in the item); `gt_agent_spec.py render
---scratch-run R --scratch-unit U` does the same for an Agent-tool spawn. A run's scratch is removed
+SCRATCH FOLDERS (0.20.0). Every unit of a stage whose agent can WRITE (a tool in
+gt_agent_spec.WRITE_TOOLS -- today only verify, which has a shell) gets a private scratch folder
+OUTSIDE the vault, `~/.gt-scratch/<run>/<stage>-<unit>/` (0700; on Windows under %LOCALAPPDATA%
+with an owner-only ACL; gt_scratch.py), named in its prompt as the only place for intermediate
+files -- the vault spool holds gt's packets and stage files and nothing an agent made. A
+read-only stage gets no folder, no scratch text and no `scratch_dir` (owner, 2026-10-04).
+`workflow-args` creates each writing unit's folder and names it in the prompt (`scratch_dir` in
+the item); `gt_agent_spec.py render --scratch-run R --scratch-unit U` does the same for an
+Agent-tool spawn, and ignores the flags for a read-only stage. A run's scratch, if any, is removed
 when it finishes (`draft` wrote its queue, `promote-plan` reached the owner), and by `cleanup
 <run>` when it is abandoned; `status` shows it, and `gt_scratch.py check` reports a finished or
 vanished run's scratch as a leak.
@@ -587,7 +590,8 @@ def _rendered_by_gt(text, job):
     """A prompt file must be what gt_agent_spec.py render printed for this job: it starts with
     the base prompt and names the job. A cheap check, not a signature; it keeps a mistyped or
     hand-written file from going to an agent as if gt had rendered it."""
-    return text.startswith(specs.BASE_PROMPT) and ("## Your job: %s\n" % job) in text
+    return (text.startswith((specs.BASE_PROMPT, specs.BASE_PROMPT_WRITER))
+            and ("## Your job: %s\n" % job) in text)
 
 
 def cmd_workflow_args(a):
@@ -618,6 +622,9 @@ def _workflow_args(a):
     except SystemExit:
         return fail("no valid spec for '%s'" % job, STOP)
     have = {p["unit"] for p in packets(d, a.stage)}
+    # A scratch folder only for an agent whose tools can write (gt_agent_spec.can_write, from
+    # the spec's tool list): a read-only stage gets no folder, no scratch text, no scratch_dir.
+    writer = specs.can_write(entry["data"])
     todo, refused = [], []
     if a.stage == "extract":
         if a.prompt:
@@ -634,8 +641,9 @@ def _workflow_args(a):
                     k, _, v = args[i + 1].partition("=")
                     inputs[k] = v
             try:
-                text, _info = specs.render(entry["data"], inputs, vault,
-                                           scratch=_scratch_for(a, a.stage, u["unit"]))
+                text, _info = specs.render(
+                    entry["data"], inputs, vault,
+                    scratch=_scratch_for(a, a.stage, u["unit"]) if writer else None)
             except specs.IntakeRefused as exc:
                 refused.append({"unit": u["unit"], "why": clean(exc, 300)})
                 continue
@@ -673,18 +681,20 @@ def _workflow_args(a):
         model = effort = None            # the definition carries them; passing them is noise
     items = []
     for unit, text in todo:
-        sd = _scratch_for(a, a.stage, unit)
+        sd = _scratch_for(a, a.stage, unit) if writer else None
         text = specs.add_scratch(text, sd)            # a skill-rendered prompt may lack it
         pf = os.path.join(d, "prompts", a.stage, unit_slug(unit) + ".md")
         if not a.dry_run:
             os.makedirs(os.path.dirname(pf), exist_ok=True)
             with open(pf, "w", encoding="utf-8", newline="\n") as fh:
                 fh.write(text)
-        items.append({"unit": unit, "label": "%s %s" % (job, unit_slug(unit)),
-                      "prompt_file": pf.replace(os.sep, "/"),
-                      "sha256": hashlib.sha256(text.encode("utf-8")).hexdigest(),
-                      "scratch_dir": sd.replace(os.sep, "/"),
-                      "agent_type": atype, "model": model, "effort": effort})
+        item = {"unit": unit, "label": "%s %s" % (job, unit_slug(unit)),
+                "prompt_file": pf.replace(os.sep, "/"),
+                "sha256": hashlib.sha256(text.encode("utf-8")).hexdigest(),
+                "agent_type": atype, "model": model, "effort": effort}
+        if sd:
+            item["scratch_dir"] = sd.replace(os.sep, "/")
+        items.append(item)
     out = {"workflow": WORKFLOW, "run": a.run, "run_dir": d.replace(os.sep, "/"),
            "stage": a.stage, "job_type": job,
            "schema": specs.json_schema(entry["data"]), "items": items, "refused": refused,

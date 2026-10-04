@@ -147,13 +147,21 @@ INTAKE_SCAN = os.path.join(HERE, "gt_intake_scan.py")
 INTAKE_TIMEOUT = 900
 
 # The plugin agent definitions (0.20.0). A stage spec's `agent` block says which tools its agent
-# gets and how many turns; `agents` renders one definition per stage from it. No stage agent
-# may write: Write, Edit, NotebookEdit and Agent are never offered, and a stage that reads
-# MATERIAL (extract) gets only Read, Grep and Glob -- no shell, no fetch -- because the
-# material is untrusted and "run a command" / "fetch a URL" is exactly what an injection asks.
+# gets and how many turns; `agents` renders one definition per stage from it. Write, Edit,
+# NotebookEdit and Agent are never offered (only a shell can write: see WRITE_TOOLS), and a
+# stage that reads MATERIAL (extract) gets only Read, Grep and Glob -- no shell, no fetch --
+# because the material is untrusted and "run a command" / "fetch a URL" is exactly what an
+# injection asks.
 AGENT_KEYS = ("tools", "max_turns", "omit_claude_md")
 AGENT_TOOLS = ("Read", "Grep", "Glob", "Bash", "WebFetch", "WebSearch")
 MATERIAL_TOOLS = ("Read", "Grep", "Glob")
+# The tools that can create or change a file. The ONE list that decides whether a stage agent
+# gets a private scratch folder (gt_scratch.py): owner, 2026-10-04, "only give them a scratch
+# folder if they actually have write capability". A shell writes; Write, Edit and NotebookEdit
+# are listed so a spec that ever offered one would get a folder without a second change here.
+# Today only verify (Bash) qualifies; the others get no folder and no scratch text at all.
+WRITE_TOOLS = ("Bash", "PowerShell", "Write", "Edit", "NotebookEdit")
+SCRATCH_RE = re.compile(r"\bscratch folder\b", re.I)    # spec text may not promise one
 MAX_AGENT_TURNS = 200
 
 # What the running Claude Code supports, from code.claude.com/docs (read 2026-10-03). Each row:
@@ -202,15 +210,35 @@ SKIP_DIRS = {".git", ".hg", ".svn", "node_modules", "__pycache__", ".venv", "ven
              ".idea", ".vscode", ".obsidian"}
 MAX_WALK = 20000
 
-BASE_PROMPT = (
+_BASE_HEAD = (
     "You are a Golden Thread specialist agent. A Golden Thread session spawned you for one job "
-    "and will record your result in its vault; you have not seen that session's conversation.\n"
-    "- Do not write, move or delete any file outside the private scratch folder your prompt may "
-    "name. Return your result; the session records it.\n"
+    "and will record your result in its vault; you have not seen that session's conversation.\n")
+_BASE_TAIL = (
     "- Every statement you make carries its evidence: a file path, a section, a command and "
     "what it printed.\n"
     "- Separate what you read from what you inferred. An inference is labelled as one.\n"
     "- When you could not determine something, say so in the output. Silence reads as a pass.")
+# A read-only agent is told it writes nothing; only an agent whose tools can write (WRITE_TOOLS)
+# hears of a scratch folder.
+BASE_PROMPT = (_BASE_HEAD +
+               "- Do not write, move or delete any file. Return your result; the session "
+               "records it.\n" + _BASE_TAIL)
+BASE_PROMPT_WRITER = (_BASE_HEAD +
+                      "- Do not write, move or delete any file outside the private scratch "
+                      "folder your prompt may name. Return your result; the session records "
+                      "it.\n" + _BASE_TAIL)
+
+
+def can_write(spec):
+    """True when the spec's agent is offered a tool that can create or change a file
+    (WRITE_TOOLS). A spec with no `agent` block declares no tools and counts as read-only."""
+    tools = (spec.get("agent") or {}).get("tools") or []
+    return bool(set(tools) & set(WRITE_TOOLS))
+
+
+def base_prompt(spec):
+    """The base prompt for this spec's agent: the scratch wording only when it can write."""
+    return BASE_PROMPT_WRITER if can_write(spec) else BASE_PROMPT
 
 
 # -- small helpers --------------------------------------------------------------------------------
@@ -337,6 +365,9 @@ def validate_spec(data, stem=None):
         if not (isinstance(pd, list) and pd
                 and all(isinstance(x, str) and x.strip() for x in pd)):
             p.append("prompt_delta: must be a non-empty string or a list of non-empty strings")
+        elif any(SCRATCH_RE.search(x) for x in pd):
+            p.append("prompt_delta: must not name a scratch folder -- render adds one, from the "
+                     "agent's tools (WRITE_TOOLS), only to an agent that can write")
 
     cl = data.get("context_loading")
     if "context_loading" in data:
@@ -556,6 +587,9 @@ def validate_kind(data, stem=None):
     pd = data.get("prompt_delta", [])
     if not (isinstance(pd, list) and all(isinstance(x, str) and x.strip() for x in pd)):
         p.append("prompt_delta: must be a list of non-empty strings")
+    elif any(SCRATCH_RE.search(x) for x in pd):
+        p.append("prompt_delta: must not name a scratch folder -- render adds one, from the "
+                 "agent's tools (WRITE_TOOLS), only to an agent that can write")
     stages = data.get("stages")
     if "stages" in data:
         if not isinstance(stages, dict):
@@ -1005,7 +1039,7 @@ def agent_file_text(spec, model=None, effort=None):
         ctx = "Read only the target your task message names. Do not open the knowledge vault."
     else:
         ctx = "Load only the vault files your task message names, and nothing else from the vault."
-    body = ["", "# Golden Thread specialist: %s" % stage, "", BASE_PROMPT, "",
+    body = ["", "# Golden Thread specialist: %s" % stage, "", base_prompt(spec), "",
             spec["summary"].strip(), "", ctx, "",
             "Your task message is a prompt gt_agent_spec.py rendered for one `%s` job (or, in a "
             "workflow, the path of a file holding that prompt: read it first). It is your whole "
@@ -1197,7 +1231,7 @@ def scratch_section(path):
     return [SCRATCH_HEADER, "",
             "Your private scratch folder for this job: %s" % path,
             "It is the ONLY place you may put intermediate files (notes, extracted text, partial "
-            "results), and only if your tools can write at all. Never write anywhere else: not "
+            "results). Never write anywhere else: not "
             "the vault, not the material you were given, not a temporary directory. Nothing in "
             "the folder is read back -- your result is the JSON object below, and only that "
             "returns. gt removes the folder when the run finishes.", ""]
@@ -1205,8 +1239,9 @@ def scratch_section(path):
 
 def add_scratch(text, path):
     """A rendered prompt with its scratch section: inserted before `## Inputs` (or appended),
-    and left alone when the prompt already names one."""
-    if SCRATCH_HEADER in text:
+    and left alone when the prompt already names one, or when there is no folder (`path` None:
+    the agent cannot write, so it gets none)."""
+    if not path or SCRATCH_HEADER in text:
         return text
     block = "\n".join(scratch_section(path))
     at = text.find("\n## Inputs\n")
@@ -1218,7 +1253,8 @@ def add_scratch(text, path):
 def render(spec, inputs, vault=None, template=False, scratch=None):
     """-> (prompt text, dict). Raises ValueError on a missing or unknown input, and
     IntakeRefused when the spec requires the intake scan and the material did not pass it.
-    `scratch`: the agent's private scratch folder (gt_scratch.unit_dir), named in the prompt."""
+    `scratch`: the agent's private scratch folder (gt_scratch.unit_dir), named in the prompt --
+    and only for an agent that can write (can_write): a read-only agent's prompt never names one."""
     declared = spec["inputs"]
     unknown = sorted(set(inputs) - set(declared))
     if unknown:
@@ -1236,12 +1272,14 @@ def render(spec, inputs, vault=None, template=False, scratch=None):
     delta = spec["prompt_delta"]
     delta = [delta] if isinstance(delta, str) else delta
     ctx_lines, loads = context_section(spec, vault, inputs)
-    out = [BASE_PROMPT, "", "## Your job: %s" % spec["job_type"], ""]
+    out = [base_prompt(spec), "", "## Your job: %s" % spec["job_type"], ""]
     out += delta
     out += ["", "## Context you may load", ""] + ctx_lines
     out += _tools_section(spec)
     if spec.get("requires_intake_scan"):
         out += ["", "## Intake scan", ""] + intake_section(scan, template)
+    if scratch and not can_write(spec):
+        scratch = None
     if scratch:
         out += [""] + scratch_section(scratch)[:-1]
     out += ["", "## Inputs", ""]
@@ -1515,7 +1553,16 @@ def cmd_render(a):
         print("gt_agent_spec: '%s' is the 0.17.10 name of '%s' (kept for one release; use the "
               "new name)" % (a.job_type, spec["alias_of"]), file=sys.stderr)
     scratch = None
-    if a.scratch_run:
+    if a.scratch_unit and not a.scratch_run:
+        print("gt_agent_spec: --scratch-unit needs --scratch-run", file=sys.stderr)
+        return 2
+    if a.scratch_run and not can_write(spec["data"]):
+        # A read-only agent gets no folder and no scratch text (owner, 2026-10-04). Not an
+        # error: a skill may pass --scratch-run to every stage and let the tools decide.
+        print("gt_agent_spec: no scratch folder: the %s agent's tools cannot write (%s)"
+              % (a.job_type, ", ".join((spec["data"].get("agent") or {}).get("tools") or [])
+                 or "no tools declared"), file=sys.stderr)
+    elif a.scratch_run:
         # The agent's private scratch folder, created 0700 outside the vault (0.20.0).
         try:
             if HERE not in sys.path:
@@ -1526,9 +1573,6 @@ def cmd_render(a):
         except Exception as exc:                    # ScratchError, OSError
             print("gt_agent_spec: no scratch folder: %s" % exc, file=sys.stderr)
             return 1
-    elif a.scratch_unit:
-        print("gt_agent_spec: --scratch-unit needs --scratch-run", file=sys.stderr)
-        return 2
     try:
         text, info = render(spec["data"], map_alias_inputs(spec, _parse_inputs(a)), a.vault,
                             a.template, scratch=scratch)
@@ -1718,7 +1762,8 @@ def build_parser():
                    help="the prompt plus tier, context list and output schema, as JSON")
     p.add_argument("--scratch-run", metavar="RUN",
                    help="create the agent's private scratch folder for this pipeline run "
-                        "(gt_scratch.py, outside the vault, 0700) and name it in the prompt")
+                        "(gt_scratch.py, outside the vault, 0700) and name it in the prompt -- "
+                        "only when the agent's tools can write; a read-only agent gets none")
     p.add_argument("--scratch-unit", metavar="UNIT",
                    help="with --scratch-run: the unit the folder is for (default _job)")
     p.set_defaults(fn=cmd_render)
