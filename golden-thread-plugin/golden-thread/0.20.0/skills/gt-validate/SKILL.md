@@ -6,6 +6,8 @@ model_intent: deep
 
 # Golden Thread Validate
 
+**Under gt sandbox mode (preview)** (the session-start line says SANDBOX MODE): this skill's shell steps are refused — each refused tool prints one line with the exact command. Instead, read with `vault_read` / `vault_search` / `vault_list` and record through `vault_queue_write`; ask the user to run the `gt_log` entry from a terminal. With sandbox mode off (the default) nothing changes.
+
 Verify a claim by re-deriving it, not by reviewing it.
 
 ## The rule this skill exists to enforce

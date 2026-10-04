@@ -31,12 +31,16 @@ except Exception:
     no_objection()
 
 tool = payload.get("tool_name") or ""
-if tool not in ("Write", "Edit", "NotebookEdit", "MultiEdit", "Bash"):
+# PowerShell (0.20.1, M10): Claude Code's PowerShell tool on Windows is a shell like Bash --
+# `>>`, Set-Content and Out-File into the vault went through unseen, a side door round a rule
+# whose enforcement is "validated".
+SHELLS = ("Bash", "PowerShell")
+if tool not in ("Write", "Edit", "NotebookEdit", "MultiEdit") + SHELLS:
     no_objection()
 
 ti = payload.get("tool_input") or {}
 target = ti.get("file_path") or ti.get("notebook_path") or ""
-if tool != "Bash" and not target:
+if tool not in SHELLS and not target:
     no_objection()
 
 try:
@@ -167,16 +171,279 @@ def bash_write_targets(cmd, cwd=None):
     return [p for p in out if p]
 
 
+# ------------------------------------------------------------------ PowerShell (0.20.1, M10)
+# The same contract as bash_write_targets: the shapes a guard can read without guessing, and no
+# objection to anything it cannot parse. Covered: the redirections (`>`, `>>`, `2>`, `*>>`, ...),
+# Set-Content / Add-Content / Out-File / Tee-Object, New-Item (a file), Copy-Item / Move-Item
+# (the destination), the .NET writers ([IO.File]::WriteAllText and kin, StreamWriter), and the
+# common aliases; Set-Location / cd / Push-Location are followed. A path built from a variable
+# or a subexpression is unknowable and draws no objection.
+_PS_WRITERS = {"set-content", "sc", "add-content", "ac", "out-file", "tee-object", "tee"}
+_PS_NEW = {"new-item", "ni"}
+_PS_COPY = {"copy-item", "copy", "cpi", "cp", "move-item", "move", "mi", "mv"}
+_PS_CD = {"set-location", "sl", "cd", "chdir", "push-location", "pushd"}
+_PS_SWITCHES = {"append", "force", "nonewline", "passthru", "noclobber", "confirm", "whatif",
+                "asbytestream", "recurse", "container", "verbose", "debug", "wait"}
+_PS_DOTNET = re.compile(
+    r"\[(?:System\.)?IO\.File\]::(WriteAll(?:Text|Lines|Bytes)|AppendAll(?:Text|Lines)|"
+    r"Create(?:Text)?|AppendText|OpenWrite|Copy|Move|Replace)\s*\((.*?)\)", re.I | re.S)
+_PS_WRITER_NEW = re.compile(
+    r"(?:\[(?:System\.)?IO\.StreamWriter\]::new|New-Object\s+(?:System\.)?IO\.StreamWriter)"
+    r"\s*\(?\s*('(?:[^']|'')*'|\"[^\"$`]*\")", re.I)
+_PS_LITERAL = re.compile(r"\s*('(?:[^']|'')*'|\"[^\"$`]*\")\s*")
+
+
+def _ps_tokens(cmd):
+    """-> [(kind, text, unknowable)]: kind "w" a word, "s" a separator, "r" a redirection
+    operator. Quotes: '...' literal ('' is a quote), "..." expands $ (so a $ inside makes the
+    word unknowable), ` escapes. Raises ValueError on an unterminated quote."""
+    out, i, n = [], 0, len(cmd)
+    word, var, has = [], False, False
+
+    def end():
+        nonlocal word, var, has
+        if has:
+            out.append(("w", "".join(word), var))
+        word, var, has = [], False, False
+    while i < n:
+        c = cmd[i]
+        if c in " \t\r":
+            end()
+        elif c in "\n;|(){}":
+            end()
+            out.append(("s", c, False))
+        elif c == "&":
+            end()
+            if cmd[i:i + 2] == "&&":
+                i += 1
+            out.append(("s", "&", False))
+        elif c == "#" and not has:
+            while i < n and cmd[i] != "\n":
+                i += 1
+            continue
+        elif c == ">" or (c in "0123456789*" and not has and cmd[i + 1:i + 2] == ">"):
+            end()
+            j = i + 1 if c != ">" else i
+            j += 1
+            if cmd[j:j + 1] == ">":
+                j += 1
+            if cmd[j:j + 1] == "&":                      # 2>&1: a stream merge, not a file
+                j += 2
+                i = j
+                continue
+            out.append(("r", cmd[i:j], False))
+            i = j
+            continue
+        elif c == "'":
+            j = i + 1
+            buf = []
+            while True:
+                if j >= n:
+                    raise ValueError("unterminated '")
+                if cmd[j] == "'":
+                    if cmd[j + 1:j + 2] == "'":
+                        buf.append("'")
+                        j += 2
+                        continue
+                    break
+                buf.append(cmd[j])
+                j += 1
+            word += buf
+            has = True
+            i = j
+        elif c == '"':
+            j = i + 1
+            buf = []
+            while True:
+                if j >= n:
+                    raise ValueError('unterminated "')
+                if cmd[j] == "`" and j + 1 < n:
+                    buf.append(cmd[j + 1])
+                    j += 2
+                    continue
+                if cmd[j] == '"':
+                    break
+                if cmd[j] == "$":
+                    var = True
+                buf.append(cmd[j])
+                j += 1
+            word += buf
+            has = True
+            i = j
+        elif c == "`" and i + 1 < n:
+            word.append(cmd[i + 1])
+            has = True
+            i += 1
+        else:
+            if c == "$" or c == "@":
+                var = True
+            word.append(c)
+            has = True
+        i += 1
+    end()
+    return out
+
+
+def _ps_literal(arg):
+    m = _PS_LITERAL.fullmatch(arg)
+    if not m:
+        return None
+    a = m.group(1)
+    return a[1:-1].replace("''", "'") if a[0] == "'" else a[1:-1]
+
+
+def powershell_write_targets(cmd, cwd=None):
+    """Absolute paths a PowerShell command visibly writes (see the block comment above)."""
+    here = cwd or os.getcwd()
+
+    def resolve(word, unknowable=False):
+        if unknowable or not word or "$" in word:
+            return None
+        p = re.sub(r"^(?:Microsoft\.PowerShell\.Core\\)?FileSystem::", "", word, flags=re.I)
+        if os.name != "nt":
+            p = p.replace("\\", "/")                     # pwsh on Linux/macOS takes both
+        p = os.path.expanduser(p)
+        if os.path.isabs(p):
+            return p
+        return os.path.join(here, p) if here else None
+
+    out = []
+    for m in _PS_DOTNET.finditer(cmd):
+        args, depth, cur, q = [], 0, [], None
+        for ch in m.group(2):                            # split the call's arguments on ","
+            if q:
+                cur.append(ch)
+                if ch == q:
+                    q = None
+            elif ch in "'\"":
+                q = ch
+                cur.append(ch)
+            elif ch == "," and depth == 0:
+                args.append("".join(cur))
+                cur = []
+            else:
+                depth += ch in "([{"
+                depth -= ch in ")]}"
+                cur.append(ch)
+        args.append("".join(cur))
+        idx = 1 if m.group(1).lower() in ("copy", "move", "replace") else 0
+        if idx < len(args):
+            lit = _ps_literal(args[idx])
+            if lit is not None:
+                out.append(resolve(lit))
+    for m in _PS_WRITER_NEW.finditer(cmd):
+        lit = _ps_literal(m.group(1))
+        if lit is not None:
+            out.append(resolve(lit))
+    try:
+        toks = _ps_tokens(cmd)
+    except ValueError:
+        return [p for p in out if p]
+    segments = [[]]
+    for t in toks:
+        if t[0] == "s":
+            segments.append([])
+        else:
+            segments[-1].append(t)
+    for seg in segments:
+        words, i = [], 0
+        while i < len(seg):
+            kind, text, unk = seg[i]
+            if kind == "r":
+                if i + 1 < len(seg) and seg[i + 1][0] == "w":
+                    out.append(resolve(seg[i + 1][1], seg[i + 1][2]))
+                    i += 2
+                    continue
+                i += 1
+                continue
+            words.append((text, unk))
+            i += 1
+        if not words:
+            continue
+        head = re.sub(r"^.*\\", "", words[0][0]).lower()  # Module\Cmdlet -> cmdlet
+        params, pos, j = {}, [], 1
+        while j < len(words):
+            w, unk = words[j]
+            if w.startswith("-") and len(w) > 1 and not unk and re.match(r"^-[A-Za-z]", w):
+                name, _, val = w[1:].partition(":")
+                name = name.lower()
+                if val:
+                    params[name] = (val, False)
+                elif name in _PS_SWITCHES:
+                    pass
+                elif j + 1 < len(words):
+                    params[name] = words[j + 1]
+                    j += 1
+            else:
+                pos.append((w, unk))
+            j += 1
+
+        def param(*names, minlen=3):
+            for k, v in params.items():
+                if k in names or (len(k) >= minlen and any(n.startswith(k) for n in names)):
+                    return v
+            return None
+        if head in _PS_CD:
+            v = param("path", "literalpath", "lp") or (pos[0] if pos else None)
+            here = None if v is None else resolve(v[0], v[1])
+        elif head in _PS_WRITERS:
+            v = param("path", "literalpath", "filepath", "pspath", "lp") or \
+                (pos[0] if pos else None)
+            if v:
+                out.append(resolve(v[0], v[1]))
+        elif head in _PS_NEW:
+            kind = param("itemtype", "type", minlen=2)
+            if kind and kind[0].lower().startswith(("dir", "sym", "junc", "hard")):
+                continue
+            v = param("path", "literalpath", "lp") or (pos[0] if pos else None)
+            name = param("name")
+            if v and name:
+                if v[1] or name[1]:
+                    continue
+                out.append(resolve(os.path.join(v[0], name[0])))
+            elif name:
+                out.append(resolve(name[0], name[1]))
+            elif v:
+                out.append(resolve(v[0], v[1]))
+        elif head in _PS_COPY:
+            v = param("destination") or (pos[1] if len(pos) > 1 else None)
+            if v:
+                out.append(resolve(v[0], v[1]))
+    return [p for p in out if p]
+
+
+def _sandbox_mode_on():
+    """gt sandbox mode on in vault-config.json, on a platform with a sandbox (0.20.1)."""
+    if os.name == "nt":
+        return False
+    try:
+        with open(os.path.join(os.path.expanduser("~"), ".claude", "vault-config.json"),
+                  encoding="utf-8") as fh:
+            v = json.load(fh).get("sandbox_mode")
+        return isinstance(v, str) and v.strip().lower() == "on"
+    except Exception:
+        return False
+
+
 def deny_queue(rel_q, how):
     q = f"{vault}/Projects/golden-thread/tools"
+    # Real paths, not `<gt scripts>` (0.20.1): HERE is the hooks dir, which holds both.
+    if _sandbox_mode_on():
+        # Under gt sandbox mode the shell cannot run the drain (it writes the vault): the MCP
+        # tool queues AND applies, outside the sandbox (0.20.1, B4).
+        route = (f"Queue it through the gt-vault MCP tool vault_queue_write (path \"{rel_q}\",\n"
+                 f"op append|replace-section|create): the broker applies it at once, outside the\n"
+                 f"sandbox. gt sandbox mode refuses the shell route, including `gt_broker.py drain`.\n\n")
+    else:
+        route = (f"Queue the write instead, then apply the queue:\n"
+                 f"  python3 \"{HERE}/gt_write_queue.py\" --vault \"{vault}\" --path \"{rel_q}\" \\\n"
+                 f"      --op append|replace-section|create [--section \"<heading>\"] --content-file <file>\n"
+                 f"  python3 \"{HERE}/gt_broker.py\" drain --vault \"{vault}\"\n\n")
     reason = (
         f"BLOCKED by Core rule core_concurrent_session_claim (queue first).\n\n"
         f"  {rel_q}\n  is vault content, and vault content is written only through the write queue"
         f" ({how} was refused).\n\n"
-        f"Queue the write instead, then apply the queue:\n"
-        f"  python3 <gt scripts>/gt_write_queue.py --vault \"{vault}\" --path \"{rel_q}\" \\\n"
-        f"      --op append|replace-section|create [--section \"<heading>\"] --content-file <file>\n"
-        f"  python3 <gt scripts>/gt_broker.py drain --vault \"{vault}\"\n\n"
+        + route +
         f"The broker holds a write another live session has claimed, removes duplicates, and sends\n"
         f"conflicts and every design.md / global-memory write to the owner for review.\n"
         f"Generated files have their own tools: log.md -> {q}/gt_log.py add, decisions.md ->\n"
@@ -189,20 +456,21 @@ def deny_queue(rel_q, how):
 
 if vault:
     try:
-        if tool == "Bash":
+        if tool in SHELLS:
             cmd = ti.get("command") or ""
-            for t in bash_write_targets(cmd, payload.get("cwd")):
+            finder = bash_write_targets if tool == "Bash" else powershell_write_targets
+            for t in finder(cmd, payload.get("cwd")):
                 rq = queue_governed(vault, t, payload.get("cwd"))
                 if rq:
-                    deny_queue(rq, "a shell write")
-            no_objection()          # Bash never reaches the claim check below
+                    deny_queue(rq, "a shell write" if tool == "Bash" else "a PowerShell write")
+            no_objection()          # a shell never reaches the claim check below
         rq = queue_governed(vault, target, payload.get("cwd"))
         if rq:
             deny_queue(rq, f"a direct {tool}")
     except SystemExit:
         raise
     except Exception:
-        if tool == "Bash":
+        if tool in SHELLS:
             no_objection()
 
 # WHICH MACHINE, by id and not by name (0.17.2). This compared `host` to

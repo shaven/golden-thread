@@ -106,6 +106,22 @@ class ToolList(VaultFixture):
         self.assertEqual(self.tools(), [])
 
 
+class OffReason(VaultFixture):
+    """0.20.1 (WORDING): "off (the vault_mcp setting)" blamed a setting still at its default;
+    with vault_mcp auto the cause is sandbox_mode being off, and the message says so."""
+
+    def instructions(self):
+        out = self.rpc({"jsonrpc": "2.0", "id": 1, "method": "initialize", "params": {}})
+        return out[1]["result"]["instructions"]
+
+    def test_the_off_message_names_the_setting_that_decides(self):
+        self.config(vault_path=str(self.vault))                 # sandbox off, vault_mcp auto
+        msg = self.instructions()
+        self.assertIn("vault_mcp auto follows sandbox_mode, which is off", msg)
+        self.config(vault_path=str(self.vault), sandbox_mode="on", vault_mcp="off")
+        self.assertIn("vault_mcp is off", self.instructions())
+
+
 class Reads(VaultFixture):
     def test_read_returns_level_and_supersession(self):
         r = self.call("vault_read", {"path": "Knowledge/Old Quokka.md"})

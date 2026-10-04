@@ -38,6 +38,7 @@ Minute-resolution timestamps collide often, so the session id is doing real work
 the second key, and the index preserves a session's own order.
 """
 import hashlib
+import json
 import os
 import re
 import sys
@@ -115,6 +116,24 @@ def spool_dir(vault, kind, project=None):
     return d
 
 
+def _python():
+    """The interpreter to name in a command: the one install.sh recorded, else this one."""
+    try:
+        with open(os.path.join(os.path.expanduser("~"), ".claude", "golden-thread",
+                               "interpreter.json"), encoding="utf-8") as fh:
+            p = json.load(fh).get("python")
+        if isinstance(p, str) and p:
+            return _q(p)
+    except Exception:                                   # noqa: BLE001
+        pass
+    return _q(sys.executable or "python3")
+
+
+def _q(s):
+    import shlex
+    return s if os.name == "nt" else shlex.quote(s)
+
+
 def _load_safe_write():
     """The safe_write module sitting beside us, or None in a vault that predates it.
 
@@ -164,11 +183,16 @@ def _safe_write(target, text):
         res = m.write(str(target), text, "a" if target.exists() else "w")
         wrote, strategy = (res if isinstance(res, tuple) else (res, "unknown"))
         if os.path.realpath(str(wrote)) != os.path.realpath(str(target)):
-            raise OSError(
+            # The replay command with real paths (0.20.1): "python3 safe_write.py replay" named
+            # neither an interpreter that can write here nor where safe_write.py lives.
+            sw = Path(__file__).resolve().parent / "safe_write.py"
+            err = OSError(
                 "gt_spool: the entry did NOT reach %s -- safe_write fell back to the %s "
                 "strategy and left it at %s. Nothing is spooled until that move lands; "
-                "run `python3 safe_write.py replay` once the destination is writable."
-                % (target, strategy, wrote))
+                "once the destination is writable, run: %s %s replay"
+                % (target, strategy, wrote, _python(), _q(str(sw))))
+            err.gt_line = str(err)          # gt_errors.run prints it as the one line
+            raise err
         return strategy
     with open(target, "a", encoding="utf-8", newline="\n") as fh:
         fh.write(text)
@@ -309,6 +333,16 @@ def refusal_line(path, exc, python=None):
     replacing the vault's log.md on 2026-10-03 where /usr/bin/python3 did not. The same
     wording as gt_write_probe.eperm_message, kept here because this file runs from the vault
     without gt's hooks dir on its path."""
+    try:
+        _here = os.path.dirname(os.path.abspath(__file__))
+        if _here not in sys.path:
+            sys.path.insert(0, _here)
+        import gt_errors as _gte
+        if _gte.in_sandbox():
+            # gt sandbox mode (0.20.1): a route, not a permission -- never Full Disk Access.
+            return _gte.sandbox_line(path, exc)
+    except ImportError:
+        pass
     import errno as _errno
     import json as _json
     python = python or sys.executable or "python3"
@@ -450,7 +484,17 @@ def write_if_changed(target, text, expect=None):
         mode = target.stat().st_mode & 0o7777
     except OSError:
         mode = None
-    fd, tmp = tempfile.mkstemp(dir=str(target.parent), prefix=target.name + ".", suffix=".gt-tmp")
+    try:
+        fd, tmp = tempfile.mkstemp(dir=str(target.parent), prefix=target.name + ".",
+                                   suffix=".gt-tmp")
+    except OSError as exc:
+        # The temp sibling is the first write, so a refused folder fails HERE -- as the same
+        # one-line WriteRefused the replace below raises, naming the target (0.20.1).
+        if is_refusal(exc):
+            err = WriteRefused(exc.errno, refusal_line(target, exc))
+            err.gt_line = err.strerror
+            raise err from exc
+        raise
     try:
         with os.fdopen(fd, "wb") as fh:
             fh.write(new)
@@ -465,7 +509,9 @@ def write_if_changed(target, text, expect=None):
         except OSError:
             pass
         if is_refusal(exc):
-            raise WriteRefused(exc.errno, refusal_line(target, exc)) from exc
+            err = WriteRefused(exc.errno, refusal_line(target, exc))
+            err.gt_line = err.strerror
+            raise err from exc
         raise
     return True
 

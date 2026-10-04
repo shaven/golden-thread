@@ -2386,7 +2386,8 @@ def check_sandbox(rep):
     mode = c.get("mode")
     fix = "python3 %s apply   (from a terminal)" % (INSTALLED_HOOKS / "gt_sandbox.py")
     if c["state"] == "off":
-        rep.add("sandbox", NOTE, "sandbox mode: off -- Claude's shell and file tools can read and "
+        rep.add("sandbox", NOTE, "sandbox mode: off (a preview in 0.20.1) -- Claude's shell and "
+                "file tools can read and "
                 "write the vault and gt's state. gt_settings.py set sandbox_mode on fences them "
                 "(SECURITY.md, 'gt sandbox mode')")
         return
@@ -2395,17 +2396,19 @@ def check_sandbox(rep):
                 "settings.json" % len(c["stale"]), "\n".join(c["stale"][:20]),
                 fix="python3 %s remove" % (INSTALLED_HOOKS / "gt_sandbox.py"))
         return
-    detail = "\n".join(c["problems"] + c["missing"][:20] + c["stale"][:10] + c["notes"])
+    detail = "\n".join(c["problems"] + c["missing"][:20] + c["stale"][:10] + c["notes"]
+                       + ["preview: " + getattr(gt_sandbox, "PREVIEW_LIMITS", "")])
+    mode_l = "%s; preview" % mode               # 0.20.1: sandbox mode is a preview
     if c["state"] != "ok":
         rep.add("sandbox", FAIL, "sandbox mode: ON (%s), settings drifted -- %d missing, %d "
-                "stale, %d override(s)" % (mode, len(c["missing"]), len(c["stale"]),
+                "stale, %d override(s)" % (mode_l, len(c["missing"]), len(c["stale"]),
                                           len(c["problems"])), detail, fix=fix)
         return
     if not gt_sandbox.os_sandbox_supported(mode):
         rep.add("sandbox", WARN, "sandbox mode: ON (%s) -- permission rules only: friction, not "
-                "a boundary (no Claude Code sandbox on this platform)" % mode, detail)
+                "a boundary (no Claude Code sandbox on this platform)" % mode_l, detail)
         return
-    rep.add("sandbox", OK, "sandbox mode: ON (%s) -- %s" % (mode, gt_sandbox.ENFORCED[mode]),
+    rep.add("sandbox", OK, "sandbox mode: ON (%s) -- %s" % (mode_l, gt_sandbox.ENFORCED[mode]),
             detail)
 
 

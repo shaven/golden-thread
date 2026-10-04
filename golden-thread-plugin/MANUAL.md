@@ -2181,10 +2181,20 @@ is reached only through gt: a read-only MCP server and the write queue. `SECURIT
 full account — every key written, the per-platform matrix, what it does not stop. This is the
 reference.
 
+**A preview in 0.20.1.** The fence holds; the skills have not all moved inside it yet.
+`/gt:gt-open`, `/gt:gt-query` and `/gt:gt-work`'s writes use the gt-vault MCP tools, and
+`gt_write_queue.py` leaves its request in the inbox. The other skills' shell steps —
+`gt_log.py add`, `gt_tasks.py`, `gt_task.py`, `gt_adr.py allocate`, `gt_closeout.py`,
+`gt_lint.py`, `gt_promote_detect.py`, `vault_init.py`, `gt_broker.py drain` — are refused, and
+each prints **one line**: what was refused, why, and the next step (the MCP tool, such as
+`vault_queue_drain`, or the exact command to run in a terminal, with real paths). No traceback,
+no Full Disk Access advice (that is for a different refusal), nothing half-written. Each skill
+carries a note saying what to use instead. Full skill support is planned for 0.20.2.
+
 | Platform | What is enforced |
 |---|---|
 | macOS | Claude Code's sandbox (Seatbelt, OS-enforced) around Bash / PowerShell / Monitor and every child, plus permission rules on the file tools |
-| Linux, WSL2 | The same with bubblewrap; needs `bubblewrap` and `socat` — gt refuses to switch on without them, because `failIfUnavailable` would stop Claude Code starting |
+| Linux, WSL2 | The same with bubblewrap; needs `bubblewrap` and `socat` that **run** (gt executes `bwrap --ro-bind / / true` and `socat -V`, 0.20.1) — gt refuses to switch on otherwise, before gt unlock asks for a code and with the fix (package command, or the AppArmor setting behind “setting up uid map: Permission denied”), because `failIfUnavailable` would stop Claude Code starting |
 | Native Windows | **Permission rules on the file tools only** — no Claude Code sandbox exists there. Friction, not a boundary |
 
 ### `gt_sandbox.py`
@@ -2194,12 +2204,13 @@ inside the sandbox `~/.claude` is write-protected):
 
 | Command | Does | Exit |
 |---|---|---|
-| `status [--json]` | on/off, the platform and what it enforces there, the vault-read setting, whether the MCP tools are offered, the inbox path, the drift state | `0` |
+| `status [--json]` | on/off, the platform and what it enforces there, the vault-read setting (while off it says reads are allowed), whether the MCP tools are offered and, if not, which setting decides, the inbox path, the drift state | `0` |
 | `plan [--json]` | the exact keys and entries it would write; writes nothing | `0` · `1` no vault |
-| `apply [--force]` | merges them into `~/.claude/settings.json` (backup first, atomic write), records what it added in `~/.claude/golden-thread/sandbox/state.json`, takes out entries it added earlier that are no longer wanted (a moved vault, an unlocked folder). `--force` writes them on Linux without bubblewrap | `1` refused |
+| `apply [--force]` | **only while `sandbox_mode` is on** (0.20.1: run by itself with the setting off it is refused with the `gt_settings.py set sandbox_mode on` command — the setting is the one way on, and it asks gt unlock). Merges the entries into `~/.claude/settings.json` (backup first, atomic write), records what it added in `~/.claude/golden-thread/sandbox/state.json`, takes out entries it added earlier that are no longer wanted (a moved vault, an unlocked folder) — the repair for drift. `--force` writes them on a Linux machine whose bubblewrap or socat cannot run, **without** `failIfUnavailable` | `1` refused |
 | `remove` | takes out exactly what it added; restores each boolean it changed unless you changed it since | `0` |
 | `check [--json]` | drift: anything missing, stale, or overridden — by managed settings, or by any key that loosens the sandbox in your user settings or the current project's `.claude/settings.json` / `.claude/settings.local.json` (working directory and git root): `enabled false`, `allowUnsandboxedCommands true`, `excludedCommands`, `ignoreViolations`, Unix-socket / Mach-lookup entries, the `enableWeaker…` switches, `additionalDirectories`, an allow entry re-opening a denied region. It reports; only managed settings or `claude --settings` make the sandbox admin-required, so that Claude Code ignores a project's loosening keys | `1` drift |
 | `verify [--json]` | the PASS / FAIL / NOT-CHECKED rows `gt_unlock.py verify` shows | `1` a FAIL |
+| `rollback-check --target DIR [--json]` | may the gt release in `DIR` be installed here? Refused (with the commands that switch them off) while sandbox mode or gt unlock is on, or gt's sandbox entries remain, and the release has no `gt_sandbox.py` / `gt_unlock.py` to manage them. `install.sh` runs it before a rollback writes anything | `1` refused |
 | `managed [--out FILE] [--json]` | prints the admin-required configuration (gt's plan plus `allowUnsandboxedCommands false`, the weakening switches off, `disableBypassPermissionsMode "disable"`) for `managed-settings.json`, and the `claude --settings <file>` command; `--out` writes only the file you name, never `settings.json` | `0` |
 
 What it writes: `sandbox.enabled true`, `allowUnsandboxedCommands false`, `failIfUnavailable
@@ -2217,7 +2228,8 @@ files, `~/Library/LaunchAgents`, systemd user units and autostart); and
 ### Reaching the vault: the gt-vault MCP server
 
 `gt_vault_mcp.py`, in gt's plugin manifest (server `gt-vault`). Its tools are offered while
-`vault_mcp` is `on`, or `auto` (the default) with sandbox mode on; otherwise it lists none.
+`vault_mcp` is `on`, or `auto` (the default) with sandbox mode on; otherwise it lists none and
+its instructions say which setting decided (with `auto`, sandbox mode being off).
 
 | Tool | Does |
 |---|---|
@@ -2246,7 +2258,10 @@ checked on the open file (regular, one link, size-capped) and read once — a sy
 or FIFO is never read — and a symlinked inbox folder is not read. Every inbox request is
 stamped origin `inbox` and session `unknown-inbox`, whatever it says, so a live session's claim
 holds it (Core rule 1) until the claim ends. `gt_broker.py status` counts
-the inbox; the session-start surface line says `SANDBOX MODE: on` and counts it too.
+the inbox; the session-start surface line says `SANDBOX MODE: on (preview)` and counts it too.
+No hook drains: with sandbox mode on, the session-start `WRITE QUEUE` line names
+`vault_queue_drain` (or the drain command for your terminal, with real paths), never the shell
+drain the sandbox refuses.
 `replace-section` from the shell cannot see the vault, so it carries no base hash and escalates:
 use `vault_queue_write` for replacements.
 
@@ -2934,7 +2949,7 @@ is registered here and can be switched off.
 | `handoff_surface` | `any` · `project` · `manual` | `any` | Where a handoff that has not been handled is shown (0.17.2): `any` every session start, whatever project is opened; `project` only when `/gt:gt-open` opens the handoff's own project; `manual` only in `/gt:gt-handle handoff`. `project` needs `/gt:gt-open` — a session that never opens the project never sees it, which is why `any` is the default |
 | `task_surface` | `off` · `on` | `on` | At session start, one line counting `p:: 1` tasks waiting on you — how many overdue, how many open over a week — with the commands to list and work them (0.17.2). A count, never the tasks; deferred tasks are not counted until their date |
 | `unlock` | `off` · `on` | `off` | gt unlock (0.20.0): agents need your presence for LOTR, credentials, publishing and gt's guards. The source of truth is the unlock policy, not vault-config.json: `set unlock on\|off` runs `gt_unlock.py policy enable\|disable`, which needs your enrolled factors. See [Security: gt unlock](#security-gt-unlock-0200) |
-| `sandbox_mode` | `off` · `on` | `off` | gt sandbox mode (0.20.0): writes Claude Code's sandbox and permission rules into `~/.claude/settings.json` so the assistant's shell and file tools cannot write the vault or gt's state (nor read the unlock home, LOTR or locked folders); the vault is reached through the gt-vault MCP tools and the write queue. Native Windows: permission rules only (friction). Restart Claude Code after switching; switch off from a terminal. See [Security: gt sandbox mode](#security-gt-sandbox-mode-0200) |
+| `sandbox_mode` | `off` · `on` | `off` | gt sandbox mode (0.20.0; a **preview** in 0.20.1 — most skills' shell steps are refused with a one-line next step): writes Claude Code's sandbox and permission rules into `~/.claude/settings.json` so the assistant's shell and file tools cannot write the vault or gt's state (nor read the unlock home, LOTR or locked folders); the vault is reached through the gt-vault MCP tools and the write queue. Native Windows: permission rules only (friction). Restart Claude Code after switching; switch off from a terminal. See [Security: gt sandbox mode](#security-gt-sandbox-mode-0200) |
 | `sandbox_vault_reads` | `deny` · `allow` | `deny` | Under sandbox mode, whether the shell and file tools may still READ the vault (writes stay denied; locked folders stay unreadable) |
 | `vault_mcp` | `auto` · `on` · `off` | `auto` | Whether the gt-vault MCP server offers its tools: `auto` = while sandbox mode is on |
 | `protected_paths` | `off` · `ask` | `ask` | A Write or Edit to the vault's `core-rules/` or `global-memory/`, to `~/.claude/golden-thread/`, or to `~/.claude/settings.json` always shows the permission prompt; editing an existing file in `Sources/` is refused (supersede it with a new file). Shell commands that write those files are not seen |
@@ -4440,7 +4455,7 @@ duplicated across projects' runbooks — the detection step of `/gt:gt-runbook-l
 | `gt_load.py [--cap N] [--json]` | what a parallel run would start with now, and why | |
 | `gt_ingest_pipeline.py stages · survey · packet · fan-in · reconcile · draft · promote-scan · promote-plan · status` | the deterministic stages of ingest and promote | `1` a stop · `3` incomplete |
 | `~/.claude/golden-thread/hooks/guard_foreign_checkout.py list` · `add PATH [--label L] [--route R] [--dry-run]` · `remove PATH [--dry-run]` | declare checkouts another machine owns ([Foreign checkouts](#foreign-checkouts-a-commit-in-another-machines-checkout)) | |
-| `gt_sandbox.py status · plan · apply [--force] · remove · check · verify · managed [--json]` (hooks dir, 0.20.0) | gt sandbox mode's Claude Code settings ([gt sandbox mode](#security-gt-sandbox-mode-0200)) | `1` refused, drift or FAIL |
+| `gt_sandbox.py status · plan · apply [--force] · remove · check · verify · managed · rollback-check [--json]` (hooks dir, 0.20.0) | gt sandbox mode's Claude Code settings ([gt sandbox mode](#security-gt-sandbox-mode-0200)) | `1` refused, drift or FAIL |
 | `gt_vault_mcp.py [--vault V]` (0.20.0) | the gt-vault MCP server over stdio; Claude Code starts it | |
 
 ---
@@ -4507,9 +4522,12 @@ heartbeat is fresh.
 Claude Code's sandbox: `~/.claude` is write-protected there. Run it from a terminal. Turning it
 **on** is refused on Linux / WSL2 without `bubblewrap` and `socat`.
 
-**Under sandbox mode a gt script fails with "Operation not permitted"** — it ran in the
-assistant's shell and touched the vault or `~/.claude/golden-thread`. Use the gt-vault MCP tools,
-run the script in a terminal, or set `sandbox_vault_reads allow` for reads.
+**Under sandbox mode a gt script prints "refused: … sandbox mode: …"** — it ran in the
+assistant's shell and touched the vault or `~/.claude/golden-thread`. Do what the line's
+`Next:` says: use the gt-vault MCP tool it names, or run the exact command it gives in a
+terminal. (A vault tool that Python itself cannot open — "can't open file … Operation not
+permitted" — is the same refusal with `sandbox_vault_reads deny`; `allow` gives the shell
+read access back.)
 
 **A handoff keeps being shown** — that is intended until it is dealt with: run
 `/gt:gt-handle handoff`, mark it handled, or defer it to a date. To see waiting handoffs only in

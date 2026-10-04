@@ -6,6 +6,8 @@ model_intent: deep
 
 # Golden Thread Promote
 
+**Under gt sandbox mode (preview)** (the session-start line says SANDBOX MODE): this skill's shell steps are refused — each refused tool prints one line with the exact command. Instead, read with `vault_read` / `vault_search` / `vault_list` and write through `vault_queue_write`; ask the user to run `gt_promote_detect.py`, the `gt_adr` allocation and the `gt_log` entry from a terminal. With sandbox mode off (the default) nothing changes.
+
 Move knowledge up the hierarchy so it's available in the right scope.
 
 ## The Hierarchy

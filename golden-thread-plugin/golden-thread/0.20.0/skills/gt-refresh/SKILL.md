@@ -6,6 +6,8 @@ model_intent: balanced
 
 # Golden Thread Refresh
 
+**Under gt sandbox mode (preview)** (the session-start line says SANDBOX MODE): this skill's shell steps are refused — each refused tool prints one line with the exact command. Instead, read with `vault_read` / `vault_search` / `vault_list` and write through `vault_queue_write`; ask the user to run the `gt_log` entry from a terminal. With sandbox mode off (the default) nothing changes.
+
 Check Sources/ for upstream changes. Sources are immutable: "updating" means creating a new source file that supersedes the old one — the old file stays as the historical record forever.
 
 A standalone LLM Wiki vault is refreshed by `/gt-wiki:gt-wiki-refresh`, from the optional

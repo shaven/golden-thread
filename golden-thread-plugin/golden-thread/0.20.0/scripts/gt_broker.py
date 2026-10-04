@@ -1201,10 +1201,24 @@ def main(argv=None) -> int:
     if vault is None:
         print("gt_broker: no vault found; pass --vault", file=sys.stderr)
         return 2
+    if a.cmd in ("drain", "status"):
+        # A queue the OS will not even list (gt sandbox mode, sandbox_vault_reads deny) is a
+        # refusal, not an empty queue: "nothing queued" there was false (0.20.1, B4).
+        try:
+            os.stat(wq.queue_dir(vault))
+        except (FileNotFoundError, NotADirectoryError):
+            pass
     if a.cmd == "audit":
         return cmd_audit(a, vault)
     return cmd_drain(a, vault) if a.cmd == "drain" else cmd_status(a, vault)
 
 
 if __name__ == "__main__":
-    raise SystemExit(main())
+    # A refusal from the OS -- gt sandbox mode, or a macOS interpreter refusal -- is one line
+    # naming the next step, not a traceback (0.20.1, B4). gt_errors sits beside this file.
+    try:
+        sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+        import gt_errors as _gte
+    except ImportError:
+        _gte = None
+    raise SystemExit(_gte.run(main, "gt_broker", mcp="vault_queue_drain") if _gte else main())

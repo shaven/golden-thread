@@ -237,12 +237,57 @@ class ApplyRemove(InProcess):
     def test_linux_without_bubblewrap_is_refused_unless_forced(self):
         self.gs.platform_mode = lambda: "linux"
         self.gs.linux_deps_missing = lambda: ["bwrap", "socat"]
+        self.gs._DEP_CACHE.clear()
         with self.assertRaises(self.gs.SandboxError) as cm:
             self.gs.apply()
         self.assertIn("refuse to start", str(cm.exception))
+        # 0.20.1 (M6): the refusal reaches gt_settings, which takes no --force.
+        self.assertNotIn("--force", str(cm.exception))
+        self.assertIn("set sandbox_mode on", str(cm.exception))
         self.assertFalse((self.home / ".claude" / "settings.json").exists())
-        self.gs.apply(force=True)
-        self.assertIs(self.settings()["sandbox"]["failIfUnavailable"], True)
+        rep = self.gs.apply(force=True)
+        # 0.20.1 (M13): never failIfUnavailable on a machine whose sandbox cannot run -- it
+        # would stop Claude Code from starting. The rest is written, and check() agrees.
+        self.assertNotIn("failIfUnavailable", self.settings()["sandbox"])
+        self.assertIs(self.settings()["sandbox"]["enabled"], True)
+        self.assertTrue(any("failIfUnavailable NOT written" in n for n in rep["notes"]))
+        self.assertEqual(self.gs.check()["missing"], [])
+
+    def fake_bwrap(self, rc, line):
+        self.gs.platform_mode = lambda: "linux"
+        self.gs.linux_deps_missing = lambda: []
+        self.gs._DEP_CACHE.clear()
+        self.gs._run_probe = lambda argv, timeout=10: (rc, line) if "bwrap" in argv[0] \
+            else (0, "socat version 1.8")
+
+    def test_a_bwrap_that_cannot_run_is_refused_with_the_apparmor_fix(self):
+        """M13: on PATH is not working. Ubuntu 24.04's AppArmor gives 'setting up uid map:
+        Permission denied'; 0.20.0 passed it and failIfUnavailable stopped Claude Code."""
+        self.fake_bwrap(1, "bwrap: setting up uid map: Permission denied")
+        with self.assertRaises(self.gs.SandboxError) as cm:
+            self.gs.apply()
+        msg = str(cm.exception)
+        self.assertIn("uid map", msg)
+        self.assertIn("kernel.apparmor_restrict_unprivileged_userns", msg)
+        self.assertFalse((self.home / ".claude" / "settings.json").exists())
+        with self.assertRaises(self.gs.SandboxError):
+            self.gs.preflight()
+        rows = {r["check"]: r for r in self.gs.verify_rows(live=False, status={})}
+        self.assertEqual(rows["sandbox-deps"]["state"], self.gs.FAIL)
+        self.assertIn("uid map", rows["sandbox-deps"]["why"])
+        self.fake_bwrap(0, "")
+        self.gs.preflight()                                  # runs: no refusal
+        rows = {r["check"]: r for r in self.gs.verify_rows(live=False, status={})}
+        self.assertEqual(rows["sandbox-deps"]["state"], self.gs.PASS)
+
+    def test_the_probe_really_runs_the_dependency(self):
+        calls = []
+        self.gs.linux_deps_missing = lambda: []
+        self.gs._DEP_CACHE.clear()
+        self.gs._run_probe = lambda argv, timeout=10: (calls.append(argv) or (0, ""))
+        self.assertEqual(self.gs.linux_deps_problems(), [])
+        self.assertTrue(any(a[1:] == ["--ro-bind", "/", "/", "true"] for a in calls), calls)
+        self.assertTrue(any(a[1:] == ["-V"] for a in calls), calls)
 
     def test_windows_apply_writes_no_sandbox_key(self):
         self.gs.platform_mode = lambda: "windows"
@@ -295,7 +340,8 @@ class SettingsSwitch(Sandbox):
         self.assertIn("friction", m.SETTINGS["sandbox_mode"]["detail"])
 
     def test_on_then_off_round_trip(self):
-        if sys.platform.startswith("linux") and not (shutil.which("bwrap") and shutil.which("socat")):
+        gs = load_module(SANDBOX, "gt_sandbox_deps_probe")
+        if sys.platform.startswith("linux") and gs.linux_deps_problems():
             p = self.py(SETTINGS, "set", "sandbox_mode", "on")
             self.assertEqual(p.returncode, 1, p.stdout + p.stderr)
             self.assertIn("bubblewrap", p.stdout)
@@ -316,6 +362,145 @@ class SettingsSwitch(Sandbox):
         p = self.py(SETTINGS, "set", "sandbox_mode", "off")
         self.assertOk(p)
         self.assertEqual(json.loads((self.home / ".claude" / "settings.json").read_text()), {})
+
+
+    def test_a_sandbox_that_cannot_run_is_refused_before_unlock_asks(self):
+        """M6: the bwrap check came after gt unlock's two TOTP codes. The preflight now runs
+        first, and a refusal records nothing."""
+        saved = {k: os.environ.get(k) for k in ("HOME", "USERPROFILE")}
+        os.environ["HOME"] = str(self.home)
+        if IS_WINDOWS:
+            os.environ["USERPROFILE"] = str(self.home)
+        saved_mods = {k: sys.modules.get(k) for k in ("gt_sandbox",)}
+        try:
+            gs = load_module(SANDBOX, "gt_sandbox")
+            sys.modules["gt_sandbox"] = gs
+
+            def refuse(h=None):
+                raise gs.SandboxError("the linux sandbox cannot run here: bwrap uid map")
+            gs.preflight = refuse
+            m = load_module(SETTINGS, "gt_settings_preflight")
+            asked = []
+            m._unlock_gate = lambda name: asked.append(name)
+            out = io.StringIO()
+            saved_out, sys.stdout = sys.stdout, out
+            try:
+                rc = m.set_value("sandbox_mode", "on")
+            finally:
+                sys.stdout = saved_out
+            self.assertEqual(rc, 1, out.getvalue())
+            self.assertIn("cannot run here", out.getvalue())
+            self.assertEqual(asked, [], "gt unlock must not be asked for a doomed change")
+            cfg = json.loads((self.home / ".claude" / "vault-config.json").read_text())
+            self.assertNotIn("sandbox_mode", cfg)
+        finally:
+            for k, v in saved.items():
+                if v is None:
+                    os.environ.pop(k, None)
+                else:
+                    os.environ[k] = v
+            for k, v in saved_mods.items():
+                if v is None:
+                    sys.modules.pop(k, None)
+                else:
+                    sys.modules[k] = v
+
+    def test_a_label_says_preview(self):
+        m = load_module(SETTINGS, "gt_settings_preview")
+        self.assertIn("preview", m.SETTINGS["sandbox_mode"]["summary"])
+        self.assertIn("0.20.2", m.SETTINGS["sandbox_mode"]["detail"])
+
+
+class BareApply(Sandbox):
+    """M1: `gt_sandbox.py apply` with the setting off wrote the deny rules while sandbox_mode --
+    and so the gt-vault MCP -- stayed off; after a restart the vault was unreachable."""
+
+    def setUp(self):
+        super().setUp()
+        self.vault = self.tmp / "vault"
+        self.vault.mkdir()
+        self.config(vault_path=str(self.vault))
+
+    def test_a_bare_apply_is_refused_with_the_command_that_turns_it_on(self):
+        p = self.py(SANDBOX, "apply")
+        self.assertEqual(p.returncode, 1, p.stdout + p.stderr)
+        self.assertIn("set sandbox_mode on", p.stderr)
+        self.assertIn("gt_settings.py", p.stderr)
+        self.assertFalse((self.home / ".claude" / "settings.json").exists(),
+                         "a refused apply writes nothing")
+        p = self.py(SANDBOX, "apply", "--force")
+        self.assertEqual(p.returncode, 1, "--force does not switch the mode on either")
+
+    def test_remove_always_works(self):
+        p = self.py(SANDBOX, "remove")
+        self.assertOk(p)
+        self.config(vault_path=str(self.vault), sandbox_mode="on")
+        self.assertOk(self.py(SANDBOX, "apply", "--force"))
+        self.config(vault_path=str(self.vault))              # switched off by hand
+        self.assertOk(self.py(SANDBOX, "remove"))
+        d = json.loads((self.home / ".claude" / "settings.json").read_text())
+        self.assertEqual(d, {})
+
+    def test_status_while_off_does_not_claim_reads_are_denied(self):
+        """WORDING: 'vault reads ... denied' was printed while nothing was denied."""
+        out = self.py(SANDBOX, "status").stdout
+        line = next(x for x in out.splitlines() if "vault reads" in x)
+        self.assertNotIn(": denied", line)
+        self.assertIn("sandbox mode is off", line)
+        mcp = next(x for x in out.splitlines() if "vault MCP tools" in x)
+        self.assertIn("follows sandbox_mode, which is off", mcp)
+        self.assertIn("preview", out)
+
+
+class Rollback(InProcess):
+    """M3: installing a gt that has no gt_sandbox.py (before 0.20.0) left the deny rules with
+    nothing to remove them. install.sh asks rollback-check first."""
+
+    def release(self, *scripts):
+        d = self.tmp / "rel" / "0.19.2"
+        (d / "scripts").mkdir(parents=True, exist_ok=True)
+        for f in scripts:
+            (d / "scripts" / f).write_text("# stub\n")
+        return d
+
+    def test_an_old_release_is_refused_while_sandbox_mode_is_on(self):
+        probs = self.gs.rollback_problems(self.release())
+        self.assertEqual(len(probs), 1, probs)
+        self.assertIn("set sandbox_mode off", probs[0]["fix"])
+        text = "\n".join(self.gs.rollback_text(self.release(), probs))
+        self.assertIn("Refusing to install gt 0.19.2", text)
+        self.assertIn("from a terminal", text)
+
+    def test_a_release_that_can_manage_it_passes(self):
+        self.assertEqual(self.gs.rollback_problems(self.release("gt_sandbox.py",
+                                                                "gt_unlock.py")), [])
+
+    def test_leftover_entries_with_the_mode_off_need_remove_first(self):
+        self.gs.apply()
+        self.config(vault_path=str(self.vault), sandbox_mode="off")
+        probs = self.gs.rollback_problems(self.release())
+        self.assertEqual(len(probs), 1, probs)
+        self.assertIn("gt_sandbox.py remove", probs[0]["fix"])
+
+    def test_off_and_clean_passes(self):
+        self.config(vault_path=str(self.vault))
+        self.assertEqual(self.gs.rollback_problems(self.release()), [])
+
+    def test_install_sh_refuses_before_writing_anything(self):
+        repo = SCRIPTS.parent.parent.parent
+        old = [d for d in (repo / "golden-thread").iterdir()
+               if d.is_dir() and not (d / "scripts" / "gt_sandbox.py").is_file()
+               and (d / ".claude-plugin" / "plugin.json").is_file()]
+        if not old or IS_WINDOWS:
+            self.skipTest("no pre-0.20.0 release in this tree (or native Windows, where those "
+                          "releases do not install)")
+        ver = max(old, key=lambda d: tuple(int(x) for x in d.name.split("."))).name
+        p = self.sh(repo / "install.sh", ver, "--no-vault", timeout=300)
+        self.assertEqual(p.returncode, 1, p.stdout[-1500:] + p.stderr[-1500:])
+        self.assertIn("Refusing to install gt %s" % ver, p.stdout)
+        self.assertIn("set sandbox_mode off", p.stdout)
+        self.assertEqual(sorted(os.listdir(self.home / ".claude")), ["vault-config.json"],
+                         "nothing may be written before the refusal")
 
 
 class WriteQueueInbox(InProcess):
@@ -504,6 +689,39 @@ class Surface(Sandbox):
         self.assertIn("SANDBOX MODE: on", out["systemMessage"])
         self.assertIn("SANDBOX INBOX: 1", out["systemMessage"])
         self.assertIn("vault_queue_write", out["hookSpecificOutput"]["additionalContext"])
+
+    def queued(self, vault):
+        q = vault / "Projects" / "golden-thread" / "spool" / "queue"
+        q.mkdir(parents=True)
+        (q / "20261004T100000.000000Z-a-x.json").write_text("{}")
+
+    @unittest.skipIf(IS_WINDOWS, "native Windows has no sandbox: its shell can run the drain")
+    def test_under_sandbox_mode_the_queue_line_does_not_send_the_model_to_the_shell(self):
+        """B4: the surface said "apply with gt_broker.py drain" under sandbox mode, where the
+        shell's drain is refused. No hook drains; the MCP does, outside the sandbox."""
+        vault = self.tmp / "vault"
+        self.queued(vault)
+        self.config(vault_path=str(vault), sandbox_mode="on")
+        p = self.py(SURFACE, "check", "--hook", input=json.dumps({"source": "startup"}))
+        out = json.loads(p.stdout)
+        line = next(x for x in out["systemMessage"].splitlines() if "WRITE QUEUE" in x)
+        self.assertIn("vault_queue_drain", line)
+        self.assertIn("outside the sandbox", line)
+        self.assertNotIn("apply with", line)
+        ctx = out["hookSpecificOutput"]["additionalContext"]
+        self.assertIn("Never run `gt_broker.py drain` from the shell", ctx)
+        self.assertIn("SANDBOX MODE: on (preview)", out["systemMessage"])
+
+    def test_outside_sandbox_mode_the_drain_command_has_real_paths(self):
+        vault = self.tmp / "vault"
+        self.queued(vault)
+        self.config(vault_path=str(vault))
+        p = self.py(SURFACE, "check", "--hook", input=json.dumps({"source": "startup"}))
+        line = next(x for x in json.loads(p.stdout)["systemMessage"].splitlines()
+                    if "WRITE QUEUE" in x)
+        self.assertNotIn("<vault>", line)
+        self.assertIn(str(vault), line)
+        self.assertIn("gt_broker.py", line)
 
     def test_nothing_is_said_when_off(self):
         vault = self.tmp / "vault"

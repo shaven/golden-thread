@@ -212,6 +212,10 @@ def main(argv=None):
         print("--project takes a slug, not a path: %r" % args.project, file=sys.stderr)
         return 2
     vault = os.path.abspath(os.path.expanduser(args.vault))
+    try:
+        os.stat(vault)       # a refused stat (sandbox mode) is a refusal, not "not a vault"
+    except (FileNotFoundError, NotADirectoryError):
+        pass
     if not os.path.isdir(vault):
         print("not a vault directory: %s" % vault, file=sys.stderr)
         return 2
@@ -259,4 +263,11 @@ def main(argv=None):
 
 
 if __name__ == "__main__":
-    sys.exit(main())
+    # A refusal from the OS -- gt sandbox mode, or a macOS interpreter refusal -- is one line
+    # naming the next step, not a traceback (0.20.1, B4). gt_errors sits beside this file.
+    try:
+        sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+        import gt_errors as _gte
+    except ImportError:
+        _gte = None
+    raise SystemExit(_gte.run(main, "gt_promote_detect") if _gte else main())

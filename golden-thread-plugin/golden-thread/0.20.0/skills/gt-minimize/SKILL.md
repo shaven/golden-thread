@@ -6,6 +6,8 @@ model_intent: balanced
 
 # Golden Thread Minimize
 
+**Under gt sandbox mode (preview)** (the session-start line says SANDBOX MODE): this skill's shell steps are refused — each refused tool prints one line with the exact command. Instead, promote what is kept through `vault_queue_write` and use `vault_queue_drain` instead of `gt_broker.py drain`. With sandbox mode off (the default) nothing changes.
+
 A session left idle past its cache lifetime rebuilds its whole prefix on the next turn, and the
 price is set by **how large the conversation was**, not how long the break was. Compacting while
 the cache is still warm reads the prefix from cache and costs a fraction of the context size;

@@ -6,6 +6,8 @@ model_intent: balanced
 
 # Golden Thread Ingest
 
+**Under gt sandbox mode (preview)** (the session-start line says SANDBOX MODE): this skill's shell steps are refused — each refused tool prints one line with the exact command. Instead, store and write through `vault_queue_write`; ask the user to run the pipeline scripts and the `gt_log` entry from a terminal. With sandbox mode off (the default) nothing changes.
+
 Scan an existing project and migrate its knowledge into the vault. All migrations are copies — originals are never deleted. Raw sources are stored immutably in `Sources/` before being synthesized into Knowledge pages.
 
 **Ingest does not ask for approval.** It runs from the intake scan to the summary without an approval step — asking would slow it down. It stops for the owner on exactly three things, listed under *Stop conditions* below, and on nothing else. Asking for an input that was not given (which directory, which slug) is not an approval gate; ask only when the input is actually missing.

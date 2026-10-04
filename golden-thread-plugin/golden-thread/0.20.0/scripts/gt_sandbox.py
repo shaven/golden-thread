@@ -3,15 +3,25 @@
 
     gt_sandbox.py status [--json]              what is on, and what it enforces on THIS platform
     gt_sandbox.py plan   [--json]              the settings gt would write, written nowhere
-    gt_sandbox.py apply  [--force] [--json]    merge them into ~/.claude/settings.json
-    gt_sandbox.py remove [--json]              take out exactly what gt added
+    gt_sandbox.py apply  [--force] [--json]    re-merge them into ~/.claude/settings.json
+                                               (only while sandbox_mode is on; 0.20.1)
+    gt_sandbox.py remove [--json]              take out exactly what gt added (always works)
     gt_sandbox.py check  [--json]              drift: is what gt wrote still there, still current?
     gt_sandbox.py verify [--json]              PASS / FAIL / NOT-CHECKED rows (gt_unlock.py verify)
     gt_sandbox.py managed [--out FILE] [--json]  print (or save) the ADMIN-REQUIRED variant, for
                                                managed settings or `claude --settings FILE`
+    gt_sandbox.py rollback-check --target DIR  may gt release DIR be installed over this
+                                               machine's sandbox mode / unlock? (install.sh)
 
-Normally driven by the `sandbox_mode` setting (gt_settings.py set sandbox_mode on|off), which
-calls apply / remove. `sandbox_vault_reads` (deny, the default, or allow) decides whether the
+PREVIEW (0.20.1). Sandbox mode is a preview: the fence holds, but most skills still run vault
+scripts from Claude's shell, which it refuses -- each refused tool prints one line naming the
+gt-vault MCP tool or the exact terminal command instead. gt-open, gt-query and the write half of
+gt-work route through the gt-vault MCP; full skill support is planned for 0.20.2.
+
+Driven by the `sandbox_mode` setting (gt_settings.py set sandbox_mode on|off), which calls
+apply / remove. A bare `apply` while the setting is off is REFUSED (0.20.1, finding M1): it
+wrote the deny rules while the setting -- and so the gt-vault MCP (vault_mcp auto) -- stayed
+off, leaving the vault unreachable after a restart, and it skipped gt unlock's confirmation. `sandbox_vault_reads` (deny, the default, or allow) decides whether the
 shell and the file tools may READ the vault too; writes are always denied while the mode is on.
 
 WHAT IT WRITES (user settings, ~/.claude/settings.json -- checked against
@@ -289,6 +299,89 @@ def linux_deps_missing():
     """bubblewrap and socat, which the Linux / WSL2 sandbox needs (docs: 'Set up Linux and
     WSL2'). Missing either + failIfUnavailable = Claude Code refuses to start."""
     return [b for b in ("bwrap", "socat") if not shutil.which(b)]
+
+
+# Each dependency is RUN, not just found (0.20.1, finding M13): on Ubuntu 24.04 AppArmor stops an
+# unprivileged bwrap with "setting up uid map: Permission denied" -- on PATH, a PASS, and then
+# failIfUnavailable made Claude Code refuse to start.
+DEP_PROBES = {"bwrap": ["--ro-bind", "/", "/", "true"], "socat": ["-V"]}
+_DEP_CACHE = {}
+
+
+def _run_probe(argv, timeout=10):
+    """-> (exit code, first line of stderr/stdout). Never raises."""
+    try:
+        p = subprocess.run(argv, capture_output=True, text=True, timeout=timeout,
+                           stdin=subprocess.DEVNULL)
+    except (OSError, subprocess.SubprocessError) as e:
+        return 127, "%s: %s" % (type(e).__name__, e)
+    text = (p.stderr or "").strip() or (p.stdout or "").strip()
+    return p.returncode, (text.splitlines() or [""])[0][:200]
+
+
+def linux_deps_problems():
+    """-> [(dependency, why)] for each Linux sandbox dependency that is missing or fails to run
+    (`bwrap --ro-bind / / true`, `socat -V`). Empty = the sandbox can start here. Cached per
+    process."""
+    missing = linux_deps_missing()
+    key = tuple(missing)
+    if key in _DEP_CACHE:
+        return list(_DEP_CACHE[key])
+    out = [(b, "not on PATH") for b in missing]
+    for b, args in DEP_PROBES.items():
+        if b in missing:
+            continue
+        exe = shutil.which(b) or b
+        rc, line = _run_probe([exe] + args)
+        if rc != 0:
+            out.append((b, "`%s %s` failed (exit %s): %s" % (b, " ".join(args), rc,
+                                                            line or "no output")))
+    _DEP_CACHE[key] = list(out)
+    return out
+
+
+def _install_hint():
+    for mgr, cmd in (("apt-get", "sudo apt-get install bubblewrap socat"),
+                     ("dnf", "sudo dnf install bubblewrap socat"),
+                     ("yum", "sudo yum install bubblewrap socat"),
+                     ("pacman", "sudo pacman -S bubblewrap socat"),
+                     ("zypper", "sudo zypper install bubblewrap socat"),
+                     ("apk", "sudo apk add bubblewrap socat")):
+        if shutil.which(mgr):
+            return cmd
+    return "install bubblewrap and socat with your package manager"
+
+
+def deps_message(mode, problems):
+    """The refusal for a Linux / WSL2 machine whose sandbox cannot run: what failed, why it
+    matters, the exact fix, and how to turn sandbox mode on afterwards."""
+    what = "; ".join("%s %s" % (b, why) for b, why in problems)
+    fixes = []
+    if any(why == "not on PATH" for _b, why in problems):
+        fixes.append(_install_hint())
+    if any(b == "bwrap" and why != "not on PATH" for b, why in problems):
+        low = " ".join(why.lower() for b, why in problems if b == "bwrap")
+        if "uid map" in low or "permission denied" in low or "operation not permitted" in low:
+            fixes.append("AppArmor is blocking unprivileged user namespaces (Ubuntu 23.10+): "
+                         "allow them for bwrap with an AppArmor profile, or "
+                         "sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0 "
+                         "(persist it in /etc/sysctl.d/)")
+        else:
+            fixes.append("make `bwrap --ro-bind / / true` succeed for your user")
+    return ("the %s sandbox cannot run here: %s. With failIfUnavailable set, Claude Code would "
+            "refuse to start, so gt does not turn sandbox mode on. Fix: %s. Then run: "
+            "gt_settings.py set sandbox_mode on" % (mode, what, "; ".join(fixes)))
+
+
+def preflight(h=None):
+    """Refuse (SandboxError) before anything is asked or written when this platform's sandbox
+    cannot run. gt_settings calls it BEFORE gt unlock's confirmation (0.20.1, finding M6: the
+    bwrap check came after two TOTP codes)."""
+    mode = platform_mode()
+    if mode in ("linux", "wsl2"):
+        probs = linux_deps_problems()
+        if probs:
+            raise SandboxError(deps_message(mode, probs))
 
 
 def unlock_home(h=None):
@@ -824,16 +917,16 @@ def apply(h=None, force=False, vault=None, reads=None):
         vault = os.path.abspath(os.path.expanduser(vault))
     p = plan(h, vault=vault, vault_reads=reads)
     mode = p["mode"]
+    withheld = []
     if mode in ("linux", "wsl2"):
-        missing = linux_deps_missing()
-        if missing and not force:
-            raise SandboxError(
-                "the %s sandbox needs %s, which %s not on PATH. With failIfUnavailable set, "
-                "Claude Code would refuse to start. Install %s (e.g. sudo apt-get install "
-                "bubblewrap socat), then turn sandbox mode on again -- or pass --force to "
-                "write the settings anyway." % (mode, " and ".join(missing),
-                                               "is" if len(missing) == 1 else "are",
-                                               " and ".join(missing)))
+        probs = linux_deps_problems()
+        if probs and not force:
+            raise SandboxError(deps_message(mode, probs))
+        if probs:
+            # `gt_sandbox.py apply --force` on a machine whose sandbox cannot run (0.20.1, M13):
+            # the rest is written, failIfUnavailable never is -- it would stop Claude Code from
+            # starting. Recorded, so check() does not call it missing; re-applied once fixed.
+            withheld = ["failIfUnavailable"]
     d = load_settings(h)
     sb = d.get("sandbox") if isinstance(d.get("sandbox"), dict) else {}
     fs = sb.get("filesystem") if isinstance(sb.get("filesystem"), dict) else {}
@@ -866,7 +959,7 @@ def apply(h=None, force=False, vault=None, reads=None):
         _prune_empty(d, key)
     bools = dict(st.get("booleans") or {})
     for name, val in SANDBOX_BOOLS:
-        if name not in p["sandbox_bools"]:
+        if name not in p["sandbox_bools"] or name in withheld:
             continue
         cur = _bool_get(d, name)
         if cur == val:
@@ -894,7 +987,7 @@ def apply(h=None, force=False, vault=None, reads=None):
     if changes:
         save_settings(d, h)
     st.update({"schema": STATE_SCHEMA, "added": added, "booleans": bools,
-               "permission_keys": pkeys, "mode": mode,
+               "permission_keys": pkeys, "mode": mode, "withheld": withheld,
                "vault": p["vault"], "vault_reads": p["vault_reads"],
                "applied_at": time.strftime("%Y-%m-%dT%H:%M:%S%z")})
     save_state(st, h)
@@ -903,7 +996,13 @@ def apply(h=None, force=False, vault=None, reads=None):
         os.chmod(inbox_dir(h), 0o700)
     except OSError:
         pass
-    return {"applied": True, "mode": mode, "changes": changes, "notes": p["notes"],
+    notes = list(p["notes"])
+    if withheld:
+        notes.append("failIfUnavailable NOT written: this machine's sandbox cannot run (%s); "
+                     "Claude Code would run commands unsandboxed rather than refuse to start. "
+                     "Fix it, then re-apply" % "; ".join("%s %s" % x for x in
+                                                          linux_deps_problems()))
+    return {"applied": True, "mode": mode, "changes": changes, "notes": notes,
             "restart": bool(changes)}
 
 
@@ -997,7 +1096,10 @@ def check(h=None, cwd=None, managed=None):
         if st is not None:
             stale += ["%s %s" % (key, e) for e in st.get("added", {}).get(key) or []
                       if e not in p["lists"][key] and e in lst]
+    held = set((st or {}).get("withheld") or [])
     for name, val in p["sandbox_bools"].items():
+        if name in held:
+            continue                                 # apply --force withheld it (M13)
         if _bool_get(d, name) != val:
             missing.append("sandbox.%s %s" % (name, json.dumps(val)))
     for name, val in p["permission_keys"].items():
@@ -1074,6 +1176,11 @@ def claude_status(timeout=20):
     return None
 
 
+# What sandbox mode (a preview in 0.20.1) does not do yet -- said wherever it is reported on.
+PREVIEW_LIMITS = ("most skills still run vault scripts from Claude's shell, which is refused with "
+                  "one line naming the MCP tool or terminal command; gt-open, gt-query and "
+                  "gt-work's writes use the gt-vault MCP")
+
 ENFORCED = {
     "macos": "Seatbelt (OS-enforced) around Claude's Bash/PowerShell/Monitor commands and "
              "their children, plus permission rules on Claude's file tools",
@@ -1118,15 +1225,15 @@ def verify_rows(h=None, cwd=None, live=True, status=None):
             add("sandbox", FAIL, "sandbox mode is off but %d of gt's entries are still in "
                                  "settings.json (gt_sandbox.py remove)" % len(c["stale"]))
         else:
-            add("sandbox", NC, "sandbox mode is off (the default): Claude's shell and file tools "
-                               "can read and write the vault and gt's state. Turn it on with "
-                               "gt_settings.py set sandbox_mode on (SECURITY.md)")
+            add("sandbox", NC, "sandbox mode (preview) is off (the default): Claude's shell and "
+                               "file tools can read and write the vault and gt's state. Turn it "
+                               "on with gt_settings.py set sandbox_mode on (SECURITY.md)")
         return rows
     c = check(h, cwd)
     # PASS only where an OS boundary exists. Native Windows (and WSL1) get the permission rules
     # alone: NOT-CHECKED, with the word "friction", never a PASS that reads as a boundary.
     add("sandbox-mode", PASS if os_sandbox_supported(mode) else NC,
-        "on (%s): %s" % (mode, ENFORCED[mode]))
+        "on (%s; preview -- %s): %s" % (mode, PREVIEW_LIMITS, ENFORCED[mode]))
     if c["state"] == "ok":
         add("sandbox-settings", PASS, "every entry gt needs is in ~/.claude/settings.json and "
                                       "nothing overrides it")
@@ -1136,10 +1243,10 @@ def verify_rows(h=None, cwd=None, live=True, status=None):
         why += (["stale: " + "; ".join(c["stale"][:4])] if c["stale"] else [])
         add("sandbox-settings", FAIL, " | ".join(why) + " (gt_sandbox.py apply)")
     if mode in ("linux", "wsl2"):
-        miss = linux_deps_missing()
-        add("sandbox-deps", FAIL if miss else PASS,
-            ("missing %s: with failIfUnavailable Claude Code will not start" % ", ".join(miss))
-            if miss else "bubblewrap and socat are on PATH")
+        probs = linux_deps_problems()
+        add("sandbox-deps", FAIL if probs else PASS,
+            deps_message(mode, probs) if probs
+            else "bubblewrap and socat run (`bwrap --ro-bind / / true`, `socat -V`)")
     if os_sandbox_supported(mode):
         cs = status if status is not None else claude_status()
         if cs is None:
@@ -1237,6 +1344,70 @@ def managed_text(h=None, out_file=None, mode=None):
     return "\n".join(lines)
 
 
+# ------------------------------------------------------------------ commands, rollback
+def _installed_or_here(name, h=None):
+    """The INSTALLED copy of a gt script (the hooks dir), else the one beside this file."""
+    p = os.path.join(gt_home(h), "hooks", name)
+    return p if os.path.isfile(p) else os.path.join(HERE, name)
+
+
+def settings_command(name, value, h=None):
+    """`<python> <hooks>/gt_settings.py set <name> <value>`, with real paths."""
+    py = sys.executable or "python3"
+    exe = _installed_or_here("gt_settings.py", h)
+    if IS_WINDOWS:
+        return '"%s" "%s" set %s %s' % (py, exe, name, value)
+    import shlex
+    return "%s %s set %s %s" % (shlex.quote(py), shlex.quote(exe), name, value)
+
+
+def _unlock_on(h=None):
+    try:
+        import gt_unlock_policy
+        return bool(gt_unlock_policy.enabled_fast(h))
+    except Exception:                                    # noqa: BLE001
+        return False
+
+
+def rollback_problems(target, h=None):
+    """-> [{"what", "why", "fix"}] that make installing the gt release at `target` (a version
+    directory) unsafe on this machine (0.20.1, finding M3). A release that does not ship
+    gt_sandbox.py can never remove the deny rules sandbox mode wrote -- after the rollback the
+    vault stays locked from Claude, with no gt-vault MCP and no undo. Likewise gt_unlock.py for
+    gt unlock. A release that ships them (0.20.0 and later) can switch them off, so it passes."""
+    scripts = os.path.join(os.path.abspath(os.path.expanduser(target)), "scripts")
+    out = []
+    if not os.path.isfile(os.path.join(scripts, "gt_sandbox.py")):
+        if is_on(h):
+            out.append({"what": "sandbox mode is on",
+                        "why": "the target release has no gt_sandbox.py, so it could never "
+                               "remove the deny rules in ~/.claude/settings.json",
+                        "fix": settings_command("sandbox_mode", "off", h)})
+        elif load_state(h) is not None:
+            out.append({"what": "gt's sandbox entries are still in ~/.claude/settings.json",
+                        "why": "the target release has no gt_sandbox.py to remove them",
+                        "fix": "%s %s remove" % (sys.executable or "python3",
+                                                 _installed_or_here("gt_sandbox.py", h))})
+    if not os.path.isfile(os.path.join(scripts, "gt_unlock.py")) and _unlock_on(h):
+        out.append({"what": "gt unlock is on",
+                    "why": "the target release has no gt_unlock.py, so nothing could turn it "
+                           "off or answer its gates",
+                    "fix": settings_command("unlock", "off", h)})
+    return out
+
+
+def rollback_text(target, probs):
+    rel = os.path.basename(os.path.abspath(target).rstrip(os.sep)) or target
+    if not probs:
+        return []                                    # silent: install.sh runs it on rollbacks
+    lines = ["✗ Refusing to install gt %s: %s." % (rel, "; ".join(
+        "%s and %s" % (p["what"], p["why"]) for p in probs)),
+             "  Turn %s off first, from a terminal (not from Claude's shell), then run this "
+             "install again:" % ("them" if len(probs) > 1 else "it")]
+    lines += ["    " + p["fix"] for p in probs]
+    return lines
+
+
 # ------------------------------------------------------------------ CLI
 def _print_report(rep, as_json):
     if as_json:
@@ -1252,12 +1423,28 @@ def _print_report(rep, as_json):
 
 def status_text(h=None):
     mode = platform_mode()
-    lines = ["gt sandbox mode: %s   (platform: %s)" % ("ON" if is_on(h) else "off", mode),
-             "  enforces: %s" % (ENFORCED[mode] if is_on(h) else "nothing -- off"),
-             "  vault reads from Claude's shell/file tools: %s"
-             % ("denied" if setting("sandbox_vault_reads", h) == "deny" else "allowed"),
-             "  vault MCP tools (vault_list/read/search/queue_write): %s"
-             % ("offered" if vault_mcp_on(h) else "not offered"),
+    on = is_on(h)
+    reads = setting("sandbox_vault_reads", h)
+    if not on:
+        # 0.20.1 (WORDING): "denied" was printed while the mode was off and nothing was denied.
+        reads_text = ("allowed -- sandbox mode is off (sandbox_vault_reads %s takes effect when "
+                      "it is on)" % reads)
+    elif not os_sandbox_supported(mode):
+        reads_text = "%s for the file tools only (%s has no OS sandbox)" % (
+            "denied" if reads == "deny" else "allowed", mode)
+    else:
+        reads_text = "denied" if reads == "deny" else "allowed"
+    mcp = setting("vault_mcp", h)
+    if vault_mcp_on(h):
+        mcp_text = "offered"
+    elif mcp == "off":
+        mcp_text = "not offered (vault_mcp off)"
+    else:
+        mcp_text = "not offered (vault_mcp auto follows sandbox_mode, which is off)"
+    lines = ["gt sandbox mode (preview): %s   (platform: %s)" % ("ON" if on else "off", mode),
+             "  enforces: %s" % (ENFORCED[mode] if on else "nothing -- off"),
+             "  vault reads from Claude's shell/file tools: %s" % reads_text,
+             "  vault MCP tools (vault_list/read/search/queue_write): %s" % mcp_text,
              "  queue inbox (writable): %s" % inbox_queue_dir(h),
              "  stage agents' scratch root (writable, outside the vault): %s" % scratch_root(h)]
     c = check(h)
@@ -1266,6 +1453,8 @@ def status_text(h=None):
         lines.append("    - " + x)
     for n in c["notes"]:
         lines.append("  note: " + n)
+    if on:
+        lines.append("  preview: " + PREVIEW_LIMITS)
     return "\n".join(lines)
 
 
@@ -1305,6 +1494,16 @@ def main(argv=None):
                     print("  note: " + n)
             return 0
         if cmd == "apply":
+            if not is_on(hh):
+                # 0.20.1 (finding M1): a bare apply wrote the deny rules while sandbox_mode --
+                # and with it the gt-vault MCP (vault_mcp auto) -- stayed off: after a restart
+                # the vault was unreachable, and gt unlock's confirmation was skipped. The
+                # setting is the one way on; `remove` always works.
+                print("gt_sandbox: refused -- sandbox mode is off, and `apply` only re-applies "
+                      "it while it is on. Turn it on with: %s" % settings_command("sandbox_mode",
+                                                                                 "on", hh),
+                      file=sys.stderr)
+                return 1
             rep = apply(hh, force=force)
             _print_report(rep, as_json)
             return 0
@@ -1339,6 +1538,21 @@ def main(argv=None):
                     print("\nwrote %s -- start Claude Code with: claude --settings %s"
                           % (out_file, out_file))
             return 0
+        if cmd == "rollback-check":
+            target = None
+            if "--target" in rest:
+                i = rest.index("--target")
+                target = rest[i + 1] if i + 1 < len(rest) else None
+            if not target:
+                print("gt_sandbox: rollback-check needs --target <release dir>", file=sys.stderr)
+                return 2
+            probs = rollback_problems(target, hh)
+            if as_json:
+                print(json.dumps({"ok": not probs, "problems": probs}, indent=2))
+            else:
+                for line in rollback_text(target, probs):
+                    print(line)
+            return 1 if probs else 0
         if cmd == "verify":
             rows = verify_rows(hh)
             if as_json:
@@ -1355,7 +1569,8 @@ def main(argv=None):
               "write-protected: run this from a terminal." % e, file=sys.stderr)
         return 1
     print("usage: gt_sandbox.py status|plan|apply [--force]|remove|check|verify|"
-          "managed [--out FILE] [--json] [--home H]", file=sys.stderr)
+          "managed [--out FILE]|rollback-check --target DIR [--json] [--home H]",
+          file=sys.stderr)
     return 2
 
 

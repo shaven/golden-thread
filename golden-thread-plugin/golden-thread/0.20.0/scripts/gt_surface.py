@@ -351,10 +351,24 @@ def task_line(vault: Path) -> list[str]:
 
 # --------------------------------------------------------------- write queue ----
 
-def queue_line(vault: Path) -> list[str]:
+def _drain_command(vault: Path) -> str:
+    """The drain spelled with real paths (0.20.1): this interpreter, the broker beside this file
+    (the hooks dir), the vault -- never `<vault>` where the vault is known."""
+    import shlex
+    q = (lambda x: '"%s"' % x) if os.name == "nt" else shlex.quote
+    return "%s %s drain --vault %s" % (q(sys.executable or "python3"),
+                                       q(str(HERE / "gt_broker.py")), q(str(vault)))
+
+
+def queue_line(vault: Path, sandbox: bool = False) -> list[str]:
     """One line when gt_write_queue.py requests are waiting for `gt_broker.py drain`. Counted
     by listing the directory, not by importing the broker: this runs from the hooks dir, and it
-    only reads -- draining is always explicit."""
+    only reads -- draining is always explicit.
+
+    Under gt sandbox mode (0.20.1, B4) the line must not tell the model to run the drain: from
+    Claude's shell it is refused. No hook drains either (SessionStart and Stop only read); the
+    drain runs outside the sandbox through the gt-vault MCP (vault_queue_drain, and every
+    vault_queue_write drains at once), or from a terminal."""
     try:
         q = vault / "Projects" / "golden-thread" / "spool" / "queue"
         n = sum(1 for p in q.iterdir() if p.suffix == ".json" and not p.name.startswith("."))
@@ -362,8 +376,26 @@ def queue_line(vault: Path) -> list[str]:
         return []
     if not n:
         return []
-    return ["WRITE QUEUE: %d vault write request%s waiting -- apply with "
-            "`gt_broker.py drain --vault <vault>`" % (n, "" if n == 1 else "s")]
+    if sandbox:
+        return ["WRITE QUEUE: %d vault write request%s waiting -- sandbox mode: the drain runs "
+                "outside the sandbox, through the gt-vault MCP tool vault_queue_drain (not from "
+                "Claude's shell), or from a terminal: %s"
+                % (n, "" if n == 1 else "s", _drain_command(vault))]
+    return ["WRITE QUEUE: %d vault write request%s waiting -- apply with `%s`"
+            % (n, "" if n == 1 else "s", _drain_command(vault))]
+
+
+def _sandbox_config():
+    """vault-config.json when gt sandbox mode is on there, else None."""
+    try:
+        import json as _json
+        cfg = _json.loads((Path.home() / ".claude" / "vault-config.json").read_text(
+            encoding="utf-8"))
+    except Exception:                                    # noqa: BLE001
+        return None
+    if not isinstance(cfg, dict) or str(cfg.get("sandbox_mode") or "").strip().lower() != "on":
+        return None
+    return cfg
 
 
 # ------------------------------------------------------------ gt sandbox mode ----
@@ -375,23 +407,24 @@ SANDBOX_CONTEXT = (
     "vault_search / vault_read / vault_list to read, vault_queue_write to write (the broker "
     "applies it outside the sandbox and the result says applied, held or escalated). "
     "gt_write_queue.py from the shell leaves its request in ~/.gt-inbox/queue; vault_queue_drain "
-    "applies it. Do not try to bypass the sandbox.")
+    "applies it. Never run `gt_broker.py drain` from the shell: no hook drains the queue, the "
+    "drain runs outside the sandbox only through the gt-vault MCP (vault_queue_drain; "
+    "vault_queue_write drains at once) or from the user's terminal. gt's vault tools under "
+    "<vault>/Projects/golden-thread/tools (gt_log, gt_tasks, gt_adr, gt_task, gt_closeout) and "
+    "gt_lint, gt_promote_detect and vault_init are refused from the shell in sandbox mode "
+    "(preview): when a skill says to run one, give the user the exact command to run in a "
+    "terminal instead. Do not try to bypass the sandbox.")
 
 
 def sandbox_lines(vault: Path | None):
     """(lines, context) while gt sandbox mode is on (0.20.0): one line saying so, the inbox count,
     and the routing note for the model. Two small file reads -- no vault walk at session start."""
-    try:
-        import json as _json
-        cfg = _json.loads((Path.home() / ".claude" / "vault-config.json").read_text(
-            encoding="utf-8"))
-    except Exception:                                    # noqa: BLE001
-        return [], []
-    if str(cfg.get("sandbox_mode") or "").strip().lower() != "on":
+    cfg = _sandbox_config()
+    if cfg is None:
         return [], []
     reads = str(cfg.get("sandbox_vault_reads") or "deny").strip().lower() != "allow"
     win = os.name == "nt"
-    line = ("SANDBOX MODE: on -- %s; the vault is reached through the gt-vault MCP tools"
+    line = ("SANDBOX MODE: on (preview) -- %s; the vault is reached through the gt-vault MCP tools"
             % ("native Windows: permission rules only (friction, not a boundary)" if win else
                "Claude's shell and file tools cannot write the vault%s" % (
                    " or read it" if reads else "")))
@@ -476,7 +509,8 @@ def build(vault: Path | None, source: str, seen: dict):
                            "in that project or asks; tell the user they are waiting and that "
                            "/gt:gt-handle handoff deals with them.")
         lines += task_line(vault)
-        lines += queue_line(vault)
+        # native Windows has no sandbox: its shell can still run the drain
+        lines += queue_line(vault, sandbox=os.name != "nt" and _sandbox_config() is not None)
     sl, sc = sandbox_lines(vault)
     lines += sl
     ctx += sc

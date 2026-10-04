@@ -6,6 +6,8 @@ model_intent: balanced
 
 # Golden Thread — Handle
 
+**Under gt sandbox mode (preview)** (the session-start line says SANDBOX MODE): this skill's shell steps are refused — each refused tool prints one line with the exact command. Instead, read with `vault_read` / `vault_search` / `vault_list`; ask the user to run `gt_task.py` / `gt_handoff_status.py` changes and `gt_tasks.py` from a terminal, and use `vault_queue_drain` instead of `gt_broker.py drain`. With sandbox mode off (the default) nothing changes.
+
 One verb for working through what is waiting. The artifact is the first argument:
 
 | invoked as | works through |

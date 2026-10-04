@@ -6,6 +6,8 @@ model_intent: balanced
 
 # Golden Thread Review
 
+**Under gt sandbox mode (preview)** (the session-start line says SANDBOX MODE): this skill's shell steps are refused — each refused tool prints one line with the exact command. Instead, read INBOX.md and the daily notes with `vault_read` / `vault_search` / `vault_list` and file items through `vault_queue_write`; ask the user to run `gt_tasks.py` from a terminal. With sandbox mode off (the default) nothing changes.
+
 Surface captured-but-unfiled work and route each item into the Projects/ folder.
 
 ## Vault location

@@ -198,7 +198,8 @@ ASSIGNMENT = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*=")
 # Words that run the NEXT word as the program (or are shell grammar in front of it).
 PREFIXES = {"sudo", "env", "exec", "time", "nice", "nohup", "command", "builtin",
             "if", "then", "else", "elif", "do", "while", "until", "!", "{"}
-INTERPRETER = re.compile(r"^(python(\d+(\.\d+)*)?|bash|sh|zsh)$")
+# python.exe / py.exe: the Windows spellings (0.20.1), from Git Bash or PowerShell.
+INTERPRETER = re.compile(r"^(python(\d+(\.\d+)*)?|py|bash|sh|zsh)(\.exe)?$", re.I)
 HELP_FLAGS = ("--help", "-h")
 
 
@@ -280,7 +281,7 @@ def targeted(tokens, segment):
         if tok in TARGET_FLAGS or tok.startswith("--vault="):
             return True
     # GT_VAULT=... in front of the command, or exported into the session
-    if re.search(r"\bGT_VAULT=", segment):
+    if re.search(r"\bGT_VAULT\s*=", segment):          # also PowerShell's $env:GT_VAULT = ...
         return True
     if os.environ.get("GT_VAULT", "").strip():
         return True
@@ -293,12 +294,21 @@ def main():
     except Exception:
         no_objection()
 
-    if (payload.get("tool_name") or "") != "Bash":
+    # PowerShell (0.20.1, M10): Claude Code's PowerShell tool runs the same vault tools. Its
+    # paths are C:\\...\\gt_adr.py, which a POSIX tokenizer would read as escapes; PowerShell
+    # has no backslash escape at all, so they become "/" before the shared parsing below.
+    tool_name = payload.get("tool_name") or ""
+    if tool_name not in ("Bash", "PowerShell"):
         no_objection()
 
     command = (payload.get("tool_input") or {}).get("command") or ""
     if not command.strip():
         no_objection()
+    if tool_name == "PowerShell":
+        command = command.replace("\\", "/")
+        # `$env:GT_VAULT = '...'` sets it for every later command in the session: named.
+        if re.search(r"\$env:GT_VAULT\s*=\s*['\"]?[^\s'\";]", command, re.I):
+            no_objection()
 
     try:
         parts = segments(command)

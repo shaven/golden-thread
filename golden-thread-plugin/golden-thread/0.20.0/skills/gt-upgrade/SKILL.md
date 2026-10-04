@@ -6,6 +6,8 @@ model_intent: balanced
 
 # Upgrade a vault to the installed release
 
+**Under gt sandbox mode (preview)** (the session-start line says SANDBOX MODE): this skill's shell steps are refused — each refused tool prints one line with the exact command. Instead, ask the user to run the whole upgrade (`gt_upgrade.py`, the migrations, the drain) from a terminal: it rewrites vault files and cannot run inside the sandbox. With sandbox mode off (the default) nothing changes.
+
 `install.sh` updates the **plugin**. This updates the **vault** — the migrations,
 documents and rules that live in it.
 

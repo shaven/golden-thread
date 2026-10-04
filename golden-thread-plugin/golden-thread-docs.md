@@ -292,7 +292,7 @@ gt's MCP server and the write queue. Native Windows: permission rules only (fric
 | Command / tool | Purpose |
 |---|---|
 | `gt_settings.py set sandbox_mode on\|off` | Write / remove the Claude Code settings (restart Claude Code; switch off from a terminal) |
-| `gt_sandbox.py status\|plan\|apply\|remove\|check\|verify\|managed` | Show, preview, (re)write, take out, check drift and loosening keys, self-check, print the admin-required config |
+| `gt_sandbox.py status\|plan\|apply\|remove\|check\|verify\|managed\|rollback-check` | Show, preview, re-apply (only while `sandbox_mode` is on), take out, check drift and loosening keys, self-check, print the admin-required config, refuse a rollback that could not remove them. Sandbox mode is a preview in 0.20.1 |
 | gt-vault MCP: `vault_search`, `vault_read`, `vault_list` | Read the vault (read-only, capped, never a locked folder) |
 | gt-vault MCP: `vault_queue_write`, `vault_queue_drain` | Queue a write and get the broker's decision; apply what `gt_write_queue.py` left in `~/.gt-inbox/queue/` |
 

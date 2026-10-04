@@ -6,6 +6,8 @@ model_intent: balanced
 
 # Golden Thread Runbook Lint
 
+**Under gt sandbox mode (preview)** (the session-start line says SANDBOX MODE): this skill's shell steps are refused — each refused tool prints one line with the exact command. Instead, read the runbooks with `vault_read` / `vault_search` / `vault_list` and write through `vault_queue_write`; ask the user to run the `gt_log` entry from a terminal. With sandbox mode off (the default) nothing changes.
+
 Repetition across runbooks means a fact is general — the exact problem the PROTOCOL.md layer and Knowledge pages exist to prevent. Detect duplication, classify it, route it to the right layer via `/gt:gt-promote`.
 
 ## Vault location

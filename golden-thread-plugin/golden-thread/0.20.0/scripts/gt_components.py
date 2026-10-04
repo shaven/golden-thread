@@ -482,6 +482,10 @@ HOOK_DIR_SCRIPTS = ("gt_paths.py", "gt_components.py",
                     # can this Python write where gt writes? (0.20.0): gt_schedule's
                     # choose-interpreter, the broker's EPERM line and gt_doctor import it.
                     "gt_write_probe.py",
+                    # one line, not a traceback, when the OS or gt sandbox mode refuses a
+                    # vault tool (0.20.1): gt_broker, gt_write_queue, gt_lint and
+                    # gt_write_probe import it from beside themselves.
+                    "gt_errors.py",
                     # MCP servers outside LOTR (0.20.1): gt_doctor's `mcp` row and
                     # gt_unlock_verify's `mcp` row import it from beside themselves.
                     "gt_mcp_inventory.py",

@@ -192,6 +192,16 @@ def probe(vault=None):
 def eperm_message(path, exc, python=None):
     """One line for a write the OS refused: which interpreter, and the fix. Never a
     traceback. `exc` is the OSError (EPERM or EACCES)."""
+    try:
+        _here = os.path.dirname(os.path.abspath(__file__))
+        if _here not in sys.path:
+            sys.path.insert(0, _here)
+        import gt_errors as _gte
+        if _gte.in_sandbox():
+            # gt sandbox mode (0.20.1): a route, not a permission -- never Full Disk Access.
+            return _gte.sandbox_line(path, exc)
+    except ImportError:
+        pass
     python = python or sys.executable or "python3"
     rec = recorded_interpreter()
     why = os.strerror(exc.errno) if getattr(exc, "errno", None) else str(exc)

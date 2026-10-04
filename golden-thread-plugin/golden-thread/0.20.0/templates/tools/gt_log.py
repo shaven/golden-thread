@@ -115,7 +115,18 @@ def cmd_add(a):
         # The merge's verdict is the answer to "is log.md up to date now?", so it is
         # this command's exit code too. Printed AFTER the spool line, so the two
         # facts -- the entry is saved, log.md is not rendered -- read in that order.
-        rc = cmd_merge(argparse.Namespace(vault=str(v), quiet=True, dry_run=False))
+        try:
+            rc = cmd_merge(argparse.Namespace(vault=str(v), quiet=True, dry_run=False))
+        except S.WriteRefused as exc:
+            # 0.20.1 (WORDING): the refusal line alone read as if the entry were lost. It is
+            # in the spool; say so, with the command that renders it, in the same one line.
+            import shlex
+            cmd = " ".join(shlex.quote(x) for x in (sys.executable or "python3",
+                                                     os.path.abspath(__file__), "--vault",
+                                                     str(v), "merge"))
+            print("%s The entry is safe in the spool (%s); once log.md is writable, run: %s"
+                  % (exc.strerror or str(exc), p, cmd), file=sys.stderr)
+            return 5
         if rc:
             print("the entry is spooled and safe; log.md was NOT updated (see above)",
                   file=sys.stderr)
@@ -339,4 +350,11 @@ def main(argv=None):
 
 
 if __name__ == "__main__":
-    raise SystemExit(main())
+    # A refusal from the OS -- gt sandbox mode, or a macOS interpreter refusal -- is one line
+    # naming the next step, not a traceback (0.20.1, B4). gt_errors sits beside this file.
+    try:
+        sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+        import gt_errors as _gte
+    except ImportError:
+        _gte = None
+    raise SystemExit(_gte.run(main, "gt_log") if _gte else main())
