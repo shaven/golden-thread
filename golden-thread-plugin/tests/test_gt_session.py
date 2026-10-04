@@ -191,6 +191,11 @@ class GtSessionTest(SessionToolsBase):
         proc = self.gs("sessB", "claim", "notes.md")
         self.assertEqual(proc.returncode, 1, proc.stdout + proc.stderr)
         self.assertIn("CONFLICT  notes.md  held by sessA", proc.stderr)
+        # 0.20.1 WORDING: the vault rule is queue-first -- a refused claim means the queue holds
+        # the write until the claim is released; pending/ staging was retired in 0.17.11.
+        self.assertNotIn("pending/", proc.stderr)
+        self.assertIn("gt_write_queue.py", proc.stderr)
+        self.assertIn("holds it while the claim is live", proc.stderr)
         (fb,) = self.files_for("sessB")
         self.assertNotIn("`notes.md`", fb.read_text(), "a refused claim was still recorded")
 

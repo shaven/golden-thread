@@ -1153,8 +1153,9 @@ def cmd_claim(args):
     if conflicts and not args.force:
         for f, other in conflicts:
             print(f"CONFLICT  {f}  held by {other}", file=sys.stderr)
-        print("\nStage your change in Projects/golden-thread/pending/ instead,\n"
-              "or re-run with --force if you know the claim is dead.", file=sys.stderr)
+        print("\nQueue your change instead (gt_write_queue.py, then gt_broker.py drain): the queue\n"
+              "holds it while the claim is live and the first drain after the claim is released\n"
+              "applies it. Re-run with --force only if you know the claim is dead.", file=sys.stderr)
         return 1
 
     stamp = _stamp()

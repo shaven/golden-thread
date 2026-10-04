@@ -12,7 +12,7 @@ running outside the claiming session (a farmed result coming back, a batch of su
 filing findings) has no claim and no way to wait for one. This tool gives such a writer a place
 to put its write: one JSON request file per write in
 
-    <vault>/Projects/golden-thread/spool/queue/<UTC timestamp>-<session>-<target>.json
+    <vault>/Projects/golden-thread/spool/queue/<UTC timestamp>-<session>-<random>-<target>.json
 
 and nothing else. It never touches the target. `gt_broker.py drain` applies the queue later, in
 timestamp order, after checking claims and conflicts; see that tool for what it decides.
@@ -54,12 +54,15 @@ from __future__ import annotations
 
 import argparse
 import datetime
+import errno
 import hashlib
 import json
 import os
 import re
+import secrets
 import sys
 import tempfile
+import time
 from pathlib import Path
 
 SCHEMA = 1
@@ -263,9 +266,13 @@ def _slug(text: str, n: int) -> str:
     return (s[:n].strip("-") or "x")
 
 
-def validate(req: dict, vault: Path) -> str | None:
+def validate(req: dict, vault: Path, at_submit: bool = True) -> str | None:
     """-> why this request is malformed or not allowed, or None. Used at submit AND drain:
-    a request file is data on disk, and anything on disk may have been written by hand."""
+    a request file is data on disk, and anything on disk may have been written by hand.
+    at_submit=False (the broker's drain-time check) skips the two checks about the vault as it
+    stood when the write was asked for -- the project exists, idea.md is still unwritten -- so a
+    project archived after a request was queued is escalated by the broker as a moved target,
+    not rejected as never-created, and the brain dump queued into a fresh idea.md still lands."""
     if not isinstance(req, dict):
         return "not a JSON object"
     extra = set(req) - KEYS
@@ -309,10 +316,77 @@ def validate(req: dict, vault: Path) -> str | None:
         return "empty content"
     if "\0" in req["content"] or len(req["content"].encode("utf-8")) > MAX_CONTENT:
         return "content is binary or larger than %d bytes" % MAX_CONTENT
-    return path_refusal(vault, req["path"])
+    return path_refusal(vault, req["path"]) or (
+        (idea_refusal(vault, req["path"], req["op"]) or project_refusal(vault, req["path"]))
+        if at_submit else None)
+
+
+IDEA_SCAFFOLD_LINE = re.compile(r"^\s*(#\s.*|<!--.*-->)\s*$")
+
+
+def idea_refusal(vault: Path, rel: str, op: str) -> str | None:
+    """idea.md is the project's original brain dump, immutable once written (CONVENTIONS.md).
+    vault_init writes it as a bare `# Title` scaffold and gt-create / gt-promote fill it with ONE
+    append; after that, every write but an identical create is refused (0.20.1). Until 0.20.1 the
+    queue took any append to it."""
+    if rel.split("/")[-1] != "idea.md" or op == "create":
+        return None
+    try:
+        text = (vault / rel).read_bytes().decode("utf-8", "replace")
+    except OSError:
+        return None                                     # absent: the append creates it
+    if all(IDEA_SCAFFOLD_LINE.match(ln) for ln in text.splitlines() if ln.strip()):
+        return None                                     # still the scaffold: this fills it
+    return ("%s is immutable once written (the project's original brain dump); put new thinking "
+            "in research.md or design.md instead" % rel)
+
+
+def project_refusal(vault: Path, rel: str) -> str | None:
+    """A write into Projects/<slug>/ needs the project to exist. Until 0.20.1 an append to a
+    mistyped or not-yet-created project made an orphan folder with no README, which no tool
+    lists; now a write that would CREATE Projects/<slug>/ is refused with the command that makes
+    the project properly. A folder that is already there is written to as before (an older
+    project without a README is gt-lint's to report, not a reason to refuse). Files directly
+    under Projects/ (INFRASTRUCTURE.md) are not in a project and are not checked."""
+    parts = rel.split("/")
+    if len(parts) < 3 or parts[0] != "Projects":
+        return None
+    if (vault / "Projects" / parts[1]).is_dir():
+        return None
+    return ("project %s does not exist (no Projects/%s/) -- create it first: "
+            "python3 \"%s\" create-project --vault \"%s\" --name %s  (or /gt:gt-create project %s)"
+            % (parts[1], parts[1], _vault_init(), vault, parts[1], parts[1]))
+
+
+def _vault_init() -> str:
+    """The vault_init.py to name in a refusal: beside this file (the plugin's scripts/), else the
+    newest one in the plugin cache (this file also runs from ~/.claude/golden-thread/hooks/,
+    where vault_init.py is not installed)."""
+    here = Path(__file__).resolve().parent / "vault_init.py"
+    if here.is_file():
+        return str(here)
+    def ver(p):
+        try:
+            return tuple(int(x) for x in p.parent.parent.name.split("."))
+        except ValueError:
+            return ()
+    cands = list((Path.home() / ".claude" / "plugins" / "cache").glob("*/gt/*/scripts/vault_init.py"))
+    return str(max(cands, key=ver)) if cands else "<gt scripts>/vault_init.py"
 
 
 _LAST_STAMP = None
+
+
+def _request_id(stamp: str, session: str, rel: str) -> str:
+    return "%s-%s-%s-%s" % (stamp, _slug(session, 8), secrets.token_hex(4), _slug(rel, 60))
+
+
+def _fresh_id(req: dict) -> str:
+    """A new random part for a request whose name was taken: same stamp, session and target,
+    so the queue order (submitted, then name) is unchanged."""
+    m = re.match(r"^(\d{8}T\d{6}\.\d{6}Z)-", req["id"])
+    stamp = m.group(1) if m else req["id"][:23]
+    return _request_id(stamp, req.get("session") or "x", req.get("path") or "x")
 
 
 def build(vault: Path, rel: str, op: str, content: str, section: str | None, session: str,
@@ -330,7 +404,9 @@ def build(vault: Path, rel: str, op: str, content: str, section: str | None, ses
         _LAST_STAMP = now
     stamp = now.strftime("%Y%m%dT%H%M%S.%fZ")
     return {"schema": SCHEMA,
-            "id": "%s-%s-%s" % (stamp, _slug(session, 8), _slug(rel, 60)),
+            # The random part (B2, 0.20.1): two writers in ONE session -- parallel stage agents
+            # share its id -- can read the same clock tick on Windows, and then the same id.
+            "id": _request_id(stamp, session, rel),
             "submitted": now.isoformat(timespec="microseconds"),
             "session": session, "origin": origin, "path": rel, "op": op,
             "section": section, "content": content, "key": key,
@@ -377,25 +453,8 @@ def deposit_inbox(vault: Path, req: dict) -> Path:
     it re-validates queued requests at drain time."""
     q = inbox_dir()
     q.mkdir(parents=True, exist_ok=True)
-    body = {"gt_inbox": 1, "vault": os.path.realpath(str(vault)), "request": req}
-    base, n = req["id"], 1
-    while (q / (req["id"] + ".json")).exists():
-        n += 1
-        req["id"] = "%s-%d" % (base, n)
-    fd, tmp = tempfile.mkstemp(prefix=".req.", suffix=".tmp", dir=str(q))
-    try:
-        with os.fdopen(fd, "w", encoding="utf-8", newline="\n") as fh:
-            json.dump(body, fh, indent=1, ensure_ascii=False)
-            fh.write("\n")
-        dest = q / (req["id"] + ".json")
-        os.replace(tmp, dest)
-    except OSError:
-        try:
-            os.unlink(tmp)
-        except OSError:
-            pass
-        raise
-    return dest
+    return _land(q, req, lambda: {"gt_inbox": 1, "vault": os.path.realpath(str(vault)),
+                                  "request": req})
 
 
 def deposit(vault: Path, req: dict) -> Path:
@@ -417,22 +476,70 @@ def deposit(vault: Path, req: dict) -> Path:
 def _deposit_queue(vault: Path, req: dict) -> Path:
     q = queue_dir(vault)
     q.mkdir(parents=True, exist_ok=True)
-    base, n = req["id"], 1
-    while (q / (req["id"] + ".json")).exists():
-        n += 1
-        req["id"] = "%s-%d" % (base, n)
-    fd, tmp = tempfile.mkstemp(prefix=".req.", suffix=".tmp", dir=str(q))
-    try:
-        with os.fdopen(fd, "w", encoding="utf-8", newline="\n") as fh:
-            json.dump(req, fh, indent=1, ensure_ascii=False)
-            fh.write("\n")
-        dest = q / (req["id"] + ".json")
-        os.replace(tmp, dest)
-    except OSError:
+    return _land(q, req, lambda: req)
+
+
+# Windows (B2, 0.20.1): a file another process has open cannot be replaced or deleted for a
+# moment -- PermissionError [WinError 5] -- where POSIX swaps the inode under the reader. Every
+# such step is retried with backoff for about RETRY_SECONDS, then reported in one line.
+RETRY_SECONDS = 5.0
+# A reserved name is an empty file for the instant between reserving it and the request landing
+# over it. A reader skips an empty request younger than this; an older one is a crashed writer's.
+RESERVE_GRACE = 120
+
+
+def retry_os(fn, *args, seconds: float = RETRY_SECONDS):
+    """fn(*args), retried while native Windows says PermissionError (a sharing violation, which
+    passes). Elsewhere a PermissionError is a real refusal -- the gt sandbox, a read-only mount --
+    and is raised at once, so the sandbox inbox fallback is not delayed."""
+    delay, end = 0.01, time.monotonic() + seconds
+    while True:
         try:
-            os.unlink(tmp)
-        except OSError:
-            pass
+            return fn(*args)
+        except PermissionError:
+            if os.name != "nt" or time.monotonic() >= end:
+                raise
+            time.sleep(delay)
+            delay = min(delay * 2, 0.25)
+
+
+def _reserve(q: Path, req: dict) -> Path:
+    """Create the request's file name EXCLUSIVELY (O_CREAT|O_EXCL) -- never an existing one. A
+    taken name gets a fresh random part and is tried again (B2, 0.20.1). Until 0.20.1 this
+    checked exists() and then os.replace()d, so two same-session writers in one clock tick wrote
+    the same name and the second silently overwrote the first, both printing `queued`."""
+    flags = os.O_WRONLY | os.O_CREAT | os.O_EXCL | getattr(os, "O_BINARY", 0)
+    for _ in range(50):
+        dest = q / (req["id"] + ".json")
+        try:
+            os.close(retry_os(os.open, str(dest), flags, 0o644))
+            return dest
+        except FileExistsError:
+            req["id"] = _fresh_id(req)
+    raise FileExistsError(errno.EEXIST, "no free request name after 50 tries", str(q))
+
+
+def _land(q: Path, req: dict, body) -> Path:
+    """Reserve a unique name, write the request beside it under a dot-name a drain never reads,
+    then move it over the (empty, our own) reservation. Any failure removes both, so the caller
+    is told `could not queue` and nothing half-made is left; success means the file is there.
+    `body()` is called after the name is final, so it carries the final id."""
+    dest = _reserve(q, req)
+    tmp = None
+    try:
+        fd, tmp = tempfile.mkstemp(prefix=".req.", suffix=".tmp", dir=str(q))
+        with os.fdopen(fd, "w", encoding="utf-8", newline="\n") as fh:
+            json.dump(body(), fh, indent=1, ensure_ascii=False)
+            fh.write("\n")
+        retry_os(os.replace, tmp, str(dest))
+        tmp = None
+    except BaseException:
+        for leftover in (tmp, str(dest)):
+            if leftover:
+                try:
+                    retry_os(os.unlink, leftover, seconds=1.0)
+                except OSError:
+                    pass
         raise
     return dest
 
@@ -486,6 +593,9 @@ def submit(vault: Path, writes: list, session: str | None = None, origin: str = 
     if not drain:
         return results, "not drained"
     rows, note = drain_now(vault)
+    missing = [r["id"] for r in results if r["id"] not in rows]
+    if missing:
+        rows.update(logged(vault, missing))
     for res in results:
         row = rows.get(res["id"])
         if row:
@@ -510,7 +620,30 @@ def drain_now(vault: Path):
     except ValueError:
         err = (p.stderr.strip().splitlines() or ["exit %d" % p.returncode])[-1]
         return {}, "the drain did not run: %s" % err
-    return {r.get("request"): r for r in data.get("results", [])}, None
+    rows = {r.get("request"): r for r in data.get("results", [])}
+    return rows, None
+
+
+def logged(vault: Path, ids) -> dict:
+    """{request id: its broker log row} for those of `ids` a drain has already decided -- one
+    that ran between this caller's deposit and its own drain decides them first (0.20.1, M4)."""
+    want, out = set(ids), {}
+    if not want:
+        return out
+    logs = sorted((vault / "Projects" / "golden-thread" / "spool" / "broker").glob("log-*.jsonl"))
+    for f in logs[-2:]:
+        try:
+            lines = f.read_text(encoding="utf-8").splitlines()
+        except (OSError, UnicodeDecodeError):
+            continue
+        for line in lines:
+            try:
+                row = json.loads(line)
+            except ValueError:
+                continue
+            if isinstance(row, dict) and row.get("request") in want:
+                out[row["request"]] = row
+    return out
 
 
 def drain_hint(vault: Path) -> str:

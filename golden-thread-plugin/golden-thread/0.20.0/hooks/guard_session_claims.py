@@ -430,12 +430,13 @@ reason = (
     f"    claim   : {claimed_as}\n\n"
     f"One shared working tree means git will NOT warn you — a write here silently\n"
     f"destroys their uncommitted work.\n\n"
-    f"Do this instead:\n"
-    f"  1. Stage the change under Projects/golden-thread/pending/\n"
-    f"     (a .patch for normal files, a .logline for append-only ones)\n"
+    f"Do this instead -- queue first:\n"
+    f"  python3 <gt scripts>/gt_write_queue.py --vault \"{vault}\" --path \"{rel}\" \\\n"
+    f"      --op append|replace-section|create [--section \"<heading>\"] --content-file <file>\n"
+    f"  The queue HOLDS the write while that claim is live, and the first\n"
+    f"  `gt_broker.py drain` after the claim is released applies it -- nothing to re-apply.\n"
     f"  -- log.md and decisions.md need no claim at all: they are generated.\n"
     f"     Use tools/gt_log.py add, or tools/gt_adr.py allocate <project>.\n"
-    f"  2. Apply it once `gt_session.py list` shows the claim cleared.\n"
     f"If you believe that session is dead, confirm with `gt_session.py list`."
 )
 

@@ -27,6 +27,21 @@ RESEARCH_TEXT = ("# quokka research\n\n## Findings\n\n- the first finding\n\n"
 
 
 class BrokerBase(Sandbox):
+    def _finish(self, procs):
+        """Wait for every process; on any failure kill the rest, so none outlives the test."""
+        fails = []
+        try:
+            for pr in procs:
+                out, err = pr.communicate(timeout=300)
+                if pr.returncode:
+                    fails.append(out + err)
+        finally:
+            for pr in procs:
+                if pr.poll() is None:
+                    pr.kill()
+                    pr.communicate()
+        self.assertEqual(fails, [])
+
     def setUp(self):
         super().setUp()
         self.vault = self.tmp / "vault"
@@ -475,8 +490,10 @@ class CoreRule1ClaimsHold(BrokerBase):
     def test_a_file_claimed_by_another_live_session_is_left_queued(self):
         self.register("wombat-live", [RESEARCH])
         self.submit("- waits for the claim", section="Findings", session="kestrel")
-        p = self.drain(expect=1)
+        # M4 (0.20.1): held on a live claim is waiting, not failing -- exit 0, said in words.
+        p = self.drain(expect=0)
         self.assertIn("wombat-live", p.stdout)
+        self.assertIn("held (waiting on a claim), not failed", p.stdout)
         self.assertEqual(self.research(), RESEARCH_TEXT)
         self.assertEqual(len(self.queued()), 1)
         self.assertEqual(self.log_rows()[-1]["decision"], "held")
@@ -494,6 +511,264 @@ class Status(BrokerBase):
         p = self.py(BROKER, "status", "--vault", self.vault, "--json")
         self.assertOk(p)
         self.assertEqual(json.loads(p.stdout)["pending"], 1)
+
+
+# ------------------------------------------------------------------------- 0.20.1 ----
+
+def _load(path, name):
+    from _harness import load_module
+    return load_module(path, name)
+
+
+class B1DedupNeverDropsAFact(BrokerBase):
+    """B1 (0.20.1 usability run): a >= 90% token-similarity "near duplicate" check recorded a
+    corrected value as a duplicate and dropped it; a retried heading+body append was doubled."""
+
+    def test_a_changed_value_is_kept_and_the_difference_is_named(self):
+        self.submit("- the oven peaks at 410 C under load", section="Findings")
+        self.drain(expect=0)
+        self.submit("- the oven peaks at 455 C under load", section="Findings")
+        p = self.drain(expect=0)
+        body = self.section("Findings")
+        self.assertIn("410 C", body)
+        self.assertIn("455 C", body, "the corrected value was dropped as a duplicate")
+        row = self.log_rows()[-1]
+        self.assertEqual(row["decision"], "apply")
+        self.assertIn("kept: differs from an existing line in", row["reason"])
+        self.assertIn("455", row["reason"])
+        self.assertIn("410", row["reason"])
+        self.assertIn("kept: differs from an existing line in", p.stdout)
+
+    def test_an_inserted_word_is_kept(self):
+        """The Windows case: "holds live claim" is not "holds claim"."""
+        self.submit("- session kestrel holds claim on research.md", section="Findings")
+        self.drain(expect=0)
+        self.submit("- session kestrel holds live claim on research.md", section="Findings")
+        self.drain(expect=0)
+        body = self.section("Findings")
+        self.assertIn("holds claim on", body)
+        self.assertIn("holds live claim on", body)
+        self.assertIn("live", self.log_rows()[-1]["reason"])
+
+    def test_only_case_spacing_and_bullets_are_ignored(self):
+        self.submit("- the cache is warm", section="Findings")
+        self.drain(expect=0)
+        self.submit("*   The  cache is WARM.", section="Findings")
+        self.drain(expect=0)
+        self.assertEqual(self.section("Findings").lower().count("cache is warm"), 1)
+        self.assertEqual(self.log_rows()[-1]["decision"], "deduplicate")
+
+    def test_a_sign_is_a_difference(self):
+        self.submit("- the offset is 5 ms", section="Findings")
+        self.drain(expect=0)
+        self.submit("- the offset is -5 ms", section="Findings")
+        self.drain(expect=0)
+        self.assertIn("-5 ms", self.section("Findings"))
+
+    def test_a_heading_and_body_retry_is_applied_once(self):
+        entry = ("## 2026-10-04: oven\n\nThe oven peaks at 455 C.\nMeasured twice, "
+                 "both runs agree.\n")
+        self.submit(entry)
+        self.submit(entry)                              # the retry, same request content
+        self.drain(expect=0)
+        self.submit(entry)                              # and a retry after it landed
+        self.drain(expect=0)
+        text = self.research()
+        self.assertEqual(text.count("## 2026-10-04: oven"), 1, text)
+        self.assertEqual(text.count("Measured twice"), 1, text)
+        self.assertEqual([r["decision"] for r in self.log_rows()],
+                         ["apply", "deduplicate", "deduplicate"])
+        self.assertEqual(self.queued(), [])
+
+    def test_a_subheading_and_body_retry_into_a_section_is_applied_once(self):
+        entry = "### oven\n\nThe oven peaks at 455 C.\n\n- measured twice\n"
+        for _ in range(2):
+            self.submit(entry, section="Findings")
+            self.drain(expect=0)
+        self.assertEqual(self.section("Findings").count("### oven"), 1)
+        self.assertEqual(self.log_rows()[-1]["decision"], "deduplicate")
+
+    def test_a_section_heading_retry_appended_into_a_section_is_applied_once(self):
+        """A `## ` heading in the text closes the section it was appended to, so the retry is
+        looked for in the whole file."""
+        entry = "## Oven\n\nThe oven peaks at 455 C.\n"
+        for _ in range(2):
+            self.submit(entry, section="Findings")
+            self.drain(expect=0)
+        self.assertEqual(self.research().count("## Oven"), 1, self.research())
+
+
+class B2UniqueRequestIds(BrokerBase):
+    """B2 (0.20.1): same-session writers in one clock tick got one id, and the second deposit
+    replaced the first while both printed `queued`."""
+
+    def test_two_requests_built_in_the_same_tick_get_different_ids(self):
+        import datetime
+        wq = _load(QUEUE, "gt_write_queue_ids")
+        now = datetime.datetime(2026, 10, 4, 12, 0, 0, tzinfo=datetime.timezone.utc)
+        a = wq.build(self.vault, RESEARCH, "append", "a", None, "sess-a", "session", None, now=now)
+        b = wq.build(self.vault, RESEARCH, "append", "b", None, "sess-a", "session", None, now=now)
+        self.assertNotEqual(a["id"], b["id"])
+        self.assertIsNone(wq.validate(a, self.vault))
+
+    def test_a_deposit_never_overwrites_a_request_even_when_exists_lies(self):
+        """The race: another writer creates the name between the check and the write. Simulated
+        by making exists() say False; the deposit must still never replace the file."""
+        from unittest import mock
+        import pathlib
+        wq = _load(QUEUE, "gt_write_queue_excl")
+        first = wq.build(self.vault, RESEARCH, "append", "- first", "Findings", "s", "session", None)
+        second = dict(first, content="- second")
+        d1 = wq._deposit_queue(self.vault, first)
+        with mock.patch.object(pathlib.Path, "exists", lambda self: False):
+            d2 = wq._deposit_queue(self.vault, second)
+        self.assertNotEqual(d1, d2)
+        self.assertEqual(json.loads(d1.read_text())["content"], "- first", "overwritten")
+        self.assertEqual(json.loads(d2.read_text())["content"], "- second")
+        self.assertEqual(len(self.queued()), 2)
+        self.assertEqual([p.name for p in self.queue_dir.iterdir() if p.name.startswith(".req")],
+                         [], "a temp file was left behind")
+
+    def test_parallel_same_session_writers_all_land(self):
+        n_proc, m_appends = 6, 10
+        script = self.tmp / "writer.py"
+        script.write_text(
+            "import subprocess, sys\n"
+            "q, vault, w, m = sys.argv[1], sys.argv[2], sys.argv[3], int(sys.argv[4])\n"
+            "for i in range(m):\n"
+            "    p = subprocess.run([sys.executable, q, '--vault', vault, '--path', %r,\n"
+            "                        '--op', 'append', '--section', 'Findings', '--session',\n"
+            "                        'same-session', '--content', '- writer %%s line %%d' %% (w, i)],\n"
+            "                       capture_output=True, text=True)\n"
+            "    if p.returncode or 'queued' not in p.stdout:\n"
+            "        sys.exit('writer %%s line %%d: %%s %%s' %% (w, i, p.stdout, p.stderr))\n"
+            % RESEARCH)
+        procs = [subprocess.Popen([PYTHON, str(script), str(QUEUE), str(self.vault), str(w),
+                                   str(m_appends)], env=self.env, stdout=subprocess.PIPE,
+                                  stderr=subprocess.PIPE, text=True) for w in range(n_proc)]
+        self._finish(procs)
+        self.assertEqual(len(self.queued()), n_proc * m_appends,
+                         "a same-session request overwrote another")
+        self.drain(expect=0)
+        body = self.section("Findings")
+        for w in range(n_proc):
+            for i in range(m_appends):
+                self.assertEqual(body.count("- writer %d line %d\n" % (w, i)), 1,
+                                 "writer %d line %d" % (w, i))
+        self.assertEqual(self.queued(), [])
+
+
+class B2DrainLockExcludes(BrokerBase):
+    """B2 (0.20.1): the drain lock was flock only, a no-op on native Windows."""
+
+    def test_a_held_lock_refuses_a_second_taker_in_another_process(self):
+        from unittest import mock
+        with mock.patch.dict("os.environ", self.env, clear=True):
+            broker = _load(BROKER, "gt_broker_lock")
+            lock = broker._lock(self.vault)
+            self.assertIsNotNone(lock)
+            try:
+                probe = ("import sys; sys.path.insert(0, %r); import gt_broker; "
+                         "from pathlib import Path; l = gt_broker._lock(Path(%r)); "
+                         "print('TAKEN' if l else 'REFUSED')" % (str(BROKER.parent),
+                                                                 str(self.vault)))
+                p = self.run_cmd([PYTHON, "-c", probe])
+                self.assertEqual(p.stdout.strip(), "REFUSED", p.stdout + p.stderr)
+            finally:
+                lock.close()
+            p = self.run_cmd([PYTHON, "-c", probe])
+            self.assertEqual(p.stdout.strip(), "TAKEN", p.stdout + p.stderr)
+
+
+class M4ConcurrentDrains(BrokerBase):
+    """M4 (0.20.1): a drain that found another running exited 1 and stranded its requests."""
+
+    def _hold_and_drain(self, apply_meanwhile):
+        from unittest import mock
+        import time
+        self.submit("- one", section="Findings")
+        self.submit("- two", section="Open questions")
+        with mock.patch.dict("os.environ", self.env, clear=True):
+            broker = _load(BROKER, "gt_broker_m4")
+            lock = broker._lock(self.vault)
+            try:
+                env = dict(self.env, GT_BROKER_LOCK_WAIT="60")
+                proc = subprocess.Popen([PYTHON, str(BROKER), "drain", "--vault",
+                                         str(self.vault), "--json"], env=env,
+                                        stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+                time.sleep(1.5)
+                self.assertIsNone(proc.poll(), "the second drain gave up instead of waiting")
+                if apply_meanwhile:
+                    broker.Drain(self.vault, False).run()
+            finally:
+                lock.close()
+        out, err = proc.communicate(timeout=120)
+        return proc.returncode, out, err
+
+    def test_a_drain_waits_for_the_running_one_then_drains_what_is_left(self):
+        rc, out, err = self._hold_and_drain(apply_meanwhile=False)
+        self.assertEqual(rc, 0, out + err)
+        self.assertEqual(self.queued(), [], "requests were stranded")
+        self.assertIn("- one", self.section("Findings"))
+
+    def test_exit_0_when_the_other_drain_applied_everything(self):
+        rc, out, err = self._hold_and_drain(apply_meanwhile=True)
+        self.assertEqual(rc, 0, out + err)
+        data = json.loads(out)
+        self.assertEqual(sorted(r["decision"] for r in data["results"]), ["apply", "apply"])
+        self.assertTrue(all(r.get("by") == "another drain" for r in data["results"]))
+        self.assertEqual(self.queued(), [])
+
+    def test_sessions_racing_submit_and_drain_leave_nothing_queued(self):
+        script = self.tmp / "session.py"
+        script.write_text(
+            "import subprocess, sys\n"
+            "q, b, vault, s = sys.argv[1:5]\n"
+            "for i in range(5):\n"
+            "    p = subprocess.run([sys.executable, q, '--vault', vault, '--path', %r, '--op',\n"
+            "                        'append', '--section', 'Findings', '--session', s,\n"
+            "                        '--content', '- %%s finding %%d' %% (s, i)])\n"
+            "    if p.returncode: sys.exit('queue failed')\n"
+            "    p = subprocess.run([sys.executable, b, 'drain', '--vault', vault])\n"
+            "    if p.returncode: sys.exit('drain exited %%d' %% p.returncode)\n" % RESEARCH)
+        procs = [subprocess.Popen([PYTHON, str(script), str(QUEUE), str(BROKER), str(self.vault),
+                                   "sess-%d" % k], env=self.env, stdout=subprocess.PIPE,
+                                  stderr=subprocess.PIPE, text=True) for k in range(4)]
+        self._finish(procs)
+        self.assertEqual(self.queued(), [], "a racing drain stranded requests")
+        body = self.section("Findings")
+        for k in range(4):
+            for i in range(5):
+                self.assertEqual(body.count("- sess-%d finding %d\n" % (k, i)), 1)
+
+
+class QueueRefusesIdeaAndMissingProjects(BrokerBase):
+    IDEA = "Projects/quokka/idea.md"
+
+    def test_idea_md_takes_its_first_fill_then_is_immutable(self):
+        (self.vault / self.IDEA).write_text(
+            "# Quokka\n\n<!-- Original brain dump \u2014 immutable after creation -->\n"
+            )
+        self.submit("## The Idea\n\nthe brain dump", path=self.IDEA)
+        self.drain(expect=0)
+        self.assertIn("the brain dump", (self.vault / self.IDEA).read_text())
+        p = self.submit("- a later thought", path=self.IDEA, expect=1)
+        self.assertIn("immutable", p.stderr)
+        self.assertIn("research.md", p.stderr)
+        self.submit("x", op="replace-file", path=self.IDEA, expect=1)
+        self.assertEqual(self.queued(), [])
+        self.assertNotIn("later thought", (self.vault / self.IDEA).read_text())
+
+    def test_a_write_into_a_project_that_does_not_exist_is_refused_with_the_command(self):
+        p = self.submit("- orphan", path="Projects/nosuch/research.md", expect=1)
+        self.assertIn("create it first", p.stderr)
+        self.assertIn("create-project", p.stderr)
+        self.assertIn("--name nosuch", p.stderr)
+        self.assertFalse((self.vault / "Projects" / "nosuch").exists(), "an orphan folder")
+        self.assertEqual(self.queued(), [])
+
+    def test_a_file_directly_under_projects_is_not_a_project(self):
+        self.submit("- infra", path="Projects/INFRASTRUCTURE.md")
 
 
 if __name__ == "__main__":
