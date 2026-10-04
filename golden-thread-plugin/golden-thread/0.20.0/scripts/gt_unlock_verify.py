@@ -185,6 +185,36 @@ def check_sandbox(r):
         r.add("sandbox", NC, "the sandbox check could not run (%s)" % type(e).__name__)
 
 
+def check_mcp(r, level=None):
+    """MCP servers outside LOTR and gt-vault (0.20.1, gt_mcp_inventory.py). Claude Code talks to
+    them directly, so unlock cannot gate them and the sandbox does not contain them: while any
+    exist this row is NOT-CHECKED, never PASS, and the level is annotated -- the L1/L2 claim
+    covers LOTR and gt-vault only. Returns how many there are (None when it could not run)."""
+    try:
+        import gt_mcp_inventory as M
+        inv = M.inventory()
+        out = M.ungated(inv)
+    except Exception as e:                       # noqa: BLE001 - a check must not crash verify
+        r.add("mcp", NC, "the MCP inventory could not run (%s)" % type(e).__name__)
+        return None
+    if inv["problems"]:
+        r.add("mcp", NC, "MCP inventory incomplete (%s)" % "; ".join(inv["problems"]))
+        return None
+    if out:
+        r.add("mcp", NC, "%d MCP server(s) outside LOTR: %s -- not gated by unlock, not "
+                         "contained by sandbox mode; the unlock level covers LOTR and gt-vault "
+                         "only (%s)" % (len(out), ", ".join(s["name"] for s in out),
+                                        M.SECURITY_REF))
+    else:
+        r.add("mcp", PASS, "every MCP server Claude Code may load goes through LOTR or gt-vault")
+    if level is not None:
+        level["scope"] = "LOTR and gt-vault only"
+        if out and level.get("level") not in ("off", "locked"):
+            level["why"] = "%s (covers LOTR and gt-vault only; %d MCP server(s) bypass it)" % (
+                level.get("why") or "", len(out))
+    return len(out)
+
+
 def main(as_json=False):
     home = C.home()
     r = Run()
@@ -214,6 +244,8 @@ def main(as_json=False):
         r.add("unlock", NC, "unlock is off, so nothing is gated; turn it on to check more "
                             "(SECURITY.md)")
     check_sandbox(r)
+    level = dict(level)
+    check_mcp(r, level)
     fails = [x for x in r.rows if x["state"] == FAIL]
     out = {"level": level, "rows": r.rows, "fail": len(fails),
            "not_checked": sum(1 for x in r.rows if x["state"] == NC)}

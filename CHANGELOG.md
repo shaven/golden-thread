@@ -541,6 +541,45 @@ report-card, watch; lockstep modules `requires_gt >=0.20.0,<0.21.0`).
   bootstrap/bootout/kickstart/load/unload..., schtasks /Create /Run /Delete /Change /End -- is
   refused whatever code path reaches it. Reads (`launchctl print`, `schtasks /Query`) still run.
 
+### MCP servers outside LOTR, named (downstream-MCP design, Phase A)
+
+(Owner decision 2026-10-04 07:04 CDT: Phase A ships with this release; lockdown, `import-mcp`
+and the rest move to 0.21.) gt unlock, LOTR's tiers and gt sandbox mode cover only what passes
+through LOTR and gt-vault. Every MCP server Claude Code connects to directly is outside both,
+and nothing said so.
+
+- **`gt_mcp_inventory.py`** (new, stdlib, read-only; `--json`) lists every MCP server Claude
+  Code may load from the current folder: user and per-folder local servers in `~/.claude.json`
+  (or `$CLAUDE_CONFIG_DIR`), `.mcp.json` in the folder and its parents with its approval state,
+  every enabled plugin's servers (`plugin.json` inline, a file path or a list, else `.mcp.json`),
+  connected claude.ai connectors, the built-in Claude in Chrome, and `managed-mcp.json`;
+  `allowManagedMcpServersOnly` / `allowedMcpServers` / `deniedMcpServers` and per-folder
+  disables are applied to each server's state. Each is GATED (named `gt-vault` / `gt-lotr`
+  **and** running gt's own script) or UNGATED, with its source, transport, a coarse endpoint
+  (command base name, URL scheme and host) and the *kind* of place its credentials live
+  (headers in config, env in config, headers helper, args, URL, OAuth store, server-side,
+  browser profile, none) plus whether a literal value sits in a file. It never prints a header,
+  env, argument or URL value; a test feeds it secret-shaped values in every field and asserts
+  none reaches the text or JSON output. Windows folder keys (`C:/Users/...`, any case or slash)
+  are matched; `gt_mcp_inventory.py managed` prints the enterprise managed-settings recipe —
+  guidance only, gt never writes managed settings.
+- **`/gt:gt-doctor` row `mcp`** lists the ungated servers as a note (never "ok" while any
+  exist; UNKNOWN when a config file cannot be read).
+- **`gt_unlock.py verify` row `mcp`** is NOT-CHECKED — never PASS — while any ungated server
+  exists, names them, and the level line says the L1/L2 claim covers LOTR and gt-vault only.
+- **SECURITY.md section 9, "MCP servers outside LOTR"**: direct servers are outside unlock and
+  sandbox mode (not "friction" — outside), how to route an HTTP server through LOTR
+  (`lotr add-mcp`, then `claude mcp remove`), and the managed-settings recipe with the paths
+  per OS.
+- **Sandbox mode read-denies Claude Code's login file**, `~/.claude/.credentials.json` (its
+  OAuth tokens on Linux, WSL and Windows), in `sandbox.filesystem.denyRead` and as a
+  `Read(//…/.credentials.json)` rule. Checked live on macOS with Claude Code 2.1.289: headless
+  `claude -p` still answers with the entry in place, and a sandboxed `cat` of a read-denied
+  fixture is refused (`Operation not permitted`) where the same file, not denied, is read. The
+  real file does not exist on macOS (Keychain), and Linux was not run live. A machine already
+  running sandbox mode reports one missing entry in `gt_sandbox.py check` until
+  `gt_sandbox.py apply` runs again.
+
 ## gt 0.19.2 — 2026-10-03
 
 **gt installs on native Windows** (owner, 2026-10-03). Proven on a Windows 11 VM (Git for

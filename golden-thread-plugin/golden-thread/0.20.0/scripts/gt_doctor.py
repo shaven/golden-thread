@@ -2203,6 +2203,7 @@ CHECKS = CHECKS + ("execution",)        # 0.18.1: gt_bench.health (measured prof
 CHECKS += ("unlock", "security")        # 0.20.0: gt unlock state + level; its self-check
 CHECKS += ("sandbox",)                  # 0.20.0: gt sandbox mode -- settings drift, platform
 CHECKS += ("scratch",)                  # 0.20.0: stage agents' scratch left by finished runs
+CHECKS += ("mcp",)                      # 0.20.1: MCP servers outside LOTR / gt-vault
 
 
 def _unlock_cli():
@@ -2355,6 +2356,45 @@ def check_sandbox(rep):
             detail)
 
 
+def check_mcp(rep):
+    """MCP servers Claude Code may load that do NOT go through LOTR or gt-vault (0.20.1,
+    gt_mcp_inventory.py). They are outside gt unlock and sandbox mode, so they are listed, never
+    "ok": a NOTE (orientation -- nothing is broken), OK only when every server is gt's, UNKNOWN
+    when a config file could not be read. No header, env or URL value is ever shown."""
+    inv_mod = None
+    for d in (HERE, INSTALLED_HOOKS):
+        if (d / "gt_mcp_inventory.py").is_file():
+            import importlib.util
+            spec = importlib.util.spec_from_file_location("gt_mcp_inventory",
+                                                          str(d / "gt_mcp_inventory.py"))
+            inv_mod = importlib.util.module_from_spec(spec)
+            try:
+                spec.loader.exec_module(inv_mod)
+            except Exception:                       # noqa: BLE001
+                inv_mod = None
+            break
+    if inv_mod is None:
+        rep.add("mcp", UNKNOWN, "gt_mcp_inventory.py is not installed in the hooks dir")
+        return
+    try:
+        inv = inv_mod.inventory()
+        out = inv_mod.ungated(inv)
+    except Exception as e:                          # noqa: BLE001
+        rep.add("mcp", UNKNOWN, "the MCP inventory could not run (%s)" % type(e).__name__)
+        return
+    detail = "\n".join(inv_mod.describe(s) for s in out)
+    if inv["problems"]:
+        rep.add("mcp", UNKNOWN, "MCP inventory incomplete: %d config file(s) unreadable"
+                % len(inv["problems"]), "\n".join(inv["problems"] + ([detail] if detail else [])))
+        return
+    if out:
+        rep.add("mcp", NOTE, "%d MCP server(s) outside LOTR -- not gated by gt unlock, not "
+                "contained by sandbox mode (%s)" % (len(out), inv_mod.SECURITY_REF), detail)
+        return
+    rep.add("mcp", OK, "every MCP server Claude Code may load goes through LOTR or gt-vault "
+            "(%d)" % inv["summary"]["gated"])
+
+
 def check_execution(rep):
     """How work executes here (check: execution): measured vs default parallel profile and its
     age, a Rosetta-translated shell, TMPDIR in a synced folder. One row; WARN only for the two
@@ -2477,6 +2517,8 @@ def main(argv=None):
         check_sandbox(rep)
     if "scratch" in wanted:
         check_scratch(rep, vault)
+    if "mcp" in wanted:
+        check_mcp(rep)
 
     if a.fix:
         fix_wiring(rep, vdir, vault)

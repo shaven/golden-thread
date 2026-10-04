@@ -478,6 +478,9 @@ HOOK_DIR_SCRIPTS = ("gt_paths.py", "gt_components.py",
                     # stage agents' private scratch folders (0.20.0): gt_sandbox allows
                     # writes to their root and gt_doctor reports leaks, both from here.
                     "gt_scratch.py",
+                    # MCP servers outside LOTR (0.20.1): gt_doctor's `mcp` row and
+                    # gt_unlock_verify's `mcp` row import it from beside themselves.
+                    "gt_mcp_inventory.py",
                     # the Touch ID helper's source: install.sh builds it from here (macOS)
                     "gt-presence.swift")
 
