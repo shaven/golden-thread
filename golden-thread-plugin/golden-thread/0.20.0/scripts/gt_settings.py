@@ -1423,7 +1423,7 @@ def set_value(name, value, force=False):
         except ImportError:
             pass
         except gt_sandbox.SandboxError as e:
-            print("refused: %s" % e)
+            print("refused: %s Nothing was changed and no code was asked for." % e)
             return 1
     if name in ("sandbox_mode", "sandbox_vault_reads"):
         # The same refusal for a change to the reads setting while sandbox mode is on, and the
