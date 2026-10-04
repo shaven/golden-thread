@@ -482,6 +482,9 @@ HOOK_DIR_SCRIPTS = ("gt_paths.py", "gt_components.py",
                     # can this Python write where gt writes? (0.20.0): gt_schedule's
                     # choose-interpreter, the broker's EPERM line and gt_doctor import it.
                     "gt_write_probe.py",
+                    # MCP servers outside LOTR (0.20.1): gt_doctor's `mcp` row and
+                    # gt_unlock_verify's `mcp` row import it from beside themselves.
+                    "gt_mcp_inventory.py",
                     # the Touch ID helper's source: install.sh builds it from here (macOS)
                     "gt-presence.swift")
 

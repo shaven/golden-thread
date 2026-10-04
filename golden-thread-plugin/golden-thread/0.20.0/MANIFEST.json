@@ -221,8 +221,8 @@
    "sha256": "8977a8959becdac7aa565eee5dd877752ebc0ddf3d8f807453f663819e214365"
   },
   "scripts/gt_components.py": {
-   "bytes": 108624,
-   "sha256": "ca4d1036578c28da51ee5b9f14ffad16b0a4c89366a183b3021d8d41b6a97e18"
+   "bytes": 108835,
+   "sha256": "811edf516b957cdbed7fc2e351d902ab11770069b8a65c1c95fd2ae52e676f98"
   },
   "scripts/gt_context.py": {
    "bytes": 10260,
@@ -241,8 +241,8 @@
    "sha256": "5e44883a367e6f4b50b8dd83428b20ffeaf2619a32a7cc9d2cda2343f92bec17"
   },
   "scripts/gt_doctor.py": {
-   "bytes": 123785,
-   "sha256": "a1927580882688cc273d93f4fe2f628cc05a931caf2218c3f4989c10b5409e1c"
+   "bytes": 125877,
+   "sha256": "0dfedc78821d846da55b60cb0e9b1dc329c4c5e68e8923ff59116412eba8b09b"
   },
   "scripts/gt_entities.py": {
    "bytes": 5423,
@@ -299,6 +299,10 @@
   "scripts/gt_machine_migrate.py": {
    "bytes": 19386,
    "sha256": "e3bdf6d93ac2571e5bd665a498b460a2d92169cc13805c2e6b5cf477c8498915"
+  },
+  "scripts/gt_mcp_inventory.py": {
+   "bytes": 23908,
+   "sha256": "afbf7dce0a93ca2522f1af7cfdf4b1fb05e258ddcf53bb7596f85ab165b569a4"
   },
   "scripts/gt_memory_check.py": {
    "bytes": 13029,
@@ -369,8 +373,8 @@
    "sha256": "784d297d1d953e90ec5fc69d2b7c443d88d4a50aba256b15f15cbdda8aed9264"
   },
   "scripts/gt_sandbox.py": {
-   "bytes": 62192,
-   "sha256": "68ca4630769e910cb97d3a0b7c9468600931c287b59e1f91779f1480a9056b41"
+   "bytes": 63333,
+   "sha256": "079933c8d1b6d9046cc7a7f2ea8eb08faf9977235c90b115f40432e04a127c31"
   },
   "scripts/gt_scan.py": {
    "bytes": 11363,
@@ -477,8 +481,8 @@
    "sha256": "a02565bb4183ec7d989153dd2c6d2f2018b679c34325cb649d041053e3020307"
   },
   "scripts/gt_unlock_verify.py": {
-   "bytes": 10351,
-   "sha256": "17aa2eed740b0e5dcc22802c1b3fc118f9b55d4456f26974d37750570b4bbcde"
+   "bytes": 12000,
+   "sha256": "0c87d6123c748167e12614fe6b1cc2156ed9b013fd3ff94ca8ec813f153911ca"
   },
   "scripts/gt_unlockd.py": {
    "bytes": 55023,
@@ -781,7 +785,7 @@
    "sha256": "ca6e34c9d9e846dedd1de0e812b421930bb86c33c9166e662c2fbf9b11756bc2"
   }
  },
- "generated": "2026-10-04T07:37:48",
+ "generated": "2026-10-04T08:07:17",
  "hooks": [
   {
    "args": [

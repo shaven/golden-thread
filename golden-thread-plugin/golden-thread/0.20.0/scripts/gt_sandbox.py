@@ -26,8 +26,9 @@ code.claude.com/docs/en/sandboxing, /settings-reference and /permissions, 2026-1
       home and its markers), the unlock socket's directory when it lives outside that, the LOTR
       home and store, ~/.claude/plugins, ~/.claude/settings.json and vault-config.json
   sandbox.filesystem.denyRead    the unlock home (sealed store, TOTP seed, recovery codes),
-      the LOTR home and store, every LOCKED vault folder (a `.gt-locked` stub), and -- with
-      sandbox_vault_reads deny -- the whole vault
+      the LOTR home and store, every LOCKED vault folder (a `.gt-locked` stub), Claude Code's
+      own login file ~/.claude/.credentials.json (0.20.1), and -- with sandbox_vault_reads
+      deny -- the whole vault
   sandbox.filesystem.allowWrite  the queue inbox, ~/.gt-inbox, where gt_write_queue.py run
       from Claude's shell leaves its requests for the broker; and the stage agents' scratch
       root, ~/.gt-scratch (gt_scratch.py, 0.20.0): one private 0700 folder per pipeline run and
@@ -173,6 +174,14 @@ def settings_path(h=None):
 
 def config_path(h=None):
     return os.path.join(claude_dir(h), "vault-config.json")
+
+
+def credentials_path(h=None):
+    """Claude Code's own login file (0.20.1): its OAuth tokens on Linux, WSL and Windows, and
+    possibly the tokens of remote MCP servers added with /mcp (code.claude.com/docs,
+    'authentication'). macOS keeps them in the Keychain and the file is normally absent; the
+    deny is written anyway, because it costs nothing and a later install may create it."""
+    return os.path.join(claude_dir(h), ".credentials.json")
 
 
 def gt_home(h=None):
@@ -411,13 +420,19 @@ def plan(h=None, vault=None, vault_reads=None, mode=None):
             deny_read_dirs += _spellings(f)
     deny_write_dirs = list(dict.fromkeys(deny_write_dirs))
     deny_read_dirs = list(dict.fromkeys(deny_read_dirs))
+    # Files read-denied (0.20.1): Claude Code's login file. Live-checked 2026-10-04 on macOS
+    # (claude 2.1.289): headless `claude -p` still answers with it in denyRead, and a sandboxed
+    # `cat` of a denied file gets "Operation not permitted" where the same file outside the
+    # list is read. Claude Code reads its own credentials in its own, unsandboxed process.
+    deny_read_files = [credentials_path(h)]
     inbox = inbox_dir(h)
     lists = {k: [] for k in LISTS}
     notes = []
     if os_sandbox_supported(mode):
         lists["sandbox.filesystem.denyWrite"] = [sandbox_path(p) for p in
                                                  deny_write_dirs + deny_write_files]
-        lists["sandbox.filesystem.denyRead"] = [sandbox_path(p) for p in deny_read_dirs]
+        lists["sandbox.filesystem.denyRead"] = [sandbox_path(p) for p in
+                                                deny_read_dirs + deny_read_files]
         lists["sandbox.filesystem.allowWrite"] = [sandbox_path(inbox),
                                                   sandbox_path(scratch_root(h))]
         bools = dict(SANDBOX_BOOLS)
@@ -429,6 +444,7 @@ def plan(h=None, vault=None, vault_reads=None, mode=None):
     deny = [("Edit(%s)" % rule_path(p, True)) for p in deny_write_dirs]
     deny += [("Edit(%s)" % rule_path(p, False)) for p in deny_write_files]
     deny += [("Read(%s)" % rule_path(p, True)) for p in deny_read_dirs]
+    deny += [("Read(%s)" % rule_path(p, False)) for p in deny_read_files]
     deny += list(SETTINGS_FILE_RULES)
     deny += config_file_rules(h, mode)
     lists["permissions.deny"] = list(dict.fromkeys(deny))
@@ -440,6 +456,7 @@ def plan(h=None, vault=None, vault_reads=None, mode=None):
             "sandbox_bools": bools, "permission_keys": dict(PERMISSION_KEYS),
             "lists": lists, "notes": notes,
             "paths": {"vault": vault, "gt_home": gth, "unlock_home": uh,
+                      "credentials": deny_read_files[0],
                       "unlock_socket_dir": sock, "lotr_homes": lotr, "lotr_store": store,
                       "inbox": inbox, "locked_folders": locked}}
 

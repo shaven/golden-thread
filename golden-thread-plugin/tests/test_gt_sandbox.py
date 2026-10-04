@@ -551,3 +551,37 @@ class LiveSrt(InProcess):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class CredentialsDeny(InProcess):
+    """0.20.1: Claude Code's login file is read-denied to the shell and the file tools. Live-
+    checked on macOS (claude 2.1.289, CHANGELOG 0.20.0): Claude Code still runs with it denied."""
+
+    def test_credentials_file_is_in_deny_read_and_a_file_read_rule(self):
+        cred = str(self.home / ".claude" / ".credentials.json")
+        p = self.gs.plan(mode="linux")
+        self.assertIn(cred.replace("\\", "/") if IS_WINDOWS else cred,
+                      p["lists"]["sandbox.filesystem.denyRead"])
+        rule = "Read(%s)" % self.gs.rule_path(cred, False)
+        self.assertIn(rule, p["lists"]["permissions.deny"])
+        self.assertFalse(rule.endswith("/**)"), "a file rule, not a folder rule")
+        self.assertNotIn(cred.replace("\\", "/") if IS_WINDOWS else cred,
+                         p["lists"]["sandbox.filesystem.denyWrite"],
+                         "read-denied only: Claude Code itself refreshes the login")
+        self.assertEqual(p["paths"]["credentials"], cred)
+
+    def test_native_windows_keeps_the_read_rule_without_sandbox_lists(self):
+        p = self.gs.plan(mode="windows")
+        cred = str(self.home / ".claude" / ".credentials.json")
+        self.assertIn("Read(%s)" % self.gs.rule_path(cred, False), p["lists"]["permissions.deny"])
+        self.assertEqual(p["lists"]["sandbox.filesystem.denyRead"], [])
+
+    def test_apply_then_remove_round_trips_with_the_new_entry(self):
+        before = {"permissions": {"deny": ["Read(//x)"]}}
+        self.write_settings(before)
+        self.gs.apply(force=True)
+        cred = str(self.home / ".claude" / ".credentials.json")
+        self.assertIn("Read(%s)" % self.gs.rule_path(cred, False),
+                      self.settings()["permissions"]["deny"])
+        self.gs.remove()
+        self.assertEqual(self.settings(), before)

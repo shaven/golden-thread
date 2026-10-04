@@ -105,7 +105,8 @@
 <p>Written against <strong>gt v0.20.0</strong> (gt-lotr 0.3.0). Unlock and sandbox mode both ship <strong>off</strong>. This
 guide says what each does when you turn it on, what it needs, how to set it up on macOS, Windows
 and Linux, and — just as plainly — what it does not protect. gt sandbox mode, which fences the
-assistant's own shell and file tools off the vault and gt's state, is section 8.</p>
+assistant's own shell and file tools off the vault and gt's state, is section 8. MCP servers Claude
+Code connects to directly, outside both, are section 9.</p>
 <blockquote>
 <p><em>"Unlock proves a person was present and limits what agents can do on their own. It is not
 anti-malware. If something already runs as you, it can wait for you to unlock."</em></p>
@@ -603,6 +604,7 @@ and gt's own scopes can never be allowed unattended; jobs are never prompted.</p
 <li>Anything after you unlock, inside the unlocked window, from software already running as you.</li>
 <li>Credentials that also exist somewhere else in plaintext.</li>
 <li>Files outside the folders you lock.</li>
+<li>MCP servers Claude Code connects to directly, not through LOTR (section 9).</li>
 </ul>
 <h3 id="worked-example-macos">Worked example (macOS)</h3>
 <pre><code class="language-bash">gt_unlock.py enroll touchid &amp;&amp; gt_unlock.py enroll totp &amp;&amp; gt_unlock.py recovery
@@ -694,8 +696,8 @@ nothing of yours. Every key is one the Claude Code documentation names
 </tr>
 <tr>
 <td><code>sandbox.filesystem.denyRead</code></td>
-<td>the unlock home (sealed store, <code>totp.seed</code>, recovery codes, audit log); LOTR's home and store; every <strong>locked</strong> vault folder; and the <strong>whole vault</strong> while <code>sandbox_vault_reads</code> is <code>deny</code> (the default)</td>
-<td>The shell cannot read the second factor, credentials, or the vault</td>
+<td>the unlock home (sealed store, <code>totp.seed</code>, recovery codes, audit log); LOTR's home and store; every <strong>locked</strong> vault folder; Claude Code's own login file <code>~/.claude/.credentials.json</code> (0.20.1; its OAuth tokens on Linux, WSL and Windows — macOS keeps them in the Keychain, and the entry is written anyway); and the <strong>whole vault</strong> while <code>sandbox_vault_reads</code> is <code>deny</code> (the default)</td>
+<td>The shell cannot read the second factor, credentials, Claude Code's login, or the vault</td>
 </tr>
 <tr>
 <td><code>sandbox.filesystem.allowWrite</code></td>
@@ -704,7 +706,7 @@ nothing of yours. Every key is one the Claude Code documentation names
 </tr>
 <tr>
 <td><code>permissions.deny</code></td>
-<td><code>Edit(//&lt;path&gt;/**)</code> for every write-denied path, <code>Read(//&lt;path&gt;/**)</code> for every read-denied path, and <code>Edit</code> on any <code>.claude/settings.json</code> / <code>.claude/settings.local.json</code>; plus <code>Edit</code> on every file Claude Code, your login shell or launchd loads code or configuration from: <code>~/.claude.json</code>, <code>~/.claude/{settings.local.json, CLAUDE.md, agents, skills, commands, hooks, output-styles}</code>, any <code>.mcp.json</code> and any project <code>.claude/{agents,skills,commands,hooks,workflows}</code>, the shell rc files (<code>.zshrc</code>, <code>.zshenv</code>, <code>.zprofile</code>, <code>.zlogin</code>, <code>.bashrc</code>, <code>.bash_profile</code>, <code>.bash_login</code>, <code>.profile</code>), <code>~/Library/LaunchAgents</code> (macOS) and <code>~/.config/systemd/user</code> / <code>~/.config/autostart</code> (Linux, WSL2)</td>
+<td><code>Edit(//&lt;path&gt;/**)</code> for every write-denied path, <code>Read(//&lt;path&gt;/**)</code> for every read-denied folder and <code>Read(//&lt;path&gt;)</code> for a read-denied file, and <code>Edit</code> on any <code>.claude/settings.json</code> / <code>.claude/settings.local.json</code>; plus <code>Edit</code> on every file Claude Code, your login shell or launchd loads code or configuration from: <code>~/.claude.json</code>, <code>~/.claude/{settings.local.json, CLAUDE.md, agents, skills, commands, hooks, output-styles}</code>, any <code>.mcp.json</code> and any project <code>.claude/{agents,skills,commands,hooks,workflows}</code>, the shell rc files (<code>.zshrc</code>, <code>.zshenv</code>, <code>.zprofile</code>, <code>.zlogin</code>, <code>.bashrc</code>, <code>.bash_profile</code>, <code>.bash_login</code>, <code>.profile</code>), <code>~/Library/LaunchAgents</code> (macOS) and <code>~/.config/systemd/user</code> / <code>~/.config/autostart</code> (Linux, WSL2)</td>
 <td>Claude's file tools (Read, Edit, Write, NotebookEdit, Grep, Glob) run <strong>outside</strong> the sandbox and follow permission rules instead; without the second group they could plant code that runs later outside every fence. Not all of <code>~/.claude</code> is denied: Claude Code's own auto-memory and plans live there</td>
 </tr>
 <tr>
@@ -821,12 +823,19 @@ Claude session. On 2026-10-04 the same runtime ran the review's inbox race for r
 symlink to the TOTP seed about 8,000 times while the broker drained about 11,000 times outside —
 nothing reached the vault, where the pre-fix broker copied the seed in in the same test; the
 runtime itself refused a hard link to the seed.</p>
+<p>Verified live on macOS (2026-10-04, Claude Code 2.1.289) for the <code>.credentials.json</code> entry: a
+headless <code>claude -p</code> session still answered with it in <code>denyRead</code>, and a sandboxed <code>cat</code> of a
+read-denied fixture file got <code>Operation not permitted</code> where the same file, not denied, was read.
+On macOS the real file does not exist (the login is in the Keychain), so the fixture stood in for
+it; Linux and WSL, where the file holds the login, were not run live. Claude Code reads its login
+in its own process, which the sandbox does not wrap.</p>
 <h3 id="84-what-it-does-not-stop">8.4 What it does not stop</h3>
 <ul>
 <li><strong>Malware or any other program running as you.</strong> The fence is around Claude's tools only;
   your terminal, editors, scheduled jobs and anything else you run are unaffected.</li>
 <li><strong>Claude Code's own processes outside the sandbox:</strong> hooks, MCP servers (including LOTR and
-  gt-vault, which can read the vault by design), plugin monitors, the status line. Commands you
+  gt-vault, which can read the vault by design, and every other MCP server — section 9),
+  plugin monitors, the status line. Commands you
   type at the <code>!</code> prompt usually run unsandboxed too.</li>
 <li><strong>What the vault MCP returns.</strong> The assistant can still read the vault through it — that is
   the point; locked folders stay out of reach.</li>
@@ -854,5 +863,51 @@ runtime itself refused a hard link to the seed.</p>
 <p>Check it any time: <code>gt_sandbox.py status</code>, <code>gt_sandbox.py check</code> (drift), <code>gt_unlock.py verify</code>
 (rows <code>sandbox-*</code>; run it from inside Claude Code and the <code>sandbox-live</code> row tries a real write
 to the vault and expects the OS to refuse it), <code>/gt:gt-doctor</code> (row <code>sandbox</code>).</p>
+<h2 id="9-mcp-servers-outside-lotr">9. MCP servers outside LOTR</h2>
+<p>gt unlock, LOTR's tiers and consent, and gt sandbox mode cover <strong>only</strong> what passes through LOTR
+(<code>gt-lotr</code>) and the vault server (<code>gt-vault</code>). Every MCP server Claude Code connects to
+<strong>directly</strong> is <strong>outside both features</strong> — not a weaker form of them, outside them:</p>
+<ul>
+<li><strong>Not gated by unlock.</strong> Claude Code starts and calls the server itself; no gt scope is asked
+  for, so no factor, tier, consent prompt, unattended rule or audit entry applies.</li>
+<li><strong>Not contained by sandbox mode.</strong> Claude Code runs MCP servers outside its sandbox by design
+  ("Claude's file tools, MCP servers, and hooks run outside it"), so a direct server reads and
+  writes whatever you can, and reaches any host.</li>
+<li><strong>Its credentials are not sealed.</strong> Headers and env values in <code>~/.claude.json</code> or <code>.mcp.json</code>
+  are usually plaintext; Claude Code's own OAuth logins for remote servers are held by Claude
+  Code, where gt cannot seal them.</li>
+</ul>
+<p>That covers user and local servers in <code>~/.claude.json</code>, a project's <code>.mcp.json</code>, servers shipped
+by any plugin other than gt's, the claude.ai connectors your account has connected, the built-in
+Claude in Chrome (it drives your logged-in browser profile), and servers in <code>managed-mcp.json</code>.</p>
+<p><strong>See them.</strong> <code>gt_mcp_inventory.py</code> (in <code>~/.claude/golden-thread/hooks/</code>; <code>--json</code> for scripts)
+lists every server Claude Code may load from the current folder: name, source, transport, state,
+GATED or UNGATED, and the <em>kind</em> of place its credentials live (headers in config, env in config,
+a headers helper, Claude Code's OAuth store, server-side, browser profile, none). It never
+prints a header, env, argument or URL value. <code>/gt:gt-doctor</code> row <code>mcp</code> lists the ungated ones,
+and <code>gt_unlock.py verify</code> row <code>mcp</code> is <strong>NOT-CHECKED — never PASS — while any exist</strong>, and the
+level line says the L1/L2 claim covers LOTR and gt-vault only. GATED means named <code>gt-vault</code> or
+<code>gt-lotr</code> <strong>and</strong> running gt's own script (<code>gt_vault_mcp.py</code>, <code>lotr_mcp.py</code>); a server merely
+named like one is UNGATED.</p>
+<p><strong>Route through LOTR.</strong> A remote HTTP server can be put behind LOTR today as an <code>mcp</code>
+connection (<code>lotr add-mcp …</code>, see the gt-lotr skill), then removed from Claude Code with
+<code>claude mcp remove &lt;name&gt;</code>, which also deletes Claude Code's copy of its login. It is then gated
+like any LOTR connection. stdio servers, and LOTR holding a server's OAuth login itself, are
+planned (0.21); until then such a server stays outside. To stop a server without moving it,
+disable it in <code>/mcp</code>, or remove it.</p>
+<p><strong>Enterprise: make it a boundary.</strong> Only managed settings can stop a user or repository adding
+servers. gt <strong>prints</strong> this recipe and never writes it (<code>gt_mcp_inventory.py managed</code>):</p>
+<pre><code class="language-json">{
+  &quot;allowManagedMcpServersOnly&quot;: true,
+  &quot;allowedMcpServers&quot;: [{&quot;serverName&quot;: &quot;gt-vault&quot;}, {&quot;serverName&quot;: &quot;gt-lotr&quot;}],
+  &quot;deniedMcpServers&quot;: [{&quot;serverName&quot;: &quot;claude-in-chrome&quot;}]
+}
+</code></pre>
+<p>Merge it into <code>managed-settings.json</code> (or a file in <code>managed-settings.d/</code>) at
+<code>/Library/Application Support/ClaudeCode/</code> (macOS), <code>/etc/claude-code/</code> (Linux, WSL) or
+<code>C:\Program Files\ClaudeCode\</code> (Windows); servers you provide centrally go in <code>managed-mcp.json</code>
+in the same folder. <code>serverName</code> is a label, not a security control — prefer <code>serverCommand</code> /
+<code>serverUrl</code> entries where you can — and a <code>deniedMcpServers</code> match always wins. Check the result
+with <code>claude mcp list</code>.</p>
 </body>
 </html>
