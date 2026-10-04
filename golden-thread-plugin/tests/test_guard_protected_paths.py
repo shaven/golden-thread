@@ -168,6 +168,16 @@ class ProtectedPathsTest(Sandbox):
         os.symlink(real, link)
         self.assertAsk(self.guard(link, tool="Edit"))
 
+    def test_symlinked_directory_into_global_memory_asks(self):
+        """0.20.1: the broker's review-target check was spelling-only; the guard asked by
+        identity already. A LINKED DIRECTORY into global-memory/ must ask, for a new file too."""
+        link = self.vault / "Projects" / "alpha" / "gmlink"
+        try:
+            os.symlink(self.vault / "global-memory", link, target_is_directory=True)
+        except (OSError, NotImplementedError):
+            self.skipTest("cannot make symlinks here")
+        self.assertAsk(self.guard(link / "brand-new.md"))
+
     # -- case variants (0.15.1: identity compare, not realpath string) ----------------
     def _case_insensitive(self, base):
         """True when base/a and base/A are the same file on this volume."""

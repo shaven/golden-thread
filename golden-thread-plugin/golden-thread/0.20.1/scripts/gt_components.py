@@ -487,6 +487,9 @@ HOOK_DIR_SCRIPTS = ("gt_paths.py", "gt_components.py",
                     # vault tool (0.20.1): gt_broker, gt_write_queue, gt_lint and
                     # gt_write_probe import it from beside themselves.
                     "gt_errors.py",
+                    # which vault paths are review targets, by identity not spelling (0.20.1):
+                    # gt_broker imports it from beside itself.
+                    "gt_review_target.py",
                     # MCP servers outside LOTR (0.20.1): gt_doctor's `mcp` row and
                     # gt_unlock_verify's `mcp` row import it from beside themselves.
                     "gt_mcp_inventory.py",

@@ -49,7 +49,7 @@ class BrokerBase(Sandbox):
         (gt / "tools").mkdir(parents=True)
         (gt / "sessions").mkdir()
         (gt / "README.md").write_text("# golden-thread\n\n## Tasks\n")
-        for tool in ("gt_task.py", "gt_tasks.py", "gt_session.py"):
+        for tool in ("gt_task.py", "gt_tasks.py", "gt_session.py", "gt_review_target.py"):
             shutil.copy(TOOLS / tool, gt / "tools" / tool)
         q = self.vault / "Projects" / "quokka"
         q.mkdir(parents=True)
@@ -497,6 +497,17 @@ class CoreRule1ClaimsHold(BrokerBase):
         self.assertEqual(self.research(), RESEARCH_TEXT)
         self.assertEqual(len(self.queued()), 1)
         self.assertEqual(self.log_rows()[-1]["decision"], "held")
+
+    def test_a_variant_spelling_of_a_claimed_file_is_still_held(self):
+        """0.20.1: claim matching is by identity and folded spelling, through the vault's
+        gt_session.py check; a case/Unicode variant of the claimed path was applied before."""
+        self.register("wombat-live", [RESEARCH])
+        for variant in ("Projects/quokka/Research.md", "Projects/quokka/re\u017fearch.md"):
+            self.submit("- via " + variant, path=variant, section="Findings", session="kestrel")
+        p = self.drain(expect=0)
+        self.assertEqual(len(self.queued()), 2, p.stdout + p.stderr)
+        self.assertEqual({r["decision"] for r in self.log_rows()}, {"held"})
+        self.assertEqual(self.research(), RESEARCH_TEXT)
 
     def test_the_claim_holder_itself_may_have_its_request_applied(self):
         self.register("wombat-live", [RESEARCH])

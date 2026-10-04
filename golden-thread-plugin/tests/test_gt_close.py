@@ -27,7 +27,7 @@ class CloseBase(Sandbox):
         self.spool = self.vault / "Projects" / "golden-thread" / "spool"
         self.hooks = self.home / ".claude" / "golden-thread" / "hooks"
         self.hooks.mkdir(parents=True, exist_ok=True)
-        for n in ("gt_broker.py", "gt_write_queue.py"):
+        for n in ("gt_broker.py", "gt_write_queue.py", "gt_review_target.py"):
             shutil.copy(SCRIPTS / n, self.hooks / n)
         for slug in ("alpha", "beta"):
             p = self.py(SCRIPTS / "vault_init.py", "create-project", "--vault", self.vault,

@@ -624,6 +624,11 @@ def age_min(fm):
 
 holder = None
 try:
+    sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+    from gt_review_target import claim_covers as _covers
+except Exception:                                    # noqa: BLE001  strings only, as before
+    _covers = None
+try:
     for p in sorted(sessions.glob("*.md")):
         if p.name == "README.md":
             continue
@@ -648,8 +653,10 @@ try:
             c = c.strip().rstrip("/")
             if not c:
                 continue
-            # exact file, or a claimed directory prefix
-            if rel == c or rel.startswith(c + "/"):
+            # exact file, or a claimed directory prefix -- by identity and folded spelling, not
+            # by string (0.20.1): a case, Unicode or symlink variant of a claimed file is the
+            # same file on a case-insensitive volume
+            if rel == c or rel.startswith(c + "/") or (_covers and _covers(vault, c, rel)):
                 holder = (sid, fm, c)
                 break
         if holder:

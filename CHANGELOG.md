@@ -25,6 +25,50 @@ release's own summary line, kept short rather than reconstructed after the fact.
 > "0.20.0 did X", it means that unreleased cut (it exists only on the owner's Mac); no published
 > release ever did. The rollback target is still 0.19.2.
 
+### The broker escalates design.md and global-memory/ by identity, not spelling (security, review of the 0.20.2 sandbox tools)
+
+The broker decided "review target" with an exact-case string match, so on macOS APFS (case-
+insensitive, Unicode-normalising) `DESIGN.md`, a long-s spelling of design.md (U+017F),
+`GLOBAL-MEMORY/MEMORY.md`, a symlinked directory into `global-memory/` and a symlink to `design.md`
+were all APPLIED instead of escalated as a `#conflict`, through the real queue and the real
+sandbox inbox. The decision now lives in one library, `gt_review_target.py` (hooks dir and
+`templates/tools/`), that asks of the real path: `os.path.samefile` of every existing prefix
+against `global-memory/` and of the target against its sibling `design.md`; and every component,
+of the path and of its resolved form, folded by NFKC + casefold, zero-width characters,
+trailing dots and spaces, `::$DATA` and 8.3 short names. A symlink that dangles or leaves its own
+directory is escalated too. `xdesign.md` and `global-memory-x/` stay ordinary files. The guard
+that asks before a write into `global-memory/` (`guard_protected_paths`) already compared by
+inode and is unchanged; no hook names `design.md`.
+
+### A task flip is no longer announced twice (the recurring Windows `test_gt_tasks` failure, root-caused)
+
+`events.jsonl` is merged by instant, then session id, and outside a Claude session the session id
+is `unknown-<pid>`. Timestamps have one-second resolution, so a task event written in the same
+second as the event it follows (a backfill seed, then a rollup that sees the box ticked) was
+ordered by process id: the flip could sort BEFORE the event it followed. `gt_tasks.py` reads a
+task's state as its last event in merge order, so the next rollup saw the old state and emitted
+the same `task.done` again. It showed as a test failure on Windows ("5 != 4" events) on three
+different trees, and was not a load flake. Now `gt_events.sync_tasks` and `gt_events.py emit`
+stamp a `task.open` / `task.done` strictly after the latest event for the same task (one second
+later when the clock has not moved). Events that were not tied keep their timestamp, so a merge
+of existing spools is byte-identical. Reproduced with a frozen clock and adversarial session ids
+in `tests/test_gt_events.py` (`TaskCausalOrder`).
+
+### A claim holds the file by identity, not by the spelling of its path (Core rule 1)
+
+Claims were compared as strings, in three places: the claim guard (`guard_session_claims`), the
+vault's `gt_session.py check` / `claim` (which the broker asks before every write) and the
+broker's fallback reader. So on a case-insensitive or Unicode-normalising volume (macOS APFS,
+Windows NTFS) a write to `Research.md`, to a long-s spelling, to `research.md.` or through a
+symlink went past another live session's claim on `research.md` and was applied. All three now
+use `gt_review_target.same_path` / `claim_covers`: equal after folding every path component
+(NFKC, casefold, zero-width characters, trailing dots and spaces, `::$DATA`), or the same inode,
+or equal after resolving links; a claimed directory covers what is under it by the same rules.
+The folding applies on every platform, deliberately: on a case-sensitive volume (Linux)
+`Research.md` and `research.md` are different files, and a claim on one now holds the other
+too. A vault's own `tools/gt_session.py` must be refreshed (`/gt:gt-upgrade`) to get this, with
+`gt_review_target.py` beside it; without that file the tool compares strings as before.
+
 ### gt-lotr: a GraphQL mutation can no longer ride `call_read` (review finding M2)
 
 `_graphql_tier` classified a document by its first word, so `fragment F on X {id} mutation M {...}`

@@ -26,7 +26,9 @@ folder is gt_log.py's, and log.md is generated from it):
     escalate     not written; a task for the owner instead. Two sessions replacing one
                  section with neither a superset of the other; a replace-section of a section
                  that changed since it was requested; a create over different content; any
-                 write to a design.md or global-memory/ (review targets); and any append or
+                 write to a design.md or global-memory/ (review targets: decided by IDENTITY, so DESIGN.md,
+                 de<U+017F>ign.md, GLOBAL-MEMORY/ and a symlink to either escalate too; a symlink
+                 that dangles or leaves its own folder escalates as well; 0.20.1); and any append or
                  replace from a farmed (external) result. Every version goes into
                  `spool/broker/conflicts/<id>.md` and the task, made with the vault's own
                  gt_task.py and tagged #conflict, points at that file -- content never goes in
@@ -97,6 +99,7 @@ HERE = Path(__file__).resolve().parent
 if str(HERE) not in sys.path:
     sys.path.insert(0, str(HERE))
 import gt_write_queue as wq                                     # noqa: E402  the ONE format
+from gt_review_target import review_target                     # noqa: E402  identity, not spelling
 
 try:
     import fcntl
@@ -112,8 +115,8 @@ TOOLS_REL = Path("Projects") / "golden-thread" / "tools"
 # Similarity above which a KEPT append is reported as sitting beside a near-identical line
 # (0.20.1). It decides nothing: only an exact normalised repeat is deduplicated (B1).
 NEAR_DUP = 0.75
-REVIEW_NAMES = {"design.md"}
-REVIEW_PREFIXES = ("global-memory/",)
+# Review targets are decided by gt_review_target.review_target (0.20.1), not by these spellings:
+# a design.md or global-memory/ by any name, case, Unicode form or link.
 
 
 # ------------------------------------------------------------------------ helpers ----
@@ -323,8 +326,10 @@ def claim_holders(vault: Path, rel: str, req_sid: str, allowed: set):
         return [], "session files could not be read (%s)" % exc.__class__.__name__
     if unreadable:
         return [], "%d session file(s) unreadable" % len(unreadable)
+    from gt_review_target import same_path                     # by identity, not by string
     return [sid for sid, status, last, files in claims
-            if rel in files and sid not in allowed and gt_demote._is_live(status, last)], None
+            if (rel in files or any(same_path(vault, rel, f) for f in files))
+            and sid not in allowed and gt_demote._is_live(status, last)], None
 
 
 # ---------------------------------------------------------------------- escalation ----
@@ -544,10 +549,17 @@ class Drain:
     def one(self, group):
         r = group[0]
         rel = r["path"]
-        name = rel.split("/")[-1]
-        if name in REVIEW_NAMES or rel.startswith(REVIEW_PREFIXES):
-            return self.escalate(group, "%s is a review target; the broker never writes it"
-                                 % ("global-memory/" if rel.startswith(REVIEW_PREFIXES) else name))
+        # By IDENTITY, not spelling (0.20.1): DESIGN.md, de<U+017F>ign.md (U+017F), GLOBAL-MEMORY/, a
+        # symlink to design.md or into global-memory/ are the same targets as the plain names.
+        hit = review_target(self.vault, rel)
+        if hit:
+            kind, why = hit
+            return self.escalate(group, (
+                "%s is a review target; the broker never writes it" % why if kind != "symlink"
+                else "%s; the broker does not write through a link it cannot show harmless "
+                     "(it could land in design.md or global-memory/)" % why)
+                + ("" if rel.lower() == why.lower() or kind == "symlink"
+                   else " (%s resolves to it)" % rel))
         if any(x["origin"] == "farm" for x in group) and r["op"] != "create":
             return self.escalate(group, "a farmed (external) result may only create a new file; "
                                         "free text into existing content is never auto-applied "

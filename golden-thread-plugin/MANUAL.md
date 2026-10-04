@@ -1023,7 +1023,23 @@ python3 $H/gt_broker.py audit --vault <vault> [--since 24]     # .md files the b
 - **Escalated means the owner decides.** Conflicting replacements, a target that changed after the
   request was queued, a target moved or deleted since (the broker never recreates a file at its
   old path), and **every** write to a `design.md` or `global-memory/` write nothing: each version is
-  kept in `spool/broker/conflicts/` and a `#conflict` task points at it.
+  kept in `spool/broker/conflicts/` and a `#conflict` task points at it. A review target is
+  decided by **identity, not spelling** (0.20.1): a file named `design.md` in any case, Unicode
+  form (U+017F long s, fullwidth letters), with trailing dots, spaces, zero-width characters, an
+  NTFS `::$DATA` suffix or a Windows 8.3 short name (`DESIGN~1.MD`); anything under the vault-root
+  `global-memory/` by any of those spellings; and anything that resolves to either through a
+  symlink or the same inode (`os.path.samefile`). A symlink in the path that dangles, or that
+  leaves the directory it sits in, is escalated too, since where it lands is not what the path
+  says. `xdesign.md`, `design-notes.md`, `global-memory-x/` and `notes/global-memory/x.md` are
+  ordinary files. The spelling rules apply on every platform: on a case-sensitive volume
+  `DESIGN.md` is a different file, and is escalated all the same.
+- **A claim holds the file, however it is spelled (0.20.1).** A claim is matched by identity,
+  not as a string: a case or Unicode variant of a claimed path (`Research.md`, a long s), a
+  trailing dot or space, a Windows 8.3 short name, or a symlink to the file is the claimed file,
+  for the guard, for `gt_session.py check` / `claim` and for the broker's hold. The case folding
+  is deliberate on every platform: on a case-sensitive volume (Linux) `Research.md` and
+  `research.md` are two files, and a claim on one holds the other all the same — a write the
+  holder did not expect waits one drain, which is cheap; a write through a variant is not.
 - **What the guard denies.** `guard_session_claims` denies a direct `Write`/`Edit` to any vault
   `.md` outside `Sources/`, `core-rules/`, `.obsidian/`, `.git/`, `.gt/` and gt's own `spool/`,
   `sessions/` and `tools/` — claimed or not — and the visible shell writes: `>`, `>>`, `tee`,
@@ -1095,7 +1111,9 @@ under `spool/events/`, merged into `events.jsonl`. The tool and schema (v1) ship
   `--dry-run`). `archive-project` is the only source of `archive`: `gt_closeout.py answer
   <slug> yes` records your decision to close, not the move, and emits no event.
 - `gt_tasks.py` emits `task.open` / `task.done` for checkbox lines that changed — once the
-  stream has been seeded with task events by a backfill.
+  stream has been seeded with task events by a backfill. A task event is always stamped after
+  the latest event for the same task (0.20.1), so a flip made in the same second as the event
+  it follows still sorts after it.
 
 An event can never fail the operation it describes: a failure is one line on stderr.
 
@@ -4327,7 +4345,7 @@ that changed after a replace was requested, write nothing: every version is save
 `spool/broker/conflicts/` and a `#conflict` P1 task points at it. A file another live session has
 claimed stays queued (Core rule 1). Generated and protected files (`log.md`, `TASKS.md`,
 `decisions.md`, `Sources/`, `core-rules/`) are refused; `design.md` and `global-memory/` always go
-to the owner. Decisions are logged to `spool/broker/log-<date>.jsonl`. gt-farm files its results
+to the owner, recognised by identity rather than spelling (see *Writing to the shared files*). Decisions are logged to `spool/broker/log-<date>.jsonl`. gt-farm files its results
 this way, and a farmed result can only create a new file, never edit an existing note (ADR-8).
 
 **Specialist agents by job type (`agent_specialization`, off by default).** With it on,
@@ -4478,6 +4496,7 @@ duplicated across projects' runbooks — the detection step of `/gt:gt-runbook-l
 | `gt_vault_mcp.py [--vault V]` (0.20.1) | the gt-vault MCP server over stdio; Claude Code starts it | |
 | `gt_mcp_inventory.py [--json] [--cwd D] [--home D]` · `managed` (0.20.1) | every MCP server Claude Code may load here (user, local, project, plugin, claude.ai, built-in, managed), marking the ones connected directly, outside unlock and the sandbox; `managed` prints the managed-settings recipe (guidance only). Read-only; the doctor and `gt_unlock.py verify` use it | |
 | `gt_uninstall.py --check` · `[--yes]` · `--keep-vault-config` · `--discard-queued` · `--purge-backups` · `--purge-lotr` · `--json` (0.20.1) | remove gt from this machine (jobs, plugin dirs and registries, sandbox entries, unlock daemon, `~/.gt-inbox`, `~/.gt-scratch`), then re-scan to prove it is gone; also `install.sh --uninstall [--check]` and `install.cmd /uninstall` | `1` a step failed or the re-scan found something · `2` refused (not confirmed, queued writes, no `~/.claude`) |
+| `gt_review_target.py` (0.20.1; a library, shipped in the hooks dir and `templates/tools/`) | `review_target(vault, rel)` -> `None` or `(kind, why)`: is a vault path a `design.md` / `global-memory/` review target, by identity (inode, symlink) and by every spelling a file system folds; the broker's escalation test | |
 | `gt_errors.py` (0.20.1; a library, shipped in the hooks dir and `templates/tools/`) | a vault tool the OS refuses prints ONE line, not a traceback, and says which cause: gt sandbox mode (use the gt-vault MCP or a terminal) or a macOS provenance refusal (another interpreter, or Full Disk Access); exit `5` | |
 
 ---

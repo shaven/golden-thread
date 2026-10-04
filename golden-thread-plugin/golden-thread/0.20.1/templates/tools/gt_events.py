@@ -71,7 +71,7 @@ import os
 import re
 import subprocess
 import sys
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
@@ -279,7 +279,13 @@ def emit(vault, kind, item, frm=None, to=None, level_from=None, level_to=None,
     Raises Invalid on a bad event, OSError on a spool it cannot write. Callers that
     describe another operation use safe_emit() instead.
     """
-    ev = build(kind, item, frm, to, level_from, level_to, project, actor, note, sid)
+    ts = None
+    if kind in ("task.open", "task.done"):
+        try:                                    # causally after the task's last event (causal_ts)
+            ts = causal_ts(task_last_instant(read_spool(Path(vault))[0]).get(item))
+        except Exception:                       # noqa: BLE001  ordering is best effort here
+            ts = None
+    ev = build(kind, item, frm, to, level_from, level_to, project, actor, note, sid, ts)
     if dry_run:
         return ev
     append_events(Path(vault), [ev], sid)
@@ -333,6 +339,33 @@ def task_state(events):
     return state
 
 
+def task_last_instant(events):
+    """{item: the latest instant of any task.* event for it} (UTC datetimes)."""
+    last = {}
+    for ev in events:
+        if ev["kind"] in ("task.open", "task.done"):
+            t = parse_ts(ev["ts"]).astimezone(timezone.utc)
+            if ev["item"] not in last or t > last[ev["item"]]:
+                last[ev["item"]] = t
+    return last
+
+
+def causal_ts(prior, ts=None):
+    """A timestamp for a new event that is strictly AFTER `prior` (an aware datetime or None).
+
+    The merge orders events by instant, then by session id, and the session id is a process id
+    (`unknown-<pid>`): when a seed or an earlier rollup and the next change to the same task fall
+    in the same second -- always on a fast machine -- the tie-break is arbitrary, the flip can sort
+    BEFORE the event it follows, and the next rollup, reading the last kind in merge order, emits
+    the same flip again (found on Windows, 0.20.1: five events where four were due). A change is
+    causally after what it changes, so it never takes an instant <= the latest event for its task.
+    """
+    now = parse_ts(ts or now_ts())
+    if prior is not None and now.astimezone(timezone.utc) <= prior:
+        now = (prior + timedelta(seconds=1)).astimezone(now.tzinfo)
+    return now.isoformat(timespec="seconds")
+
+
 def _project_or_none(slug):
     return slug if isinstance(slug, str) and PROJECT_RE.match(slug) else None
 
@@ -353,6 +386,7 @@ def sync_tasks(vault, observed, sid=None, dry_run=False):
         state = task_state(events)
         if not state:
             return 0
+        last = task_last_instant(events)
         out, seen = [], set()
         for readme_rel, slug, label, done in observed:
             item = task_item(readme_rel, label)
@@ -364,7 +398,7 @@ def sync_tasks(vault, observed, sid=None, dry_run=False):
                 continue
             try:
                 out.append(build(want, item, project=_project_or_none(slug),
-                                 note=clip(label), sid=sid))
+                                 note=clip(label), sid=sid, ts=causal_ts(last.get(item))))
             except Invalid as exc:
                 print("gt_events: task event skipped (%s)" % exc, file=sys.stderr)
         if out and not dry_run:

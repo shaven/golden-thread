@@ -36,7 +36,7 @@ class TaskBase(Sandbox):
         # install.sh puts the broker in the stable hooks dir; that is where gt_task looks
         self.hooks = self.home / ".claude" / "golden-thread" / "hooks"
         self.hooks.mkdir(parents=True, exist_ok=True)
-        for n in ("gt_broker.py", "gt_write_queue.py"):
+        for n in ("gt_broker.py", "gt_write_queue.py", "gt_review_target.py"):
             shutil.copy(SCRIPTS / n, self.hooks / n)
         self.spool = self.vault / "Projects" / "golden-thread" / "spool"
 

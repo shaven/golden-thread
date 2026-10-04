@@ -382,5 +382,84 @@ class Backfill(Sandbox):
         self.assertEqual(kinds, ["task.done", "task.open"])
 
 
+class TaskCausalOrder(Sandbox):
+    """Found on Windows, 0.20.1: test_gt_tasks failed '5 != 4' on three trees. The merge orders
+    events by instant, then session id, and a session id is `unknown-<pid>`. A seed (or an earlier
+    rollup) and the next flip of the same task in the SAME SECOND are ordered by pid, so the flip
+    could sort BEFORE the event it follows; the next rollup read the last kind in that order and
+    emitted the flip again. These tests freeze the clock and choose adversarial session ids, so
+    the order is the worst one every time."""
+
+    T = "2026-10-04T10:00:00-05:00"
+
+    def setUp(self):
+        super().setUp()
+        self.vault = self.tmp / "vault"
+        (self.vault / "Projects" / "golden-thread").mkdir(parents=True)
+
+    def lib_frozen(self, name):
+        E = load_module(TOOL, name)
+        E.now_ts = lambda: self.T
+        return E
+
+    def kinds(self, E, item="Projects/a/README.md#t-1"):
+        return [e["kind"] for e in E.read_spool(self.vault)[0] if e["item"] == item]
+
+    def test_a_flip_in_the_same_second_as_the_seed_is_emitted_once(self):
+        E = self.lib_frozen("gt_events_ord1")
+        item = E.task_item("Projects/a/README.md", "one")
+        obs = [("Projects/a/README.md", "a", "one", True)]
+        ev = E.build("task.open", item, project="a", actor="backfill", note="one",
+                     sid="zzz-seed", ts=self.T)      # same second; its session sorts LAST
+        E.append_events(self.vault, [ev], "zzz-seed")
+        self.assertEqual(E.sync_tasks(self.vault, obs, sid="aaa-rollup"), 1, "the flip")
+        self.assertEqual(E.sync_tasks(self.vault, obs, sid="aaa-rollup"), 0,
+                         "the same flip was emitted again: it sorted before the seed")
+        self.assertEqual(self.kinds(E, item), ["task.open", "task.done"])
+
+    def test_many_flips_under_a_frozen_clock_each_settle_at_once(self):
+        E = self.lib_frozen("gt_events_ord2")
+        item = E.task_item("Projects/a/README.md", "one")
+        ev = E.build("task.open", item, project="a", actor="backfill", note="one",
+                     sid="zzz-seed", ts=self.T)
+        E.append_events(self.vault, [ev], "zzz-seed")
+        done = False
+        for n in range(8):
+            done = not done
+            sid = ("aaa", "mmm", "zzz-late")[n % 3]     # adversarial: both sides of the seed
+            obs = [("Projects/a/README.md", "a", "one", done)]
+            self.assertEqual(E.sync_tasks(self.vault, obs, sid=sid), 1, "flip %d" % n)
+            self.assertEqual(E.sync_tasks(self.vault, obs, sid=sid), 0,
+                             "flip %d was emitted again" % n)
+            self.assertEqual(E.sync_tasks(self.vault, obs, sid="other"), 0)
+        self.assertEqual(self.kinds(E, item), ["task.open"] + ["task.done", "task.open"] * 4)
+
+    def test_a_task_emit_is_ordered_after_the_task_it_follows(self):
+        E = self.lib_frozen("gt_events_ord3")
+        item = "Projects/a/README.md#t-9"
+        E.emit(self.vault, "task.open", item, project="a", sid="zzz-1")
+        E.emit(self.vault, "task.done", item, project="a", sid="aaa-2")
+        self.assertEqual(self.kinds(E, item), ["task.open", "task.done"])
+        self.assertEqual(E.task_state(E.read_spool(self.vault)[0])[item], "task.done")
+
+    def test_a_future_dated_prior_event_is_still_followed(self):
+        E = self.lib_frozen("gt_events_ord4")
+        item = E.task_item("Projects/a/README.md", "one")
+        ev = E.build("task.open", item, project="a", actor="backfill", note="one",
+                     sid="zzz", ts="2026-10-04T10:00:30-05:00")        # 30 s ahead of "now"
+        E.append_events(self.vault, [ev], "zzz")
+        self.assertEqual(E.sync_tasks(self.vault, [("Projects/a/README.md", "a", "one", True)],
+                                      sid="aaa"), 1)
+        self.assertEqual(self.kinds(E, item), ["task.open", "task.done"])
+
+    def test_untied_events_keep_their_merged_order_and_text(self):
+        """causal_ts never touches an event whose instant is already after its prior."""
+        E = self.lib_frozen("gt_events_ord5")
+        self.assertEqual(E.causal_ts(None), self.T)
+        from datetime import datetime, timezone
+        earlier = datetime(2026, 10, 4, 14, 0, 0, tzinfo=timezone.utc)      # 09:00 -05:00
+        self.assertEqual(E.causal_ts(earlier), self.T)
+
+
 if __name__ == "__main__":
     unittest.main()

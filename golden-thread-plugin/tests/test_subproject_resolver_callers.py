@@ -31,7 +31,7 @@ class FixtureBase(Sandbox):
         # gt_task drains through the broker installed beside the hooks
         hooks = self.home / ".claude" / "golden-thread" / "hooks"
         hooks.mkdir(parents=True, exist_ok=True)
-        for n in ("gt_broker.py", "gt_write_queue.py"):
+        for n in ("gt_broker.py", "gt_write_queue.py", "gt_review_target.py"):
             shutil.copy(SCRIPTS / n, hooks / n)
 
     def create(self, name, *extra):

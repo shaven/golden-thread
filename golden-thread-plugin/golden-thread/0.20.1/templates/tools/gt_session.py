@@ -914,6 +914,21 @@ def _claimed_files(body):
     return re.findall(r"^-\s+`([^`]+)`", body, flags=re.M)
 
 
+def _holds(body, f):
+    """Does this registration claim file `f`? By identity and folded spelling, not by string
+    (0.20.1): a case, Unicode or symlink variant of a claimed file is the same file on a
+    case-insensitive volume. gt_review_target sits beside this file; without it, strings."""
+    held = _claimed_files(body)
+    if f in held:
+        return True
+    try:
+        sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
+        from gt_review_target import same_path
+    except Exception:                                   # noqa: BLE001
+        return False
+    return any(same_path(VAULT, f, c) for c in held)
+
+
 def _take_over(p, sid, args, how):
     """Re-register an EXISTING registration in place, keeping every claim it holds.
 
@@ -1148,7 +1163,7 @@ def cmd_claim(args):
         if opath == p or stale:
             continue
         for f in args.files:
-            if f in _claimed_files(obody):
+            if _holds(obody, f):
                 conflicts.append((f, other))
     if conflicts and not args.force:
         for f, other in conflicts:
@@ -1228,7 +1243,7 @@ def cmd_check(args):
     me, mypath = _my_registration(args)
     holders = []
     for sid, fm, body, stale, p in _live(stale_after, me):
-        if args.file in _claimed_files(body):
+        if _holds(body, args.file):
             holders.append((sid, fm, stale, p))
     rc = 0
     if not holders:

@@ -60,6 +60,8 @@ class GuardTestBase(Sandbox):
         # guard imports it at run time. Before 0.12.8 a stale duplicate in hooks/ made
         # this work by accident.
         shutil.copy2(SCRIPTS / "gt_paths.py", self.hooks / "gt_paths.py")
+        # 0.20.1: claims are matched by identity and folded spelling (gt_review_target).
+        shutil.copy2(SCRIPTS / "gt_review_target.py", self.hooks / "gt_review_target.py")
         self.env["PYTHONDONTWRITEBYTECODE"] = "1"
         self.pin_hostname(HOST)
         mid = self.home / ".claude" / "golden-thread" / "machine-id"
@@ -153,6 +155,33 @@ class GuardTest(GuardTestBase):
         self.assertNotIn("pending/", reason, "claim refused => queue first, not pending/")
         self.assertIn("gt_write_queue.py", reason)
         self.assertIn("HOLDS the write while that claim is live", reason)
+
+    # -- claims match by IDENTITY, not by string (0.20.1) -------------------------------
+    def test_a_case_unicode_or_trailing_dot_variant_of_a_claimed_file_is_denied(self):
+        self.session(host=HOST, pid=os.getpid())
+        base = self.vault / "Projects" / "alpha"
+        for name in ("RESEARCH.json", "Research.JSON", "re\u017fearch.json", "research.json.",
+                     "\uff52esearch.json"):
+            self.assertDeny(self.guard(base / name), name)
+        self.assertAllow(self.guard(base / "research2.json"))
+        self.assertAllow(self.guard(base / "xresearch.json"))
+
+    def test_a_case_variant_of_a_claimed_directory_is_denied(self):
+        self.session(host=HOST, pid=os.getpid(), claims=("Projects/alpha/notes",))
+        self.assertDeny(self.guard(self.vault / "Projects" / "ALPHA" / "NOTES" / "x.json"))
+        self.assertAllow(self.guard(self.vault / "Projects" / "alpha" / "notes-x" / "x.json"))
+
+    @unittest.skipIf(IS_WINDOWS, "symlinks need a privilege Windows tests do not assume")
+    def test_a_symlink_to_a_claimed_file_is_denied(self):
+        self.session(host=HOST, pid=os.getpid())
+        self.target.parent.mkdir(parents=True, exist_ok=True)
+        self.target.write_text("{}")
+        link = self.target.parent / "alias.json"
+        try:
+            os.symlink(self.target.name, link)
+        except (OSError, NotImplementedError):
+            self.skipTest("cannot make symlinks here")
+        self.assertDeny(self.guard(link))
 
     def test_live_pid_wins_over_an_old_heartbeat(self):
         self.session(host=HOST, pid=os.getpid(), last_execution=local_stamp(600))

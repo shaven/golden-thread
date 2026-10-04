@@ -566,11 +566,19 @@ itself.
   and session `unknown-inbox`, whatever the body claimed — a writer in the sandbox cannot speak
   for a session, so **no live session's claim lets an inbox request through** (Core rule 1),
   not even the claim of the session running the drain; it waits until the claim ends. It is
-  then decided like any request — conflicts and `design.md` / `global-memory` go to you.
+  then decided like any request — conflicts and `design.md` / `global-memory` go to you. Those
+  two are recognised **by identity, not by spelling** (0.20.1): a file named `design.md` in any
+  case, Unicode form, trailing-dot/space, `::$DATA` or 8.3 (`DESIGN~1.MD`) spelling, anything under
+  the vault-root `global-memory/` by those spellings, and anything that reaches either through a
+  symlink or the same inode. A symlink in the path that dangles or leaves its own directory is
+  escalated as well. Look-alikes (`xdesign.md`, `global-memory-x/`) are ordinary files.
   Rejected inbox files are kept in `spool/broker/rejected/` up to 50; past that they are logged
   and deleted. An oversized file is never read and is left for you. `vault_queue_write` stamps
   its requests the same way, with the MCP server's own session id: a tool call cannot name
-  another session to write through its claim. Native Windows has no sandbox, so there the inbox
+  another session to write through its claim. A claim is matched **by identity, not spelling**
+  (0.20.1): a case, Unicode, trailing-dot, 8.3 or symlink variant of a claimed path is held like
+  the claimed path itself — on every platform, so on a case-sensitive volume a claim on
+  `research.md` also holds `Research.md`, deliberately. Native Windows has no sandbox, so there the inbox
   is not a boundary at all: the broker still refuses links and reparse points and checks that
   the open file is the one it listed, inside the inbox, but Claude's shell can open your files
   directly anyway.
