@@ -28,7 +28,8 @@ INVARIANTS
   V1  READ-ONLY. No tool opens a vault file for writing. Writes are requests to the queue; the
       broker (gt_broker.py) decides them exactly as it decides any session's.
   V2  INSIDE THE VAULT ONLY. A path is vault-relative with forward slashes; `..`, dot-segments,
-      absolute paths and anything resolving outside the vault after symlinks are refused.
+      absolute paths and anything resolving outside the vault after symlinks are refused --
+      by vault_read and vault_list, and by vault_search for every result and index.md.
   V3  LOCKED FOLDERS ARE ABSENT. A folder holding gt_lock's `.gt-locked` stub, and everything
       under it, is never listed, read or searched -- even when named exactly. `.age` files are
       never returned.
@@ -41,6 +42,9 @@ INVARIANTS
       gets the scope. Unlock on and the client unloadable = refused, never served.
   V6  UNTRUSTED DATA. Every result says so; vault text is returned as data, never as
       instructions.
+  V7  THE SERVER SAYS WHO IS WRITING. vault_queue_write stamps the request with this server's
+      own session id (its environment, from Claude Code) and origin "session"; a tool call
+      cannot name another session to write through its claim (0.20.x review M4).
 """
 import argparse
 import datetime as dt
@@ -132,9 +136,7 @@ TOOLS = [
          "content": {"type": "string", "description": "The text (for set-property: the value)."},
          "section": {"type": "string", "description": "A level-2 heading, without '## '."},
          "key": {"type": "string", "description": "set-property: the frontmatter key."},
-         "hint": {"type": "string", "description": "One line for the owner if it conflicts."},
-         "session": {"type": "string", "description": "The originating session id (default: "
-                                                      "this server's CLAUDE_CODE_SESSION_ID)."}},
+         "hint": {"type": "string", "description": "One line for the owner if it conflicts."}},
          ["path", "op", "content"]),
      "annotations": {"title": "Queue a vault write", "readOnlyHint": False,
                      "destructiveHint": False, "idempotentHint": False, "openWorldHint": False}},
@@ -339,7 +341,12 @@ class Vault:
         qwords = {K._stem(w) for w in K.words(query)}
         index = []
         try:
-            for i, line in enumerate((v / "index.md").read_text(encoding="utf-8").splitlines()):
+            self.resolve("index.md")                     # L2: a symlinked index.md that leaves
+            idx_lines = (v / "index.md").read_text(encoding="utf-8").splitlines()
+        except (ToolError, OSError):                     # the vault is not read
+            idx_lines = []
+        try:
+            for i, line in enumerate(idx_lines):
                 lw = {K._stem(w) for w in K.words(line)}
                 hit = len(qwords & lw)
                 if hit:
@@ -358,6 +365,10 @@ class Vault:
             if self.locked_ancestor(rel) is not None \
                     or any(x.startswith(".") for x in rel.split("/")):
                 continue                                 # V3; dot-folders vault_read refuses
+            try:
+                self.resolve(rel)                        # V2 (L2, 0.20.x review): a symlink out
+            except ToolError:                            # of the vault, or into a locked folder,
+                continue                                 # is not a result -- as vault_read says
             state, cur, exp = "current", None, None
             if G is not None:
                 c = G.current_of(rel, by)
@@ -613,9 +624,10 @@ class Server:
                 cur = None
             if w.get("key") and wq.frontmatter_is_block(cur, w["key"]):
                 raise ToolError("refused", "%s holds a YAML block; use replace-file" % w["key"])
-        sess = a.get("session") if isinstance(a.get("session"), str) and a["session"].strip() \
-            else None
-        results, note = wq.submit(Path(v.real), [w], session=sess, origin="session")
+        # M4 (0.20.x review): the session and origin are this server's to state, never the
+        # caller's. A `session` argument (accepted until 0.20.0) is ignored: letting a tool call
+        # name a claim holder's session let it write through that session's claim (Core rule 1).
+        results, note = wq.submit(Path(v.real), [w], session=server_session(), origin="session")
         r = results[0]
         dec = r.get("decision")
         out = {"ok": dec not in ("refused", "reject"), "decision": dec,
@@ -633,6 +645,15 @@ class Server:
                for r in rows.values()]
         return {"ok": note is None, "results": res,
                 "left": sum(1 for r in res if r["decision"] == "held"), "note": note}
+
+
+def server_session():
+    """The session this server belongs to: Claude Code starts one vault server per session and
+    gives it the session id in its environment. Never taken from a tool call (M4)."""
+    for var in ("CLAUDE_CODE_SESSION_ID", "CLAUDE_SESSION_ID", "GT_SESSION_ID"):
+        if (os.environ.get(var) or "").strip():
+            return os.environ[var].strip()
+    return "unknown-mcp"
 
 
 def _int(v, default, cap):

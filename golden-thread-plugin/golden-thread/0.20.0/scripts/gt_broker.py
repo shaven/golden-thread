@@ -56,9 +56,16 @@ targets, externally authored free text) goes to a human.
 
 THE SANDBOX INBOX (0.20.0). Under gt sandbox mode, gt_write_queue.py run from Claude's shell leaves
 its request in ~/.gt-inbox/queue/ (the one folder the sandbox lets it write). Each `drain` first
-moves this vault's inbox requests into the queue -- only regular files, addressed to this vault,
-passing gt_write_queue's validation; the rest go to spool/broker/rejected/inbox-*.json; a symlink
-is never followed and a symlinked inbox folder is not read. `status` counts the inbox.
+moves this vault's inbox requests into the queue -- only regular files with one link, addressed
+to this vault, passing gt_write_queue's validation; the rest go to
+spool/broker/rejected/inbox-*.json (at most INBOX_REJECT_KEEP copies; past that, logged and
+deleted). Each file is opened once, relative to an O_NOFOLLOW handle on the inbox folder, with
+O_NOFOLLOW, checked on the open descriptor and read once, bounded; those bytes are all that is
+ever used, so a writer racing the broker cannot swap in a symlink, a hard link or a FIFO (see
+_Inbox). A symlinked inbox folder is not read. The broker stamps every inbox request origin
+"inbox" (a body's "farm" is kept: it is stricter) and session "unknown-inbox": a sandboxed writer
+cannot speak for a session, so no claim holder's permission covers its request. `status` counts
+the inbox.
 
 Exit: 0 every request decided (or nothing queued) | 1 something left queued, or another drain
 is running | 2 usage or no vault.
@@ -413,7 +420,15 @@ class Drain:
         return reqs
 
     def held_by_claim(self, req) -> str | None:
-        allowed = {req["session"]} | ({my_session()} if my_session() else set())
+        # M4 (0.20.x review): a request from the sandbox inbox speaks for no session -- the broker
+        # stamped it INBOX_SESSION -- so no claim holder's permission covers it, not even that
+        # of the session running this drain. Only a request a trusted writer queued (a session's
+        # own gt_write_queue run, or the vault MCP server, which stamps its own session id) may
+        # pass the claim of the session it names.
+        if req.get("origin") == "inbox" or req.get("session") == wq.INBOX_SESSION:
+            allowed = set()
+        else:
+            allowed = {req["session"]} | ({my_session()} if my_session() else set())
         holders, err = claim_holders(self.vault, req["path"], req["session"], allowed)
         if err:
             return "could not check claims, so not writing: %s" % err
@@ -614,115 +629,344 @@ def _line(row, dry):
 # the owner. A file naming another vault is left for that vault's drain.
 
 INBOX_MAX_BYTES = 2 * wq.MAX_CONTENT
+# L3 (0.20.x review): a writer in the sandbox can make any number of bad requests, and every one
+# used to be copied into the vault. At most INBOX_REJECT_KEEP rejected inbox copies are kept in
+# spool/broker/rejected/; past that a rejected request is logged and deleted, not copied.
+INBOX_REJECT_KEEP = 50
+LINK_WHY = "not a regular file (a symlink, hard link, device or pipe is never read)"
+# Test hook (0.20.x review H1): called as _INBOX_RACE_HOOK(stage, name) at the two points where a
+# racing writer would swap something -- "dir" before the inbox folder is opened, "file" before
+# each entry is opened -- so a regression test can make the swap happen exactly there instead of
+# by luck. None in production.
+_INBOX_RACE_HOOK = None
 
 
-def inbox_candidates(vault: Path) -> list:
-    """-> [(path, body or None, why or None)] for inbox files addressed to THIS vault, plus the
-    unreadable ones (body None). Reads only; never follows a symlink."""
-    q = wq.inbox_dir()
-    # The inbox folders are gt's own: either one replaced by a symlink (which a sandboxed
-    # process can do -- it may write there) would point the broker at some other folder, e.g.
-    # the vault's own queue, and have it "reject" legitimate requests. A symlinked inbox is not
-    # read at all.
-    if os.path.islink(str(q)) or os.path.islink(str(q.parent)):
-        return []
+def _hook(stage, name=None):
+    if _INBOX_RACE_HOOK is not None:
+        _INBOX_RACE_HOOK(stage, name)
+
+
+class _InboxEntry:
+    __slots__ = ("name", "data", "body", "why", "link")
+
+    def __init__(self, name, data=None, body=None, why=None, link=False):
+        self.name, self.data, self.body, self.why, self.link = name, data, body, why, link
+
+
+class _Inbox:
+    """The queue inbox, opened so that nothing in it can be swapped under the broker (H1).
+
+    POSIX: ~/.gt-inbox and its queue/ folder are each opened O_DIRECTORY|O_NOFOLLOW (a symlinked
+    folder is refused, not followed); every entry is opened relative to that folder's fd with
+    O_NOFOLLOW|O_NONBLOCK (a symlink fails to open, a FIFO cannot block), fstat'ed on the open fd
+    (regular file, exactly one link -- a hard link to a read-denied file is refused unread --
+    and within the size cap), and read at most cap+1 bytes from that fd. Those bytes are the only
+    ones ever used, for the accept and the reject path alike, and the entry is unlinked through
+    the folder fd. Nothing is ever re-opened by path.
+
+    Windows has no O_NOFOLLOW and no dir_fd. There the folders are refused when they are links
+    or reparse points, each entry is lstat'ed, opened, and its open handle must be the SAME file
+    (st_dev/st_ino) as the lstat saw, a regular file with one link, whose final path
+    (GetFinalPathNameByHandleW) is inside the inbox folder; anything else is refused unread.
+    Native Windows has no Claude Code sandbox, so the inbox there is not a security boundary:
+    Claude's shell can open any of your files directly (SECURITY.md)."""
+
+    def __init__(self):
+        self.q = wq.inbox_dir()
+        self.dfd = None
+        self.real = None
+        self.ok = False
+
+    def __enter__(self):
+        _hook("dir")
+        if os.name == "nt" or not hasattr(os, "O_NOFOLLOW") or not hasattr(os, "O_DIRECTORY"):
+            self.ok = self._open_windows()
+        else:
+            self.ok = self._open_posix()
+        return self
+
+    def __exit__(self, *exc):
+        if self.dfd is not None:
+            os.close(self.dfd)
+            self.dfd = None
+        return False
+
+    # -- opening the folder
+    def _open_posix(self):
+        flags = os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW | getattr(os, "O_CLOEXEC", 0)
+        try:
+            pfd = os.open(str(self.q.parent), flags)
+        except OSError:
+            return False                              # missing, or ~/.gt-inbox is a symlink
+        try:
+            self.dfd = os.open(self.q.name, flags, dir_fd=pfd)
+        except OSError:
+            return False                              # missing, or queue/ is a symlink
+        finally:
+            os.close(pfd)
+        return True
+
+    def _open_windows(self):
+        import stat as _st
+        for d in (self.q.parent, self.q):
+            try:
+                st = os.lstat(str(d))
+            except OSError:
+                return False
+            if not _st.S_ISDIR(st.st_mode) or _is_reparse(st):
+                return False
+        try:
+            self.real = os.path.realpath(str(self.q))
+        except OSError:
+            return False
+        return True
+
+    def names(self):
+        if not self.ok:
+            return []
+        try:
+            got = os.listdir(self.dfd) if self.dfd is not None else os.listdir(str(self.q))
+        except OSError:
+            return []
+        return sorted(n for n in got if n.endswith(".json") and not n.startswith(".")
+                      and "/" not in n and "\\" not in n)
+
+    # -- reading one entry
+    def read(self, name) -> _InboxEntry:
+        _hook("file", name)
+        if self.dfd is not None:
+            return self._read_posix(name)
+        return self._read_windows(name)
+
+    def _read_posix(self, name):
+        import errno
+        flags = os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK | getattr(os, "O_CLOEXEC", 0)
+        try:
+            fd = os.open(name, flags, dir_fd=self.dfd)
+        except OSError as exc:
+            if exc.errno in (errno.ELOOP, getattr(errno, "EMLINK", -1), getattr(errno, "EFTYPE", -1)):
+                return _InboxEntry(name, why=LINK_WHY, link=True)
+            if exc.errno == errno.ENOENT:
+                return _InboxEntry(name, why="gone")
+            return _InboxEntry(name, why="unreadable (%s)" % exc.__class__.__name__)
+        try:
+            return self._from_fd(name, fd, None)
+        finally:
+            os.close(fd)
+
+    def _read_windows(self, name):
+        import stat as _st
+        p = os.path.join(str(self.q), name)
+        try:
+            lst = os.lstat(p)
+        except OSError:
+            return _InboxEntry(name, why="gone")
+        if not _st.S_ISREG(lst.st_mode) or _is_reparse(lst):
+            return _InboxEntry(name, why=LINK_WHY, link=True)
+        try:
+            fd = os.open(p, os.O_RDONLY | getattr(os, "O_BINARY", 0) | getattr(os, "O_NOINHERIT", 0))
+        except OSError as exc:
+            return _InboxEntry(name, why="unreadable (%s)" % exc.__class__.__name__)
+        try:
+            return self._from_fd(name, fd, lst)
+        finally:
+            os.close(fd)
+
+    def _from_fd(self, name, fd, lst):
+        import stat as _st
+        try:
+            st = os.fstat(fd)
+        except OSError as exc:
+            return _InboxEntry(name, why="unreadable (%s)" % exc.__class__.__name__)
+        if lst is not None:
+            if (st.st_dev, st.st_ino) != (lst.st_dev, lst.st_ino):
+                return _InboxEntry(name, why=LINK_WHY + "; it changed while being opened",
+                                   link=True)
+            fin = _final_path(fd)
+            if fin is None or os.path.normcase(os.path.dirname(fin)) != os.path.normcase(self.real):
+                return _InboxEntry(name, why=LINK_WHY + "; it resolves outside the inbox",
+                                   link=True)
+        if not _st.S_ISREG(st.st_mode) or st.st_nlink != 1:
+            return _InboxEntry(name, why=LINK_WHY, link=True)
+        if st.st_size > INBOX_MAX_BYTES:
+            return _InboxEntry(name, why="larger than %d bytes" % INBOX_MAX_BYTES)
+        chunks, got = [], 0
+        while got <= INBOX_MAX_BYTES:
+            try:
+                b = os.read(fd, INBOX_MAX_BYTES + 1 - got)
+            except OSError as exc:
+                return _InboxEntry(name, why="unreadable (%s)" % exc.__class__.__name__)
+            if not b:
+                break
+            chunks.append(b)
+            got += len(b)
+        data = b"".join(chunks)
+        if len(data) > INBOX_MAX_BYTES:
+            return _InboxEntry(name, why="larger than %d bytes" % INBOX_MAX_BYTES)
+        try:
+            body = json.loads(data.decode("utf-8"))
+        except (UnicodeDecodeError, ValueError) as exc:
+            return _InboxEntry(name, data=data, why="unreadable (%s)" % exc.__class__.__name__)
+        return _InboxEntry(name, data=data, body=body)
+
+    def unlink(self, name):
+        try:
+            if self.dfd is not None:
+                os.unlink(name, dir_fd=self.dfd)
+            else:
+                os.unlink(os.path.join(str(self.q), name))
+            return True
+        except OSError:
+            return False
+
+    def where(self, name):
+        return self.q / name
+
+
+def _is_reparse(st) -> bool:
+    import stat as _st
+    if _st.S_ISLNK(st.st_mode):
+        return True
+    return bool(getattr(st, "st_file_attributes", 0) & 0x400)   # FILE_ATTRIBUTE_REPARSE_POINT
+
+
+def _final_path(fd):
+    """Windows: the path the OPEN handle really refers to, or None if it cannot be had."""
     try:
-        names = sorted(n for n in os.listdir(str(q)) if n.endswith(".json") and not n.startswith("."))
-    except OSError:
-        return []
+        import ctypes
+        import msvcrt
+        from ctypes import wintypes
+        h = msvcrt.get_osfhandle(fd)
+        f = ctypes.windll.kernel32.GetFinalPathNameByHandleW
+        f.argtypes = [wintypes.HANDLE, wintypes.LPWSTR, wintypes.DWORD, wintypes.DWORD]
+        f.restype = wintypes.DWORD
+        buf = ctypes.create_unicode_buffer(1024)
+        n = f(h, buf, 1024, 0)
+        if not n or n >= 1024:
+            return None
+        out = buf.value
+        if out.startswith("\\\\?\\UNC\\"):
+            out = "\\\\" + out[8:]
+        elif out.startswith("\\\\?\\"):
+            out = out[4:]
+        return os.path.realpath(out)
+    except Exception:                                           # noqa: BLE001
+        return None
+
+
+def _inbox_entries(vault: Path, box: _Inbox) -> list:
+    """-> [(entry, why)] for inbox files addressed to THIS vault, plus the refused ones. An
+    entry another vault's request is skipped (left for that vault's drain)."""
     try:
         mine = os.path.realpath(str(vault))
     except OSError:
         return []
     out = []
-    for n in names:
-        p = q / n
-        try:
-            st = os.lstat(str(p))
-        except OSError:
+    for n in box.names():
+        e = box.read(n)
+        if e.why == "gone":
             continue
-        import stat as _st
-        if not _st.S_ISREG(st.st_mode):
-            out.append((p, None, "not a regular file (a symlink or a device is never read)"))
-            continue
-        if st.st_size > INBOX_MAX_BYTES:
-            out.append((p, None, "larger than %d bytes" % INBOX_MAX_BYTES))
-            continue
-        try:
-            body = json.loads(p.read_text(encoding="utf-8"))
-        except (OSError, UnicodeDecodeError, ValueError) as exc:
-            out.append((p, None, "unreadable (%s)" % exc.__class__.__name__))
-            continue
-        if not (isinstance(body, dict) and body.get("gt_inbox") == 1
-                and isinstance(body.get("vault"), str) and isinstance(body.get("request"), dict)):
-            out.append((p, None, "not a gt inbox request"))
-            continue
-        try:
-            if os.path.realpath(body["vault"]) != mine:
-                continue                            # another vault's: left for its own drain
-        except (OSError, ValueError):
-            continue
-        out.append((p, body, None))
+        if e.why is None:
+            body = e.body
+            if not (isinstance(body, dict) and body.get("gt_inbox") == 1
+                    and isinstance(body.get("vault"), str) and isinstance(body.get("request"), dict)):
+                e.why, e.body = "not a gt inbox request", None
+            else:
+                try:
+                    if os.path.realpath(body["vault"]) != mine:
+                        continue                        # another vault's: left for its own drain
+                except (OSError, ValueError):
+                    continue
+        out.append(e)
     return out
+
+
+def inbox_candidates(vault: Path) -> list:
+    """-> [(path, body or None, why or None)] for inbox files addressed to THIS vault, plus the
+    unreadable ones (body None). Reads only, through _Inbox: never follows a symlink."""
+    with _Inbox() as box:
+        return [(box.where(e.name), e.body, e.why) for e in _inbox_entries(vault, box)]
+
+
+def _stamp_inbox(req: dict) -> dict:
+    """M4 (0.20.x review): session and origin are the broker's to say, not the writer's. Any
+    body value is replaced; a body that claimed "farm" keeps it, because that is only ever
+    stricter (a farmed result may only create)."""
+    req["origin"] = "farm" if req.get("origin") == "farm" else "inbox"
+    req["session"] = wq.INBOX_SESSION
+    return req
+
+
+def _kept_rejects(dest: Path) -> int:
+    try:
+        return sum(1 for n in os.listdir(str(dest)) if n.startswith("inbox-"))
+    except OSError:
+        return 0
 
 
 def pickup_inbox(vault: Path, dry_run: bool = False) -> list:
     """Move this vault's valid inbox requests into its queue; reject the rest into
-    spool/broker/rejected/ (nothing is deleted unread). -> [row] for what was refused, so the
-    caller can report it; accepted requests are decided by the drain that follows."""
+    spool/broker/rejected/ (up to INBOX_REJECT_KEEP copies; past that, logged and deleted).
+    -> [row] for what was refused, so the caller can report it; accepted requests are decided by
+    the drain that follows. Every byte used is the one bounded read _Inbox made from the file
+    it opened -- nothing here re-opens an inbox path."""
     rows = []
-    for p, body, why in inbox_candidates(vault):
-        req = body.get("request") if body else None
-        if why is None:
-            why = wq.validate(req, vault)
-        if why is None:
-            if not dry_run:
-                req.pop("_file", None)
-                wq._deposit_queue(vault, req)
+    with _Inbox() as box:
+        for e in _inbox_entries(vault, box):
+            req = e.body.get("request") if e.body else None
+            why = e.why
+            if why is None:
+                _stamp_inbox(req)
+                why = wq.validate(req, vault)
+            if why is None:
+                if not dry_run:
+                    req.pop("_file", None)
+                    wq._deposit_queue(vault, req)
+                    box.unlink(e.name)
+                continue
+            if e.link:
+                # Never followed and never read: the LINK is removed (its target is untouched).
+                if not dry_run:
+                    box.unlink(e.name)
+                rows.append({"request": Path(e.name).stem, "path": None, "op": None,
+                             "decision": "reject", "reason": "inbox: " + why +
+                             "; the link was removed", "session": None, "origin": None})
+                continue
+            if e.data is None:
+                # Too large (or unreadable): never copied into the vault; left for the owner.
+                rows.append({"request": Path(e.name).stem, "path": None, "op": None,
+                             "decision": "reject",
+                             "reason": "inbox: %s; left in %s for you to remove"
+                                       % (why, box.where(e.name)),
+                             "session": None, "origin": None})
+                continue
+            isreq = isinstance(req, dict)
+            def _s(v, n):                           # writer-chosen: bounded in the log
+                return v[:n] if isinstance(v, str) else None
+            row = {"ts": _now().isoformat(timespec="seconds"),
+                   "request": _s(req.get("id"), 120) if isreq else Path(e.name).stem,
+                   "path": _s(req.get("path"), 300) if isreq else None,
+                   "section": None, "op": _s(req.get("op"), 40) if isreq else None,
+                   "session": wq.INBOX_SESSION, "origin": "inbox",
+                   "decision": "reject", "reason": "inbox: %s" % why}
+            rows.append(row)
+            if dry_run:
+                continue
+            d = vault / BROKER_REL
+            dest = d / "rejected"
+            dest.mkdir(parents=True, exist_ok=True)
+            if _kept_rejects(dest) < INBOX_REJECT_KEEP:
                 try:
-                    os.unlink(str(p))
-                except FileNotFoundError:
-                    pass
-            continue
-        if body is None and why.startswith("not a regular file"):
-            # A symlink is never followed: the LINK is removed (its target is untouched).
-            if not dry_run:
-                try:
-                    os.unlink(str(p))
+                    (dest / ("inbox-" + e.name)).write_bytes(e.data)
                 except OSError:
-                    pass
-            rows.append({"request": p.stem, "path": None, "op": None, "decision": "reject",
-                         "reason": "inbox: " + why + "; the link was removed", "session": None,
-                         "origin": None})
-            continue
-        if body is None and why.startswith("larger than"):
-            # Never read and never copied into the vault: reported, and left for the owner.
-            rows.append({"request": p.stem, "path": None, "op": None, "decision": "reject",
-                         "reason": "inbox: %s; left in %s for you to remove" % (why, p),
-                         "session": None, "origin": None})
-            continue
-        row = {"ts": _now().isoformat(timespec="seconds"),
-               "request": (req or {}).get("id") if isinstance(req, dict) else p.stem,
-               "path": (req or {}).get("path") if isinstance(req, dict) else None,
-               "section": None, "op": (req or {}).get("op") if isinstance(req, dict) else None,
-               "session": (req or {}).get("session") if isinstance(req, dict) else None,
-               "origin": (req or {}).get("origin") if isinstance(req, dict) else None,
-               "decision": "reject", "reason": "inbox: %s" % why}
-        rows.append(row)
-        if dry_run:
-            continue
-        d = vault / BROKER_REL
-        dest = d / "rejected"
-        dest.mkdir(parents=True, exist_ok=True)
-        try:
-            data = p.read_bytes()
-            (dest / ("inbox-" + p.name)).write_bytes(data)
-            os.unlink(str(p))
-        except OSError:
-            continue
-        with open(d / ("log-%s.jsonl" % _now().strftime("%Y-%m-%d")), "a", encoding="utf-8",
-                  newline="\n") as fh:
-            fh.write(json.dumps(row, ensure_ascii=False) + "\n")
+                    continue
+            else:
+                row["reason"] += ("; not kept -- %d rejected inbox requests are already in %s"
+                                  % (INBOX_REJECT_KEEP, dest.relative_to(vault).as_posix()))
+            box.unlink(e.name)
+            with open(d / ("log-%s.jsonl" % _now().strftime("%Y-%m-%d")), "a", encoding="utf-8",
+                      newline="\n") as fh:
+                fh.write(json.dumps(row, ensure_ascii=False) + "\n")
     return rows
 
 

@@ -66,6 +66,14 @@ SCHEMA = 1
 QUEUE_REL = Path("Projects") / "golden-thread" / "spool" / "queue"
 OPS = ("append", "replace-section", "create", "set-property", "replace-file")
 ORIGINS = ("session", "farm")
+# Origins only the broker stamps (0.20.x review M4): a request picked up from the sandbox inbox is
+# re-stamped origin "inbox" (or kept "farm", never loosened) with session INBOX_SESSION, whatever
+# its body said -- a writer in Claude's sandbox does not get to name the session it speaks for.
+STAMPED_ORIGINS = ("inbox",)
+INBOX_SESSION = "unknown-inbox"
+# A request id becomes a file name in the queue: one plain component, nothing that could climb out
+# of the queue folder (0.20.x review: an inbox body could carry "../../Knowledge/x").
+REQUEST_ID = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,199}$")
 MAX_CONTENT = 256 * 1024
 KEYS = {"schema", "id", "submitted", "session", "origin", "path", "op", "section", "content", "key", "target_existed",
         "base_sha256", "hint"}
@@ -268,9 +276,11 @@ def validate(req: dict, vault: Path) -> str | None:
     for k in ("id", "submitted", "session", "origin", "path", "op", "content"):
         if not isinstance(req.get(k), str):
             return "field %s missing or not a string" % k
+    if not REQUEST_ID.match(req["id"]) or ".." in req["id"]:
+        return "request id must be one plain name (letters, digits, '.', '-', '_')"
     if req["op"] not in OPS:
         return "unknown op %r" % req["op"]
-    if req["origin"] not in ORIGINS:
+    if req["origin"] not in ORIGINS + STAMPED_ORIGINS:
         return ("unknown origin %r -- a third-party extension has no write path (ADR-8)"
                 % req["origin"])
     sec = req.get("section")
