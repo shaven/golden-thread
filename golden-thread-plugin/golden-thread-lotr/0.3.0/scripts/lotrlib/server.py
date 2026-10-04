@@ -32,6 +32,7 @@ import stat
 import struct
 import sys
 import threading
+import time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 from . import unlock
@@ -402,10 +403,58 @@ def serve_pipe(engine_factory, home, *, stop_event=None, on_ready=None):
 _ROUTE = re.compile(r"^/v1/(%s)$" % "|".join(METHODS))
 
 
+def _linger(sock, max_bytes, seconds):
+    """Half-close `sock` (FIN) and discard whatever the peer still sends, until it closes, or
+    `max_bytes` or `seconds` run out. Nothing read here is parsed."""
+    try:
+        sock.shutdown(socket.SHUT_WR)
+    except OSError:
+        return
+    deadline = time.monotonic() + seconds
+    seen = 0
+    try:
+        while seen < max_bytes:
+            left = deadline - time.monotonic()
+            if left <= 0:
+                return
+            sock.settimeout(left)
+            chunk = sock.recv(min(65536, max_bytes - seen))
+            if not chunk:
+                return
+            seen += len(chunk)
+    except (OSError, ValueError):
+        return
+
+
 class _HttpHandler(BaseHTTPRequestHandler):
     server_version = "gt-lotr/" + VERSION
     sys_version = ""
     timeout = 60
+    # Lingering close (2026-10-04). A reply sent before the request body is read -- 401/403
+    # before the client is authenticated, 404 for an unknown route, 400 on a bad
+    # Content-Length, 413 over the cap -- used to close the socket with the body still
+    # unread. http.client sends the headers and the body in two send() calls. A body already
+    # here at the close made it a close with unread data, which sends RST, and macOS and Linux
+    # then throw away the reply the client had not read; a body sent after the close (the
+    # client descheduled between its two sends, as on a loaded Windows host) reached a closed
+    # socket, which answers RST, and Windows raised WinError 10053. Either way the client saw a
+    # reset instead of the 401, so a wrong secret looked like an unreachable hub. Now a request
+    # whose body was not read ends with a half-close and a bounded drain (discarded, never
+    # parsed), so the close is clean. Refusal still happens on the headers alone: nothing
+    # unauthenticated is read before the reply.
+    LINGER_SECONDS = 2.0
+    LINGER_BYTES = MAX_BODY + 64 * 1024
+
+    def setup(self):
+        super().setup()
+        self._body_read = False
+
+    def finish(self):
+        try:
+            super().finish()
+        finally:
+            if not self._body_read:
+                _linger(self.connection, self.LINGER_BYTES, self.LINGER_SECONDS)
 
     def log_message(self, fmt, *args):         # quiet: never echo headers or bodies
         pass
@@ -462,6 +511,7 @@ class _HttpHandler(BaseHTTPRequestHandler):
             self.close_connection = True
             return self._err(413, "too_large", "request over 1 MB")
         raw = self.rfile.read(length) if length else b""
+        self._body_read = True
         try:
             params = json.loads(raw.decode("utf-8")) if raw.strip() else {}
         except (ValueError, UnicodeDecodeError):

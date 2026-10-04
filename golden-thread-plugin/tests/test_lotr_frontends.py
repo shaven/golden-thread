@@ -311,6 +311,54 @@ class HttpServerTests(unittest.TestCase):
             self.assertEqual(h.engine.calls[-1][-1], "mbp")
             self.assertNotIn(SECRET, json.dumps(body))
 
+    def _refused_with_a_body(self, h, path, headers, late=False):
+        """POST `path` with a 200 KB body the server refuses before reading it, and read the
+        reply only after the server has replied and closed: -> the status line.
+
+        Two orderings, both of which the old server turned into a reset. `late=False`: headers
+        and body in one go, so the body sits unread when the server closes; closing a socket
+        with unread data sends RST, and macOS and Linux then discard the reply the client had
+        not read (ECONNRESET on every run). `late=True`: the body follows only after the server
+        has replied and closed -- what http.client does, headers and body in two send() calls,
+        when it is descheduled between them -- so it reaches a closed socket, which answers
+        RST; on Windows that is the WinError 10053/10054 test_auth_codes hit under load."""
+        body = b"x" * 200000                    # far beyond any read buffer, under MAX_BODY
+        hdrs = "".join(f"{k}: {v}\r\n" for k, v in headers.items())
+        head = (f"POST {path} HTTP/1.1\r\nHost: x\r\n{hdrs}"
+                f"Content-Length: {len(body)}\r\n\r\n").encode()
+        s = socket.create_connection(("127.0.0.1", h.port), timeout=10)
+        try:
+            try:
+                if late:
+                    s.sendall(head)
+                    time.sleep(0.3)             # the server has replied and closed
+                    s.sendall(body)
+                else:
+                    s.sendall(head + body)
+            except OSError:
+                pass                            # a reset while sending: the read below says
+            time.sleep(0.3)                     # the reply and the close (or RST) are in
+            data = b""
+            while True:
+                chunk = s.recv(65536)
+                if not chunk:
+                    break
+                data += chunk
+        finally:
+            s.close()
+        return data.split(b"\r\n", 1)[0].decode()
+
+    def test_a_refused_request_with_a_body_gets_its_reply_not_a_reset(self):
+        with _HttpRunner() as h:
+            for late in (False, True):
+                for code, path, headers in ((401, "/v1/find", _auth(secret="no")),
+                                            (403, "/v1/find", _auth(cid="old")),
+                                            (404, "/v1/enroll", _auth()),
+                                            (401, "/v1/find", {})):
+                    with self.subTest(code=code, path=path, late=late):
+                        self.assertIn(" %d " % code,
+                                      self._refused_with_a_body(h, path, headers, late=late))
+
     def test_admin_and_other_routes_404(self):
         with _HttpRunner() as h:
             for path in ("/v1/enroll", "/v1/add", "/v1/revoke", "/v1/reload", "/v2/find", "/",

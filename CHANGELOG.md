@@ -373,6 +373,21 @@ passes now (`tests/test_inbox_review2.py`, `tests/test_sandbox_review2.py`,
   later (the protocol that added it). A 2025-03-26 client sees the list unchanged. Only what the
   shim always produces is constrained; a downstream's `data` stays untyped and untrusted. An
   envelope without `ok` gets one, so every result conforms.
+- **gt-lotr's hub answers a refused request instead of resetting it.** A reply sent before the
+  request body was read -- 401 or 403 before the client is authenticated, 404 for an unknown
+  route, 400 on a bad `Content-Length`, 413 over the cap -- closed the socket with the body
+  still unread. Python's `http.client` sends headers and body in two `send()` calls. If the body
+  was in the server's buffer at the close, closing with unread data sends RST and macOS and
+  Linux discard the reply the client has not read yet. If the client was descheduled between
+  the two calls -- a loaded host -- the body reached an already-closed socket, which answers
+  RST, and Windows raises WinError 10053 on the next read. Either way a wrong secret could look
+  like an unreachable hub (`daemon_unreachable` rather than `unauthorized`), and the second
+  ordering is the intermittent `test_lotr_frontends.HttpServerTests.test_auth_codes` failure
+  under the parallel suite on Windows. Now a request whose body was not read ends with a
+  half-close (FIN) and a bounded drain (at most 1 MB + 64 KB or 2 s, discarded, never parsed);
+  refusal still happens on the headers alone. A new test sends a 200 KB body to each refusal in
+  both orderings and reads only after the server has closed: before the fix it failed on every
+  run (ECONNRESET on macOS, WinError 10053 on Windows); after it, it passes on all three.
 - **gt-lotr's MCP server starts on native Windows.** Its `plugin.json` launched `python3`, which
   there is the Microsoft Store stub, so the server never started (an open item of this release;
   INSTALL.md documented a manual `claude mcp add`).
