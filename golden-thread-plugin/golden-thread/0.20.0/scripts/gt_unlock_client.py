@@ -206,3 +206,71 @@ def check(scope, *, request=False, reason="", subject=None, job=None, h=None, an
         return {"allowed": False, "code": "unreachable" if e.code == "unreachable" else e.code,
                 "message": e.message, "grant": None, "level": "?",
                 "hints": e.hints or ["gt_unlock.py daemon start"]}
+
+
+# ------------------------------------------------------------------ M12: old code after upgrade
+
+def code_status(h=None):
+    """-> None when no authority answers, else {"stale", "pid", "since", ...}. An authority
+    that predates this check (0.20.0: no `code_status` method) is old code by definition:
+    {"stale": True, "old_protocol": True, "pid": <its pid from the kernel>}. Never raises,
+    never starts anything."""
+    h = h or home()
+    try:
+        c = connect(h, timeout=2.0)
+    except gt_ipc.IpcError:
+        return None
+    try:
+        try:
+            return c.call("code_status", {})
+        except gt_ipc.IpcError as e:
+            if e.code != "unknown_method":
+                return None
+            peer = gt_ipc.peer_of(c) or {}
+            return {"stale": True, "old_protocol": True, "pid": peer.get("pid"),
+                    "since": None}
+    finally:
+        c.close()
+
+
+def restart_if_stale(h=None, wait=10.0):
+    """Stop an authority that runs old code, then start it again from the installed code when
+    unlock is on (off: it starts on demand, as always). -> (state, info), state one of
+    "not_running", "current", "restarted", "stopped", "failed". It never grants: the old
+    authority's grants are all dropped. A pre-0.20.1 authority has no orderly stop that skips
+    the factor, so it is ended by signal -- only after the client verified, from the kernel,
+    that the process is the installed gt_unlockd.py (connect -> verify_server)."""
+    h = h or home()
+    info = code_status(h)
+    if info is None:
+        return "not_running", None
+    if not info.get("stale"):
+        return "current", info
+    addr = address(h)
+    if info.get("old_protocol"):
+        pid = info.get("pid")
+        try:
+            import signal
+            os.kill(int(pid), signal.SIGTERM)
+        except (OSError, TypeError, ValueError):
+            return "failed", info
+    else:
+        try:
+            c = connect(h, timeout=5.0)
+            try:
+                res = c.call("stop_if_stale", {})
+            finally:
+                c.close()
+        except gt_ipc.IpcError:
+            return "failed", info
+        if not res.get("stopping"):
+            return "current", res
+        info = dict(info, revoked=res.get("revoked"))
+    deadline = time.monotonic() + wait
+    while gt_ipc.alive_at(addr, timeout=0.3) and time.monotonic() < deadline:
+        time.sleep(0.1)
+    if gt_ipc.alive_at(addr, timeout=0.3):
+        return "failed", info
+    if enabled(h):
+        return ("restarted" if start_daemon(h) else "stopped"), info
+    return "stopped", info

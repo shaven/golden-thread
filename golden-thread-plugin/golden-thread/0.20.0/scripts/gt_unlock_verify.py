@@ -129,6 +129,26 @@ def check_gated_refused(r, home, status):
         r.add("step-up", FAIL, "gt:unlock:policy was granted without a fresh confirmation")
 
 
+def check_code(r, home):
+    """M12 (usability run 2026-10-04): an install, upgrade or rollback left the authority
+    running OLD code -- the same pid survived all three. install.sh now restarts it; this row
+    catches the case where that did not happen. Read-only: it never stops anything."""
+    import time
+    info = C.code_status(home)
+    if info is None:
+        r.add("authority-code", NC, "the authority is not running")
+        return
+    if not info.get("stale"):
+        r.add("authority-code", PASS, "the authority (pid %s) runs the installed code"
+              % info.get("pid"))
+        return
+    since = info.get("since")
+    r.add("authority-code", FAIL, "the unlock service is running old code (pid %s, since %s): "
+          "run gt_unlock.py daemon restart-if-stale (it drops every grant; unlock again)"
+          % (info.get("pid"), time.strftime("%Y-%m-%d %H:%M", time.localtime(since))
+             if since else "before this version"))
+
+
 def check_helper(r):
     if sys.platform != "darwin":
         r.add("touchid-helper", NC, "macOS only")
@@ -233,6 +253,7 @@ def main(as_json=False):
             level = {"level": "locked", "why": "unlock is on but the authority is not running: "
                      "every gated scope is refused (fail closed)"}
             r.add("authority", NC, "not running (gt_unlock.py daemon start)")
+        check_code(r, home)
         check_files(r, home)
         check_transport(r, home)
         if status is not None:
@@ -243,6 +264,8 @@ def main(as_json=False):
     else:
         r.add("unlock", NC, "unlock is off, so nothing is gated; turn it on to check more "
                             "(SECURITY.md)")
+        if gt_ipc.alive_at(C.address(home), timeout=0.3):
+            check_code(r, home)
     check_sandbox(r)
     level = dict(level)
     check_mcp(r, level)

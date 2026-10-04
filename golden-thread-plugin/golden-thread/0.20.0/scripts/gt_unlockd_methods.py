@@ -26,6 +26,12 @@ Guards, by method:
                       and a platform signature over the op unless inside the consent window
   stop                a fresh factor while unlock is on (review F1); `lock` needs nothing --
                       it only tightens
+  stop_if_stale       nothing, and it stops the authority ONLY when its code on disk changed
+                      since it started (an install / upgrade / rollback, M12); it never grants:
+                      every grant is revoked
+  enroll totp with skip_platform
+                      bootstrap without the platform factor only for a person's terminal, by
+                      the kernel's process table (no claude ancestor, a tty, a login shell)
 """
 import base64
 import hashlib
@@ -38,7 +44,8 @@ import time
 import gt_ipc
 import gt_unlock_factors as F
 import gt_unlock_policy as P
-from gt_unlockd import Denied, _sha, approval_bind, seat_of
+from gt_unlockd import PROMPT_COOLDOWN_S as D_COOLDOWN
+from gt_unlockd import Denied, _has_tty, _sha, approval_bind, seat_of
 
 
 def methods(auth):
@@ -206,7 +213,7 @@ def methods(auth):
                            params.get("reason") or "", conn, rid, tty(params),
                            use_recovery=bool(params.get("recovery")), seat=seat)
         return {"grant": g.gid, "factors": g.factors, "ttl_s": g.ttl, "idle_s": g.idle,
-                "session": target.root["pid"], "seat": seat,
+                "session": target.root["pid"], "seat": seat, "kind": kind,
                 "needs_reenrol": bool(auth.state().get("needs_reenrol"))}
 
     @method
@@ -266,8 +273,18 @@ def methods(auth):
         lk = auth._prompting(session.key)
         try:
             ctx = auth._ctx(text, None, rid, False)
-            used = auth.collect(ctx, "consent", "lotr:consent:" + op_hash[:64],
-                                requester(peer), k=1, need_platform=True)
+            try:
+                used = auth.collect(ctx, "consent", "lotr:consent:" + op_hash[:64],
+                                    requester(peer), k=1, need_platform=True)
+            except Denied as e:
+                # Review 2026-10-04: a refused / cancelled / failed consent set no cooldown,
+                # so a confused or injected session could raise Touch ID / Hello prompts back
+                # to back. The same cooldown an unlock refusal sets now applies (the next
+                # consent inside it is refused with code "cooldown", raising no prompt).
+                auth.cooldown[session.key] = time.monotonic()
+                auth.audit("consent", grant=g.gid, verdict="deny", reason=e.code)
+                raise Denied("consent_denied", "the consent was not given (%s); wait %d s "
+                             "before asking again" % (e.message, D_COOLDOWN), e.hints)
         finally:
             lk.release()
         if not auth.audit("consent", grant=g.gid, verdict="allow", factors=",".join(used),
@@ -388,14 +405,36 @@ def methods(auth):
                 auth.sealed_cache.pop(k, None)
 
     # ---------------------------------------------------------- enrolment
-    def _bootstrap_ok(name):
+    def _bootstrap_ok(name, peer, params):
         """Nothing enrolled yet: start with the platform factor where this machine has one,
-        because enrolling it takes a physical touch / PIN, which an agent cannot supply."""
+        because enrolling it takes a physical touch / PIN, which an agent cannot supply.
+
+        M5 (usability run 2026-10-04): the platform factor is OPTIONAL. A person who does not
+        want Touch ID / Windows Hello may enrol TOTP first with `enroll totp
+        --without-platform` -- honoured only for a process the KERNEL shows is a person's
+        terminal: no `claude` ancestor, a controlling terminal, a login shell above it (the
+        same test read_without_unlock uses, F6/H2). An agent's shell is refused, so an agent
+        still cannot bootstrap factors it would then hold."""
         for plat in P.PLATFORM_FACTORS:
             f = auth.factors.get(plat)
             if f is not None and f.available()[0] and name != plat:
+                if name == "totp" and params.get("skip_platform"):
+                    kind, _root, _s = auth.classify(peer)
+                    if kind == "terminal" and _has_tty(peer) and auth.interactive(peer):
+                        auth.audit("enroll_bootstrap", factor=name, verdict="ok",
+                                   reason="without_platform", subject=peer["pid"])
+                        return
+                    auth.audit("enroll_bootstrap", factor=name, verdict="deny",
+                               reason="without_platform_not_a_terminal", subject=peer["pid"])
+                    raise Denied("platform_first", "enrolling TOTP without %s is allowed only "
+                                 "from your own terminal (not from Claude Code or a script "
+                                 "without one): run gt_unlock.py enroll totp --without-platform "
+                                 "in a terminal window" % plat)
                 raise Denied("platform_first", "enrol %s first: it needs your finger or PIN, "
-                             "which is what makes the rest of the enrolment trustworthy" % plat)
+                             "which is what makes the rest of the enrolment trustworthy. To use "
+                             "TOTP without %s, run in your own terminal: gt_unlock.py enroll "
+                             "totp --without-platform (then gt_unlock.py policy enable "
+                             "--factors totp; SECURITY.md section 3)" % (plat, plat))
 
     @method
     def enroll(peer, params, conn=None, rid=None):
@@ -427,7 +466,7 @@ def methods(auth):
             raise Denied("unavailable", "%s is not available here: %s" % (name, why))
         used = require_full(peer, "enrol %s" % name, conn, rid, params)
         if not used and not (enr.get("factors") or {}):
-            _bootstrap_ok(name)
+            _bootstrap_ok(name, peer, params)
         if name == "totp":
             uri = F.TotpFactor().begin(auth.home, params.get("account") or "gt")
             auth.audit("enroll_begin", factor="totp", verdict="ok")
@@ -523,7 +562,14 @@ def methods(auth):
         if not merged.get("enabled"):
             auth._off_by_policy = True
         auth.reload()
-        auth.audit("policy_set", verdict="ok", enabled=bool(merged.get("enabled")))
+        # M5: a K the owner chose (gt_unlock.py policy enable --factors) is on record twice --
+        # in the approved policy bytes and here -- so a lower K is never a silent one.
+        chosen = (merged.get("factors") or {}).get("chosen")
+        auth.audit("policy_set", verdict="ok", enabled=bool(merged.get("enabled")),
+                   k=(merged.get("factors") or {}).get("required"),
+                   k_default=(P.default_policy().get("factors") or {}).get("required"),
+                   k_chosen_by_owner=",".join(chosen.get("factors") or [])
+                   if isinstance(chosen, dict) else None)
         return {"enabled": bool(merged.get("enabled"))}
 
     @method
@@ -554,6 +600,29 @@ def methods(auth):
         except OSError:
             lines = []
         return {"lines": [ln.rstrip("\n") for ln in lines]}
+
+    @method
+    def code_status(peer, params, conn=None, rid=None):
+        """M12: the pid, start time and whether this process runs the code now on disk."""
+        return auth.code_status()
+
+    @method
+    def stop_if_stale(peer, params, conn=None, rid=None):
+        """M12 (usability run 2026-10-04): install / upgrade / rollback left the authority on
+        OLD code (the same pid survived all three). This stops it WITHOUT a factor, but only
+        when its code on disk has changed since it started -- it never grants anything: every
+        grant is revoked and the next request starts the authority again from the new code.
+        A same-user process could end the daemon by signal anyway (the F1 residual); this
+        only adds an orderly way that drops grants and says so in the audit log."""
+        cs = auth.code_status()
+        if not cs["stale"]:
+            return dict(cs, stopping=False)
+        n = auth.revoke_all("code_updated")
+        auth.audit("daemon_stop", verdict="ok", reason="code_updated", revoked=n)
+        ev = getattr(auth, "stop", None)
+        if ev is not None:
+            ev.set()
+        return dict(cs, stopping=True, revoked=n)
 
     @method
     def stop(peer, params, conn=None, rid=None):

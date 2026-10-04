@@ -642,6 +642,49 @@ and nothing said so.
   running sandbox mode reports one missing entry in `gt_sandbox.py check` until
   `gt_sandbox.py apply` runs again.
 
+### gt unlock, usable on every machine (usability run 2026-10-04: B3, M5, M6, M12)
+
+- **`gt_unlock.py run` works.** `run --scope S -- CMD` crashed every time (`TypeError:
+  unhashable type: 'list'`): its command positional shared the subcommand's argparse dest.
+  Tested end to end -- refused while locked, runs once unlocked, `--secret-file` handed over
+  and deleted.
+- **TOTP-only machines can turn unlock on** (a Mac without Touch ID or the Command Line Tools,
+  a desktop Mac, a PC without Windows Hello). `gt_unlock.py policy enable --factors totp` sets
+  K (how many factors must agree) to the factors you name and records the choice in the policy
+  (`factors.chosen`), the audit log and `status`; it still needs your current factors. At a
+  terminal `policy enable` offers it; anywhere else the refusal names that command. K is still
+  never lowered silently. Windows Hello (and Touch ID) is optional:
+  `enroll totp --without-platform` skips it -- only for a process the kernel shows is a
+  person's terminal (no `claude` ancestor, a tty, a login shell), never Claude Code's shell.
+- **One code per command.** A request that unlocks and also needs a step-up
+  (`gt:settings:security`) takes the factors it just collected as the step-up, when they are
+  what a step-up asks for (the platform factor where one is usable, else any but a recovery
+  code); a grant made earlier still steps up. `gt_settings.py set unlock on|off` no longer asks
+  the settings gate before `policy enable|disable` asks for K fresh factors. "Code already
+  used" now says "wait for the next code (about N s)"; replay is still refused. On Linux / WSL2
+  `set sandbox_mode on` checks bubblewrap and socat before asking for any code, drops the
+  nonexistent `--force` hint, and names apt / dnf / pacman / zypper by distribution.
+- **The authority restarts after an install.** The same `gt_unlockd.py` pid survived
+  reinstall, rollback and roll-forward, running old code. It now fingerprints its code files at
+  start; `install.sh` runs `gt_unlock.py daemon restart-if-stale`, which stops it only when the
+  code changed (no factor: it only stops and never grants; every grant is dropped and the
+  output says so) and starts it again when unlock is on. A 0.20.0 authority, which has no such
+  method, is ended by signal after the client verified it is the installed `gt_unlockd.py`.
+  `status`, `daemon status` and `verify` (new `authority-code` row) report "the unlock service
+  is running old code (pid N, since ...)" with the command.
+- **A refused consent cools down.** A platform consent (Touch ID / Hello) that was cancelled,
+  refused or failed set no cooldown, so a confused or injected session could raise prompts back
+  to back. It now sets the same cooldown an unlock refusal does: the refusal says
+  `consent_denied ... wait N s`, and the next consent inside the cooldown is refused with code
+  `cooldown` without a prompt. Nothing is auto-approved.
+- **Wording.** `unlock` says the grant is bound to this shell / Claude Code session and what
+  ends it; `status` shows the last revocation ("revoked at 14:02: screen locked"), K explained,
+  and one `Next:` line that `enroll` and `recovery` print too and that never names a factor
+  the OS cannot have; `enroll totp` at end of input prints one line, not an `EOFError`;
+  `--help` describes every command; prompts name "Claude Code session (pid N)" for a shim or
+  hook of Claude Code (and "<script> (pid N), a command in Claude Code session (pid M)" for a
+  deeper process) instead of "Python (pid N)".
+
 ## gt 0.19.2 — 2026-10-03
 
 **gt installs on native Windows** (owner, 2026-10-03). Proven on a Windows 11 VM (Git for

@@ -401,8 +401,8 @@
    "sha256": "1fcbca05425599a2bee203aca8ceacff04cbef537ecfc246a95e9ef8be0521a1"
   },
   "scripts/gt_settings.py": {
-   "bytes": 78242,
-   "sha256": "ad41245d775943b93ed637fac9c5c23d1e2d3c2c686c2bf025c2e7b1cfc58a53"
+   "bytes": 81563,
+   "sha256": "1c435324d2fe37fe03c24230e5d3afb91f272903f7d5e53aba7ac1464d472f2b"
   },
   "scripts/gt_staged.py": {
    "bytes": 3529,
@@ -433,24 +433,24 @@
    "sha256": "84f53f48ee9737f6e449817e12bf1dd5ed61322be6a1a53b91f7145ddebf61fd"
   },
   "scripts/gt_unlock.py": {
-   "bytes": 27753,
-   "sha256": "81098333e1fe8ef4325d9db1331156d7fcc01fa772c81546d739795a68ba972c"
+   "bytes": 42921,
+   "sha256": "370a4a60fe8736ed56e7c662243cbfc37cdf8c3c47dbc86a492c986b2ca69c1f"
   },
   "scripts/gt_unlock_brokers.py": {
    "bytes": 26605,
    "sha256": "a645cf946b1345e4476c97308ae9a947800a5caf2a75565aad498e0fcc90dafe"
   },
   "scripts/gt_unlock_client.py": {
-   "bytes": 9362,
-   "sha256": "98a0a1130bff35481bc82f168c55600823fb10523b1cd1affc7a57e30d56f259"
+   "bytes": 11963,
+   "sha256": "c0db5b7d82e7e7396b46819acdb7cc8b94d8db971ecc1e014ec51387854a567f"
   },
   "scripts/gt_unlock_crypto.py": {
    "bytes": 13026,
    "sha256": "dc2d5dac24aa810186674ae4b585fb92dcd927451f43a7007e19c5ada15712f2"
   },
   "scripts/gt_unlock_factors.py": {
-   "bytes": 15754,
-   "sha256": "4c620dc1d02f4b617919f8eae6e9abe8c48c6a503c8c9e271fc71473af21f8c6"
+   "bytes": 16532,
+   "sha256": "bd401bdb68807961c0b202a066a08791d1827d3dd2a2a5f1cf1559e28342bf69"
   },
   "scripts/gt_unlock_hello.ps1": {
    "bytes": 14970,
@@ -481,16 +481,16 @@
    "sha256": "a02565bb4183ec7d989153dd2c6d2f2018b679c34325cb649d041053e3020307"
   },
   "scripts/gt_unlock_verify.py": {
-   "bytes": 12000,
-   "sha256": "0c87d6123c748167e12614fe6b1cc2156ed9b013fd3ff94ca8ec813f153911ca"
+   "bytes": 13084,
+   "sha256": "1c2579fe5f5d5b9869033b801e1229b639eeaffc4b797c435213ff8492e9118f"
   },
   "scripts/gt_unlockd.py": {
-   "bytes": 55023,
-   "sha256": "95aa0f7e0a420108c98bc4307a763d7796c1c2bf7a11d56844ca0c811f14ad95"
+   "bytes": 59604,
+   "sha256": "f2a16b8d1420757e3dc6ae8c9e805f7ef885d634d6e1099e71db88ee198509d7"
   },
   "scripts/gt_unlockd_methods.py": {
-   "bytes": 30324,
-   "sha256": "2ee8835d264a7610accdc61b9cfbd53a573e6dd235658c90b768d3a09843118d"
+   "bytes": 35054,
+   "sha256": "892e14c40ca71f51f86451136c9b83769472f12b2724417f5e769c77593f03b5"
   },
   "scripts/gt_upgrade.py": {
    "bytes": 50713,
@@ -785,7 +785,7 @@
    "sha256": "ca6e34c9d9e846dedd1de0e812b421930bb86c33c9166e662c2fbf9b11756bc2"
   }
  },
- "generated": "2026-10-04T08:57:45",
+ "generated": "2026-10-04T12:13:34",
  "hooks": [
   {
    "args": [

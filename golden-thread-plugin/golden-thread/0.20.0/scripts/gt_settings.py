@@ -453,7 +453,9 @@ SETTINGS = {
             "The source of truth is the unlock policy (~/.claude/golden-thread/unlock/policy.json,\n"
             "tightened by an administrator's floor), not vault-config.json: `set unlock on|off`\n"
             "runs `gt_unlock.py policy enable|disable`, which needs your enrolled factors.\n"
-            "Enrol first: gt_unlock.py enroll touchid (macOS) / hello (Windows), then totp.\n"
+            "Enrol first: gt_unlock.py enroll touchid (macOS) / hello (Windows), then totp;\n"
+            "with TOTP alone: enroll totp, then gt_unlock.py policy enable --factors totp.\n"
+            "`gt_unlock.py status` names the next step.\n"
             "It is not anti-malware: something already running as you can wait for you to\n"
             "unlock. SECURITY.md says exactly what each level stops (0.20.0)."),
     },
@@ -938,6 +940,61 @@ def _sandbox_switch(name, value, d):
     return None
 
 
+def _linux_package_hint(packages, os_release="/etc/os-release", which=None):
+    """The install command for `packages` on THIS Linux, from /etc/os-release (ID, ID_LIKE),
+    else from which package manager is on PATH. Usability run 2026-10-04: the hint said
+    apt-get on a dnf machine."""
+    import shutil
+    which = which or shutil.which
+    ids = []
+    try:
+        with open(os_release, "r", encoding="utf-8") as fh:
+            for line in fh:
+                k, _, v = line.strip().partition("=")
+                if k in ("ID", "ID_LIKE"):
+                    ids += v.strip().strip('"').lower().split()
+    except OSError:
+        pass
+    managers = (("apt", ("debian", "ubuntu"), "sudo apt-get install %s"),
+                ("dnf", ("fedora", "rhel", "centos"), "sudo dnf install %s"),
+                ("pacman", ("arch",), "sudo pacman -S %s"),
+                ("zypper", ("suse", "opensuse", "sles"), "sudo zypper install %s"))
+    pk = " ".join(packages)
+    for _name, family, cmd in managers:
+        if any(i in family or any(i.startswith(f) for f in family) for i in ids):
+            return cmd % pk
+    for name, _family, cmd in managers:
+        if which("apt-get" if name == "apt" else name):
+            return cmd % pk
+    return "install %s with your package manager" % pk
+
+
+def _sandbox_prereqs_missing(name, value):
+    """-> the refusal text when turning sandbox mode on (or changing its reads while it is
+    on) cannot work on this Linux / WSL2 because bubblewrap or socat is missing, else None.
+    Checked before any unlock confirmation is asked for."""
+    d = _load()
+    mode = value if name == "sandbox_mode" else (d.get("sandbox_mode") or "off")
+    if mode != "on":
+        return None
+    try:
+        import gt_sandbox
+        pm = gt_sandbox.platform_mode()
+        if pm not in ("linux", "wsl2"):
+            return None
+        missing = gt_sandbox.linux_deps_missing()
+    except Exception:                            # noqa: BLE001 - _sandbox_switch reports it
+        return None
+    if not missing:
+        return None
+    pkgs = ["bubblewrap" if m == "bwrap" else m for m in missing]
+    return ("refused: sandbox mode on %s needs %s, which %s not installed; Claude Code would "
+            "refuse to start without it. Install it with:\n  %s\nthen run this again. Nothing "
+            "was changed and no code was asked for."
+            % ("WSL2" if pm == "wsl2" else "Linux", " and ".join(missing),
+               "is" if len(missing) == 1 else "are", _linux_package_hint(pkgs)))
+
+
 def _unlock_gate(name):
     """-> None when the change may proceed, else the refusal text. Fails closed when unlock is
     on and the authority cannot be asked."""
@@ -1350,7 +1407,17 @@ def set_value(name, value, force=False):
             return 2
         if msg:
             print("  " + msg)
-    if name in SECURITY_KEYS:
+    if name in ("sandbox_mode", "sandbox_vault_reads"):
+        # M6 (usability run 2026-10-04): a change the sandbox would refuse anyway is refused
+        # BEFORE anyone is asked for a code -- not after two of them.
+        missing = _sandbox_prereqs_missing(name, value)
+        if missing:
+            print(missing)
+            return 1
+    # `unlock` itself is not gated here: `gt_unlock.py policy enable|disable` asks the
+    # authority for K FRESH factors (step-up + K, ignoring any grant), which is stricter than
+    # this gate -- asking both made one command need codes from two 30 s windows (M6).
+    if name in SECURITY_KEYS and name != "unlock":
         refusal = _unlock_gate(name)
         if refusal:
             print("refused: changing %s needs a fresh confirmation (gt unlock): %s"

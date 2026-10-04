@@ -3112,6 +3112,16 @@ post_install_gate() {
   echo "    python3 \"$doc\" post-install --vault \"$vault\""
   return 0
 }
+# gt unlock's authority (0.20.1, M12): a running gt_unlockd.py keeps the code it started with,
+# so the same pid used to survive a reinstall, an upgrade and a rollback. Stop it when the code
+# it runs has changed -- an orderly stop that needs no factor, ONLY because the code changed,
+# and that never grants: every grant is dropped (the command says so) -- and start it again
+# from the new code when unlock is on. Silent when no authority is running.
+if [ -f "$HOME/.claude/golden-thread/hooks/gt_unlock.py" ]; then
+  python3 -B "$HOME/.claude/golden-thread/hooks/gt_unlock.py" daemon restart-if-stale 2>/dev/null \
+    | sed 's/^/  /' || true
+fi
+
 PI_RC=0
 post_install_gate || PI_RC=$?
 if [ "$PI_RC" -ne 0 ]; then

@@ -157,6 +157,31 @@ def _sha(data):
     return hashlib.sha256(data).hexdigest()
 
 
+# M12 (usability run 2026-10-04): the files whose code the authority runs. An install, upgrade
+# or rollback that changes any of them leaves a running authority on OLD code; code_status
+# reports that, and stop_if_stale ends it (gt_unlock.py daemon restart-if-stale, run by
+# install.sh).
+CODE_GLOBS = ("gt_unlock*.py", "gt_ipc.py", "gt_unlock_hello.ps1")
+
+
+def code_fingerprint(d=None):
+    """sha256 over the names and contents of the authority's code files in `d` (default: the
+    directory this module runs from). A file added, removed or changed changes it."""
+    import glob
+    d = d or HERE
+    names = sorted({os.path.basename(p) for g in CODE_GLOBS
+                    for p in glob.glob(os.path.join(d, g))})
+    h = hashlib.sha256()
+    for n in names:
+        try:
+            with open(os.path.join(d, n), "rb") as f:
+                data = f.read()
+        except OSError:
+            data = b"\0unreadable"
+        h.update(n.encode("utf-8") + b"\0" + hashlib.sha256(data).digest())
+    return h.hexdigest()
+
+
 class Session:
     def __init__(self, root, kind, session_id=None, job=None):
         self.root = root                  # {"pid", "start"}
@@ -248,6 +273,10 @@ class Authority:
         self.sealed_cache = {}
         self.cooldown = {}                # requester root key -> monotonic time
         self.started = time.time()
+        self.code = code_fingerprint()     # M12: what this process loaded
+        # The latest revocation, so `status` can say "revoked at 14:02: screen locked" instead
+        # of the grant silently vanishing (usability run 2026-10-04). Never a secret.
+        self.last_revoked = None
         w, m = self._clock()
         self._skew = w - m
         self._last_wall = w
@@ -494,13 +523,19 @@ class Authority:
         f = policy.get("factors") or {}
         k = int(f.get("required", 1))
         usable = self.usable_factors(policy)
+        # M5 (usability run 2026-10-04): name the supported way out. A machine with only TOTP
+        # (a Mac without a sensor or the Command Line Tools, a desktop Mac, a PC without Hello)
+        # had no route but a hand-edited policy.
+        choose = ("enrol more, or choose the factors on purpose: gt_unlock.py policy enable "
+                  "--factors %s" % (",".join(usable) or "totp"))
         if len(usable) < k:
-            return ("%d factor(s) required but only %d usable here (%s); enrol more -- K is "
-                    "never lowered silently" % (k, len(usable), ", ".join(usable) or "none"))
+            return ("K = %d (how many factors must agree to unlock) but only %d factor(s) are "
+                    "enrolled and usable here (%s); %s -- K is never lowered silently"
+                    % (k, len(usable), ", ".join(usable) or "none", choose))
         one_of = f.get("require_one_of") or []
         if one_of and not set(one_of) & set(usable):
-            return "policy requires one of %s, and none is enrolled and usable" % \
-                ", ".join(one_of)
+            return ("the policy requires one of %s in every unlock, and none is enrolled and "
+                    "usable here; %s" % (", ".join(one_of), choose))
         return None
 
     # ------------------------------------------------------------------ audit (I8)
@@ -529,8 +564,26 @@ class Authority:
         return {"pid": peer["pid"], "start": peer["start"]}
 
     def describe(self, pid):
-        path = gt_ipc.process_path(pid)
-        return "%s (pid %s)" % (os.path.basename(path) or "?", pid)
+        """Who asks, in the words a prompt shows. Usability run 2026-10-04: an MCP shim or a
+        hook of Claude Code read "Python (pid N)". Now a direct child of `claude` is "Claude
+        Code session (pid <claude>)", a deeper descendant names both, and a python process
+        names the script it runs. From the kernel's process table only (I1)."""
+        def name(info_pid):
+            main = gt_ipc.main_script(info_pid)
+            if main:
+                return os.path.basename(main)
+            return os.path.basename(gt_ipc.process_path(info_pid)) or "?"
+        try:
+            chain = gt_ipc.ancestry(pid, limit=8)
+        except Exception:                                     # noqa: BLE001
+            chain = []
+        for i, info in enumerate(chain):
+            if self.is_claude(info):
+                if i <= 1:
+                    return "Claude Code session (pid %s)" % info["pid"]
+                return "%s (pid %s), a command in Claude Code session (pid %s)" % (
+                    name(pid), pid, info["pid"])
+        return "%s (pid %s)" % (name(pid), pid)
 
     def classify(self, peer, job=None):
         """-> (kind, session_root_ident, shim_session_or_None). kind: shim | vault_shim |
@@ -592,6 +645,8 @@ class Authority:
             self.sealed_cache.clear()          # every revocation empties it (sealed I2)
         for g in gone:
             self.audit("revoke", grant=g.gid, reason=why, session=key[0])
+        if gone:
+            self.last_revoked = {"at": time.time(), "why": why, "grants": len(gone)}
         return gone[0] if gone else None
 
     def revoke_all(self, why):
@@ -718,7 +773,9 @@ class Authority:
         cannot carpet the screen with prompts hoping one is approved by reflex."""
         last = self.cooldown.get(root_key)
         if last and time.monotonic() - last < PROMPT_COOLDOWN_S:
-            raise Denied("cooldown", "a recent unlock request was refused; wait a few seconds")
+            raise Denied("cooldown", "a recent request was refused; wait %d s before asking "
+                         "again" % max(1, int(PROMPT_COOLDOWN_S - (time.monotonic() - last))
+                                       + 1))
         if not self.prompt_lock.acquire(timeout=0.1):
             raise Denied("busy", "another unlock prompt is open")
         return self.prompt_lock
@@ -752,6 +809,14 @@ class Authority:
         self.audit("grant", grant=g.gid, factors=",".join(used), session=session.root["pid"],
                    kind=session.kind, seat=seat)
         return g
+
+    def satisfies_step_up(self, factors):
+        """Would `factors`, collected just now, be what step_up() asks for? The platform
+        factor where one is usable; otherwise any factor but a recovery code."""
+        plat = [x for x in self.usable_factors() if x in P.PLATFORM_FACTORS]
+        if plat:
+            return any(f in P.PLATFORM_FACTORS for f in factors)
+        return any(f != "recovery" for f in factors)
 
     def step_up(self, session, g, requester, scope, reason, conn, rid, tty):
         fresh = int((self.eff.policy.get("step_up") or {}).get("fresh_s", 60))
@@ -837,7 +902,7 @@ class Authority:
             session = shim_session or self.session_for(root, kind)
             seat = seat_of(kind)
             g = self.active_grant(session.gkey(seat))
-            requester = self.describe(peer["pid"])
+            requester = self.describe(peer["pid"]) if request else None
             if g is None:
                 if not request:
                     return self._verdict(False, "locked", "gt is locked; unlock first", None,
@@ -846,6 +911,13 @@ class Authority:
                                                 "approve the prompt"])
                 g = self.do_unlock(session, requester, scope, reason, conn, rid, tty,
                                    seat=seat)
+                # M6 (usability run 2026-10-04): the factors just collected FOR THIS VERY
+                # REQUEST are its fresh confirmation, when they are what a step-up would ask
+                # for (the platform factor where one is usable; else any non-recovery factor).
+                # Asking again made TOTP-only machines type two codes from two 30 s windows
+                # for one command. A grant made earlier still steps up as before.
+                if g.step_up_at is None and self.satisfies_step_up(g.factors):
+                    g.step_up_at = g.created
             if level == "step_up":
                 if not request:
                     fresh = int((eff.policy.get("step_up") or {}).get("fresh_s", 60))
@@ -923,7 +995,16 @@ class Authority:
                 "grants": len(self.grants), "sealed": S.names(self.home),
                 "admin_floor": any(os.path.lexists(p) for p in
                                    (self.admin_paths or P.admin_paths())),
-                "needs_reenrol": bool(self.state().get("needs_reenrol"))}
+                "needs_reenrol": bool(self.state().get("needs_reenrol")),
+                "factors_chosen": (eff.policy.get("factors") or {}).get("chosen"),
+                "last_revoked": self.last_revoked,
+                "pid": os.getpid(), "since": self.started}
+
+    def code_status(self):
+        """M12: is this process running the code now on disk? -> dict (never raises)."""
+        now = code_fingerprint()
+        return {"pid": os.getpid(), "since": self.started, "version": VERSION,
+                "code": self.code, "code_now": now, "stale": now != self.code}
 
 
 BROKER_SCOPES = ("gt:secrets",)

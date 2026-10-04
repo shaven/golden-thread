@@ -271,10 +271,27 @@ class TotpFactor(Factor):
         ok, why = totp_mod.verify(key, code, st, **_totp_opts(ctx.policy))
         if not ok:
             raise FactorError(why, {"locked_out": "too many wrong codes: TOTP is locked out",
-                                    "replayed": "that code was already used",
+                                    "replayed": replayed_message(st),
                                     "malformed": "a code is six digits",
                                     "wrong": "wrong code"}.get(why, why))
         return True
+
+
+def replayed_message(st, now=None):
+    """"Code already used" plus how long until the app shows one that is not (usability run
+    2026-10-04: enrol -> recovery -> policy enable inside one 30 s window met a bare "already
+    used"). A code is accepted once; the next acceptable one starts at the step after the last
+    accepted step."""
+    import time as _t
+    now = _t.time() if now is None else now
+    try:
+        wait = int((int(st.get("last_step", -1)) + 1) * totp_mod.STEP - now) + 1
+    except (TypeError, ValueError):
+        wait = 0
+    if wait <= 0:
+        return "that code was already used; enter the code your app shows now"
+    return ("that code was already used; wait for the next code (about %d s) and try "
+            "again" % min(wait, 2 * totp_mod.STEP))
 
 
 def _totp_opts(policy):
