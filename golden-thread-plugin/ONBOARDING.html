@@ -280,8 +280,12 @@ python3 $U recovery            # ten one-time codes: store them offline
 python3 $U policy enable       # proves the factors work, then turns it on
 python3 $U verify              # the level this machine runs at, check by check
 </code></pre>
-<p>It is not anti-malware: something already running as you can wait for you to unlock.
-<a href="SECURITY.md"><code>SECURITY.md</code></a> says exactly what it stops and what it does not.</p>
+<p>It is not anti-malware: something already running as you can wait for you to unlock. In
+0.20.0 the gate is <strong>friction</strong> against the assistant and accidents, not a boundary: a program
+running as you — the assistant's own shell included — can get around it if it sets out to. What
+holds even then, with Touch ID / Hello (L2): every open of a sealed credential needs your finger
+or PIN, and so can each consent-tier operation. <a href="SECURITY.md"><code>SECURITY.md</code></a> says exactly what
+it stops and what it does not.</p>
 <h2 id="adding-a-knowledge-base-gt-wiki">Adding a knowledge base (gt-wiki)</h2>
 <p>If you want a structured wiki alongside your project memory:</p>
 <pre><code>/gt-wiki:gt-wiki-init

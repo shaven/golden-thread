@@ -89,6 +89,76 @@ anti-malware. If something already runs as you, it can wait for you to unlock."*
 - **Not yet proven live** (owner steps): a Touch ID prompt from the helper, a Developer ID
   signed + notarized helper, Windows Hello on a machine with a PIN, an Entra app registration.
 
+### gt unlock after the independent security review: fixed, and described honestly
+
+An independent, fresh-context review of the unlock layer (a release gate, 2026-10-03) drove a
+real authority over a real socket and reproduced seven bypasses by a process running as you —
+the assistant's own shell — plus medium and low findings. The guide's rows "assistant via Bash:
+Stopped (L1, L2)" overstated the code. Owner decision (2026-10-03 18:37): fix every logic bug,
+make sealed secrets need a fingerprint per open or per short window with no silent cache, and
+rewrite the security guide honestly; L3 is not in this release. Each exploit harness is now a
+regression test that failed on the reviewed commit (`fe571f2`) and passes now:
+`tests/test_unlock_review_regressions.py`, `tests/test_lotr_review_regressions.py`.
+
+- **Admin floor (F2, a pure logic bug).** `merge()` tightened only identical keys, so a user
+  `lotr:github:write: open` beat an admin `lotr:*:write: step_up`. Each scope's level is now the
+  stricter of the user's and the admin's, each found by its own most specific pattern; the
+  admin's patterns travel in the merged policy (`admin_floor_scopes`, never read from a user
+  file).
+- **Secrets bound to the requester (F4).** A shell child read a sealed value on the shim's
+  session grant, and the opened-value cache was global. Under `mcp_only` the broker
+  (`gt:secrets`) now serves only the shim (or gt-lotr's installed `lotrd.py` for it). Every open
+  of a `sealed:` ref needs a fresh Touch ID / Hello; `secrets_window_s` (new, default 0, at most
+  900; `gt_unlock.py policy secrets-window S`) allows one touch per window **per process and
+  grant**, never longer, never shared.
+- **Consumers and the shim by real path (F5, F7).** `is_lotr_daemon` was a file-name check (a
+  Bash-written `/tmp/x/lotrd.py` passed, and a shipped test asserted it). The credential
+  consumer and the shim seat are now the INSTALLED gt-lotr `lotrd.py` / `lotr_mcp.py`, by the
+  real path of the file the process runs, from `installed_plugins.json`. A shim replacing an
+  earlier one starts with no grant (killing the shim and registering an impostor before the
+  next tick inherited it); the real shim re-registers after an authority restart.
+- **Fake authority (F1).** `stop` needed nothing and clients never checked the server, so Bash
+  could stop the daemon and serve "allowed" itself. Clients now identify the server from the
+  kernel (macOS LOCAL_PEERTOKEN, Linux SO_PEERCRED, Windows GetNamedPipeServerProcessId; the
+  Windows command line now comes from NtQueryInformationProcess, not a PowerShell call) and
+  refuse anything but the installed `gt_unlockd.py` (`server_unverified`, never allowed). `stop`
+  needs a fresh factor while unlock is on; `lock` still needs nothing.
+- **Policy approval (F3).** The approval was a sha256 in `state.json`; rewriting two files
+  opened everything, and deleting them turned unlock off. Where a platform factor is enrolled
+  the approval is now its Touch ID / Hello signature over the policy hash, made during the
+  step-up and verified on every load; unsigned, invalid, or signed by a key the enrolment says
+  needs no finger ⇒ the most restrictive policy. TOTP-only machines keep a hash, labelled L1.
+  `unlock-on` markers (inside the unlock home and beside it) keep deleted policy files reading
+  as "on, locked"; the running authority also remembers it was on.
+- **Orphans (F6).** A double-forked process became a "terminal" and got LOTR reads without
+  unlock. A terminal-kind caller with no controlling terminal no longer gets
+  `read_without_unlock`.
+- **Consent (M1).** Only gt-lotr's installed `lotrd.py` may ask for consent, and the authority
+  composes the prompt text and op hash from the operation; a shell child could name the shim,
+  write its own text and open a consent window. Every prompt is composed by the authority; a
+  caller's reason appears only as a quoted, unverified claim.
+- **Hub (M2, M3).** An HTTP client is never the local caller (`local` is refused as a client id
+  and on the HTTP path); the hub's live registry reload requires a 600 file owned by the user; a
+  hub client's brokered ref is asked as the unattended job `lotr-hub:<client>`, so only an
+  allow-list entry opens it (it resolved under lotrd's own identity).
+- **Touch ID helper swap.** `install.sh` kept an existing `gt-presence` unhashed. The built
+  binary's sha256 (and a release binary's Developer ID requirement) is recorded in
+  `gt-presence.install.json` and checked before every use; mismatch ⇒ Touch ID unavailable.
+  `gt_unlock_touchid.py record|verify` are new.
+- **Low.** With unlock off a brokered ref is refused (`unlock_off`) instead of starting the
+  authority; an audit line that cannot be written refuses write / consent / secret releases (in
+  the authority, and in LOTR before a write runs); `localize_mcp` writes through `mkstemp` +
+  atomic replace; `pipeline-stage.js` accepts only the exact `<run_dir>/prompts/<stage>/<unit>.md`
+  (`workflow-args` now prints `run_dir`); `agents/` and `workflows/` are in MANIFEST.json and the
+  drift check; every stage prompt names its tool limit, which on the fallback route (the Agent
+  tool, used when the installed definition is missing or stale) is advisory — the agent there
+  has every tool.
+- **The guide.** `SECURITY.md` §1, §2 and §4 rewritten: at L1/L2 the gate is friction against
+  the assistant and accidents, not a boundary; the hard guarantees at L2 are sealed credentials
+  needing a touch per open (or window) and biometric consent; the agent boundary needs L3
+  (future). §4 now lists each way a program running as you can still get around the gate.
+  ONBOARDING and MANUAL say the same.
+
 
 ### Claude Code integration: stage agents with their own effort, a pipeline workflow, typed LOTR results
 

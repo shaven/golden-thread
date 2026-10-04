@@ -2393,17 +2393,17 @@ anti-malware. If something already runs as you, it can wait for you to unlock."<
 </tr>
 <tr>
 <td>L1</td>
-<td>TOTP / SSO only: stops agents and accidents, not malware running as you</td>
+<td>TOTP / SSO only: friction against agents and accidents — not a boundary against any program running as you, the assistant's shell included</td>
 <td><code>level L1</code></td>
 </tr>
 <tr>
 <td>L2</td>
-<td>Touch ID or Windows Hello required in every unlock; credentials sealed under that key</td>
+<td>Touch ID or Windows Hello required in every unlock; credentials sealed under that key, and <strong>every sealed open needs your finger or PIN</strong> (or one per <code>secrets_window_s</code>). The gate itself is still friction against a program running as you</td>
 <td><code>level L2</code></td>
 </tr>
 <tr>
 <td>L3</td>
-<td>authority as a service account, admin-owned code and policy</td>
+<td>authority as a service account, admin-owned code and policy — the agent boundary</td>
 <td>not shipped in 0.20.0</td>
 </tr>
 </tbody>
@@ -2431,7 +2431,11 @@ anti-malware. If something already runs as you, it can wait for you to unlock."<
 </tr>
 <tr>
 <td><code>policy consent none\|platform [--window S]</code></td>
-<td>Consent-tier LOTR operations: LOTR's own confirmation (<code>none</code>), or a Touch ID / Hello approval valid for S seconds (<code>platform</code>)</td>
+<td>Consent-tier LOTR operations: LOTR's own confirmation (<code>none</code>), or a Touch ID / Hello approval valid for S seconds (<code>platform</code>); the prompt text is composed by the authority from the operation</td>
+</tr>
+<tr>
+<td><code>policy secrets-window S</code></td>
+<td>How long one Touch ID / Hello opens a sealed credential for, per process and grant: <code>0</code> (default) = every open asks; at most 900 s; never cached past it or shared between processes</td>
 </tr>
 <tr>
 <td><code>policy unattended add\|remove JOB SCOPE</code></td>
@@ -2467,7 +2471,7 @@ anti-malware. If something already runs as you, it can wait for you to unlock."<
 </tr>
 <tr>
 <td><code>status</code>, <code>verify</code>, <code>audit [-n N]</code>, <code>daemon start\|stop\|status</code></td>
-<td>State and level; the self-check (PASS / FAIL / NOT-CHECKED, never "secure"); the audit log; the authority</td>
+<td>State and level; the self-check (PASS / FAIL / NOT-CHECKED, never "secure"); the audit log; the authority (<code>stop</code> needs a fresh factor while unlock is on; <code>lock</code> never does)</td>
 </tr>
 <tr>
 <td><code>register</code>, <code>revoke</code>, <code>hook session-start\|session-end</code></td>
@@ -2508,7 +2512,7 @@ anti-malware. If something already runs as you, it can wait for you to unlock."<
 <tr>
 <td>Reading a secret ref through the broker</td>
 <td><code>gt:secrets</code></td>
-<td>the grant</td>
+<td>the grant, held by the <strong>requesting</strong> process (under <code>mcp_only</code>: the LOTR shim, or gt-lotr's installed <code>lotrd.py</code> for it — never the assistant's shell); a <code>sealed:</code> ref also needs a fresh platform factor per open</td>
 </tr>
 <tr>
 <td>Publishing credentials (git helper, AWS)</td>
@@ -2540,12 +2544,22 @@ authority raises), <code>touchid</code> (<code>gt-presence</code>, Secure Enclav
 <code>hello</code> (<code>gt_unlock_hello.ps1</code>, TPM, RS256 checked in Python), <code>sso</code> (Entra ID, PKCE +
 loopback, ID token checked in Python), <code>recovery</code> (one code = one factor, forces re-enrolment).
 Defaults when on: 2 factors including Touch ID (macOS) / Hello (Windows); 1 (TOTP) on Linux.
-A grant is held in memory, bound to the session's <code>claude</code> process (LOTR scopes only to its
-registered MCP shim: <code>door: mcp_only</code>), and ends after 15 min idle, 8 h, the shim or session
-ending, screen lock, sleep, clock rollback, <code>lock</code> or an authority restart.</p>
+A grant is held in memory, bound to the session's <code>claude</code> process (LOTR and broker scopes
+only to its registered MCP shim: <code>door: mcp_only</code>), and ends after 15 min idle, 8 h, the shim
+or session ending, screen lock, sleep, clock rollback, <code>lock</code> or an authority restart. The shim
+seat is taken only by the installed gt-lotr <code>lotr_mcp.py</code> (real path) started by <code>claude</code>; a
+replacement shim starts with no grant; after a restart the shim registers again. Every client
+checks that the process serving the authority's address runs the installed <code>gt_unlockd.py</code>
+(kernel peer identity) and refuses anything else (<code>server_unverified</code>). A "terminal" caller
+with no controlling terminal gets no reads without unlock. What all of this does <strong>not</strong> stop
+— a program running as you that sets out to get around it — is listed in <code>SECURITY.md</code> §4.</p>
 <p>State lives in <code>~/.claude/golden-thread/unlock/</code> (700): <code>policy.json</code>, <code>enrolment.json</code> (public
-keys only), <code>state.json</code> (TOTP replay/lockout, policy approval), <code>totp.seed</code>, <code>recovery.json</code>
-(hashes), <code>sealed/</code>, <code>audit.jsonl</code>. The administrator floor: <code>/Library/Application Support/gt/
+keys only), <code>state.json</code> (TOTP replay/lockout, policy approval — on macOS / Windows a Touch ID /
+Hello signature over the policy, verified on every load; on TOTP-only machines a hash, L1),
+<code>totp.seed</code> (readable by any program running as you — at L1 that is the whole unlock),
+<code>recovery.json</code> (hashes), <code>sealed/</code>, <code>audit.jsonl</code>, and the <code>unlock-on</code> marker (a second copy,
+<code>~/.claude/golden-thread/.unlock-unlock-on</code>, sits beside the directory: while either exists,
+deleted policy files read as "on, locked", never "off"). The administrator floor: <code>/Library/Application Support/gt/
 unlock-policy.json</code>, <code>%ProgramData%\gt\unlock-policy.json</code> or <code>HKLM\SOFTWARE\Policies\gt
 \UnlockPolicy</code>, <code>/etc/gt/unlock-policy.json</code> — it only tightens, and an unverifiable one
 locks everything.</p>
@@ -2557,7 +2571,10 @@ real level (L1 with a plaintext age identity, L2 with a hardware one). <code>cor
 as absent and say so once.</p>
 <h3 id="helpers">Helpers</h3>
 <p><code>gt_unlock_touchid.py build --dest DIR</code> compiles the Touch ID helper (<code>install.sh</code> runs it on
-macOS when the Xcode Command Line Tools are present). <code>gt_unlock_hello.py available|selftest</code>
+macOS when the Xcode Command Line Tools are present) and records the built binary's sha256 in
+<code>gt-presence.install.json</code>; <code>record --helper P [--release]</code> records a binary installed another
+way (<code>--release</code> requires gt's Developer ID signature), <code>verify --helper P</code> checks it. Every
+use re-checks the record; a mismatch makes Touch ID unavailable. <code>gt_unlock_hello.py available|selftest</code>
 checks Windows Hello at the console. Doctor rows <code>unlock</code> and <code>security</code> report the state and
 run <code>verify</code>.</p>
 <h2 id="reaching-other-systems">Reaching other systems</h2>

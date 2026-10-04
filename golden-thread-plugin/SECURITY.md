@@ -15,20 +15,37 @@ commands and read your files. gt unlock puts a person back in the loop for the t
 matter — your connected systems (LOTR), your credentials, publishing, and gt's own guards —
 without slowing down ordinary work.
 
-What was built, and why each piece is there:
+**Read this first.** In 0.20.0 the authority runs **as you** (levels L1 and L2). Against a
+program running as you — and that includes the assistant's own shell — the gate is **friction**:
+it stops accidents and makes the assistant ask, but a determined process of yours can get
+around it (section 4 lists how). The guarantees that hold even then are narrower and come from
+hardware: at **L2**, opening a sealed credential needs your finger or PIN every time (or once
+per short window you choose), and a consent-tier LOTR operation can need a touch of its own. A
+real boundary against the agent needs **L3** — the authority as a separate, administrator-owned
+service — which **0.20.0 does not ship**.
 
-| Measure | What it stops |
-|---|---|
-| **Kernel peer identity.** Every caller is identified by the operating system (macOS audit token with the process version, Linux `SO_PEERCRED` + start time, Windows named-pipe client pid + creation time + user SID) — never by anything the caller says | A process pretending to be another one |
-| **Signatures, not booleans.** Touch ID and Windows Hello sign a fresh challenge with a hardware key (Secure Enclave / TPM); gt verifies the signature itself in Python | A fake helper that just answers "ok"; a replayed old approval |
-| **Sealed credentials** (`sealed:` refs). Encrypted at rest under a key that only opens after your finger or PIN | Credential theft from disk while you are away or locked |
-| **The `mcp_only` door.** With unlock on, LOTR serves only the MCP connection Claude Code started — not a command the assistant runs in its shell | The assistant using LOTR through Bash, around your approvals |
-| **Only the authority asks.** Every prompt is raised by gt's unlock authority, naming who is asking and for what. A client can request an unlock; it can never claim one | An agent typing "approved" on your behalf |
-| **Grants in memory only**, bound to one session and revoked on idle (15 min), TTL (8 h), screen lock, sleep, clock rollback, the session or MCP shim ending, and `gt_unlock.py lock` | A forgotten unlocked session staying open |
-| **Admin policy floor.** An administrator-owned file that can only tighten | A user or agent loosening an organisation's policy |
-| **Fail closed.** With unlock on, an unreadable policy, a missing factor, an authority that is down, or a policy edited behind gt's back locks every gated action — never the reverse | "Broken" quietly meaning "open" |
-| **No gt crypto store.** gt brokers proven stores (1Password, sops+age, Vault, the OS keychains) and uses CryptoKit / DPAPI for sealing; it ships no cipher of its own | Home-made cryptography |
-| **Every grant audited.** Each unlock, check, secret read and revocation is one line in `~/.claude/golden-thread/unlock/audit.jsonl`, with its grant id — never a code or a secret value | "What happened while I was unlocked?" |
+An independent security review of 0.20.0 (2026-10-03) reproduced seven bypasses of the gate by
+a same-user process. Each was fixed, and each is now a regression test
+(`tests/test_unlock_review_regressions.py`, `tests/test_lotr_review_regressions.py`); what
+cannot be fixed without L3 is written down in section 4 instead of being claimed away.
+
+What was built, and what each piece really does:
+
+| Measure | What it does | Against a process running as you (L1/L2) |
+|---|---|---|
+| **Kernel peer identity.** Every caller is identified by the operating system (macOS audit token with the process version, Linux `SO_PEERCRED` + start time, Windows named-pipe client pid + creation time + user SID) — never by anything the caller says | A process cannot pretend to be another live process | Holds |
+| **The client checks the server.** Before sending anything, gt's client asks the kernel which process serves the authority's address and refuses it unless it runs the installed `gt_unlockd.py` | A fake "allow everything" server bound after the real one stopped is refused | Friction: a process of yours can run the *real* `gt_unlockd.py` with its own state |
+| **Signatures, not booleans.** Touch ID and Windows Hello sign a fresh challenge with a hardware key (Secure Enclave / TPM); gt verifies the signature itself in Python | A fake helper that answers "ok"; a replayed old approval | Holds for presence. The helper is checked against the hash install recorded before each use |
+| **Sealed credentials** (`sealed:` refs). Encrypted at rest under a biometric hardware key; **every open needs your finger or PIN** (or once per `secrets_window_s`, per process and grant, never shared) | Credential theft from disk; reading a sealed value without you touching the sensor | **Holds at L2.** Once opened, the value is in the requesting program's memory |
+| **Biometric consent** (`consent_requires_factor: platform`). A touch over each consent-tier operation, composed by the authority from the operation itself | A screen-control agent clicking "approve" | **Holds at L2**, as long as you read what the prompt names |
+| **The `mcp_only` door.** LOTR and the credential broker serve only the MCP connection Claude Code started (the installed `lotr_mcp.py`, child of `claude`) — not a command run in the assistant's shell | The assistant using LOTR or your secrets through Bash by accident or by habit | Friction (section 4) |
+| **Only the authority asks.** Every prompt is composed by gt's unlock authority, naming who is asking and for what; a caller's own reason appears only as a quoted, unverified claim. A client can request an unlock; it can never claim one | An agent typing "approved" on your behalf | Holds; a process can still show a look-alike prompt of its own |
+| **Grants in memory only**, bound to one session and revoked on idle (15 min), TTL (8 h), screen lock, sleep, clock rollback, the session or MCP shim ending (a replacement shim starts with nothing), and `gt_unlock.py lock` | A forgotten unlocked session staying open | Holds for timing; see section 4 for who can use a live grant |
+| **Policy approval signed by your platform factor.** A policy edited behind gt's back is not trusted until approved with a step-up, and on macOS / Windows the approval is a Touch ID / Hello signature over the policy itself | Rewriting `policy.json` and its approval to open everything | Friction: a process of yours can rewrite your enrolment too (section 4). TOTP-only (Linux): a hash, L1 |
+| **Admin policy floor.** An administrator-owned file that can only tighten; each scope's level is the stricter of yours and the admin's, each by its own most specific rule | A user pattern loosening an organisation's rule | Holds as logic; binding only at L3 |
+| **Fail closed.** With unlock on, an unreadable or missing policy, deleted policy files, a missing factor, an authority that is down or cannot be verified, an unwritable audit log (for writes and secrets), or a policy edited behind gt's back locks every gated action — never the reverse | "Broken" quietly meaning "open" | Friction: deleting the `unlock-on` markers too turns it off |
+| **No gt crypto store.** gt brokers proven stores (1Password, sops+age, Vault, the OS keychains) and uses CryptoKit / DPAPI for sealing; it ships no cipher of its own | Home-made cryptography | Holds |
+| **Every grant audited.** Each unlock, check, secret read and revocation is one line in `~/.claude/golden-thread/unlock/audit.jsonl`, with its grant id — never a code or a secret value. A write, consent or secret release that cannot be recorded is refused | "What happened while I was unlocked?" | The log is yours: a process of yours can edit it afterwards |
 
 ## 2. How it works
 
@@ -38,31 +55,40 @@ What was built, and why each piece is there:
  Claude Code                  │  (gt_unlockd, per user)  │       by an admin floor)
  ├─ MCP shim (lotr_mcp) ─────▶│  • who is asking? kernel │
  │       │                    │  • grants (in memory)    │──▶ audit.jsonl
- │       ▼                    │  • raises every prompt   │
+ │       ▼                    │  • composes every prompt │
  │   LOTR daemon ──check────▶ └─────────────────────────┘
  │       │ allowed? then call GitHub / Jira / Microsoft 365 …
- └─ Bash (the assistant's shell) ──▶ LOTR? refused (mcp_only)
+ └─ Bash (the assistant's shell) ──▶ LOTR or a secret? refused (mcp_only)
 ```
 
 1. A session starts. gt registers it with the authority; the LOTR MCP connection Claude Code
    starts registers itself as that session's one shim. The authority accepts it only when the
-   kernel says its parent is `claude`. That is why, on Windows, the installer points the MCP
-   command at the Python interpreter itself rather than at a launcher script (0.20.0): a script
-   in between would be the parent, and every registration would be refused.
+   kernel says its parent is `claude` **and** the process runs the installed gt-lotr
+   `lotr_mcp.py` (by real path, from Claude Code's `installed_plugins.json`). A second shim is
+   refused while the first is alive; a shim that replaces a dead one starts with no grant. If
+   the authority restarts, the shim registers again on its next call. On Windows the installer
+   points the MCP command at the Python interpreter itself rather than at a launcher script
+   (0.20.0): a script in between would be the parent, and every registration would be refused.
 2. The assistant calls a LOTR tool. LOTR asks the authority whether **this process** (named by
    the kernel) may use `lotr:<connection>:<tier>`. Locked: the authority asks you — a Touch ID
    or Windows Hello sheet, then a dialog for your authenticator code — naming the requester and
    the scope.
 3. You approve. The authority checks the signature and the code, grants the session, and LOTR
    proceeds. The grant id is written into LOTR's audit line for that call.
-4. Fifteen idle minutes, eight hours, your screen locking, the lid closing, or the session
+4. A sealed credential the call needs is opened by the authority with **another** touch (every
+   time by default; `gt_unlock.py policy secrets-window 60` allows one touch per minute per
+   process and grant). Only gt-lotr's installed `lotrd.py` may ask for a credential on behalf
+   of the shim, and the value goes to the downstream call, never back to the assistant.
+5. Fifteen idle minutes, eight hours, your screen locking, the lid closing, or the session
    ending: the grant is gone and the next call asks again.
 
-Reads of LOTR connections can stay open (`read_without_unlock`, on by default); writes and
-anything gated need the grant. Consent-tier operations (send, merge, delete) still get LOTR's
-own confirmation, and you can require a Touch ID / Hello approval per operation instead
-(`gt_unlock.py policy consent platform --window 300` approves consent operations for five
-minutes, then asks again).
+Reads of LOTR connections can stay open (`read_without_unlock`, on by default) — for a process
+at a terminal. A process with no controlling terminal (a daemon, a double-forked orphan) does
+not get that convenience. Writes and anything gated need the grant. Consent-tier operations
+(send, merge, delete) still get LOTR's own confirmation, and you can require a Touch ID / Hello
+approval per operation instead (`gt_unlock.py policy consent platform --window 300` approves
+consent operations for five minutes, then asks again). Stopping the authority while unlock is
+on needs a fresh factor; `gt_unlock.py lock` never does.
 
 ## 3. What it needs, and how to set it up
 
@@ -136,35 +162,67 @@ checked.
 | Level | What it is | Stops | Does not stop |
 |---|---|---|---|
 | **off** (default) | Nothing gated | — | Anything |
-| **L1 Gate** | TOTP (and SSO), no platform factor | The assistant via Bash or other tools, other local agents and scripts, use after the session ends or the screen locks; full audit | Malware running as you: it can read the TOTP seed, the credentials and gt's code |
-| **L2 Sealed** | Touch ID / Windows Hello required in every unlock; credentials sealed | Credential theft at rest; screen-control agents clicking approve (they cannot touch the sensor) | Malware inside an unlocked window; code patched to capture your next unlock |
-| **L3 Separated** | Authority and LOTR as a service account, code and policy admin-owned | Use before unlock, policy downgrade, seed and credential reads | An attacker inside your session after you unlock. **gt 0.20.0 does not ship L3.** |
+| **L1 Gate** | TOTP (and SSO), no platform factor | Accidents, use after the session ends or the screen locks, the assistant using LOTR or secrets *by the ordinary route*; full audit. **Friction, not a boundary**, against the assistant's shell | Any program running as you — the assistant's shell included — that sets out to get around it: it can read the TOTP seed and answer the code itself |
+| **L2 Sealed** | Touch ID / Windows Hello required in every unlock; credentials sealed | Reading a sealed credential without your finger or PIN (each open, or each short window); a consent-tier operation without a touch, when you require one; screen-control agents clicking approve (they cannot touch the sensor). Everything else as L1 — **still friction** against a process running as you | A program running as you using what you approve: it can ask while you are there, race a look-alike prompt, use an unlocked grant, or get around the gate itself (below); code patched to capture your next unlock |
+| **L3 Separated** | Authority and LOTR as a separate service account, code and policy administrator-owned | Use before unlock, policy downgrade, seed and credential reads, the gate bypasses below — **the agent boundary** | An attacker inside your session after you unlock. **gt 0.20.0 does not ship L3.** |
 
 | Threat | L1 | L2 |
 |---|---|---|
-| The assistant calling LOTR or the authority from Bash | Stopped (`mcp_only` + grant) | Stopped |
-| Another local agent or script, while locked | Gated, but can read credentials directly | Stopped |
-| Malware running as you, before you unlock | Not stopped | Partly: it cannot decrypt sealed credentials, but can change gt's code for your next unlock |
-| Malware running as you, after you unlock | Not stopped | Not stopped (short idle and TTL limit the window) |
+| The assistant using LOTR or secrets from Bash *by the ordinary route* | Refused (`mcp_only`) | Refused |
+| The assistant's shell, or any program of yours, setting out to get around the gate | **Not stopped** — friction only (list below) | **Not stopped** for the gate; sealed values still need your touch per open |
+| Another local agent or script, while locked | Gated, but can read unsealed credentials directly | Sealed credentials stay sealed |
+| Malware running as you, before you unlock | Not stopped | Partly: it cannot open sealed credentials without your touch, but can change gt's code for your next unlock |
+| Malware running as you, after you unlock | Not stopped | Not stopped for the gate; each sealed open still needs a touch, which it can ask you for |
 | A screen-control / accessibility agent | Can click dialogs | Cannot touch the sensor |
 | A keylogger reading your TOTP code | First use wins (each code works once) | Same; use TOTP with a platform factor |
-| A fake prompt racing gt's | Possible | Possible: gt's prompts name the requester and scope |
+| A fake prompt racing gt's | Possible | Possible: gt's prompts are composed by the authority and name the requester and scope — read them |
 | Stolen laptop, locked | Disk encryption + revoke on lock | The Secure Enclave / TPM needs your finger or PIN |
-| Stolen laptop, unlocked and unattended | Until idle / TTL (15 min idle by default) | Same |
+| Stolen laptop, unlocked and unattended | Until idle / TTL (15 min idle by default) | Same, but each sealed open needs a finger |
 | Identity provider compromise | SSO forged; two factors including a local one mitigate | Same |
 | Root / administrator compromise | Out of scope | Out of scope |
 
-Honest limits, in one place:
+**How a program running as you can still get around the gate at L1/L2** — each is friction,
+documented, and closed only by L3:
 
-* At L1 and L2 the authority runs as you, from files you can change. The admin floor and the
-  policy integrity check stop agents and accidents, not someone with your account.
-* The settings guard sees Claude Code's Write/Edit tools. A shell command writing
-  `settings.json` is not stopped by the hook; at L2 the credentials it would want are still
-  sealed.
+* **Run its own authority.** It can kill the daemon (a signal needs no factor) and start the
+  *real* `gt_unlockd.py` against its own home at the same address; gt's clients check the
+  program, not whose state it serves. A restart revokes every grant, so this shows up as a
+  fresh prompt or a refusal, not silent access to yours.
+* **Rewrite your files.** The policy, its approval, the enrolment, `installed_plugins.json`
+  and gt's own code are your files. The policy approval is a Touch ID / Hello signature, but a
+  process of yours can create its own Secure Enclave key, write it into the enrolment and sign
+  with it (a Secure Enclave key is not bound to the program that made it). An approval by a key
+  the enrolment marks as needing no finger is refused — the marking itself is your file.
+  Deleting the policy and its state fails closed while the `unlock-on` markers exist; deleting
+  the markers too turns unlock off.
+* **Read the TOTP seed** (`totp.seed`). At L1 that is the whole unlock: it can compute a code
+  and unlock its own session — and, being in the same session as the shim, the shim's.
+* **Look like gt's own processes.** The shim seat and the credential consumer are checked by
+  the real path of the file a process runs; a process of yours can run the real file with its
+  own input. A replacement shim starts with no grant, and the first shim keeps its seat while
+  it lives.
+* **Leave the session.** A double-forked process is not a descendant of `claude`, so the
+  `mcp_only` door does not apply to it; it gets no read without unlock, and any unlock it asks
+  for is a prompt naming it. On Windows, where there is no controlling terminal to check, it
+  still gets reads without unlock.
+* **Claim a scheduled job's name** (`GT_JOB`) from outside a session and use that job's
+  allow-listed, narrow, read-only scope. List only what you would accept that for.
+* **Swap the Touch ID helper.** The helper is hashed at install and re-checked before every
+  use; a process that rewrites the helper *and* its install record can watch what is sealed or
+  opened afterwards (not forge your presence; a release binary's Developer ID signature is
+  checked too).
+* **Edit the audit log** after the fact, and the hooks' settings guard sees only Claude Code's
+  Write/Edit tools, not a shell command writing `settings.json`.
+
+Other honest limits:
+
 * A brokered secret is only as locked as the weakest of the store, gt's grant, and the way it
   reaches the program. Environment variables are readable by any process of yours (`ps eww`).
-* Unattended jobs name themselves (`GT_JOB`); a process of yours outside a session can claim a
-  job's name. That is why a job may hold only narrow, read-only scopes (below).
+  Only `sealed:` refs need your touch per open; `file:`, `keychain:` (L1) and the other stores
+  are as strong as their own table row in section 5.4.
+* The admin floor and the policy checks stop agents and accidents, not someone with your
+  account; on a Mac where the daily account is an administrator, even L3's admin-owned files
+  are bounded by the administrator password prompt.
 
 ## 5. Locking down more with gt unlock
 
@@ -284,20 +342,24 @@ python $u verify
   factors, fewer allowed factors, shorter TTL and idle, stricter scopes, `locked_keys` the user
   cannot change, a pinned Entra tenant. A floor file gt cannot verify locks everything.
 * The floor is **binding only at L3**, when the enforcing code is also administrator-owned;
-  0.20.0 runs the authority as the user. Say so in your own policy documents.
+  0.20.0 runs the authority as the user. Say so in your own policy documents. Where users are
+  administrators of their own machines, admin-owned protection is bounded by that password.
 * **Signing:** release builds of the macOS helper are Developer ID signed and notarized. The
   Windows Hello script is unsigned by design; sign it with your own certificate where policy
   requires signed scripts.
 * **Recovery for managed fleets:** keep `admin_only` recovery in your process: reset an
-  enrolment by removing `~/.claude/golden-thread/unlock/` (which also discards sealed
-  credentials) under your own controls.
+  enrolment by removing `~/.claude/golden-thread/unlock/` and the marker beside it,
+  `~/.claude/golden-thread/.unlock-unlock-on` (which also discards sealed credentials), under
+  your own controls.
 
 ## 7. Recovery, and turning it off
 
 * **Lost phone or changed fingerprints:** `gt_unlock.py unlock --recovery` accepts one recovery
   code as one factor; you then re-enrol (`gt_unlock.py enroll …`). Each code works once.
-* **Lost every factor:** remove `~/.claude/golden-thread/unlock/` and enrol again. Sealed
-  credentials are lost with it — that is what sealed means; keep their originals in your store.
+* **Lost every factor:** remove `~/.claude/golden-thread/unlock/` **and** the marker beside it,
+  `~/.claude/golden-thread/.unlock-unlock-on` (while either remains, gt treats unlock as on with
+  no policy and keeps everything gated locked), then enrol again. Sealed credentials are lost
+  with it — that is what sealed means; keep their originals in your store.
 * **Turn it off:** `gt_unlock.py policy disable` (needs your factors) or
   `gt_settings.py set unlock off`. Off, every hook behaves exactly as before 0.20.0.
 * **Check it:** `gt_unlock.py status`, `gt_unlock.py verify`, `gt_unlock.py audit -n 50`.

@@ -229,8 +229,12 @@ python3 $U policy enable       # proves the factors work, then turns it on
 python3 $U verify              # the level this machine runs at, check by check
 ```
 
-It is not anti-malware: something already running as you can wait for you to unlock.
-[`SECURITY.md`](SECURITY.md) says exactly what it stops and what it does not.
+It is not anti-malware: something already running as you can wait for you to unlock. In
+0.20.0 the gate is **friction** against the assistant and accidents, not a boundary: a program
+running as you — the assistant's own shell included — can get around it if it sets out to. What
+holds even then, with Touch ID / Hello (L2): every open of a sealed credential needs your finger
+or PIN, and so can each consent-tier operation. [`SECURITY.md`](SECURITY.md) says exactly what
+it stops and what it does not.
 
 ## Adding a knowledge base (gt-wiki)
 

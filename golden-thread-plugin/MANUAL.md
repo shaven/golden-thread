@@ -2048,9 +2048,9 @@ enterprise admin floor, recovery. This section is the reference.
 | Level | Means | `gt_unlock.py status` says |
 |---|---|---|
 | off | nothing gated (default) | `unlock: off` |
-| L1 | TOTP / SSO only: stops agents and accidents, not malware running as you | `level L1` |
-| L2 | Touch ID or Windows Hello required in every unlock; credentials sealed under that key | `level L2` |
-| L3 | authority as a service account, admin-owned code and policy | not shipped in 0.20.0 |
+| L1 | TOTP / SSO only: friction against agents and accidents — not a boundary against any program running as you, the assistant's shell included | `level L1` |
+| L2 | Touch ID or Windows Hello required in every unlock; credentials sealed under that key, and **every sealed open needs your finger or PIN** (or one per `secrets_window_s`). The gate itself is still friction against a program running as you | `level L2` |
+| L3 | authority as a service account, admin-owned code and policy — the agent boundary | not shipped in 0.20.0 |
 
 ### `gt_unlock.py`
 
@@ -2059,7 +2059,8 @@ enterprise admin floor, recovery. This section is the reference.
 | `enroll touchid\|hello\|totp\|sso` | Adds a factor. The first factor on a Mac or Windows machine must be the platform one (it needs your finger or PIN); every later enrolment change needs your current factors ("step-up + K"). `totp` shows a terminal QR code and the secret once, then asks for one valid code before saving |
 | `unenroll FACTOR`, `recovery` | Removes a factor; prints ten new one-time recovery codes (shown once) |
 | `policy show\|enable\|disable\|set FILE\|approve` | Reads or changes the policy through the authority, which asks for your factors first. `approve` re-trusts a `policy.json` edited outside gt (until then everything gated is locked) |
-| `policy consent none\|platform [--window S]` | Consent-tier LOTR operations: LOTR's own confirmation (`none`), or a Touch ID / Hello approval valid for S seconds (`platform`) |
+| `policy consent none\|platform [--window S]` | Consent-tier LOTR operations: LOTR's own confirmation (`none`), or a Touch ID / Hello approval valid for S seconds (`platform`); the prompt text is composed by the authority from the operation |
+| `policy secrets-window S` | How long one Touch ID / Hello opens a sealed credential for, per process and grant: `0` (default) = every open asks; at most 900 s; never cached past it or shared between processes |
 | `policy unattended add\|remove JOB SCOPE` | The allow-list for scheduled jobs: one narrow read scope (`lotr:<conn>:read`) or one credential (`secret:<ref>`) per entry; write, consent, publish and gt scopes are refused |
 | `policy sso --client-id ID [--tenant T] [--pin-subject OID]` | Points Entra sign-in at your app registration |
 | `unlock [--scope S] [--recovery]`, `lock` | Grants this session (or `--session PID`) after the factors; revokes every grant |
@@ -2068,7 +2069,7 @@ enterprise admin floor, recovery. This section is the reference.
 | `seal put\|list\|rm NAME`, `seal migrate REF --name N [--remove-source]` | The sealed store (`sealed:` refs); values on stdin, never argv |
 | `secret get REF [--out FILE]` | One secret to a pipe or a 600 file; refuses a terminal |
 | `git-credential get`, `aws-credential --ref REF` | git's credential helper and AWS `credential_process`, under `gt:publish` |
-| `status`, `verify`, `audit [-n N]`, `daemon start\|stop\|status` | State and level; the self-check (PASS / FAIL / NOT-CHECKED, never "secure"); the audit log; the authority |
+| `status`, `verify`, `audit [-n N]`, `daemon start\|stop\|status` | State and level; the self-check (PASS / FAIL / NOT-CHECKED, never "secure"); the audit log; the authority (`stop` needs a fresh factor while unlock is on; `lock` never does) |
 | `register`, `revoke`, `hook session-start\|session-end` | Used by the SessionStart / SessionEnd hooks and the LOTR shim |
 
 ### What is gated
@@ -2079,7 +2080,7 @@ enterprise admin floor, recovery. This section is the reference.
 | Editing `~/.claude/settings.json`, `vault-config.json`, `~/.claude/golden-thread/` | `gt:settings:hooks` | fresh confirmation (`guard_protected_paths`, before the `protected_paths` switch) |
 | `gt_settings.py set` of `protected_paths`, `test_gate`, `foreign_checkout_guard`, `component_updates`, `commit_checks`, `addon_fixes`, `unlock` | `gt:settings:security` | fresh confirmation |
 | Policy and enrolment changes | `gt:unlock:*` | your K factors, fresh |
-| Reading a secret ref through the broker | `gt:secrets` | the grant |
+| Reading a secret ref through the broker | `gt:secrets` | the grant, held by the **requesting** process (under `mcp_only`: the LOTR shim, or gt-lotr's installed `lotrd.py` for it — never the assistant's shell); a `sealed:` ref also needs a fresh platform factor per open |
 | Publishing credentials (git helper, AWS) | `gt:publish` | the grant |
 | LOTR hub client enrol / revoke | `gt:hub:enroll` | fresh confirmation |
 | Opening a locked vault file | `gt:lock:<folder>` | the grant |
@@ -2095,13 +2096,23 @@ authority raises), `touchid` (`gt-presence`, Secure Enclave, ES256 checked in Py
 `hello` (`gt_unlock_hello.ps1`, TPM, RS256 checked in Python), `sso` (Entra ID, PKCE +
 loopback, ID token checked in Python), `recovery` (one code = one factor, forces re-enrolment).
 Defaults when on: 2 factors including Touch ID (macOS) / Hello (Windows); 1 (TOTP) on Linux.
-A grant is held in memory, bound to the session's `claude` process (LOTR scopes only to its
-registered MCP shim: `door: mcp_only`), and ends after 15 min idle, 8 h, the shim or session
-ending, screen lock, sleep, clock rollback, `lock` or an authority restart.
+A grant is held in memory, bound to the session's `claude` process (LOTR and broker scopes
+only to its registered MCP shim: `door: mcp_only`), and ends after 15 min idle, 8 h, the shim
+or session ending, screen lock, sleep, clock rollback, `lock` or an authority restart. The shim
+seat is taken only by the installed gt-lotr `lotr_mcp.py` (real path) started by `claude`; a
+replacement shim starts with no grant; after a restart the shim registers again. Every client
+checks that the process serving the authority's address runs the installed `gt_unlockd.py`
+(kernel peer identity) and refuses anything else (`server_unverified`). A "terminal" caller
+with no controlling terminal gets no reads without unlock. What all of this does **not** stop
+— a program running as you that sets out to get around it — is listed in `SECURITY.md` §4.
 
 State lives in `~/.claude/golden-thread/unlock/` (700): `policy.json`, `enrolment.json` (public
-keys only), `state.json` (TOTP replay/lockout, policy approval), `totp.seed`, `recovery.json`
-(hashes), `sealed/`, `audit.jsonl`. The administrator floor: `/Library/Application Support/gt/
+keys only), `state.json` (TOTP replay/lockout, policy approval — on macOS / Windows a Touch ID /
+Hello signature over the policy, verified on every load; on TOTP-only machines a hash, L1),
+`totp.seed` (readable by any program running as you — at L1 that is the whole unlock),
+`recovery.json` (hashes), `sealed/`, `audit.jsonl`, and the `unlock-on` marker (a second copy,
+`~/.claude/golden-thread/.unlock-unlock-on`, sits beside the directory: while either exists,
+deleted policy files read as "on, locked", never "off"). The administrator floor: `/Library/Application Support/gt/
 unlock-policy.json`, `%ProgramData%\gt\unlock-policy.json` or `HKLM\SOFTWARE\Policies\gt
 \UnlockPolicy`, `/etc/gt/unlock-policy.json` — it only tightens, and an unverifiable one
 locks everything.
@@ -2117,7 +2128,10 @@ as absent and say so once.
 ### Helpers
 
 `gt_unlock_touchid.py build --dest DIR` compiles the Touch ID helper (`install.sh` runs it on
-macOS when the Xcode Command Line Tools are present). `gt_unlock_hello.py available|selftest`
+macOS when the Xcode Command Line Tools are present) and records the built binary's sha256 in
+`gt-presence.install.json`; `record --helper P [--release]` records a binary installed another
+way (`--release` requires gt's Developer ID signature), `verify --helper P` checks it. Every
+use re-checks the record; a mismatch makes Touch ID unavailable. `gt_unlock_hello.py available|selftest`
 checks Windows Hello at the console. Doctor rows `unlock` and `security` report the state and
 run `verify`.
 
