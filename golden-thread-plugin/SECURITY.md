@@ -115,6 +115,22 @@ on needs a fresh factor; `gt_unlock.py lock` never does.
 Everything below runs from your own terminal. `gt_unlock.py` lives at
 `~/.claude/golden-thread/hooks/gt_unlock.py` (written `gt_unlock.py` below).
 
+**K** is how many factors must agree to unlock. The default is K = 2 with Touch ID (macOS) or
+Windows Hello (Windows) among them, and K = 1 (TOTP) on Linux. gt never lowers K on its own:
+when this machine cannot meet it, `policy enable` refuses and names the command that lets you
+choose — `gt_unlock.py policy enable --factors totp` sets K to the factors you name, records in
+the policy (and the audit log) that you chose it, and still needs your current factors to
+change. At a terminal, `policy enable` offers that choice itself. `gt_unlock.py status` shows
+K, the choice, and the one command to run next.
+
+**One code per command.** When a request unlocks you and also needs a fresh confirmation
+(changing a security setting with `gt_settings.py set …`), the factors just collected for that
+same request are the confirmation — you are not asked twice. A code is still accepted once
+only: if a later command in the same 30 s window asks for TOTP again, it says "wait for the
+next code (about N s)". `gt_settings.py set unlock on|off` asks only `policy enable|disable`
+for your factors. On Linux / WSL2, `gt_settings.py set sandbox_mode on` checks for bubblewrap
+and socat before it asks for any code, and names the install command for your distribution.
+
 ### macOS — TOTP + Touch ID (L2)
 
 Needs: a Mac with Touch ID, the Xcode Command Line Tools (`xcode-select --install`, so
@@ -131,6 +147,19 @@ Needs: a Mac with Touch ID, the Xcode Command Line Tools (`xcode-select --instal
 5. `gt_unlock.py policy enable` — proves your factors work (touch + code), then turns unlock on.
 6. `gt_unlock.py status` should say `level L2`. `gt_unlock.py verify` runs the self-check.
 
+**A Mac without Touch ID** (a desktop Mac without a Magic Keyboard with Touch ID, or no Command
+Line Tools, so no helper): TOTP is what this Mac can use, and unlock runs at **L1**.
+`gt_unlock.py enroll totp`, `gt_unlock.py recovery`, then
+`gt_unlock.py policy enable --factors totp` (K = 1, recorded as your choice). If the Mac has
+Touch ID but you do not want to use it, enrol TOTP first with
+`gt_unlock.py enroll totp --without-platform` — accepted only from your own terminal (a
+process with a terminal and a login shell above it, and no Claude Code session), so an agent
+in a session cannot enrol factors it would then hold. It is the same kernel check
+`read_without_unlock` uses and, like it, friction rather than a boundary at L1/L2: a same-user
+process that detaches itself and starts its own login shell on a pseudo-terminal passes it. A
+TOTP enrolled that way shows in `gt_unlock.py status`, and your own `enroll touchid` would then
+ask for a code you do not have — so it cannot happen silently.
+
 ### Windows — TOTP + Windows Hello (L2)
 
 Needs: Windows 10/11 with Windows Hello set up (Settings › Accounts › Sign-in options › PIN
@@ -142,6 +171,13 @@ Needs: Windows 10/11 with Windows Hello set up (Settings › Accounts › Sign-i
    requester and scope in its own prompt.
 2. `gt_unlock.py enroll totp`, `gt_unlock.py recovery`, `gt_unlock.py policy enable` as above.
 
+**Without Windows Hello** (no PIN set up, or you prefer not to use it): Hello is optional.
+When Hello is not set up, `gt_unlock.py enroll totp` works straight away; when it is set up
+but you do not want it, use `gt_unlock.py enroll totp --without-platform` from your own
+terminal window (refused from Claude Code's shell, for the reason given under macOS). Then
+`gt_unlock.py recovery` and `gt_unlock.py policy enable --factors totp`. Unlock then runs at
+**L1**, and sealed credentials (which need Hello) are not available.
+
 The Hello helper is a Windows PowerShell 5.1 script run with `-ExecutionPolicy Bypass` for its
 own process only; nothing about your machine's execution policy changes. It is not
 code-signed: the security rests on the TPM signature gt verifies, not on who signed the script.
@@ -152,7 +188,21 @@ Windows needs a desktop logon (user-scope DPAPI is unavailable in an SSH key log
 
 Linux has no platform authenticator gt can use, so unlock there is **L1**: it stops agents and
 accidents, not malware running as you. `gt_unlock.py enroll totp`, `gt_unlock.py recovery`,
-`gt_unlock.py policy enable`. Without a desktop, codes are typed in the terminal that asked.
+`gt_unlock.py policy enable` (K = 1 is already Linux's default). Without a desktop, codes are
+typed in the terminal that asked. Enrolling and then making recovery codes inside one 30 s
+window asks you to wait for the next code; the message says how long.
+
+### Grants, and keeping the authority current
+
+`gt_unlock.py unlock` unlocks the shell (or Claude Code session) that asked — other terminals
+and sessions stay locked. Locking the screen, sleep, idling past the limit or
+`gt_unlock.py lock` ends it, and `gt_unlock.py status` says when and why ("revoked at 14:02:
+screen locked"). Re-running `install.sh` — an upgrade, a reinstall or a roll-forward —
+restarts the authority when its code changed (`gt_unlock.py daemon restart-if-stale`): that
+stop needs no factor because it only stops — it never grants — and every grant is dropped, so
+you unlock again. If it did not happen, `status` and `verify` say "the unlock service is
+running old code (pid N, since …)" with that command. Rolling back to a release older than
+0.20.1 cannot do this for you: stop the authority first (`gt_unlock.py daemon stop`).
 
 ### Microsoft Entra ID sign-in (any platform, optional)
 

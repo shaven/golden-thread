@@ -8,7 +8,7 @@ and optionally Microsoft Entra ID sign-in. Read SECURITY.md first: it says exact
 level stops and what it does not.
 
     gt_unlock.py status [--json]
-    gt_unlock.py enroll totp [--account NAME]
+    gt_unlock.py enroll totp [--account NAME] [--without-platform]
     gt_unlock.py enroll touchid|hello|sso
     gt_unlock.py unenroll FACTOR
     gt_unlock.py recovery
@@ -21,7 +21,8 @@ level stops and what it does not.
     gt_unlock.py revoke
     gt_unlock.py hook session-start|session-end
     gt_unlock.py policy show [--json]
-    gt_unlock.py policy enable|disable|approve
+    gt_unlock.py policy enable [--factors totp[,touchid|hello|sso]]
+    gt_unlock.py policy disable|approve
     gt_unlock.py policy set FILE
     gt_unlock.py policy consent none|platform [--window SECONDS]
     gt_unlock.py policy secrets-window SECONDS     (0 = a fresh Touch ID / Hello per unseal)
@@ -35,8 +36,12 @@ level stops and what it does not.
     gt_unlock.py git-credential get|store|erase
     gt_unlock.py aws-credential --ref REF
     gt_unlock.py audit [-n N]
-    gt_unlock.py daemon start|stop|status
+    gt_unlock.py daemon start|stop|status|restart-if-stale
     gt_unlock.py verify [--json]
+
+K is how many factors must agree to unlock. `policy enable --factors totp` is the supported way
+to run with TOTP alone (a Mac without Touch ID, a PC without Windows Hello): it sets K to the
+number of factors named and records that you chose it; K is never lowered silently.
 
 `check` exits 0 allowed, 10 locked (unlock first), 11 a fresh confirmation (step-up) is
 needed, 12 refused (policy, the mcp_only door, failed closed, or no authority). Every other
@@ -85,22 +90,127 @@ def _call(method, params=None, **kw):
 
 # ------------------------------------------------------------------------- status
 
+PLATFORM = ("touchid", "hello")
+K_MEANS = "K = how many factors must agree to unlock"
+
+# Why a grant ended, in words (the authority's audit codes -> what `status` prints).
+REVOKED_WHY = {
+    "screen_lock": "screen locked", "sleep": "the machine slept",
+    "clock_rollback": "the clock went backwards", "idle": "idle too long",
+    "ttl": "the grant reached its time limit", "lock": "gt_unlock.py lock",
+    "session_end": "the session ended", "session_root_exit": "its shell or Claude Code exited",
+    "shim_exit": "the MCP shim exited", "vault_shim_exit": "the vault MCP server exited",
+    "shim_replaced": "a new MCP shim replaced the old one",
+    "vault_shim_replaced": "a new vault MCP server replaced the old one",
+    "daemon_stop": "the authority was stopped",
+    "code_updated": "gt was upgraded and the authority restarted",
+}
+
+
+def _usable(st):
+    f = st.get("factors") or {}
+    return [n for n in ("touchid", "hello", "sso", "totp")
+            if (f.get(n) or {}).get("enrolled") and (f.get(n) or {}).get("available")]
+
+
+def _k_short(st, usable=None):
+    """True when the policy's K (or its required platform factor) cannot be met here."""
+    usable = _usable(st) if usable is None else usable
+    try:
+        k = int(st.get("required") or 1)
+    except (TypeError, ValueError):
+        k = 1
+    one_of = st.get("require_one_of") or []
+    return len(usable) < k or bool(one_of and not set(one_of) & set(usable))
+
+
+def next_step(st):
+    """The ONE next command, from what the authority reports -- the same answer for `status`
+    and for enrolment's "Next:" line, and never a factor this machine cannot use (usability
+    run 2026-10-04: status kept suggesting Touch ID on a Mac without a sensor, and "Next:"
+    disagreed with it). None when there is nothing to do."""
+    f = st.get("factors") or {}
+    enrolled = [n for n in ("touchid", "hello", "sso", "totp") if (f.get(n) or {}).get("enrolled")]
+    plat = [n for n in PLATFORM if (f.get(n) or {}).get("available")]
+    usable = _usable(st)
+    if not enrolled:
+        if plat:
+            return ("gt_unlock.py enroll %s  (or, to use TOTP without it: gt_unlock.py enroll "
+                    "totp --without-platform)" % plat[0])
+        return "gt_unlock.py enroll totp"
+    if "totp" not in enrolled:
+        return "gt_unlock.py enroll totp"
+    if not (f.get("recovery") or {}).get("enrolled"):
+        return "gt_unlock.py recovery  (keep the codes offline)"
+    if st.get("needs_reenrol"):
+        return "re-enrol the factor you lost: gt_unlock.py enroll %s" % (plat[0] if plat
+                                                                        else "totp")
+    if _k_short(st, usable):
+        return "gt_unlock.py policy enable --factors %s  (%s; you choose them on purpose)" % (
+            ",".join(usable) or "totp", K_MEANS)
+    if not st.get("enabled"):
+        return "gt_unlock.py policy enable"
+    return None
+
+
+def _offline_hint():
+    """What to run first when the authority is not running (so it could not say which factors
+    this machine has). Never names a factor this platform cannot have."""
+    if sys.platform == "darwin":
+        helper = os.path.join(os.path.expanduser("~"), ".claude", "golden-thread", "bin",
+                              "gt-presence")
+        if os.path.exists(helper):
+            return ("gt_unlock.py enroll touchid (or, on a Mac without Touch ID: gt_unlock.py "
+                    "enroll totp), then gt_unlock.py status says what is next")
+        return ("gt_unlock.py enroll totp (no Touch ID helper is installed here), then "
+                "gt_unlock.py status says what is next")
+    if os.name == "nt":
+        return ("gt_unlock.py enroll hello (Windows Hello), or without Hello: gt_unlock.py "
+                "enroll totp --without-platform; then gt_unlock.py status says what is next")
+    return "gt_unlock.py enroll totp, then gt_unlock.py status says what is next"
+
+
+def _revoked_line(st):
+    lr = st.get("last_revoked") or {}
+    if not lr.get("at"):
+        return None
+    import time as _t
+    return "revoked at %s: %s" % (_t.strftime("%H:%M", _t.localtime(lr["at"])),
+                                  REVOKED_WHY.get(lr.get("why"), lr.get("why") or "?"))
+
+
+def _stale_line(info):
+    """-> the warning for an authority running code older than what is installed, or None."""
+    if not info or not info.get("stale"):
+        return None
+    since = info.get("since")
+    import time as _t
+    return ("the unlock service is running old code (pid %s, since %s); restart it with: "
+            "gt_unlock.py daemon restart-if-stale  (every grant is dropped; unlock again)"
+            % (info.get("pid") or "?", _t.strftime("%Y-%m-%d %H:%M", _t.localtime(since))
+               if since else "?"))
+
+
 def cmd_status(ns):
     if not C.enabled():
         info = {"enabled": False, "assurance": {"level": "off",
                                                  "why": "unlock is off (the default)"}}
+        reached = False
         try:
             info = _call("status", start=False)
+            reached = True
         except gt_ipc.IpcError:
             pass
         if ns.json:
             _out(info)
         else:
             print("unlock: off -- agents use LOTR and gt's settings without asking you.")
-            print("  turn it on: gt_unlock.py enroll %s, then gt_unlock.py policy enable"
-                  % ("touchid" if sys.platform == "darwin" else
-                     "hello" if os.name == "nt" else "totp"))
+            nxt = next_step(info) if reached else None
+            print("  turn it on: %s" % (nxt or _offline_hint()))
             print("  what it does and does not protect: SECURITY.md")
+            warn = _stale_line(C.code_status()) if reached else None
+            if warn:
+                print("  ! " + warn)
         return 0
     try:
         st = _call("status")
@@ -118,18 +228,32 @@ def cmd_status(ns):
     print("unlock: ON · level %s -- %s" % (a["level"], a["why"]))
     for p in st.get("problems") or []:
         print("  ! %s" % p)
-    print("  factors (need %s%s):" % (st.get("required"),
-                                      ", one of " + "/".join(st["require_one_of"])
-                                      if st.get("require_one_of") else ""))
+    warn = _stale_line(C.code_status())
+    if warn:
+        print("  ! " + warn)
+    chosen = st.get("factors_chosen") or {}
+    print("  factors (K = %s: how many must agree to unlock%s%s):" % (
+        st.get("required"),
+        "; one of " + "/".join(st["require_one_of"]) if st.get("require_one_of") else "",
+        "; you chose %s on %s" % ("+".join(chosen.get("factors") or []),
+                                  str(chosen.get("at") or "?")[:10]) if chosen else ""))
     for name, f in sorted(st["factors"].items()):
+        if not f["enrolled"] and not f["available"] and name in PLATFORM:
+            continue                 # never list a factor this OS cannot have (touchid on Linux)
         print("    %-9s %s · %s" % (name, "enrolled" if f["enrolled"] else "not enrolled",
                                     ("available" if f["available"] else "unavailable: " +
                                      f["why"])))
     print("  door: %s · grants live: %d · sealed credentials: %d · admin floor: %s"
           % (st.get("door"), st.get("grants", 0), len(st.get("sealed") or []),
              "yes" if st.get("admin_floor") else "no"))
+    rl = _revoked_line(st)
+    if rl:
+        print("  " + rl)
     if st.get("needs_reenrol"):
         print("  ! a recovery code was used: re-enrol your factors")
+    nxt = next_step(st)
+    if nxt:
+        print("  Next: " + nxt)
     print("  It is not anti-malware: something already running as you can wait for you to "
           "unlock (SECURITY.md).")
     return 0
@@ -165,21 +289,48 @@ def _show_totp(uri):
     del T
 
 
+def _print_next():
+    """The enrolment's "Next:" line -- the very answer `status` gives (next_step)."""
+    try:
+        nxt = next_step(_call("status"))
+    except gt_ipc.IpcError:
+        nxt = None
+    print("Next: %s" % (nxt or "gt_unlock.py status"))
+
+
 def cmd_enroll(ns):
     try:
         if ns.factor == "totp":
-            res = _call("enroll", {"factor": "totp", "phase": "begin", "account": ns.account})
+            params = {"factor": "totp", "phase": "begin", "account": ns.account}
+            if ns.without_platform:
+                params["skip_platform"] = True
+            res = _call("enroll", params)
             _show_totp(res["uri"])
             import getpass
-            code = getpass.getpass("Enter the code your app now shows: ")
+            try:
+                if sys.stdin and sys.stdin.isatty():
+                    code = getpass.getpass("Enter the code your app now shows: ")
+                else:
+                    line = sys.stdin.readline() if sys.stdin else ""
+                    if not line:
+                        raise EOFError
+                    code = line.strip()
+            except (EOFError, KeyboardInterrupt):
+                # usability run 2026-10-04: a raw EOFError traceback. Nothing was saved: the
+                # seed stays pending until a code confirms it.
+                sys.stderr.write("\ngt_unlock: no code was entered, so TOTP is NOT enrolled; "
+                                 "run gt_unlock.py enroll totp again in a terminal\n")
+                return 2
             _call("enroll", {"factor": "totp", "phase": "confirm", "code": code,
                              "account": ns.account})
             if sys.stdout.isatty():
                 sys.stdout.write("\033[2J\033[H")          # clear the seed off the screen
-            print("TOTP enrolled. Next: gt_unlock.py recovery (keep the codes offline).")
+            print("TOTP enrolled.")
+            _print_next()
             return 0
         res = _call("enroll", {"factor": ns.factor})
         print("%s enrolled." % res.get("enrolled"))
+        _print_next()
         return 0
     except gt_ipc.IpcError as e:
         return _err(e)
@@ -203,6 +354,8 @@ def cmd_recovery(ns):
           "re-enrol. Store them offline; they are shown only now.\n")
     for c in res["codes"]:
         print("  " + c)
+    print("")
+    _print_next()
     return 0
 
 
@@ -221,6 +374,14 @@ def cmd_unlock(ns):
         return 0
     print("unlocked (grant %s…, factors %s; ends after %d min idle or %d h)" % (
         res["grant"][:8], ", ".join(res["factors"]), res["idle_s"] // 60, res["ttl_s"] // 3600))
+    # usability run 2026-10-04: the grant is bound to the session that asked -- say so, and
+    # say what ends it, so a lock screen revoking it is not a surprise.
+    kind = res.get("kind")
+    who = ("this Claude Code session (pid %s)" if kind in ("claude", "shim", "vault_shim")
+           else "this terminal's shell (pid %s)" if kind == "terminal" and not ns.session
+           else "session pid %s") % res.get("session", "?")
+    print("  bound to %s only: other terminals and sessions stay locked. Locking the screen, "
+          "sleep or `gt_unlock.py lock` ends it." % who)
     if res.get("needs_reenrol"):
         print("a recovery code was used: re-enrol your factors now")
     return 0
@@ -254,7 +415,7 @@ def _resolve(ref, scope_reason):
 
 
 def cmd_run(ns):
-    cmd = list(ns.cmd)
+    cmd = list(ns.run_argv or [])
     if cmd and cmd[0] == "--":
         cmd = cmd[1:]
     if not cmd:
@@ -370,6 +531,68 @@ def _set_policy(p):
         return _err(e)
 
 
+FACTOR_CHOICES = ("totp", "touchid", "hello", "sso")
+
+
+def _parse_factors(text):
+    names = [x.strip().lower() for x in (text or "").split(",") if x.strip()]
+    bad = [x for x in names if x not in FACTOR_CHOICES]
+    if not names or bad or len(set(names)) != len(names):
+        return None
+    return names
+
+
+def _apply_factor_choice(p, names):
+    """M5 (usability run 2026-10-04): the owner names the factors every unlock needs. K becomes
+    how many were named, and the choice is RECORDED in the policy (`factors.chosen`), which the
+    authority shows in `status` and audits -- K is changed on purpose, never lowered
+    silently. The change still needs the CURRENT policy's factors (policy_set's step-up + K)."""
+    import time as _t
+    f = dict(p.get("factors") or {})
+    f["required"] = len(names)
+    f["require_one_of"] = [n for n in names if n in PLATFORM][:1]
+    f["chosen"] = {"factors": list(names), "by": "owner",
+                   "at": _t.strftime("%Y-%m-%dT%H:%M:%S%z")}
+    p["factors"] = f
+
+
+def _choose_factors(ns):
+    """-> the factor list to record, [] to leave the policy's factors alone, None on a usage
+    error, False when the owner declined (both already printed). Without --factors, a machine
+    whose usable factors cannot meet K is offered the supported path: asked at a terminal,
+    else told the exact command."""
+    if ns.factors:
+        names = _parse_factors(ns.factors)
+        if names is None:
+            sys.stderr.write("gt_unlock: --factors takes a comma list of %s, e.g. --factors "
+                             "totp\n" % ", ".join(FACTOR_CHOICES))
+            return None
+        return names
+    try:
+        st = _call("status")
+    except gt_ipc.IpcError:
+        return []                      # policy_set below reports the real problem
+    usable = _usable(st)
+    if not usable or not _k_short(st, usable):
+        return []
+    want = "+".join((st.get("require_one_of") or [])) or "more factors"
+    print("This machine can use %s, but the policy asks for K = %s (%s)%s." % (
+        " and ".join(usable), st.get("required"), K_MEANS,
+        ", including " + want if st.get("require_one_of") else ""))
+    cmd = "gt_unlock.py policy enable --factors %s" % ",".join(usable)
+    if sys.stdin and sys.stdin.isatty():
+        try:
+            ans = input("Turn unlock on with %s alone (K = %d)? It is recorded as your "
+                        "choice. [y/N] " % (" + ".join(usable), len(usable)))
+        except (EOFError, KeyboardInterrupt):
+            ans = ""
+        if ans.strip().lower() in ("y", "yes"):
+            return usable
+    sys.stderr.write("gt_unlock: unlock was NOT turned on. To use what this machine has, run:\n"
+                     "  %s\n(or enrol more factors first; SECURITY.md section 3)\n" % cmd)
+    return False
+
+
 def cmd_policy(ns):
     a = ns.action
     if a == "show":
@@ -389,10 +612,19 @@ def cmd_policy(ns):
         except gt_ipc.IpcError as e:
             return _err(e)
     p = _current_user_policy() or {}
+    if ns.factors and a != "enable":
+        sys.stderr.write("gt_unlock: --factors goes with policy enable\n")
+        return 2
     if a in ("enable", "disable"):
         if not p:
             p = {"schema": 1}
         p["enabled"] = (a == "enable")
+        if a == "enable":
+            chosen = _choose_factors(ns)
+            if chosen is None or chosen is False:
+                return 2 if chosen is None else 1
+            if chosen:
+                _apply_factor_choice(p, chosen)
         return _set_policy(p)
     if a == "set":
         if not ns.args:
@@ -612,8 +844,31 @@ def cmd_daemon(ns):
             print("authority NOT stopped (%s): %s" % (e.code, e.message))
             return 1
         return 0
+    if ns.action == "restart-if-stale":
+        # M12: install.sh runs this after copying gt's hooks. Quiet when nothing ran.
+        state, info = C.restart_if_stale()
+        info = info or {}
+        if state == "not_running":
+            return 0
+        if state == "current":
+            print("unlock authority: running current code (pid %s)" % info.get("pid"))
+            return 0
+        if state == "failed":
+            print("unlock authority: running OLD code (pid %s) and could not be stopped; stop "
+                  "it with: gt_unlock.py daemon stop" % info.get("pid"))
+            return 1
+        print("unlock authority: it was running old code (pid %s); stopped it%s. Any unlock "
+              "was dropped -- unlock again when you need it." % (
+                  info.get("pid"), " and started it from the installed code"
+                  if state == "restarted" else
+                  " (it starts again on first use)"))
+        return 0
     up = gt_ipc.alive_at(C.address(), timeout=1.0)
     print("authority %s at %s" % ("running" if up else "not running", C.address()))
+    if up:
+        warn = _stale_line(C.code_status())
+        if warn:
+            print("  ! " + warn)
     return 0 if up else 1
 
 
@@ -624,43 +879,75 @@ def cmd_verify(ns):
 
 # ------------------------------------------------------------------------- argv
 
+# One line per command for `gt_unlock.py --help`, and the description of `gt_unlock.py CMD -h`
+# (usability run 2026-10-04: the top-level help listed bare command names).
+HELP = {
+    "status": "show whether unlock is on, its level, your factors, and what to do next",
+    "enroll": "add a factor: totp (an authenticator app), touchid (macOS), hello (Windows), sso",
+    "unenroll": "remove an enrolled factor (needs your factors)",
+    "recovery": "print ten new one-time recovery codes (needs your factors)",
+    "unlock": "prove you are present and unlock THIS shell or Claude Code session",
+    "lock": "revoke every grant now (never needs a factor)",
+    "check": "ask whether a scope is allowed (exit 0 allowed, 10 locked, 11 step-up, 12 refused)",
+    "run": "run a command once the scope is unlocked, handing it secrets as files or env",
+    "register": "register a session or an MCP shim with the authority (used by gt's hooks)",
+    "revoke": "revoke this session's grants (used by gt's SessionEnd hook)",
+    "hook": "the SessionStart / SessionEnd hook entry point",
+    "policy": "show or change the unlock policy: enable, disable, approve, set, consent, ...",
+    "seal": "store, list, remove or migrate sealed credentials",
+    "secret": "resolve a secret ref to a pipe or a file (never to a terminal)",
+    "git-credential": "git's credential-helper protocol, backed by sealed credentials",
+    "aws-credential": "AWS credential_process, backed by a secret ref",
+    "audit": "print the last lines of the authority's audit log",
+    "daemon": "start, stop or check the unlock authority; restart it after an upgrade",
+    "verify": "run the safe self-check on this machine (PASS / FAIL / NOT-CHECKED)",
+}
+
+
 def build_parser():
-    ap = argparse.ArgumentParser(prog="gt_unlock", description="gt unlock: presence-gated "
-                                 "access for agents (see SECURITY.md)")
-    sub = ap.add_subparsers(dest="cmd")
-    s = sub.add_parser("status")
+    ap = argparse.ArgumentParser(
+        prog="gt_unlock", description="gt unlock: presence-gated access for agents (see "
+        "SECURITY.md). K, used throughout, is how many factors must agree to unlock.")
+    sub = ap.add_subparsers(dest="cmd", metavar="COMMAND")
+
+    s = sub.add_parser("status", help=HELP["status"], description=HELP["status"])
     s.add_argument("--json", action="store_true")
-    s = sub.add_parser("enroll")
+    s = sub.add_parser("enroll", help=HELP["enroll"], description=HELP["enroll"])
     s.add_argument("factor", choices=["totp", "touchid", "hello", "sso"])
     s.add_argument("--account", default=None)
-    s = sub.add_parser("unenroll")
+    s.add_argument("--without-platform", action="store_true",
+                   help="enrol TOTP first even though Touch ID / Windows Hello is available "
+                        "here (only from your own terminal; see SECURITY.md section 3)")
+    s = sub.add_parser("unenroll", help=HELP["unenroll"], description=HELP["unenroll"])
     s.add_argument("factor")
-    sub.add_parser("recovery")
-    s = sub.add_parser("unlock")
+    sub.add_parser("recovery", help=HELP["recovery"], description=HELP["recovery"])
+    s = sub.add_parser("unlock", help=HELP["unlock"], description=HELP["unlock"])
     s.add_argument("--scope")
     s.add_argument("--reason")
     s.add_argument("--session", type=int)
     s.add_argument("--recovery", action="store_true")
-    sub.add_parser("lock")
-    s = sub.add_parser("check")
+    sub.add_parser("lock", help=HELP["lock"], description=HELP["lock"])
+    s = sub.add_parser("check", help=HELP["check"], description=HELP["check"])
     s.add_argument("--scope", required=True)
     s.add_argument("--request", action="store_true")
     s.add_argument("--reason")
     s.add_argument("--job")
-    s = sub.add_parser("run")
+    s = sub.add_parser("run", help=HELP["run"], description=HELP["run"])
     s.add_argument("--scope", required=True)
     s.add_argument("--secret-file", action="append")
     s.add_argument("--env", action="append")
-    s.add_argument("cmd", nargs=argparse.REMAINDER)
-    s = sub.add_parser("register")
+    # B3 (usability run 2026-10-04): this positional was `cmd`, the subcommand's own dest, so
+    # argparse overwrote "run" with the command list and dispatch crashed (unhashable list).
+    s.add_argument("run_argv", nargs=argparse.REMAINDER, metavar="-- CMD [ARGS...]")
+    s = sub.add_parser("register", help=HELP["register"], description=HELP["register"])
     g = s.add_mutually_exclusive_group(required=True)
     g.add_argument("--session", action="store_true")
     g.add_argument("--shim", action="store_true")
     s.add_argument("--session-id")
-    sub.add_parser("revoke")
-    s = sub.add_parser("hook")
+    sub.add_parser("revoke", help=HELP["revoke"], description=HELP["revoke"])
+    s = sub.add_parser("hook", help=HELP["hook"], description=HELP["hook"])
     s.add_argument("event", choices=["session-start", "session-end"])
-    s = sub.add_parser("policy")
+    s = sub.add_parser("policy", help=HELP["policy"], description=HELP["policy"])
     s.add_argument("action", choices=["show", "enable", "disable", "approve", "set", "consent",
                                       "secrets-window", "unattended", "sso"])
     s.add_argument("args", nargs="*")
@@ -669,24 +956,28 @@ def build_parser():
     s.add_argument("--client-id")
     s.add_argument("--tenant")
     s.add_argument("--pin-subject")
-    s = sub.add_parser("seal")
+    s.add_argument("--factors", help="with enable: the factors every unlock needs, chosen by "
+                   "you, e.g. totp or totp,touchid (sets K to how many you name)")
+    s = sub.add_parser("seal", help=HELP["seal"], description=HELP["seal"])
     s.add_argument("action", choices=["put", "list", "rm", "migrate"])
     s.add_argument("name_ref", nargs="?")
     s.add_argument("--name")
     s.add_argument("--remove-source", action="store_true")
-    s = sub.add_parser("secret")
+    s = sub.add_parser("secret", help=HELP["secret"], description=HELP["secret"])
     s.add_argument("action", choices=["get"])
     s.add_argument("ref")
     s.add_argument("--out")
-    s = sub.add_parser("git-credential")
+    s = sub.add_parser("git-credential", help=HELP["git-credential"],
+                       description=HELP["git-credential"])
     s.add_argument("action", choices=["get", "store", "erase"])
-    s = sub.add_parser("aws-credential")
+    s = sub.add_parser("aws-credential", help=HELP["aws-credential"],
+                       description=HELP["aws-credential"])
     s.add_argument("--ref", required=True)
-    s = sub.add_parser("audit")
+    s = sub.add_parser("audit", help=HELP["audit"], description=HELP["audit"])
     s.add_argument("-n", type=int, default=20)
-    s = sub.add_parser("daemon")
-    s.add_argument("action", choices=["start", "stop", "status"])
-    s = sub.add_parser("verify")
+    s = sub.add_parser("daemon", help=HELP["daemon"], description=HELP["daemon"])
+    s.add_argument("action", choices=["start", "stop", "status", "restart-if-stale"])
+    s = sub.add_parser("verify", help=HELP["verify"], description=HELP["verify"])
     s.add_argument("--json", action="store_true")
     return ap
 
