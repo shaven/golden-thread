@@ -193,6 +193,13 @@ class ReadOnlyVault(Sandbox):
                     "--op", "append", "--content", "- [ ] queued before the lock")
         self.assertOk(p)
         self.config(vault_path=str(self.vault), sandbox_mode="on", sandbox_vault_reads="allow")
+        # gt_tasks writes nothing when the roll-up is unchanged (0.20.1, install branch), and then
+        # a read-only vault is no refusal at all. Remove the receipt so the roll-up is pending and
+        # the tool has a write the OS must refuse.
+        try:
+            (self.vault / "Projects" / "golden-thread" / ".tasks-digest").unlink()
+        except FileNotFoundError:
+            pass
         self.addCleanup(self.unlock)
         self.lock()
 
