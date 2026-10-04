@@ -232,8 +232,8 @@ class AgentsAreSetByTheTask(PolicyBase):
         self.assertEqual(self.model("extract-docs"), "sonnet")
 
     def test_an_agent_override_refuses_a_job_type_effort_a_bad_effort_and_a_non_alias(self):
-        # 0.20.0 (changed deliberately): a STAGE override may now carry an effort, because each
-        # stage's agent definition holds one; until 0.20.0 every effort was refused ("the Agent
+        # 0.20.1 (changed deliberately): a STAGE override may now carry an effort, because each
+        # stage's agent definition holds one; until 0.20.1 every effort was refused ("the Agent
         # tool has no effort parameter"). A job-type override still may not: one definition
         # serves every kind, so that job runs through the Agent tool's model.
         for args, why in ((("--agent", "extract-docs", "--model", "opus", "--effort", "high"),
@@ -287,7 +287,7 @@ class DoctorRow(PolicyBase):
 
 
 class AgentDefinitionFiles(PolicyBase):
-    """0.20.0: the installed stage agent definitions (agents/<stage>.md in the gt plugin's cache
+    """0.20.1: the installed stage agent definitions (agents/<stage>.md in the gt plugin's cache
     and marketplace copies) get model AND effort from the policy, like skills, and follow the
     agent_models setting at once."""
 

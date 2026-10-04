@@ -1,4 +1,4 @@
-"""gt_ipc, the local front door gt's unlock authority and gt-lotr share (0.20.0).
+"""gt_ipc, the local front door gt's unlock authority and gt-lotr share (0.20.1).
 
 Pinned here (design-unlock.md §3, acceptance f):
   * the peer's identity comes from the kernel and matches the real process (pid + start time);

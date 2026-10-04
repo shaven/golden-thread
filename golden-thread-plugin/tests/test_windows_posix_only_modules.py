@@ -1,7 +1,7 @@
-"""Modules that cannot run on native Windows are off there, said in words (0.20.0).
+"""Modules that cannot run on native Windows are off there, said in words (0.20.1).
 
 gt-lotr is a gateway served on a Unix-domain socket, its clients authenticated by peer uid and
-its secrets protected by 0600 permission bits; Windows has none of the three. Before 0.20.0
+its secrets protected by 0600 permission bits; Windows has none of the three. Before 0.20.1
 `install.sh --with lotr` on Windows installed it, and the first command died on os.fchmod. Now
 gt_components.module_detail (which install.sh and gt_doctor both read) turns it off on Windows,
 whatever was chosen, and leaves the recorded choice alone. The lotr tests skip on Windows for
@@ -38,7 +38,7 @@ class PosixOnlyModules(Sandbox):
         self.assertIn("Unix-domain-socket", d["reason"])
 
     def test_lotr_0_3_0_runs_on_windows_over_the_named_pipe(self):
-        """0.20.0: gt-lotr 0.3.0 has a Windows front door (gt_ipc named pipe)."""
+        """0.20.1: gt-lotr 0.3.0 has a Windows front door (gt_ipc named pipe)."""
         self.assertFalse(self.m.posix_only("lotr", "0.3.0"))
         self.assertEqual(self.detail(True, with_=("lotr",))["lotr"]["state"], "on")
 

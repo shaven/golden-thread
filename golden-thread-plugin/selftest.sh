@@ -15,7 +15,7 @@ HERE="$(cd "$(dirname "$0")" && pwd)"
 TMP="$(mktemp -d)"; trap 'rm -rf "$TMP"' EXIT
 export HOME="$TMP/home"; mkdir -p "$HOME/.claude"
 # A throwaway HOME must never reach the real launchd domain / Task Scheduler: gt_schedule.py
-# refuses every scheduler write while this is set (0.20.0).
+# refuses every scheduler write while this is set (0.20.1).
 export GT_TEST_SANDBOX=1
 fail=0
 ok()  { printf 'ok    %s\n' "$1"; }
@@ -136,7 +136,7 @@ while IFS= read -r cmd; do
       speaks "$out" systemMessage && ok "SessionStart $name emits systemMessage" \
                                   || bad "SessionStart $name said nothing: $out" ;;
     gt_unlock.py)
-      # gt unlock (0.20.0) ships OFF, and off it must say nothing and start nothing.
+      # gt unlock (0.20.1) ships OFF, and off it must say nothing and start nothing.
       [ -z "$out" ] && ok "SessionStart $name silent while unlock is off" \
                     || bad "SessionStart $name spoke while unlock is off: $out" ;;
     gt_report_card.py|gt_usage_brief.py)

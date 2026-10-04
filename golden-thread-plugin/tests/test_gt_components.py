@@ -57,7 +57,7 @@ def py_argv(command):
     n = len(PY_HOOK_PREFIX)
     if argv[:n] == PY_HOOK_PREFIX:
         return ["python3", "-B"] + argv[n:]
-    # macOS (0.20.0): an install's recorded interpreter, by absolute path.
+    # macOS (0.20.1): an install's recorded interpreter, by absolute path.
     if len(argv) > 1 and os.path.isabs(argv[0]) and os.path.basename(argv[0]).startswith(
             "python") and argv[1] == "-B":
         return ["python3", "-B"] + argv[2:]
@@ -989,7 +989,7 @@ class InstallChoicesAreWrittenOneWay(Sandbox):
 
 
 class LocalizeMcp(Sandbox):
-    """0.20.0, Windows: a plugin MCP server started with `python3` runs the Microsoft Store stub
+    """0.20.1, Windows: a plugin MCP server started with `python3` runs the Microsoft Store stub
     there and never starts. install.sh rewrites the INSTALLED manifests' command to the
     interpreter it resolved (an absolute path), so Claude Code starts the server directly --
     still a direct child of claude, which gt unlock's register_shim requires."""

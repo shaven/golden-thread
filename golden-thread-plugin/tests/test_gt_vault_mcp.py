@@ -1,4 +1,4 @@
-"""gt_vault_mcp.py -- gt's vault MCP server (0.20.0, gt sandbox mode; request
+"""gt_vault_mcp.py -- gt's vault MCP server (0.20.1, gt sandbox mode; request
 2026-10-02-vault-mcp-read-server).
 
 Driven the way Claude Code drives it: JSON-RPC lines over stdio, against a fixture vault in a

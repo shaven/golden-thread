@@ -2,7 +2,7 @@
 
 A test fakes a program by writing a `#!` shell script first on PATH. POSIX runs it as it is,
 and nothing here changes that: on macOS and Linux install_fake() writes the script and chmods
-it, exactly what the tests did inline before (0.20.0).
+it, exactly what the tests did inline before (0.20.1).
 
 Native Windows cannot run that script, for two separate reasons, and each needs its own bridge:
 

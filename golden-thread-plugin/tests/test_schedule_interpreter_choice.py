@@ -1,4 +1,4 @@
-"""The scheduled jobs' interpreter is CHOSEN, not overwritten (0.20.0).
+"""The scheduled jobs' interpreter is CHOSEN, not overwritten (0.20.1).
 
 2026-10-03, on the publishing Mac: install.sh recorded Homebrew's python3.9 -- the python it ran
 under -- and under launchd that interpreter got PermissionError writing the vault (macOS privacy

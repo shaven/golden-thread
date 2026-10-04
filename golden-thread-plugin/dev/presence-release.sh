@@ -1,6 +1,6 @@
 #!/bin/bash
 # presence-release.sh -- build, Developer ID sign and (only on --submit) notarize the gt-presence
-# Touch ID helper for a gt release (0.20.0).
+# Touch ID helper for a gt release (0.20.1).
 #
 #   dev/presence-release.sh --dry-run            print every command, run none
 #   dev/presence-release.sh                      build + sign + zip + verify; NO submission

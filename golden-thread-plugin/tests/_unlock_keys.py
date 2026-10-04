@@ -1,4 +1,4 @@
-"""Test-only SIGNING keys for the unlock tests (0.20.0).
+"""Test-only SIGNING keys for the unlock tests (0.20.1).
 
 gt ships verification only (scripts/gt_unlock_crypto.py); the tests need something to sign
 with -- a stand-in for the Secure Enclave, the TPM and an identity provider. Everything here

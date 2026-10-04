@@ -94,7 +94,7 @@ class SkillLintTest(Sandbox):
 
 
 class ForkedSkills(Sandbox):
-    """0.20.0: `context: fork` runs a skill in a subagent with none of the conversation, in the
+    """0.20.1: `context: fork` runs a skill in a subagent with none of the conversation, in the
     background by default -- it cannot ask the owner. A forked skill that asks is refused."""
 
     def skill(self, name, front, body):

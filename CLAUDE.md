@@ -61,7 +61,7 @@ a block cannot loop, and test the allow cases before the block case.
 
 ## The documents, and what belongs in each
 
-Ten documents, each with a different reader (SECURITY.md joined in 0.20.0). The release gate checks that every skill is
+Ten documents, each with a different reader (SECURITY.md joined in 0.20.1). The release gate checks that every skill is
 *named* in three of them and that no PDF is older than its source — it cannot check whether
 what a document **says** is still true, which is the failure that actually happens.
 
@@ -99,7 +99,7 @@ python3 dev/plugins.py manifest golden-thread/<version>
 
 | | |
 |---|---|
-| **`SECURITY.md`** (0.20.0) | **Reader:** anyone deciding whether to turn gt unlock on, and an enterprise reviewer. **Must carry:** the verbatim headline ("Unlock proves a person was present…"); what was built and what each measure stops; how it works; per-platform setup; the threat-model table with what each level does **not** protect; "Locking down more"; enterprise floor and signing; recovery and turning it off. **Must not carry:** any claim stronger than the code and its tests support — never "secure", "unhackable". **Goes stale at:** factor setup steps, the level table, the broker ratings. |
+| **`SECURITY.md`** (0.20.1) | **Reader:** anyone deciding whether to turn gt unlock on, and an enterprise reviewer. **Must carry:** the verbatim headline ("Unlock proves a person was present…"); what was built and what each measure stops; how it works; per-platform setup; the threat-model table with what each level does **not** protect; "Locking down more"; enterprise floor and signing; recovery and turning it off. **Must not carry:** any claim stronger than the code and its tests support — never "secure", "unhackable". **Goes stale at:** factor setup steps, the level table, the broker ratings. |
 
 ### Getting started
 

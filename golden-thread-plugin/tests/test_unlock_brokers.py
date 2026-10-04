@@ -1,4 +1,4 @@
-"""gt_unlock_brokers -- bring-your-own secret stores behind the unlock grant (0.20.0).
+"""gt_unlock_brokers -- bring-your-own secret stores behind the unlock grant (0.20.1).
 
 The broker is called only by the unlock authority, in process, so it is tested in process. Every
 store CLI is a FAKE Python program wired in through TOOL_OVERRIDE (an in-process seam with no

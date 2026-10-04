@@ -468,7 +468,7 @@ class ClaudeOnlyAndIntakeScanTest(AgentSpecBase):
 
 
 
-# -- 0.20.0: plugin agent definitions (gt:<stage>) and what the running Claude Code supports ----
+# -- 0.20.1: plugin agent definitions (gt:<stage>) and what the running Claude Code supports ----
 AGENTS = GT / "agents"
 PINNED = {"GT_CLAUDE_CODE_VERSION": "2.1.288"}        # never ask a real `claude` in a test
 
@@ -487,7 +487,7 @@ def frontmatter_of(path):
 
 class PluginAgentDefinitions(AgentSpecBase):
     """One plugin agent per stage, generated from the stage spec's `agent` block and carrying
-    model AND effort -- the Agent tool's own `model` parameter has no effort (0.20.0)."""
+    model AND effort -- the Agent tool's own `model` parameter has no effort (0.20.1)."""
 
     def test_the_shipped_definitions_are_exactly_what_the_specs_render(self):
         p = self.py(TOOL, "agents", "--check", AGENTS)

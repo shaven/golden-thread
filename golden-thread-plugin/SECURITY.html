@@ -102,7 +102,7 @@
   body{max-width:52rem;margin:0 auto;padding:2.2rem 2rem;}
   h1,h2,h3{break-after:avoid;} table{break-inside:avoid;}
 </style></head><body><h1 id="gt-security-guide-gt-unlock-and-gt-sandbox-mode">gt security guide — gt unlock and gt sandbox mode</h1>
-<p>Written against <strong>gt v0.20.0</strong> (gt-lotr 0.3.0). Unlock and sandbox mode both ship <strong>off</strong>. This
+<p>Written against <strong>gt v0.20.1</strong> (gt-lotr 0.3.0). Unlock and sandbox mode both ship <strong>off</strong>. This
 guide says what each does when you turn it on, what it needs, how to set it up on macOS, Windows
 and Linux, and — just as plainly — what it does not protect. gt sandbox mode, which fences the
 assistant's own shell and file tools off the vault and gt's state, is section 8. MCP servers Claude
@@ -117,15 +117,15 @@ that is on your machine. An AI agent working for you runs as you: it can call to
 commands and read your files. gt unlock puts a person back in the loop for the things that
 matter — your connected systems (LOTR), your credentials, publishing, and gt's own guards —
 without slowing down ordinary work.</p>
-<p><strong>Read this first.</strong> In 0.20.0 the authority runs <strong>as you</strong> (levels L1 and L2). Against a
+<p><strong>Read this first.</strong> In 0.20.1 the authority runs <strong>as you</strong> (levels L1 and L2). Against a
 program running as you — and that includes the assistant's own shell — the gate is <strong>friction</strong>:
 it stops accidents and makes the assistant ask, but a determined process of yours can get
 around it (section 4 lists how). The guarantees that hold even then are narrower and come from
 hardware: at <strong>L2</strong>, opening a sealed credential needs your finger or PIN every time (or once
 per short window you choose), and a consent-tier LOTR operation can need a touch of its own. A
 real boundary against the agent needs <strong>L3</strong> — the authority as a separate, administrator-owned
-service — which <strong>0.20.0 does not ship</strong>.</p>
-<p>An independent security review of 0.20.0 (2026-10-03) reproduced seven bypasses of the gate by
+service — which <strong>0.20.1 does not ship</strong>.</p>
+<p>An independent security review of 0.20.1 (2026-10-03) reproduced seven bypasses of the gate by
 a same-user process. Each was fixed, and each is now a regression test
 (<code>tests/test_unlock_review_regressions.py</code>, <code>tests/test_lotr_review_regressions.py</code>); what
 cannot be fixed without L3 is written down in section 4 instead of being claimed away.
@@ -239,7 +239,7 @@ demonstrated bypass is a regression test (<code>tests/test_inbox_review2.py</cod
    refused while the first is alive; a shim that replaces a dead one starts with no grant. If
    the authority restarts, the shim registers again on its next call. On Windows the installer
    points the MCP command at the Python interpreter itself rather than at a launcher script
-   (0.20.0): a script in between would be the parent, and every registration would be refused.</li>
+   (0.20.1): a script in between would be the parent, and every registration would be refused.</li>
 <li>The assistant calls a LOTR tool. LOTR asks the authority whether <strong>this process</strong> (named by
    the kernel) may use <code>lotr:&lt;connection&gt;:&lt;tier&gt;</code>. Locked: the authority asks you — a Touch ID
    or Windows Hello sheet, then a dialog for your authenticator code — naming the requester and
@@ -258,7 +258,7 @@ at a terminal. The requesting process must have a controlling terminal <strong>a
 above it (argv[0] starting with <code>-</code>, or <code>-l</code> / <code>--login</code> — what login(1), sshd, Terminal,
 iTerm2 and tmux start). An orphan (re-parented to launchd or init, no login shell above it)
 never gets it, even after giving itself a terminal with <code>setsid</code> + <code>openpty</code> + <code>TIOCSCTTY</code> (the
-2026-10-04 re-review did exactly that against 0.20.0's first build; it is now a regression
+2026-10-04 re-review did exactly that against 0.20.1's first build; it is now a regression
 test). On Windows the parent chain must be intact and reach an interactive shell or terminal
 host. This is a convenience, not a boundary: a process of yours can start its own login shell
 (<code>bash -lc</code>, <code>script</code>, a scripted Terminal window). For a boundary set <code>read_without_unlock</code>
@@ -403,7 +403,7 @@ checked.</p>
 <td><strong>L3 Separated</strong></td>
 <td>Authority and LOTR as a separate service account, code and policy administrator-owned</td>
 <td>Use before unlock, policy downgrade, seed and credential reads, the gate bypasses below — <strong>the agent boundary</strong></td>
-<td>An attacker inside your session after you unlock. <strong>gt 0.20.0 does not ship L3.</strong></td>
+<td>An attacker inside your session after you unlock. <strong>gt 0.20.1 does not ship L3.</strong></td>
 </tr>
 </tbody>
 </table>
@@ -504,7 +504,7 @@ gt's hooks and state, the plugin files, LOTR — but every other program of your
 <li><strong>Look like gt's own processes.</strong> The shim seat and the credential consumer are checked by
   the real path of the file a process runs; a process of yours can run the real file with its
   own input. A replacement shim starts with no grant, and the first shim keeps its seat while
-  it lives. The real file can also be made to run someone else's code: before 0.20.0's re-review
+  it lives. The real file can also be made to run someone else's code: before 0.20.1's re-review
   fix, <code>PYTHONPATH</code> pointing at a <code>sitecustomize.py</code> ran arbitrary code inside the real file,
   under its trusted identity. Now every trusted Python process (<code>lotrd.py</code>, <code>lotr_mcp.py</code>,
   <code>gt_vault_mcp.py</code>, <code>gt_unlockd.py</code>) must also run under an isolated interpreter: gt starts
@@ -629,7 +629,7 @@ grant, and <code>gt_unlock.py status</code> / doctor label each with its real le
 </tr>
 <tr>
 <td>HashiCorp Vault (<code>vault:</code>)</td>
-<td><strong>L1</strong> (0.20.0 does not hold Vault tokens in the authority)</td>
+<td><strong>L1</strong> (0.20.1 does not hold Vault tokens in the authority)</td>
 </tr>
 <tr>
 <td>gt's sealed store (<code>sealed:</code>)</td>
@@ -676,7 +676,7 @@ python $u verify
   factors, fewer allowed factors, shorter TTL and idle, stricter scopes, <code>locked_keys</code> the user
   cannot change, a pinned Entra tenant. A floor file gt cannot verify locks everything.</li>
 <li>The floor is <strong>binding only at L3</strong>, when the enforcing code is also administrator-owned;
-  0.20.0 runs the authority as the user. Say so in your own policy documents. Where users are
+  0.20.1 runs the authority as the user. Say so in your own policy documents. Where users are
   administrators of their own machines, admin-owned protection is bounded by that password.</li>
 <li><strong>Signing:</strong> release builds of the macOS helper are Developer ID signed and notarized. The
   Windows Hello script is unsigned by design; sign it with your own certificate where policy
@@ -695,7 +695,7 @@ python $u verify
   no policy and keeps everything gated locked), then enrol again. Sealed credentials are lost
   with it — that is what sealed means; keep their originals in your store.</li>
 <li><strong>Turn it off:</strong> <code>gt_unlock.py policy disable</code> (needs your factors) or
-  <code>gt_settings.py set unlock off</code>. Off, every hook behaves exactly as before 0.20.0.</li>
+  <code>gt_settings.py set unlock off</code>. Off, every hook behaves exactly as before 0.20.1.</li>
 <li><strong>Check it:</strong> <code>gt_unlock.py status</code>, <code>gt_unlock.py verify</code>, <code>gt_unlock.py audit -n 50</code>.</li>
 </ul>
 <h2 id="8-gt-sandbox-mode">8. gt sandbox mode</h2>
@@ -826,7 +826,7 @@ itself.</p>
   bytes are the only ones it uses, for accepting and rejecting alike, and it removes the file
   through the same folder handle; it never re-opens an inbox path. So a sandboxed writer racing
   the broker cannot swap in a symlink, a hard link or another folder to have a file it may not
-  read copied into the vault (the 2026-10-04 review demonstrated exactly that against 0.20.0's
+  read copied into the vault (the 2026-10-04 review demonstrated exactly that against 0.20.1's
   first build, with the TOTP seed; it is now a regression test, deterministic and live under
   the sandbox runtime). A request must name this vault and pass the queue's validation (paths
   inside the vault, no generated files, Sources or Core rules, a plain request id). The broker
@@ -922,10 +922,10 @@ in its own process, which the sandbox does not wrap.</p>
   is refused with the command to use (0.20.1): it used to write the deny rules while the setting
   — and with it the gt-vault MCP (<code>vault_mcp auto</code>) — stayed off, so after a restart the vault
   was unreachable, and it skipped gt unlock's confirmation. <code>gt_sandbox.py remove</code> always works.</li>
-<li><strong>Rolling back</strong> to a gt older than 0.20.0 (which has no <code>gt_sandbox.py</code> and no
+<li><strong>Rolling back</strong> to a gt older than 0.20.1 (which has no <code>gt_sandbox.py</code> and no
   <code>gt_unlock.py</code>) is refused by <code>install.sh</code> while sandbox mode or gt unlock is on, or while
   gt's sandbox entries are still in <code>settings.json</code>, with the exact commands to switch them off
-  first (0.20.1): the older release could never remove them. A rollback to 0.20.0 is allowed.</li>
+  first (0.20.1): the older release could never remove them. A rollback to a release that carries <code>gt_sandbox.py</code> is allowed.</li>
 <li>gt's vault tools run from the assistant's shell (<code>gt_tasks</code>, <code>gt_lint</code>, <code>gt_log</code>, …) cannot
   read or write the vault: the assistant uses the MCP tools, or you run them in a terminal —
   each tool's one-line refusal names the command (see the preview note above).

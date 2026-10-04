@@ -3,7 +3,7 @@
   "name": "visualize",
   "plugin": "gt-visualize",
   "version": "0.4.4",
-  "requires_gt": ">=0.20.0,<0.21.0",
+  "requires_gt": ">=0.20.1,<0.21.0",
   "summary": "A codebase in 3D: a scroll-driven walkthrough of how its parts work together (explain), or a code city of its files (render) -- one offline HTML file drawn with three.js",
   "default": "on",
   "skills": [

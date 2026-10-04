@@ -1,6 +1,6 @@
 # gt security guide — gt unlock and gt sandbox mode
 
-Written against **gt v0.20.0** (gt-lotr 0.3.0). Unlock and sandbox mode both ship **off**. This
+Written against **gt v0.20.1** (gt-lotr 0.3.0). Unlock and sandbox mode both ship **off**. This
 guide says what each does when you turn it on, what it needs, how to set it up on macOS, Windows
 and Linux, and — just as plainly — what it does not protect. gt sandbox mode, which fences the
 assistant's own shell and file tools off the vault and gt's state, is section 8. MCP servers Claude
@@ -17,16 +17,16 @@ commands and read your files. gt unlock puts a person back in the loop for the t
 matter — your connected systems (LOTR), your credentials, publishing, and gt's own guards —
 without slowing down ordinary work.
 
-**Read this first.** In 0.20.0 the authority runs **as you** (levels L1 and L2). Against a
+**Read this first.** In 0.20.1 the authority runs **as you** (levels L1 and L2). Against a
 program running as you — and that includes the assistant's own shell — the gate is **friction**:
 it stops accidents and makes the assistant ask, but a determined process of yours can get
 around it (section 4 lists how). The guarantees that hold even then are narrower and come from
 hardware: at **L2**, opening a sealed credential needs your finger or PIN every time (or once
 per short window you choose), and a consent-tier LOTR operation can need a touch of its own. A
 real boundary against the agent needs **L3** — the authority as a separate, administrator-owned
-service — which **0.20.0 does not ship**.
+service — which **0.20.1 does not ship**.
 
-An independent security review of 0.20.0 (2026-10-03) reproduced seven bypasses of the gate by
+An independent security review of 0.20.1 (2026-10-03) reproduced seven bypasses of the gate by
 a same-user process. Each was fixed, and each is now a regression test
 (`tests/test_unlock_review_regressions.py`, `tests/test_lotr_review_regressions.py`); what
 cannot be fixed without L3 is written down in section 4 instead of being claimed away.
@@ -80,7 +80,7 @@ What was built, and what each piece really does:
    refused while the first is alive; a shim that replaces a dead one starts with no grant. If
    the authority restarts, the shim registers again on its next call. On Windows the installer
    points the MCP command at the Python interpreter itself rather than at a launcher script
-   (0.20.0): a script in between would be the parent, and every registration would be refused.
+   (0.20.1): a script in between would be the parent, and every registration would be refused.
 2. The assistant calls a LOTR tool. LOTR asks the authority whether **this process** (named by
    the kernel) may use `lotr:<connection>:<tier>`. Locked: the authority asks you — a Touch ID
    or Windows Hello sheet, then a dialog for your authenticator code — naming the requester and
@@ -99,7 +99,7 @@ at a terminal. The requesting process must have a controlling terminal **and** a
 above it (argv[0] starting with `-`, or `-l` / `--login` — what login(1), sshd, Terminal,
 iTerm2 and tmux start). An orphan (re-parented to launchd or init, no login shell above it)
 never gets it, even after giving itself a terminal with `setsid` + `openpty` + `TIOCSCTTY` (the
-2026-10-04 re-review did exactly that against 0.20.0's first build; it is now a regression
+2026-10-04 re-review did exactly that against 0.20.1's first build; it is now a regression
 test). On Windows the parent chain must be intact and reach an interactive shell or terminal
 host. This is a convenience, not a boundary: a process of yours can start its own login shell
 (`bash -lc`, `script`, a scripted Terminal window). For a boundary set `read_without_unlock`
@@ -234,7 +234,7 @@ checked.
 | **off** (default) | Nothing gated | — | Anything |
 | **L1 Gate** | TOTP (and SSO), no platform factor | Accidents, use after the session ends or the screen locks, the assistant using LOTR or secrets *by the ordinary route*; full audit. **Friction, not a boundary**, against the assistant's shell | Any program running as you — the assistant's shell included — that sets out to get around it: it can read the TOTP seed and answer the code itself |
 | **L2 Sealed** | Touch ID / Windows Hello required in every unlock; credentials sealed | Reading a sealed credential without your finger or PIN (each open, or each short window); a consent-tier operation without a touch, when you require one; screen-control agents clicking approve (they cannot touch the sensor). Everything else as L1 — **still friction** against a process running as you | A program running as you using what you approve: it can ask while you are there, race a look-alike prompt, use an unlocked grant, or get around the gate itself (below); code patched to capture your next unlock |
-| **L3 Separated** | Authority and LOTR as a separate service account, code and policy administrator-owned | Use before unlock, policy downgrade, seed and credential reads, the gate bypasses below — **the agent boundary** | An attacker inside your session after you unlock. **gt 0.20.0 does not ship L3.** |
+| **L3 Separated** | Authority and LOTR as a separate service account, code and policy administrator-owned | Use before unlock, policy downgrade, seed and credential reads, the gate bypasses below — **the agent boundary** | An attacker inside your session after you unlock. **gt 0.20.1 does not ship L3.** |
 
 | Threat | L1 | L2 |
 |---|---|---|
@@ -277,7 +277,7 @@ gt's hooks and state, the plugin files, LOTR — but every other program of your
 * **Look like gt's own processes.** The shim seat and the credential consumer are checked by
   the real path of the file a process runs; a process of yours can run the real file with its
   own input. A replacement shim starts with no grant, and the first shim keeps its seat while
-  it lives. The real file can also be made to run someone else's code: before 0.20.0's re-review
+  it lives. The real file can also be made to run someone else's code: before 0.20.1's re-review
   fix, `PYTHONPATH` pointing at a `sitecustomize.py` ran arbitrary code inside the real file,
   under its trusted identity. Now every trusted Python process (`lotrd.py`, `lotr_mcp.py`,
   `gt_vault_mcp.py`, `gt_unlockd.py`) must also run under an isolated interpreter: gt starts
@@ -383,7 +383,7 @@ grant, and `gt_unlock.py status` / doctor label each with its real level:
 | sops + age, identity in the Secure Enclave or a YubiKey | **L2** |
 | 1Password CLI (`op:`) | **L2** (its own biometric unlock and idle limit) |
 | Bitwarden CLI (`bw:`) | **L1** after unlock (the session key sits in the environment or a file) |
-| HashiCorp Vault (`vault:`) | **L1** (0.20.0 does not hold Vault tokens in the authority) |
+| HashiCorp Vault (`vault:`) | **L1** (0.20.1 does not hold Vault tokens in the authority) |
 | gt's sealed store (`sealed:`) | **L2** |
 
 ### 5.5 Scheduled jobs
@@ -433,7 +433,7 @@ python $u verify
   factors, fewer allowed factors, shorter TTL and idle, stricter scopes, `locked_keys` the user
   cannot change, a pinned Entra tenant. A floor file gt cannot verify locks everything.
 * The floor is **binding only at L3**, when the enforcing code is also administrator-owned;
-  0.20.0 runs the authority as the user. Say so in your own policy documents. Where users are
+  0.20.1 runs the authority as the user. Say so in your own policy documents. Where users are
   administrators of their own machines, admin-owned protection is bounded by that password.
 * **Signing:** release builds of the macOS helper are Developer ID signed and notarized. The
   Windows Hello script is unsigned by design; sign it with your own certificate where policy
@@ -452,7 +452,7 @@ python $u verify
   no policy and keeps everything gated locked), then enrol again. Sealed credentials are lost
   with it — that is what sealed means; keep their originals in your store.
 * **Turn it off:** `gt_unlock.py policy disable` (needs your factors) or
-  `gt_settings.py set unlock off`. Off, every hook behaves exactly as before 0.20.0.
+  `gt_settings.py set unlock off`. Off, every hook behaves exactly as before 0.20.1.
 * **Check it:** `gt_unlock.py status`, `gt_unlock.py verify`, `gt_unlock.py audit -n 50`.
 
 ## 8. gt sandbox mode
@@ -549,7 +549,7 @@ itself.
   bytes are the only ones it uses, for accepting and rejecting alike, and it removes the file
   through the same folder handle; it never re-opens an inbox path. So a sandboxed writer racing
   the broker cannot swap in a symlink, a hard link or another folder to have a file it may not
-  read copied into the vault (the 2026-10-04 review demonstrated exactly that against 0.20.0's
+  read copied into the vault (the 2026-10-04 review demonstrated exactly that against 0.20.1's
   first build, with the TOTP seed; it is now a regression test, deterministic and live under
   the sandbox runtime). A request must name this vault and pass the queue's validation (paths
   inside the vault, no generated files, Sources or Core rules, a plain request id). The broker
@@ -624,10 +624,10 @@ in its own process, which the sandbox does not wrap.
   is refused with the command to use (0.20.1): it used to write the deny rules while the setting
   — and with it the gt-vault MCP (`vault_mcp auto`) — stayed off, so after a restart the vault
   was unreachable, and it skipped gt unlock's confirmation. `gt_sandbox.py remove` always works.
-* **Rolling back** to a gt older than 0.20.0 (which has no `gt_sandbox.py` and no
+* **Rolling back** to a gt older than 0.20.1 (which has no `gt_sandbox.py` and no
   `gt_unlock.py`) is refused by `install.sh` while sandbox mode or gt unlock is on, or while
   gt's sandbox entries are still in `settings.json`, with the exact commands to switch them off
-  first (0.20.1): the older release could never remove them. A rollback to 0.20.0 is allowed.
+  first (0.20.1): the older release could never remove them. A rollback to a release that carries `gt_sandbox.py` is allowed.
 * gt's vault tools run from the assistant's shell (`gt_tasks`, `gt_lint`, `gt_log`, …) cannot
   read or write the vault: the assistant uses the MCP tools, or you run them in a terminal —
   each tool's one-line refusal names the command (see the preview note above).

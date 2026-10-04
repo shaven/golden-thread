@@ -242,7 +242,8 @@ class Engine:
                 result = None
                 for i, (opd, a) in enumerate(plan):
                     result = http.call(opd, a, cursor=cursor if i == len(plan) - 1 else None)
-            data, notes = self._shape(result.get("data"), prof, select)
+            data, notes = self._shape(result.get("data"), prof, select,
+                                       bool(result.get("next_cursor")))
             notes = list(result.get("notes") or []) + list(notes)
             env = {"ok": True, "connection": connection, "identity": identity,
                    "client": client_id or LOCAL_CLIENT, "op": op, "tier": tier,
@@ -351,11 +352,12 @@ class Engine:
                 probe["graphql_query"] = a.get("query", "")
         return policy.classify(conn, probe)
 
-    def _shape(self, data, prof, select):
+    def _shape(self, data, prof, select, has_cursor=False):
         lim = self._limits()
         return shaping.shape(data, noise_keys=prof.get("noise_keys", ()), select=select,
                              max_chars=lim.get("max_result_chars", 24000),
-                             default_page=lim.get("default_page", 20))
+                             default_page=lim.get("default_page", 20),
+                             has_cursor=has_cursor)
 
     def _audit(self, base, identity, tier, verdict, status):
         try:

@@ -1,4 +1,4 @@
-"""gt_unlock.py and the REAL authority process, end to end (0.20.0): start the daemon, enrol
+"""gt_unlock.py and the REAL authority process, end to end (0.20.1): start the daemon, enrol
 TOTP (bootstrap where no platform factor is available), turn unlock on with a fresh code, see
 the gate locked, unlock, lock, stop. The same sequence is the Windows VM proof.
 """

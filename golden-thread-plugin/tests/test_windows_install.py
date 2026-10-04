@@ -376,7 +376,7 @@ class DoctorIsolation(unittest.TestCase):
 
 class ScheduleOnWindows(Sandbox):
     def test_jobs_go_to_task_scheduler_not_launchd(self):
-        # 0.19.2 refused these in words; 0.20.0 runs them on Task Scheduler
+        # 0.19.2 refused these in words; 0.20.1 runs them on Task Scheduler
         # (tests/test_schedule_task_scheduler.py). Never launchctl, never os.getuid.
         sched = load_module(SCRIPTS / "gt_schedule.py", "gt_schedule_win")
         seen = []

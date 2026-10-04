@@ -267,7 +267,7 @@ INSTALLED = (0, 9)
 
 
 def _sandbox_env(home):
-    """The environment for an install into the throwaway `home`. Windows (0.20.0): Python's
+    """The environment for an install into the throwaway `home`. Windows (0.20.1): Python's
     expanduser reads USERPROFILE, not HOME, so with HOME alone every Python step of the install
     wrote the REAL user's ~/.claude and the sandbox's settings.json was never wired."""
     env = dict(os.environ, HOME=str(home))
@@ -309,7 +309,7 @@ def run_install(repo, home, vault):
 
 def _rmtree(path):
     """shutil.rmtree that clears read-only bits first: git writes its objects read-only and
-    Windows refuses to delete those, so ignore_errors left every sandbox behind (0.20.0)."""
+    Windows refuses to delete those, so ignore_errors left every sandbox behind (0.20.1)."""
     import stat
 
     def retry(func, p, _exc):

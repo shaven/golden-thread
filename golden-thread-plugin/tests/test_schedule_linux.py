@@ -1,6 +1,6 @@
 """gt_schedule.py on Linux: a systemd --user timer, or a tagged crontab line (0.20.1, M11).
 
-0.20.0 wrote a launchd plist on Linux and called launchctl, which Linux does not have: every
+0.20.1 wrote a launchd plist on Linux and called launchctl, which Linux does not have: every
 Linux job was a file nothing ran, and it was still listed as installed. Now Linux registers the
 job with systemd --user (preferred) or cron, and an old plist migrates to it.
 
@@ -237,7 +237,7 @@ class Cron(LinuxCase):
 
 
 class FromTheOldPlist(LinuxCase):
-    """0.20.0 left a launchd plist on Linux. It is a broken job until migrated."""
+    """0.20.1 left a launchd plist on Linux. It is a broken job until migrated."""
 
     def old_plist(self):
         self.m.AGENTS.mkdir(parents=True)

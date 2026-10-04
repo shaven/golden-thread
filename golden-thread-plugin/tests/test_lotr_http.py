@@ -414,6 +414,19 @@ class TestShaping(unittest.TestCase):
         self.assertIn("items", notes[0])
         self.assertIn("37 of 57", notes[0])
 
+    def test_list_truncation_note_is_truthful_about_the_cursor(self):
+        data = {"value": list(range(30))}
+        _, notes = shaping.shape(data, default_page=20)          # unpaged: no cursor exists
+        self.assertIn("showing 20 of 30", notes[0])
+        self.assertIn("10 more items were cut", notes[0])
+        self.assertIn("narrow the query", notes[0])
+        self.assertNotIn("use the cursor", notes[0])
+        self.assertNotIn("next_cursor", notes[0])
+        _, notes = shaping.shape(data, default_page=20, has_cursor=True)
+        self.assertIn("showing 20 of 30", notes[0])
+        self.assertIn("next_cursor", notes[0])
+        self.assertNotIn("no cursor", notes[0])
+
     def test_max_chars(self):
         data = [{"title": "x" * 100, "n": i} for i in range(15)]
         out, notes = shaping.shape(data, max_chars=500, default_page=50)

@@ -36,7 +36,7 @@ REPO = Path(__file__).resolve().parent.parent
 # tests/test_sync_gt_src.py asserts every test module that reaches into dev/ uses this.
 HAS_DEV = (REPO / "dev").is_dir()
 
-# gt unlock (0.20.0): the suite must NEVER raise a real prompt -- no code dialog, no Touch ID
+# gt unlock (0.20.1): the suite must NEVER raise a real prompt -- no code dialog, no Touch ID
 # sheet, no Windows Hello prompt, no browser -- and never leave an unlock daemon behind. On
 # 2026-10-03 a test run put a real "enter 6-digit code" dialog on the owner's screen. Every
 # test process, and every process a test starts (Sandbox.env re-adds both below), carries:
@@ -45,7 +45,7 @@ HAS_DEV = (REPO / "dev").is_dir()
 #                         real daemon starts and stops it itself, and asserts it is gone
 UNLOCK_TEST_ENV = {"GT_UNLOCK_NO_UI": "1", "GT_UNLOCK_NO_START": "1"}
 os.environ.update(UNLOCK_TEST_ENV)
-# gt_schedule (0.20.0): launchd's domain is gui/<uid> and Task Scheduler's is the user's,
+# gt_schedule (0.20.1): launchd's domain is gui/<uid> and Task Scheduler's is the user's,
 # whatever HOME says, so a test must never change either. GT_TEST_SANDBOX makes gt_schedule
 # refuse every scheduler write and never treat any HOME as the real user's. Same reach as
 # UNLOCK_TEST_ENV: every test process, and every process a test starts (Sandbox.env).
@@ -142,7 +142,7 @@ WIKI_SCRIPTS = WIKI / "scripts"
 # The interpreter every test runs a script with. On native Windows `python3` on PATH is the
 # Microsoft Store stub (python.org installs python.exe and py.exe, never python3.exe), so the
 # suite uses the interpreter running it -- install.sh's rule, which refuses anything under
-# ...\WindowsApps\ (0.20.0). macOS and Linux are unchanged.
+# ...\WindowsApps\ (0.20.1). macOS and Linux are unchanged.
 IS_WINDOWS = os.name == "nt"
 if IS_WINDOWS:
     if "\\windowsapps\\" in sys.executable.lower():
@@ -174,7 +174,7 @@ if IS_WINDOWS:
 # How gt writes a .py hook COMMAND on this platform (gt_components.hook_python): `python3 -B`
 # everywhere but native Windows, where `python3` is the Store stub and the command names the
 # interpreter by absolute "/" path, in UTF-8 mode.
-# On macOS (0.20.0) an install that recorded an interpreter for hooks (the one that passed the
+# On macOS (0.20.1) an install that recorded an interpreter for hooks (the one that passed the
 # write probe, in <home>/.claude/golden-thread/python) names it instead: py_hook_prefix(home).
 PY_HOOK_PREFIX = ([Path(PYTHON).as_posix(), "-X", "utf8", "-B"] if IS_WINDOWS
                   else ["python3", "-B"])
@@ -202,7 +202,7 @@ def py_hook_command(script, *args, home=None):
 
 
 # gt-lotr 0.3.0 runs on native Windows (its local door is gt core's named pipe, gt_ipc), so the
-# blanket LOTR_POSIX_ONLY skip is gone (0.20.0). A lotr test that still cannot run there skips
+# blanket LOTR_POSIX_ONLY skip is gone (0.20.1). A lotr test that still cannot run there skips
 # with its specific reason: WIN_MODE_BITS below, or the unix-socket-mechanics reason in the test.
 
 
@@ -216,7 +216,7 @@ def _has_tzdb():
 
 
 # Priority-window rules name IANA zones. macOS and Linux ship the database; native Windows has
-# none unless the `tzdata` package is installed, and gt_tasks then says so on stderr (0.20.0).
+# none unless the `tzdata` package is installed, and gt_tasks then says so on stderr (0.20.1).
 HAS_TZDB = _has_tzdb()
 needs_tzdb = unittest.skipUnless(HAS_TZDB, "no IANA time-zone database on this machine (native "
                                            "Windows without the tzdata package); gt_tasks "
@@ -228,7 +228,7 @@ needs_tzdb = unittest.skipUnless(HAS_TZDB, "no IANA time-zone database on this m
 # reason; a product bug is fixed, not skipped). Use these, or a specific reason of the same kind.
 # A fake external program (gh, ps, git, ssh ...) is NOT such a reason: write it with
 # tests/_fakes.install_fake(), which makes the same `#!` script runnable on native Windows
-# (0.20.0; it replaced WIN_FAKE_EXE, which skipped 31 tests there).
+# (0.20.1; it replaced WIN_FAKE_EXE, which skipped 31 tests there).
 WIN_MODE_BITS = ("asserts POSIX permission bits (chmod/st_mode); Windows has no mode bits -- "
                  "st_mode always reads 0o666 or 0o444")
 WIN_CHMOD_FAULT = ("injects a failure with chmod (an unreadable file or unwritable directory); "
@@ -308,19 +308,19 @@ class Sandbox(unittest.TestCase):
         self.tmp = Path(tempfile.mkdtemp(prefix="gt-test-"))
         # A cleanup, not only tearDown: tearDown never runs when setUp raises -- a skipTest()
         # in a subclass's setUp included -- and every such test leaked its whole sandbox
-        # (0.20.0; tests/prun.py now fails a unit that leaves anything in TMPDIR).
+        # (0.20.1; tests/prun.py now fails a unit that leaves anything in TMPDIR).
         self.addCleanup(self._remove_sandbox, self.tmp)
         self.home = self.tmp / "home"
         (self.home / ".claude").mkdir(parents=True)
         env = {k: v for k, v in os.environ.items()
                if not k.startswith(("CLAUDE", "GT_"))}
         env.update(GIT_ID)
-        env.update(UNLOCK_TEST_ENV)            # no real prompt, no stray daemon (0.20.0)
-        env.update(SANDBOX_TEST_ENV)           # never the real launchd/schtasks (0.20.0)
+        env.update(UNLOCK_TEST_ENV)            # no real prompt, no stray daemon (0.20.1)
+        env.update(SANDBOX_TEST_ENV)           # never the real launchd/schtasks (0.20.1)
         env["HOME"] = str(self.home)
         if IS_WINDOWS:
             # Windows Python's expanduser reads USERPROFILE, not HOME: without this every tool a
-            # test runs would read the developer's real ~/.claude (0.20.0).
+            # test runs would read the developer's real ~/.claude (0.20.1).
             env["USERPROFILE"] = str(self.home)
             env["PYTHONUTF8"] = "1"
             # gt_scratch's Windows root is %LOCALAPPDATA%, which a sandbox HOME does not move:
@@ -475,7 +475,7 @@ def source_fingerprint(*dirs):
 def _path_variants(old, new):
     """[(old form, new form)], longest first. On Windows a path is written three ways -- native
     "C:\\x", "/"-separated (hook commands, git) and JSON-escaped "C:\\\\x" -- and each form
-    must be rewritten as itself (0.20.0)."""
+    must be rewritten as itself (0.20.1)."""
     pairs = {(old, new), (os.path.realpath(old), new)}
     if IS_WINDOWS:
         for o, n in list(pairs):

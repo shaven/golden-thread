@@ -1,4 +1,4 @@
-"""gt unlock, the Windows Hello factor (0.20.0): scripts/gt_unlock_hello.py + .ps1.
+"""gt unlock, the Windows Hello factor (0.20.1): scripts/gt_unlock_hello.py + .ps1.
 
 Everywhere: the factor is driven through a FAKE helper that answers the way
 gt_unlock_hello.ps1 does, signing with a throwaway RSA key (tests/_unlock_keys.RSAKey), so

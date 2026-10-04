@@ -5,7 +5,7 @@
 
 A guided walkthrough for your first session. Six steps, ~15 minutes.
 
-**Requirements:** Python 3.8+, Claude Code installed. Written against **gt v0.20.0**.
+**Requirements:** Python 3.8+, Claude Code installed. Written against **gt v0.20.1**.
 
 ---
 
@@ -230,7 +230,7 @@ python3 $U verify              # the level this machine runs at, check by check
 ```
 
 It is not anti-malware: something already running as you can wait for you to unlock. In
-0.20.0 the gate is **friction** against the assistant and accidents, not a boundary: a program
+0.20.1 the gate is **friction** against the assistant and accidents, not a boundary: a program
 running as you — the assistant's own shell included — can get around it if it sets out to. What
 holds even then, with Touch ID / Hello (L2): every open of a sealed credential needs your finger
 or PIN, and so can each consent-tier operation. [`SECURITY.md`](SECURITY.md) says exactly what

@@ -102,7 +102,7 @@ class DoctorModulesCheck(DoctorBase):
         (gt / "plugin.json").write_text('{"name": "gt", "version": "0.14.0"}')
         self.module("demo", "on", ">=0.14.0,<0.15.0")
         self.module("wiki", "on", ">=0.14.0")
-        self.module("far", "on", ">=0.20.0")
+        self.module("far", "on", ">=0.20.1")
         self.module("quiet", "off", ">=0.14.0")
 
     def module(self, name, default, requires):
@@ -149,7 +149,7 @@ class DoctorModulesCheck(DoctorBase):
         self.assertIn("not installed by choice (module default)", self.line(row, "quiet"))
         far = self.line(row, "far")
         self.assertIn("does NOT admit gt 0.14.0", far)
-        self.assertIn("requires gt >=0.20.0", far)
+        self.assertIn("requires gt >=0.20.1", far)
 
     def test_on_module_whose_plugin_is_missing_or_disabled_needs_attention(self):
         self.register(installed=("demo",), enabled=())
@@ -239,7 +239,7 @@ class DoctorVaultCheck(DoctorBase):
 @unittest.skipUnless(os.name == "nt", "Windows-only: the Task Scheduler backend (macOS has "
                                       "DoctorScheduleCheck; Linux has no scheduler backend)")
 class DoctorScheduleCheckOnWindows(DoctorBase):
-    """`schedule` on Windows (0.20.0): an installed job is a spec + wrapper under
+    """`schedule` on Windows (0.20.1): an installed job is a spec + wrapper under
     ~/.claude/golden-thread/jobs, judged by Task Scheduler's Last Result. schtasks is the stub
     from test_schedule_task_scheduler, reached through GT_SCHTASKS_STUB -- never the real one."""
 
@@ -465,7 +465,7 @@ class DoctorWorkersAndLint(DoctorBase):
         self.install_hook_scripts(["gt_workers.py"])
         row = [c for c in json.loads(self.doctor("--json").stdout)["checks"]
                if c["check"] == "workers"][0]
-        # skipped on native Windows: no `ps -eo`, so gt_workers says NOT CHECKED (0.20.0) and
+        # skipped on native Windows: no `ps -eo`, so gt_workers says NOT CHECKED (0.20.1) and
         # the doctor reports it as not supported there (0.20.1)
         self.assertIn(row["state"], ("skipped",) if IS_WINDOWS else ("ok", "warn"))
 
@@ -844,7 +844,7 @@ class DoctorUnderlyingCheckCrashes(DoctorBase):
         self.assertEqual(row["state"], "unknown", str(row))
 
     def test_a_worker_check_that_could_not_look_is_unknown_not_clean(self):
-        # 0.20.0: gt_workers prints NOT CHECKED when it cannot read the process table (native
+        # 0.20.1: gt_workers prints NOT CHECKED when it cannot read the process table (native
         # Windows); that is neither "clean" nor a stray to reap.
         (self.hooks / "gt_workers.py").write_text(
             "print('GT workers: NOT CHECKED — the process table could not be read')\n",

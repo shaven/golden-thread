@@ -131,7 +131,7 @@ class ReportCardInstalled(Sandbox):
         self.assertRegex(p.stdout, r"Modules: .*report-card on")
         self.assertTrue((self.hooks_dir / SCRIPT).is_file())
         # PY_HOOK_PREFIX: "python3 -B", or on Windows the interpreter by "/" path, -X utf8 -B
-        pre = py_hook_prefix(self.home)       # macOS: the recorded interpreter (0.20.0)
+        pre = py_hook_prefix(self.home)       # macOS: the recorded interpreter (0.20.1)
         n = len(pre)
         got = sorted((ev, argv[n + 1:]) for ev, argv in self.card_entries())
         self.assertEqual(got, sorted(EXPECTED_HOOKS))

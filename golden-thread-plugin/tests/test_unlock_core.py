@@ -1,4 +1,4 @@
-"""gt unlock, the authority (0.20.0): TOTP, policy merge and the admin floor, grants bound to
+"""gt unlock, the authority (0.20.1): TOTP, policy merge and the admin floor, grants bound to
 the exact process, the mcp_only door, every revocation trigger, fail-closed, recovery codes,
 the unattended allow-list, and "off changes nothing".
 
@@ -612,7 +612,7 @@ class Sealed(AuthorityCase):
     """Phase 2: sealed creds are unreadable while locked; the cache dies with the grant."""
 
     def test_sealed_secret_needs_a_grant_and_the_cache_dies_on_lock(self):
-        """0.20.0 review: the broker serves the REQUESTING process (the shim under mcp_only),
+        """0.20.1 review: the broker serves the REQUESTING process (the shim under mcp_only),
         every unseal is its own platform factor by default, and a window's cache is per
         subject and grant and dies with the grant."""
         self.standard()

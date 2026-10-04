@@ -1,4 +1,4 @@
-"""gt unlock, the Touch ID factor (0.20.0): the gt-presence helper and gt_unlock_touchid.py.
+"""gt unlock, the Touch ID factor (0.20.1): the gt-presence helper and gt_unlock_touchid.py.
 
 The helper is BUILT from the shipped Swift source into a temp dir, then exercised with
 NON-BIOMETRIC Secure Enclave keys (TouchIdFactor(insecure_test_keys=True)), so no test ever
@@ -76,7 +76,7 @@ def write_fake(name, body):
     with open(path, "w", encoding="utf-8", newline="\n") as f:
         f.write("#!/bin/sh\ncat >/dev/null\n" + body + "\n")
     os.chmod(path, 0o755)
-    # Recorded, as install records a helper it built (0.20.0 review): these tests are about
+    # Recorded, as install records a helper it built (0.20.1 review): these tests are about
     # what the helper SAYS, so it must get past the install-record check first.
     T.record_helper(path)
     return path

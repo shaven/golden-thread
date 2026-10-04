@@ -7,7 +7,7 @@ A Claude Code plugin that turns an Obsidian vault into the single source of trut
 
 
 > [!IMPORTANT]
-> **0.20.0: gt unlock and gt sandbox mode (both off by default), and Windows, finished.** Turned on, agents need your
+> **0.20.1: gt unlock and gt sandbox mode (both off by default), and Windows, finished.** Turned on, agents need your
 > presence — TOTP plus Touch ID (macOS) or Windows Hello, optionally Microsoft Entra ID sign-in —
 > before they use LOTR connections, credentials, publishing or gt's own guards. Callers are
 > identified by the kernel, approvals are hardware signatures gt verifies itself, credentials can

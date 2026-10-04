@@ -94,7 +94,7 @@ class RecallBench(Sandbox):
 
 
 class KeywordRecallSkipsLockedFolders(Sandbox):
-    """0.20.0: a folder holding gt_lock.py's .gt-locked stub is absent to recall -- never
+    """0.20.1: a folder holding gt_lock.py's .gt-locked stub is absent to recall -- never
     searched, never surfaced (not even a plaintext page left beside the lock), one notice."""
 
     def test_a_locked_folder_is_never_surfaced(self):

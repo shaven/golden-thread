@@ -1,4 +1,4 @@
-"""A client process for the unlock tests (0.20.0): the authority identifies callers by their
+"""A client process for the unlock tests (0.20.1): the authority identifies callers by their
 KERNEL identity and ancestry, so each role (a shim, a Bash-spawned process, a fake `claude`)
 must be a real process of its own.
 

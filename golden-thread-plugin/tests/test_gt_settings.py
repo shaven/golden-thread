@@ -20,9 +20,9 @@ from _harness import Sandbox, SCRIPTS, load_module, WATCH, REPORT_CARD
 
 TOOL = SCRIPTS / "gt_settings.py"
 EXPECTED = {
-    # 0.20.0: gt unlock, off by default; its source of truth is the unlock policy file.
+    # 0.20.1: gt unlock, off by default; its source of truth is the unlock policy file.
     "unlock": ("off", ["off", "on"]),
-    # 0.20.0: gt sandbox mode (gt_sandbox.py), its read sub-option, and the vault MCP switch.
+    # 0.20.1: gt sandbox mode (gt_sandbox.py), its read sub-option, and the vault MCP switch.
     "sandbox_mode": ("off", ["off", "on"]),
     "sandbox_vault_reads": ("deny", ["deny", "allow"]),
     "vault_mcp": ("auto", ["auto", "on", "off"]),

@@ -179,7 +179,7 @@ class KnowledgeChecksTest(LintBase):
         self.assertNoFinding(f, "broken-link", "Knowledge/Table.md")
 
     def test_a_link_to_a_locked_page_is_locked_not_broken(self):
-        """0.20.0: a page locked by gt_lock.py exists only as <page>.md.age. The link is right;
+        """0.20.1: a page locked by gt_lock.py exists only as <page>.md.age. The link is right;
         the page is unreadable while locked -- skipped with ONE notice, never broken-link."""
         self.index("Links")
         self.w("Knowledge/Links.md", "[[Vault Keys]] [[Secrets/Vault Keys]] [[Truly Gone]]\n")

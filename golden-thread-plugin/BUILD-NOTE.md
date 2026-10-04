@@ -1,4 +1,4 @@
-# Build note — gt 0.20.0
+# Build note — gt 0.20.1
 
 **Read this first if you are the person taking this tree into the other repository.**
 
@@ -8,13 +8,13 @@
 > content reaches you from the owner. `SOURCE.json`, at the root of gt-src, names the exact commit
 > the tree was cut from.
 
-> **Not released yet.** 0.20.0 = the Windows completion (built as 0.19.3, never released) plus
+> **Not released yet.** 0.20.1 = the Windows completion (built as 0.19.3, never released) plus
 > gt unlock (security, off by default; `SECURITY.md`) plus the Claude Code integration items 0–4
 > and 6 of `plan-0.20.0-claude-code-integration.md` (stage plugin agents with model and effort,
 > the `gt:pipeline-stage` workflow, LOTR `outputSchema`, gt-lotr's MCP server on Windows, the
 > `--dry-run` placement fix; no skill forks). Built on `feat/0.20.0` from `8078835`.
 > Nothing is pushed, tagged or synced to gt-src until the owner says release; then it goes straight
-> to main. The table below is 0.19.1's, with 0.19.2 and 0.20.0 on top. There is no published 0.19.3.
+> to main. 0.20.1 supersedes the never-released 0.20.0 (re-cut, history kept). The table below is 0.19.1's, with 0.19.2 and 0.20.1 on top. There is no published 0.19.3.
 
 ---
 
@@ -22,11 +22,11 @@
 
 | Plugin | Version | Note |
 |---|---|---|
-| gt (core) | **0.20.0** | 0.20.0: gt unlock (an authority daemon, TOTP + Touch ID / Windows Hello / Entra ID factors, sealed and brokered credentials, gated settings and publishing, folder locks, `verify` and doctor rows `unlock`/`security`; off by default) + the Windows completion: Windows completed (a `python3` shim for the model's shell, LF for every gt write, scheduled jobs on Task Scheduler, the test suite runs on Windows), installer rollback on failure, the scheduled jobs' interpreter chosen and proven rather than overwritten. 0.19.2: native Windows install (`install.cmd`, interpreter resolution, hooks under Git Bash, `/` manifest keys, LF vault writes, UTF-8 output). 0.19.1: model and effort profiles, recall benchmark, prompt hints (off), supersession and expiry at read time, queue-guard tokens, no bytecode in gt-src, post-install release resolution and receipt, one launchd interpreter, commit-gate timeout, Stop-validator install fix (no published 0.19.0) |
-| gt-wiki | **0.2.7** | `requires_gt >=0.20.0,<0.21.0` only |
-| gt-demo, gt-farm, gt-flow, gt-report-card, gt-watch | **0.20.0** | they move with gt |
-| gt-visualize | **0.4.4** | `requires_gt >=0.20.0,<0.21.0` only |
-| gt-usage | **0.1.6** | `requires_gt >=0.20.0,<0.21.0` only |
+| gt (core) | **0.20.1** | 0.20.1: gt unlock (an authority daemon, TOTP + Touch ID / Windows Hello / Entra ID factors, sealed and brokered credentials, gated settings and publishing, folder locks, `verify` and doctor rows `unlock`/`security`; off by default) + the Windows completion: Windows completed (a `python3` shim for the model's shell, LF for every gt write, scheduled jobs on Task Scheduler, the test suite runs on Windows), installer rollback on failure, the scheduled jobs' interpreter chosen and proven rather than overwritten. 0.19.2: native Windows install (`install.cmd`, interpreter resolution, hooks under Git Bash, `/` manifest keys, LF vault writes, UTF-8 output). 0.19.1: model and effort profiles, recall benchmark, prompt hints (off), supersession and expiry at read time, queue-guard tokens, no bytecode in gt-src, post-install release resolution and receipt, one launchd interpreter, commit-gate timeout, Stop-validator install fix (no published 0.19.0) |
+| gt-wiki | **0.2.7** | `requires_gt >=0.20.1,<0.21.0` only |
+| gt-demo, gt-farm, gt-flow, gt-report-card, gt-watch | **0.20.1** | they move with gt |
+| gt-visualize | **0.4.4** | `requires_gt >=0.20.1,<0.21.0` only |
+| gt-usage | **0.1.6** | `requires_gt >=0.20.1,<0.21.0` only |
 | gt-lotr | **0.3.0** | consumes gt unlock (grant check per call, grant ids in the audit, `mcp_only`, biometric consent option, `sealed:`/BYO secret refs); a Windows named-pipe front door; `outputSchema` on its four tools (MCP 2025-06-18+); on Windows the installer starts its MCP server with the resolved Python; still off by default |
 
 Skills stay **36** (every one now declares a `model_intent`). gt_lint checks **24 → 25**
@@ -40,7 +40,7 @@ lives with the install choices. Doctor checks **16 → 17** (`model-policy`). Ho
 The full account, one section per theme with the why, is `../CHANGELOG.md` (it travels in gt-src).
 The short version:
 
-- **gt sandbox mode (0.20.0, off by default):** `gt_settings.py set sandbox_mode on` writes Claude
+- **gt sandbox mode (0.20.1, off by default):** `gt_settings.py set sandbox_mode on` writes Claude
   Code's sandbox + permission rules into `~/.claude/settings.json` (`gt_sandbox.py`, recorded and
   cleanly removable); the vault is reached through the new `gt-vault` MCP server
   (`gt_vault_mcp.py`, in gt's plugin manifest) and the write queue, with `~/.gt-inbox` as the one

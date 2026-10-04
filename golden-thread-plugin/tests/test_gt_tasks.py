@@ -115,7 +115,7 @@ class GtTasksTest(Sandbox):
         self.assertIn("| nested task | `parent/child` |", text)
 
     def test_a_locked_project_folder_is_skipped_with_one_notice(self):
-        """0.20.0: a project folder holding gt_lock.py's .gt-locked stub is absent -- its tasks
+        """0.20.1: a project folder holding gt_lock.py's .gt-locked stub is absent -- its tasks
         (and its sub-projects') are not rolled up, one stderr notice says so, never an error."""
         self.project("alpha", tasks=["- [ ] visible task [p:: 2]"])
         self.project("vaulted", tasks=["- [ ] hidden task [p:: 1]"])
@@ -518,7 +518,8 @@ class TaskEventsTest(Sandbox):
     def test_only_changes_are_emitted_and_an_unchanged_rerun_adds_nothing(self):
         self.project("alpha", tasks=["- [ ] one [p:: 2]", "- [ ] two"])
         self.seed()
-        seeded = len(self.events())
+        before = self.events()
+        seeded = len(before)
         self.rollup()
         self.assertEqual(len(self.events()), seeded, "an unchanged rollup emitted events")
         self.project("alpha", tasks=["- [x] one [p:: 1]", "- [ ] two", "- [ ] three"])
@@ -526,7 +527,12 @@ class TaskEventsTest(Sandbox):
             self.rollup(*args)
             self.assertEqual(len(self.events()), seeded, "%s emitted events" % args)
         self.rollup()
-        new = self.events()[seeded:]
+        # events.jsonl is merged in timestamp order, ties broken by session id: events written
+        # within the same second as the seed can sort BEFORE it, so "the new ones" are chosen by
+        # identity, never by position (a position slice flaked on a fast Windows run).
+        import json
+        known = {json.dumps(e, sort_keys=True) for e in before}
+        new = [e for e in self.events() if json.dumps(e, sort_keys=True) not in known]
         self.assertEqual(sorted((e["kind"], e["note"]) for e in new),
                          [("task.done", "one"), ("task.open", "three")])
         self.assertEqual({e["project"] for e in new}, {"alpha"})

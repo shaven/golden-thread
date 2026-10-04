@@ -78,7 +78,7 @@ COVERED = {
     "scripts/gt_pipeline.py": ("flag", "init", "add", "set", "remove", "render"),
     "scripts/gt_ingest_pipeline.py": ("survey", "packet", "fan-in", "reconcile", "draft",
                                       "promote-scan", "promote-plan"),
-    # 0.20.0: per-file age locks -- add writes FILE.age, removes the plaintext and the stub
+    # 0.20.1: per-file age locks -- add writes FILE.age, removes the plaintext and the stub
     "scripts/gt_lock.py": ("add", "restore"),
 }
 

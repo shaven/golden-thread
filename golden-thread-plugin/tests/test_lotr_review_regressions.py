@@ -1,4 +1,4 @@
-"""Regression tests for the independent security review of gt 0.20.0 / gt-lotr 0.3.0
+"""Regression tests for the independent security review of gt 0.20.1 / gt-lotr 0.3.0
 (2026-10-03 16:15 CDT): the gt-lotr side, the Touch ID helper, and the review's low findings.
 
 Each test failed against fe571f2, the reviewed commit; the finding it pins is in its docstring.

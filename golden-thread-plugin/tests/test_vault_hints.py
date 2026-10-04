@@ -73,7 +73,7 @@ class VaultHints(HintsBase):
         self.assertNotIn("nightly snapshots are kept", out)
 
     def test_a_locked_knowledge_folder_is_never_surfaced(self):
-        """0.20.0: Knowledge/ holding gt_lock.py's stub is absent: no entry pointing into it is
+        """0.20.1: Knowledge/ holding gt_lock.py's stub is absent: no entry pointing into it is
         hinted, neither a plaintext page left beside the lock nor a locked <page>.md.age."""
         self.config(vault_hints="on")
         k = self.vault / "Knowledge"

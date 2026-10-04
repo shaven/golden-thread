@@ -5,7 +5,7 @@
 #
 #   Selectors (test modules or units) run a subset; only a FULL run records a receipt.
 #   -j N is a worker count and nothing else: it goes to the runner as GT_TEST_JOBS=N, so a run
-#   with -j and no selector is still FULL and runs both gates (0.20.0; see step 4).
+#   with -j and no selector is still FULL and runs both gates (0.20.1; see step 4).
 #   --affected (0.18.1): the tests mapped to this branch's changes (tests/prun.py --affected,
 #   computed HERE, where the git history is) run on the runner; a pass records a SCOPED receipt
 #   here, which the commit guard accepts on a feature branch only.
@@ -26,7 +26,7 @@
 #      the verdict says the FULL suite passed AND both gates (secrets, code) passed, and the tree
 #      is UNCHANGED since the snapshot, does this machine record a receipt (gt_test_receipt.py),
 #      with what = "remote:tests/run.sh@<host>" and the three gate verdicts on it.
-#      Until 0.20.0 this passed `-j N` to tests/run.sh, which took it for a test selector and ran
+#      Until 0.20.1 this passed `-j N` to tests/run.sh, which took it for a test selector and ran
 #      a "subset" with no gates -- and this script recorded a full receipt from the exit code
 #      alone. Every remote receipt on 2026-10-03 had skipped the secrets scan. No verdict line,
 #      or one that does not name all three as pass, means no receipt.
@@ -60,7 +60,7 @@ fi
 [ -n "$HOST" ] || HOST=claudebox
 case "$JOBS" in ''|*[!0-9]*) [ -z "$JOBS" ] || { echo "-j wants a number, got: $JOBS"; exit 2; } ;; esac
 AFF_JSON=""; LOG=""; KEEP_LOG=no
-# Its own temp files go when it exits (0.20.0: the leak check in tests/prun.py caught both left
+# Its own temp files go when it exits (0.20.1: the leak check in tests/prun.py caught both left
 # behind on every run). A FAILED run keeps its log, because the failure message names it.
 cleanup() { [ -z "$AFF_JSON" ] || rm -f "$AFF_JSON"
             [ -z "$LOG" ] || [ "$KEEP_LOG" = yes ] || rm -f "$LOG"; }
@@ -80,7 +80,7 @@ print("" if d["full"] else " ".join(d["modules"]) or "-")' "$AFF_JSON")
 fi
 # The runner has no git history to map changes with, so an --affected subset is sent as plain
 # selectors -- plus --gates, so the secrets and code gates still run on it: a scoped receipt
-# licenses a commit too. (Until 0.20.0 they did not, and the scoped receipt was recorded anyway.)
+# licenses a commit too. (Until 0.20.1 they did not, and the scoped receipt was recorded anyway.)
 GATES_OPT=""; [ "$AFFECTED" = yes ] && [ $# -gt 0 ] && GATES_OPT="--gates"
 SELQ=""; [ $# -gt 0 ] && SELQ=$(printf '%q ' "$@")
 # From git, not by stripping $ROOT off $PLUGIN: in Git Bash `pwd -P` says /tmp/... while git says

@@ -221,10 +221,10 @@ class WorkersCli(Sandbox):
 
     @unittest.skipUnless(IS_WINDOWS, "the unreadable-table wording is Windows-only")
     def test_windows_without_a_process_table_says_not_checked_everywhere(self):
-        """0.20.0: an empty table on Windows is the norm, not a hiccup -- check, list and reap
+        """0.20.1: an empty table on Windows is the norm, not a hiccup -- check, list and reap
         each say the table was not read, and nothing is reaped or pruned."""
         # This machine's own process table, not the fixture: setUp's fake `ps` runs on Windows
-        # too since 0.20.0 (tests/_fakes.py), and would hand the tool a readable table.
+        # too since 0.20.1 (tests/_fakes.py), and would hand the tool a readable table.
         remove_fake(self.bin / "ps")
         self.registry.parent.mkdir(parents=True, exist_ok=True)
         self.registry.write_text(json.dumps({"pid": 900002, "host": "gt-test-host",

@@ -1,6 +1,6 @@
-"""Content-keyed scanner baselines (0.20.0): a version cut no longer re-flags accepted lines.
+"""Content-keyed scanner baselines (0.20.1): a version cut no longer re-flags accepted lines.
 
-Until 0.20.0 tests/secrets-baseline.json and .gt/code-baseline.json keyed an entry by PATH, so
+Until 0.20.1 tests/secrets-baseline.json and .gt/code-baseline.json keyed an entry by PATH, so
 every cut (golden-thread/0.20.0/... copied to golden-thread/0.20.1/...) re-flagged every line
 the owner had already accepted. Now an entry is (rule, the path with release-version segments
 as <ver>, a hash of the normalised line, a count). Pinned:

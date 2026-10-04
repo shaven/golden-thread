@@ -1,4 +1,4 @@
-"""Vault-relative paths gt stores, prints or compares are "/"-separated on every OS (0.20.0).
+"""Vault-relative paths gt stores, prints or compares are "/"-separated on every OS (0.20.1).
 
 On native Windows `str(p.relative_to(vault))` and `os.path.relpath(a, b)` give backslash paths
 ("Projects\\alpha\\research.md"). gt treats a vault-relative path as a logical key: it writes

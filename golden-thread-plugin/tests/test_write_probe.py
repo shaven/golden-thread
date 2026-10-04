@@ -1,4 +1,4 @@
-"""macOS provenance EPERM: one interpreter for hooks, tools and jobs, chosen by a write probe (0.20.0).
+"""macOS provenance EPERM: one interpreter for hooks, tools and jobs, chosen by a write probe (0.20.1).
 
 2026-10-03, on the publishing Mac: Homebrew's python3.9 -- the default `python3` there -- got
 `[Errno 1] Operation not permitted` replacing the vault's log.md (a file carrying

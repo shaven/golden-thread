@@ -1,4 +1,4 @@
-"""gt_lock.py -- per-file age locks for vault folders (0.20.0, owner decisions (a) and (b)).
+"""gt_lock.py -- per-file age locks for vault folders (0.20.1, owner decisions (a) and (b)).
 
 Driven through the CLI against a sandbox vault with a FAKE age (a Python program behind a `#!`
 wrapper installed the house way, tests/_fakes.py, so it runs on Windows too). The fake keeps

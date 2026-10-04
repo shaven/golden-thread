@@ -1,4 +1,4 @@
-"""Receipts name the gates that ran (0.20.0), and options never turn a full run into a subset.
+"""Receipts name the gates that ran (0.20.1), and options never turn a full run into a subset.
 
 Found 2026-10-03: `dev/remote-test.sh -j 8` handed `-j 8` to tests/run.sh, which treated ANY
 argument as a test selector (`FULL_RUN=no` unless `$# -eq 0`). The run went down the subset path,
@@ -62,7 +62,7 @@ class GatedRepoBase(CommitGuardBase):
                        "--ok", "--tests", "5", *extra)
 
     def plant_ungated(self, **extra):
-        """A receipt as every recorder before 0.20.0 wrote it: ok, and no gates at all."""
+        """A receipt as every recorder before 0.20.1 wrote it: ok, and no gates at all."""
         row = {"repo": str(self.repo.resolve()), "what": "remote:tests/run.sh@box", "ok": True,
                "tests": 3638, "elapsed": 0.0, "at": time.time(), "at_human": "now", "head": ""}
         row.update(extra)
@@ -261,7 +261,7 @@ class RemoteTestRunsTheGates(FakeRepo):
         self.rtmp = self.tmp / "rtmp"
         self.env["GT_REMOTE_TMP"] = self.rtmp.as_posix()
         # remote-test.sh's OWN temp files (its log, the --affected mapping) go to TMPDIR:
-        # here, so this test can see what it leaves (0.20.0).
+        # here, so this test can see what it leaves (0.20.1).
         self.ltmp = self.tmp / "ltmp"
         self.ltmp.mkdir()
         self.env["TMPDIR"] = self.ltmp.as_posix()

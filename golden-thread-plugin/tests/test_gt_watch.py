@@ -85,7 +85,7 @@ class WatchTest(Sandbox):
     def _stub(self, name, body):
         p = self.bin / name
         if name == "gh":
-            # Runnable on native Windows too (0.20.0, tests/_fakes.py). `crontab` is NOT: cron
+            # Runnable on native Windows too (0.20.1, tests/_fakes.py). `crontab` is NOT: cron
             # is POSIX-only (WIN_CRON), and a crontab Windows could find would change what the
             # hook says there.
             install_fake(self, p, body)
@@ -405,7 +405,7 @@ class TestCron(WatchTest):
 
     @unittest.skipUnless(IS_WINDOWS, "the Windows wording; POSIX installs the cron entry")
     def test_windows_says_cron_is_posix_only(self):
-        """0.20.0: Windows has no cron. install-cron says so in words, and with watches the
+        """0.20.1: Windows has no cron. install-cron says so in words, and with watches the
         report says nothing fetches on its own -- not a silent "nothing new" for ever."""
         p = self.watch("install-cron", "--every", "30m")
         self.assertEqual(p.returncode, 1, p.stdout)

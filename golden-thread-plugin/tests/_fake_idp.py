@@ -1,4 +1,4 @@
-"""A local, plain-http stand-in for Microsoft Entra ID, for the SSO unlock tests (0.20.0).
+"""A local, plain-http stand-in for Microsoft Entra ID, for the SSO unlock tests (0.20.1).
 
 Serves, on 127.0.0.1 with Entra's path shapes:
   /<tenant>/v2.0/.well-known/openid-configuration   discovery

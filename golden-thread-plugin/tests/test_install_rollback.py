@@ -1,4 +1,4 @@
-"""install.sh rolls a failed install back (0.20.0).
+"""install.sh rolls a failed install back (0.20.1).
 
 Until 0.19.2 a failure after the installer started writing left a half-installed machine -- its
 own words were "nothing is rolled back": superseded caches already pruned, settings.json and

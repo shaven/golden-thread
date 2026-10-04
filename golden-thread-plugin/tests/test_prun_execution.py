@@ -69,7 +69,7 @@ class FakeRepo(Sandbox):
         base = REPO / "tests" / "secrets-baseline.json"
         if base.is_file():
             shutil.copy2(base, tests / "secrets-baseline.json")
-        # And the code-scan baseline (0.20.0: the owner's accepted findings in the vendored
+        # And the code-scan baseline (0.20.1: the owner's accepted findings in the vendored
         # qrcodegen.py), at the path run.sh's code gate reads: <plugin>/.gt/code-baseline.json.
         cbase = REPO / ".gt" / "code-baseline.json"
         if cbase.is_file():
@@ -167,7 +167,7 @@ class Affected(FakeRepo):
 class Hosts(FakeRepo):
     def fake_ssh(self):
         """GT_PRUN_SSH for a local stand-in for ssh. prun shlex-splits the value, so it is the
-        "/" form of the path, quoted: a Windows path's backslashes would be eaten (0.20.0)."""
+        "/" form of the path, quoted: a Windows path's backslashes would be eaten (0.20.1)."""
         ssh = install_fake(self, self.tmp / "fake-ssh", FAKE_SSH)
         return shlex.quote(ssh.as_posix())
 
@@ -195,7 +195,7 @@ class Hosts(FakeRepo):
 
 
 class LeakCheck(FakeRepo):
-    """0.20.0: a unit that leaves anything in its TMPDIR fails, naming what it left. Before it,
+    """0.20.1: a unit that leaves anything in its TMPDIR fails, naming what it left. Before it,
     test_gt_demote left ~118 MB per test and claudebox2's /tmp filled to 97%, all green."""
 
     def test_a_leaked_temp_dir_fails_its_unit_and_nothing_is_left(self):

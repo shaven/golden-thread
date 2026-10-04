@@ -77,7 +77,7 @@ travel over the network.
 - **Check state:** `lotr status`. It shows connections, whether each credential is present
   (never its value), clients and recipes.
 
-## With gt unlock on (0.3.0, gt 0.20.0)
+## With gt unlock on (0.3.0, gt 0.20.1)
 
 gt unlock is gt core's session gate, **off by default**; with it off, nothing below applies and
 LOTR behaves exactly as 0.2.0. With it on, LOTR asks gt's unlock authority before it acts:

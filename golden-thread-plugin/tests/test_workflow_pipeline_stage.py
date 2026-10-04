@@ -1,4 +1,4 @@
-"""workflows/pipeline-stage.js -- the gt:pipeline-stage workflow (gt 0.20.0).
+"""workflows/pipeline-stage.js -- the gt:pipeline-stage workflow (gt 0.20.1).
 
 The workflow runtime is Claude Code's, so these tests run the script under Node with the four
 hooks it uses (agent, pipeline, phase, log) replaced by recorders, the same way the runtime

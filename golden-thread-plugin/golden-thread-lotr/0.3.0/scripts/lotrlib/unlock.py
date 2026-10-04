@@ -1,4 +1,4 @@
-"""gt-lotr as a CONSUMER of gt core's unlock authority (0.3.0, gt 0.20.0).
+"""gt-lotr as a CONSUMER of gt core's unlock authority (0.3.0, gt 0.20.1).
 
 LOTR never decides who is unlocked. It asks gt core's authority (gt_unlockd) through gt core's
 own client, gt_unlock_client.py, which gt installs beside its hooks. This module only finds

@@ -11,12 +11,19 @@ release's own summary line, kept short rather than reconstructed after the fact.
 
 ---
 
-## gt 0.20.0 — unreleased
+## gt 0.20.1 — unreleased
 
 > **There is no published 0.19.3.** The Windows completion was built as 0.19.3 and never
 > released; the owner moved it into 0.20.0 together with the unlock layer (2026-10-03), so the
 > 0.19.3 directories were re-cut as 0.20.0, as 0.19.0 was re-cut as 0.19.1. The rollback target
 > is 0.19.2, the last release published.
+
+> **This release supersedes the never-released 0.20.0.** 0.20.0 was cut, then `install.sh`
+> changed again (the usability fixes below), which `check_installer_version` refuses under one
+> version name; so 0.20.0 was re-cut as 0.20.1 (directories renamed, history kept), as 0.19.0 was
+> re-cut as 0.19.1. Every item of the 0.20.0 entry is in this one. Where an item below says
+> "0.20.0 did X", it means that unreleased cut (it exists only on the owner's Mac); no published
+> release ever did. The rollback target is still 0.19.2.
 
 ### gt-lotr: a GraphQL mutation can no longer ride `call_read` (review finding M2)
 
@@ -27,6 +34,12 @@ fragment definitions; a mutation or subscription anywhere, several operations, o
 unparsable is `write`. An explicit `body` argument, which the HTTP layer merges over `query`, is
 now the text that is classified. Raw `POST /$batch` and Jira/Graph POSTs were already `write`
 (POST defaults to write); no curated op is read-classified on a body.
+
+### gt-lotr: the truncation note no longer promises a cursor that does not exist
+
+When shaping cut an unpaged list (e.g. Graph events as one array, 20 of 30), the note said "use
+the cursor". It now reports shown/total and, with no cursor, says to narrow the query or fetch a
+smaller page; with a `next_cursor` it says to use it.
 
 ### gt unlock: agents need your presence for what matters (off by default)
 
@@ -89,7 +102,7 @@ anti-malware. If something already runs as you, it can wait for you to unlock."*
   assistant's shell, biometric consent is an option (`consent_window_s`), the new secret
   schemes resolve through the authority, hub enrol/revoke need a step-up, and LOTR runs on
   native Windows over the named pipe. gt-usage 0.1.6, gt-visualize 0.4.4 and gt-wiki 0.2.7 only
-  move `requires_gt` to `>=0.20.0,<0.21.0`.
+  move `requires_gt` to `>=0.20.1,<0.21.0`.
 - **Tests:** `test_gt_ipc`, `test_unlock_core`, `test_unlock_redteam` (every bypass route in
   the design, each attempted and refused), `test_unlock_cli`, `test_unlock_touchid` (a real
   Secure Enclave signature checked by the Python verifier), `test_unlock_hello`,
@@ -350,7 +363,7 @@ passes now (`tests/test_inbox_review2.py`, `tests/test_sandbox_review2.py`,
     model override, a Claude Code older than 2.1.78, or a session that does not offer the type —
     the skill spawns as before, with `model`.
   - *Changed on purpose:* `gt_model_policy.py set --agent <stage> --effort E` is now accepted
-    (until 0.20.0 every agent effort was refused, because nothing could carry one). A job-type
+    (until 0.20.1 every agent effort was refused, because nothing could carry one). A job-type
     effort is still refused: one definition serves every kind.
 - **Ingest and promote stages can run as a workflow, `gt:pipeline-stage`** (Claude Code
   workflows, 2.1.154+). `gt_ingest_pipeline.py workflow-args` writes each unit's prompt into the
@@ -448,7 +461,7 @@ passes now (`tests/test_inbox_review2.py`, `tests/test_sandbox_review2.py`,
 
 (Owner, 2026-10-03: "Finish the work for windows".) 0.19.2 made gt install on Windows; this
 makes it usable there. Version directories re-cut from 0.19.3 (gt, demo, farm, flow,
-report-card, watch; lockstep modules `requires_gt >=0.20.0,<0.21.0`).
+report-card, watch; lockstep modules `requires_gt >=0.20.1,<0.21.0`).
 
 - **`python3` works in Claude's shell on Windows.** Skills tell Claude to run `python3 <tool>.py`;
   in Git Bash that was the Microsoft Store stub. `install.sh` writes a `python3` shim (the Python
@@ -699,8 +712,8 @@ moves to 0.20.2.
   was unreachable, and gt unlock's confirmation had been skipped. `remove` always works.
 - **A rollback cannot strand sandbox mode or unlock (finding M3).** `install.sh <older>` asks
   the newest `gt_sandbox.py rollback-check` before its first write; a release without
-  `gt_sandbox.py` / `gt_unlock.py` (before 0.20.0) is refused while either is on, or gt's
-  sandbox entries remain, with the exact commands that switch them off. A rollback to 0.20.0
+  `gt_sandbox.py` / `gt_unlock.py` (before 0.20.1) is refused while either is on, or gt's
+  sandbox entries remain, with the exact commands that switch them off. A rollback to a release that carries them
   passes.
 - **The Linux prerequisites are run, not found (finding M13).** gt executes
   `bwrap --ro-bind / / true` and `socat -V`; on Ubuntu 24.04 AppArmor makes bwrap fail with

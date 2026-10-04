@@ -1,4 +1,4 @@
-"""Private scratch folders for gt's stage agents (0.20.0).
+"""Private scratch folders for gt's stage agents (0.20.1).
 
 Owner, 2026-10-04: pipeline stage agents shared the run's folder under the vault's
 spool/pipeline/<run>/ -- per run, not per agent, and inside the vault, the wrong place for

@@ -402,7 +402,7 @@ registry when its mtime changes.
   - Annotations: `find` and `call_read` are `readOnlyHint: true`; `call_write` is
     `destructiveHint: false`; `call_consent` is `destructiveHint: true` and also has
     `_meta["anthropic/requiresUserInteraction"] = true`.
-  - From 0.3.0 (gt 0.20.0), when the negotiated protocol is 2025-06-18 or later, each tool also
+  - From 0.3.0 (gt 0.20.1), when the negotiated protocol is 2025-06-18 or later, each tool also
     has an `outputSchema` describing its envelope (`ok` required; the error object; for calls
     `data`, `next_cursor`, `notes`, `withheld`, with `data` untyped). A 2025-03-26 client gets
     the list without it, since that protocol has no `outputSchema`.
@@ -425,7 +425,7 @@ registry when its mtime changes.
 - `lotrlib/confirm.py`: `confirm(mode, text, dialog=None)` and `describe(...)`. The engine calls it for
   every consent-tier op, whoever the caller. `Engine(..., dialog=callable)` is for tests.
 
-## 0.3.0: the gt unlock consumer and the Windows front door (gt 0.20.0)
+## 0.3.0: the gt unlock consumer and the Windows front door (gt 0.20.1)
 
 Zero behaviour change while gt unlock is off (its default): every 0.2.0 test runs unchanged.
 

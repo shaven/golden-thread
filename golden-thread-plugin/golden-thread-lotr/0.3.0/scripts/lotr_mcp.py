@@ -23,7 +23,7 @@ never exits until stdin closes.
     it restarted, which forgets every session) makes the shim register again, then retry --
     once (review F7, 2026-10-03: it used to stay unregistered, leaving the seat free).
 
-0.3.0 (gt 0.20.0), always: tools/list carries an outputSchema per tool for a client that
+0.3.0 (gt 0.20.1), always: tools/list carries an outputSchema per tool for a client that
 negotiated MCP 2025-06-18 or later (tools_for); results already carried the envelope as
 structuredContent. On native Windows install.sh points this server's command at the resolved
 interpreter (gt_components.localize_mcp), so it is still started directly by `claude`.
@@ -121,7 +121,7 @@ TOOLS = [
 ]
 TOOL_NAMES = {t["name"] for t in TOOLS}
 
-# outputSchema (gt-lotr 0.3.0, gt 0.20.0). Every tools/call result already carries its envelope
+# outputSchema (gt-lotr 0.3.0, gt 0.20.1). Every tools/call result already carries its envelope
 # as structuredContent; these schemas declare that envelope, so a client can validate it. MCP
 # added outputSchema in protocol 2025-06-18 (modelcontextprotocol.io/specification/2025-06-18/
 # server/tools, "Output Schema"; absent from 2025-03-26), so a client that negotiated an older

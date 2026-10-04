@@ -1,4 +1,4 @@
-"""gt unlock, the SSO factor (0.20.0): Microsoft Entra ID, auth code + PKCE with a loopback
+"""gt unlock, the SSO factor (0.20.1): Microsoft Entra ID, auth code + PKCE with a loopback
 redirect, the ID token verified in Python. Runs against tests/_fake_idp.py on 127.0.0.1 -- no
 network. The fake browser GETs the authorize URL and follows the redirect to gt's listener.
 """

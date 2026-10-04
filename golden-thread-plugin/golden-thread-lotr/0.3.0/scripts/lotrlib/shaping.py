@@ -181,7 +181,8 @@ def _fit(data, max_chars):
     return text[:max_chars], f"cut to the first {max_chars} characters of the serialized result"
 
 
-def shape(data, *, noise_keys=(), select=None, max_chars=24000, default_page=20):
+def shape(data, *, noise_keys=(), select=None, max_chars=24000, default_page=20,
+          has_cursor=False):
     """Project, de-noise and cap a result. Returns (data, notes).
 
     An explicit `select` is the caller's choice of fields, so noise removal is skipped for it:
@@ -197,9 +198,15 @@ def shape(data, *, noise_keys=(), select=None, max_chars=24000, default_page=20)
         data = _truncate_lists(data, int(default_page), "", cuts)
         for path, (n, total, cut) in cuts.items():
             where = "the result" if path == "(top level)" else f"'{path}'"
-            notes.append(f"list {where} truncated to {default_page} items "
-                         f"({cut} of {total} cut" + (f" across {n} lists" if n > 1 else "") +
-                         "); use the cursor, a smaller limit or a select to see the rest")
+            counts = (f"showing {default_page} of {total}; {cut} of {total} cut"
+                      + (f" across {n} lists" if n > 1 else ""))
+            if has_cursor:
+                how = "use next_cursor for the next page, or a smaller limit or a select"
+            else:   # no cursor exists: this list came back whole, so there is nothing to page
+                how = (f"{cut} more items were cut and there is no cursor for this result; "
+                       "narrow the query (filters, $top/date range) or fetch with a smaller "
+                       "page size")
+            notes.append(f"list {where} truncated to {default_page} items ({counts}); {how}")
     if max_chars and _size(data) > max_chars:
         before = _size(data)
         data, how = _fit(data, int(max_chars))

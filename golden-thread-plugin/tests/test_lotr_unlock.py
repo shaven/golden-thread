@@ -1,4 +1,4 @@
-"""gt-lotr 0.3.0 as a consumer of gt core's unlock authority (gt 0.20.0).
+"""gt-lotr 0.3.0 as a consumer of gt core's unlock authority (gt 0.20.1).
 
 A real authority (tests/_unlock_fixture.AuthorityCase) serves a socket / pipe in a temp home;
 this test process is the fake `claude`. A real lotrd front door (lotrlib.server) runs in this

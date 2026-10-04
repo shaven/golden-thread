@@ -15,13 +15,13 @@ it at startup, look things up while working, and write back what they learn.
 Its distinguishing idea is the second problem, the one most memory systems never
 address: **writing a rule down does not mean it gets followed.**
 
-Plugin **v0.20.0**. Ten Core rules currently enforced, five of them *validated* — a
+Plugin **v0.20.1**. Ten Core rules currently enforced, five of them *validated* — a
 hook inspects the finished reply (`Stop`) or the tool call about to run (`PreToolUse`)
 and blocks it if the rule was broken.
 
 
 > [!IMPORTANT]
-> **0.20.0: gt unlock and gt sandbox mode (both off by default), and Windows, finished.** Turned on, agents need your
+> **0.20.1: gt unlock and gt sandbox mode (both off by default), and Windows, finished.** Turned on, agents need your
 > presence — TOTP plus Touch ID (macOS) or Windows Hello, optionally Microsoft Entra ID sign-in —
 > before they use LOTR connections, credentials, publishing or gt's own guards. Callers are
 > identified by the kernel, approvals are hardware signatures gt verifies itself, credentials can
@@ -433,7 +433,7 @@ of a commit. It exits non-zero only when a member could not run. Run it from lau
 
 Accepted findings belong in a baseline (`--write-baseline .gt/secrets-baseline.json`,
 `.gt/code-baseline.json`), which both the gate and the sweep pick up automatically, so
-what you have examined goes quiet while anything new still fires. Since 0.20.0 an entry is
+what you have examined goes quiet while anything new still fires. Since 0.20.1 an entry is
 content-keyed -- rule, the path with release-version segments as `<ver>`, a hash of the line
 (a salted PBKDF2 for secrets; no text is stored) -- so a version cut does not re-flag what you
 accepted, and an old path-keyed baseline is still honoured. The commit gate has two

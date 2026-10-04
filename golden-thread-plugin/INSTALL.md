@@ -39,7 +39,7 @@ where should the vault live? Re-run with `--vault` once you know.
 `install.sh` resolves its own paths, so it can be run from anywhere. Run
 `bash install.sh --help` for every option.
 
-**On Windows** (0.19.2; complete in 0.20.0) run the same installer from Git Bash, or run `install.cmd` from
+**On Windows** (0.19.2; complete in 0.20.1) run the same installer from Git Bash, or run `install.cmd` from
 cmd.exe, PowerShell or Explorer — it finds Git Bash and hands `install.sh` every argument
 unchanged (`install.cmd --vault C:\Users\you\Documents\GoldenThread`; `/uninstall`, `/check`
 and `/?` are understood too). Both need
@@ -47,7 +47,7 @@ and `/?` are understood too). Both need
 and Python 3.8+ from [python.org](https://www.python.org/downloads/) with *Add python.exe to
 PATH* ticked. See *Windows* below.
 
-**A failed install is rolled back** (0.20.0). If the installer exits non-zero after it has
+**A failed install is rolled back** (0.20.1). If the installer exits non-zero after it has
 started writing — any exit but 4, which means "installed, now choose a vault", and 9 under
 `--force-manifest-mismatch` — it puts back
 `~/.claude/settings.json`, the plugin registrations, the golden-thread-plugin marketplace and
@@ -136,8 +136,8 @@ It copies each plugin into Claude Code's plugin cache — gt's looks like this:
                       gt_components, gt_version_check, gt_workers, gt_push_check, …)
   templates/        ← vault scaffold templates, Core rules, git hooks, vault tools
   hooks/            ← Core-rule enforcement
-  agents/           ← the pipeline stage agents gt:extract … gt:place (0.20.0)
-  workflows/        ← the gt:pipeline-stage workflow (0.20.0)
+  agents/           ← the pipeline stage agents gt:extract … gt:place (0.20.1)
+  workflows/        ← the gt:pipeline-stage workflow (0.20.1)
 ```
 
 The enforcement hooks are **also** copied outside the cache, to
@@ -213,7 +213,7 @@ migrations still pending; `/gt:gt-upgrade` applies them.
 
 ---
 
-## gt unlock: security, off by default (0.20.0)
+## gt unlock: security, off by default (0.20.1)
 
 The installer does not turn it on; it ends by saying it is off and how to turn it on. What it
 touches when you do:
@@ -305,7 +305,7 @@ attach `golden-thread-plugin.zip` to a release.
 
 macOS can refuse one Python writes it allows another: a file carrying `com.apple.provenance`, or a privacy-protected folder.
 Seen 2026-10-03: Homebrew's `python3.9` -- the default `python3` on that Mac -- could not replace
-the vault's `log.md`, while `/usr/bin/python3` could. Since 0.20.0 gt words this as one line
+the vault's `log.md`, while `/usr/bin/python3` could. Since 0.20.1 gt words this as one line
 naming the interpreter and the fix (`gt_log.py` exits `5`; the broker holds the request; nothing
 is half-written), and `install.sh` picks ONE interpreter for hooks, tools and scheduled jobs by
 an actual write probe -- create, write, `os.replace`, remove in the vault and in
@@ -390,7 +390,7 @@ changed or not where the list puts it. **By default it then installs anyway, mar
 `GT_REQUIRE_CHECKSUM=1`) turns a mismatch into a refusal (exit 8, nothing copied); use it on the
 machine receiving a publish. A tree with no `SHA256SUMS` installs as it stands.
 
-**Windows** (native since 0.19.2, complete in 0.20.0; tested on Windows 11 with Git for Windows
+**Windows** (native since 0.19.2, complete in 0.20.1; tested on Windows 11 with Git for Windows
 2.56 and Python 3.12).
 `install.sh` and the hooks are bash scripts and run under Git Bash; `install.cmd` is only a
 launcher for it. The installer resolves a real Python once — `python3`, then `python`, then
@@ -400,7 +400,7 @@ writes under your profile unreliable). With no other Python 3.8+ it stops before
 anything and says what to install. The interpreter it found is written into the hook commands
 and to `~/.claude/golden-thread/python` for the hook wrappers.
 
-*`python3` in Claude's shell (0.20.0).* Skills tell Claude to run `python3 <tool>.py`, and in
+*`python3` in Claude's shell (0.20.1).* Skills tell Claude to run `python3 <tool>.py`, and in
 Git Bash `python3` is the Store stub. The installer writes a small `python3` shim — the Python
 it resolved, in UTF-8 mode, with `\r` stripped from piped output — to
 `~/.claude/golden-thread/bin/python3` and to `~/bin/python3` (Git for Windows puts `~/bin` first
@@ -409,7 +409,7 @@ to PATH and sets `PYTHONUTF8=1` through `$CLAUDE_ENV_FILE`, which Claude Code so
 Bash command. A `~/bin/python3` that is not gt's is left alone. Claude Code's PowerShell tool
 does not read `$CLAUDE_ENV_FILE`; there `python` (python.org's name) works as it is.
 
-*Scheduled jobs (0.20.0).* Jobs are labelled `io.goldenthread.gt-<job>` (0.20.1; an install
+*Scheduled jobs (0.20.1).* Jobs are labelled `io.goldenthread.gt-<job>` (0.20.1; an install
 moves a job still under the old `com.markethaven.gt-<job>` label). A job is reported installed
 only when the scheduler accepted it: a refused registration puts the files back and says NOT
 INSTALLED (0.20.1). On Linux a job is a systemd user timer, or a tagged crontab line where
@@ -421,7 +421,7 @@ reads launchd's exit code on macOS. Like a macOS job, a task runs only while you
 at the desktop — from an SSH session `install` registers it and says it is NOT PROVEN; prove it
 later with `gt_schedule.py check <job>`.
 
-*gt-lotr on Windows (0.20.0).* gt-lotr 0.3.0 serves its local front door on a named pipe
+*gt-lotr on Windows (0.20.1).* gt-lotr 0.3.0 serves its local front door on a named pipe
 (user-SID-only DACL, remote clients rejected, first instance only), so it installs on Windows;
 gt-lotr 0.2.0 and older stay off there. Its `plugin.json` starts the MCP server with `python3`,
 which on Windows is the Microsoft Store stub, so the installer rewrites the INSTALLED copies of
@@ -429,7 +429,7 @@ that manifest (plugin cache and marketplace) to the interpreter it resolved, as 
 with `PYTHONUTF8=1` (`gt_components.py localize-mcp`). Claude Code then starts the server
 directly, so it stays a direct child of `claude`, which gt unlock's shim registration checks.
 The post-install gate's `smoke-lotr` row starts exactly that configured command and asks it for
-its tools. macOS and Linux keep the manifest as shipped. *What does not run on Windows, and says so (0.20.0).* gt-lotr before 0.3.0 (a Unix-domain-socket gateway) is
+its tools. macOS and Linux keep the manifest as shipped. *What does not run on Windows, and says so (0.20.1).* gt-lotr before 0.3.0 (a Unix-domain-socket gateway) is
 off on Windows whatever is chosen; `gt-watch`'s hourly cron fetch (`install-cron`) is POSIX-only —
 run `gt_watch.py fetch` by hand or from Task Scheduler; the doctor's `workers` row says it is not
 supported on Windows (there is no POSIX process table); task priority windows need a time-zone database —

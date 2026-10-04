@@ -43,11 +43,11 @@ IS_LINUX = sys.platform.startswith("linux")
 
 
 def job_path(home, job):
-    """Where an installed gt job lives: a launchd plist, or on Windows (0.20.0) the Task
+    """Where an installed gt job lives: a launchd plist, or on Windows (0.20.1) the Task
     Scheduler spec gt_schedule keeps beside the job's .cmd wrapper (gt_schedule.job_file)."""
     if IS_WINDOWS or IS_LINUX:
         # Linux (0.20.1): a systemd/cron job's spec, as gt_schedule.job_file names it there; a
-        # launchd plist on Linux is a 0.20.0 leftover nothing runs, and is reported as such.
+        # launchd plist on Linux is a 0.20.1 leftover nothing runs, and is reported as such.
         return home / ".claude" / "golden-thread" / "jobs" / ("gt-%s.json" % job)
     return home / "Library" / "LaunchAgents" / ("com.markethaven.gt-%s.plist" % job)
 
@@ -88,7 +88,7 @@ class InstalledMachine(Sandbox):
     def tearDownClass(cls):
         if cls._shared:
             # The harness rmtree: git writes read-only objects, which shutil.rmtree cannot
-            # delete on Windows -- ignore_errors left the whole install behind (0.20.0).
+            # delete on Windows -- ignore_errors left the whole install behind (0.20.1).
             rmtree(cls._shared["tmp"])
             cls._shared = None
         super().tearDownClass()
@@ -554,12 +554,12 @@ class LotrOnSmoke(InstalledMachine):
 
     def test_lotr_on_is_placed_and_smoke_tested(self):
         self.assertEqual(self.install_proc.returncode, 0, self.install_proc.stdout[-3000:])
-        # 0.20.0: gt-lotr 0.3.0 runs on Windows too (named pipe), so the gate places and
+        # 0.20.1: gt-lotr 0.3.0 runs on Windows too (named pipe), so the gate places and
         # smoke-tests it there exactly as on POSIX.
         rc, rows, _ = self.gate()
         self.assertEqual(rows["lotr"]["state"], "PASS", rows["lotr"])
         self.assertEqual(rows["smoke-lotr"]["state"], "PASS", rows["smoke-lotr"])
-        # 0.20.0: the smoke starts the CONFIGURED command (the installed manifest's), so the
+        # 0.20.1: the smoke starts the CONFIGURED command (the installed manifest's), so the
         # PASS above proves what Claude Code will run. On Windows that command is the
         # interpreter install.sh resolved, never `python3` (the Store stub); elsewhere it is
         # the manifest as shipped.

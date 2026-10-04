@@ -12,9 +12,9 @@
 #                                   # on a feature branch only -- never at a release gate
 #   tests/run.sh --gates test_x     # a subset, plus both gates (dev/remote-test.sh --affected)
 #
-# OPTIONS ARE NOT SELECTORS (0.20.0). A run is FULL when it names no test selector, whatever
+# OPTIONS ARE NOT SELECTORS (0.20.1). A run is FULL when it names no test selector, whatever
 # options it carries; only a full run runs the whole suite AND both gates (secrets, code) and
-# may record a full receipt. Until 0.20.0 any argument at all -- `-j 8` included -- made the run
+# may record a full receipt. Until 0.20.1 any argument at all -- `-j 8` included -- made the run
 # a "subset": dev/remote-test.sh -j 8 skipped both gates and still recorded a receipt saying
 # the suite passed. The last line of every run is a machine-readable verdict:
 #   gt-gates: scope=full|scoped|subset tests=pass|fail count=N secrets=<v> code=<v>
@@ -35,7 +35,7 @@
 # GT_TEST_SERIAL=1 falls back to plain `unittest`, and is worth keeping: if a test fails
 # in parallel and passes serially, that difference is itself the finding.
 #
-# TEMP-DIR LEAKS FAIL (0.20.0): prun.py gives every unit its own empty TMPDIR and fails any unit
+# TEMP-DIR LEAKS FAIL (0.20.1): prun.py gives every unit its own empty TMPDIR and fails any unit
 # that leaves something in it, naming each entry and its size, then removes it. A leak used to be
 # invisible -- a passing test that left 118 MB behind on every run looked exactly like a clean
 # one. Not covered: GT_TEST_SERIAL=1 (plain unittest, one shared TMPDIR). GT_TEST_LEAK_CHECK=0
@@ -43,7 +43,7 @@
 set -uo pipefail
 cd "$(dirname "$0")"
 
-# Native Windows (0.20.0): in Git Bash `python3` is the Microsoft Store stub. Resolve a real
+# Native Windows (0.20.1): in Git Bash `python3` is the Microsoft Store stub. Resolve a real
 # interpreter the way the hooks do -- the newest release's hooks/gt_python.sh, which skips
 # anything under ...\WindowsApps\ and is a no-op on macOS and Linux.
 case "${OSTYPE:-}" in
@@ -67,7 +67,7 @@ esac
 # one module, not the tree, and a receipt from it would wave through a commit nothing
 # had covered. Receipts are best-effort -- a clone with no ~/.claude still runs tests.
 gate_args() {
-  # The verdicts every receipt carries (0.20.0): a receipt names which gates ran.
+  # The verdicts every receipt carries (0.20.1): a receipt names which gates ran.
   printf '%s\n' --gate "tests=$TESTS_V" --gate "secrets=$SEC_V" --gate "code=$CODE_V"
 }
 
@@ -197,12 +197,12 @@ EOF
     ${GT_TEST_REF:+--ref "$GT_TEST_REF"} >/dev/null 2>&1 || true
 }
 
-# ── Arguments: OPTIONS are not SELECTORS (0.20.0) ─────────────────────────────────
+# ── Arguments: OPTIONS are not SELECTORS (0.20.1) ─────────────────────────────────
 #
 # Only a FULL run is evidence: `tests/run.sh test_gt_lint` proves one module, not the tree, and
 # a receipt from it would wave through a commit nothing had covered. But "full" means "names no
 # selector", not "has no arguments": `-j 8` caps the workers and changes nothing about WHAT ran.
-# Until 0.20.0 this read `[ $# -eq 0 ]`, so `-j 8` (which dev/remote-test.sh always passed when
+# Until 0.20.1 this read `[ $# -eq 0 ]`, so `-j 8` (which dev/remote-test.sh always passed when
 # asked for a worker count) silently turned a full run into a subset that skipped both gates.
 OPTS=(); SELECTORS=(); SCOPED=no; FORCE_GATES=no; PRINT_ONLY=no
 while [ $# -gt 0 ]; do

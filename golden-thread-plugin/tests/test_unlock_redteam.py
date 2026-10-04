@@ -1,5 +1,5 @@
 """Red team: every bypass route in design-unlock.md §0 and §7, attempted, and each must fail
-(0.20.0, owner requirement 2026-10-03 11:07).
+(0.20.1, owner requirement 2026-10-03 11:07).
 
 Each test is one attack, named for what the attacker tries. Routes that live in another module
 are listed at the bottom with where they are pinned, so this file is the one catalogue.

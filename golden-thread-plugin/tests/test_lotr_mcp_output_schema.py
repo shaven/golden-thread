@@ -1,4 +1,4 @@
-"""gt-lotr 0.3.0 (gt 0.20.0): outputSchema on the four MCP tools.
+"""gt-lotr 0.3.0 (gt 0.20.1): outputSchema on the four MCP tools.
 
 Every tools/call result already carried its envelope as structuredContent; the tools now
 declare it. MCP added outputSchema in protocol 2025-06-18 ("Servers MUST provide structured

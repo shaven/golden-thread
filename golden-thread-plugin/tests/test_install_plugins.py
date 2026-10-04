@@ -292,7 +292,7 @@ class RunsMachineMigrations(Base):
         self.assertIn("FAILED demo-to-install-choices: cannot write", p.stdout)
         self.assertIn("INSTALL INCOMPLETE — machine migration failed; the install is rolled back; "
                       "fix and re-run install.sh", p.stdout)
-        self.assertIn("ROLLED BACK", p.stdout)          # 0.20.0: tests/test_install_rollback.py
+        self.assertIn("ROLLED BACK", p.stdout)          # 0.20.1: tests/test_install_rollback.py
         self.assertLess(p.stdout.index("FAILED"), p.stdout.index("INSTALL INCOMPLETE"))
         self.assertNotIn("Vault ready", p.stdout, "the vault step ran after a failed migration")
         self.assertNotIn("Restart Claude Code", p.stdout)

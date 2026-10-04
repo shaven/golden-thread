@@ -1,95 +1,114 @@
 {
-  "accepted": [
-    [
-      "golden-thread/0.20.0/scripts/qrcodegen.py",
-      "py-assert-in-shipped-code",
-      98
-    ],
-    [
-      "golden-thread/0.20.0/scripts/qrcodegen.py",
-      "py-assert-in-shipped-code",
-      111
-    ],
-    [
-      "golden-thread/0.20.0/scripts/qrcodegen.py",
-      "py-assert-in-shipped-code",
-      115
-    ],
-    [
-      "golden-thread/0.20.0/scripts/qrcodegen.py",
-      "py-assert-in-shipped-code",
-      118
-    ],
-    [
-      "golden-thread/0.20.0/scripts/qrcodegen.py",
-      "py-assert-in-shipped-code",
-      199
-    ],
-    [
-      "golden-thread/0.20.0/scripts/qrcodegen.py",
-      "py-assert-in-shipped-code",
-      269
-    ],
-    [
-      "golden-thread/0.20.0/scripts/qrcodegen.py",
-      "py-assert-in-shipped-code",
-      299
-    ],
-    [
-      "golden-thread/0.20.0/scripts/qrcodegen.py",
-      "py-assert-in-shipped-code",
-      332
-    ],
-    [
-      "golden-thread/0.20.0/scripts/qrcodegen.py",
-      "py-assert-in-shipped-code",
-      343
-    ],
-    [
-      "golden-thread/0.20.0/scripts/qrcodegen.py",
-      "py-assert-in-shipped-code",
-      363
-    ],
-    [
-      "golden-thread/0.20.0/scripts/qrcodegen.py",
-      "py-assert-in-shipped-code",
-      372
-    ],
-    [
-      "golden-thread/0.20.0/scripts/qrcodegen.py",
-      "py-assert-in-shipped-code",
-      379
-    ],
-    [
-      "golden-thread/0.20.0/scripts/qrcodegen.py",
-      "py-assert-in-shipped-code",
-      396
-    ],
-    [
-      "golden-thread/0.20.0/scripts/qrcodegen.py",
-      "py-assert-in-shipped-code",
-      470
-    ],
-    [
-      "golden-thread/0.20.0/scripts/qrcodegen.py",
-      "py-assert-in-shipped-code",
-      472
-    ],
-    [
-      "golden-thread/0.20.0/scripts/qrcodegen.py",
-      "py-assert-in-shipped-code",
-      504
-    ],
-    [
-      "golden-thread/0.20.0/scripts/qrcodegen.py",
-      "py-assert-in-shipped-code",
-      565
-    ],
-    [
-      "golden-thread/0.20.0/scripts/qrcodegen.py",
-      "py-assert-in-shipped-code",
-      573
-    ]
+  "format": 2,
+  "entries": [
+    {
+      "rule": "py-assert-in-shipped-code",
+      "path": "golden-thread/<ver>/scripts/qrcodegen.py",
+      "hash": "sha256:0257e17f033dd609a9cc86ac877ec65e9edef263c2920b65cf82f54a3183ebba",
+      "count": 1
+    },
+    {
+      "rule": "py-assert-in-shipped-code",
+      "path": "golden-thread/<ver>/scripts/qrcodegen.py",
+      "hash": "sha256:0ac9dd1f469d852536e3b86617b27d9771655a2b75c382041b07a270069cfe96",
+      "count": 1
+    },
+    {
+      "rule": "py-assert-in-shipped-code",
+      "path": "golden-thread/<ver>/scripts/qrcodegen.py",
+      "hash": "sha256:0ce66a84d92cf4fef2c6e06ef9ffa92c0620c0db6e78e75a0b83f223c8330ad6",
+      "count": 1
+    },
+    {
+      "rule": "py-assert-in-shipped-code",
+      "path": "golden-thread/<ver>/scripts/qrcodegen.py",
+      "hash": "sha256:286f283e832c84cb037c4a5387c8d352cb39a385f10f2952fb69e4578a1a3396",
+      "count": 1
+    },
+    {
+      "rule": "py-assert-in-shipped-code",
+      "path": "golden-thread/<ver>/scripts/qrcodegen.py",
+      "hash": "sha256:31c7fba53828c90a0dcee3e3faff9ef9b7617a69f6864b814d35d78ac4ba2618",
+      "count": 1
+    },
+    {
+      "rule": "py-assert-in-shipped-code",
+      "path": "golden-thread/<ver>/scripts/qrcodegen.py",
+      "hash": "sha256:65c1c651cc8922582975eef4c7543f0ad428058e4a4d0fe4a0f1e8ac557680ae",
+      "count": 1
+    },
+    {
+      "rule": "py-assert-in-shipped-code",
+      "path": "golden-thread/<ver>/scripts/qrcodegen.py",
+      "hash": "sha256:67cf5fc701680b22019b586fc717e2630e58cea57c7ac4f14ba6466bf80db2ba",
+      "count": 1
+    },
+    {
+      "rule": "py-assert-in-shipped-code",
+      "path": "golden-thread/<ver>/scripts/qrcodegen.py",
+      "hash": "sha256:72b713144129565ac07b5ca5afe5f5d02c253057da2cc98cfb71c8bc53e4f3fb",
+      "count": 1
+    },
+    {
+      "rule": "py-assert-in-shipped-code",
+      "path": "golden-thread/<ver>/scripts/qrcodegen.py",
+      "hash": "sha256:7e8929f0bc876eb47b3b275da1db45ced67a02f3661d46305423f006f4b00bbb",
+      "count": 1
+    },
+    {
+      "rule": "py-assert-in-shipped-code",
+      "path": "golden-thread/<ver>/scripts/qrcodegen.py",
+      "hash": "sha256:8d22435e423d907bf12ffc03d1091cd3b1a437ee0c58cab09848eec54e71e8f9",
+      "count": 1
+    },
+    {
+      "rule": "py-assert-in-shipped-code",
+      "path": "golden-thread/<ver>/scripts/qrcodegen.py",
+      "hash": "sha256:9953634b1edac217e5cb5ae70f4fb19e83d1ca31e0b393b028f7f2cbb50099fd",
+      "count": 1
+    },
+    {
+      "rule": "py-assert-in-shipped-code",
+      "path": "golden-thread/<ver>/scripts/qrcodegen.py",
+      "hash": "sha256:9b45d1880dd6e24a455424cfc6b425089d97f85d68a3c4649a57d2d6e2c56c9e",
+      "count": 1
+    },
+    {
+      "rule": "py-assert-in-shipped-code",
+      "path": "golden-thread/<ver>/scripts/qrcodegen.py",
+      "hash": "sha256:ab6924a063120e8f703f090f3c2e19c070bd49bf76cbb1b0b6f8f5da9f629139",
+      "count": 1
+    },
+    {
+      "rule": "py-assert-in-shipped-code",
+      "path": "golden-thread/<ver>/scripts/qrcodegen.py",
+      "hash": "sha256:af833c31b7f0370ed61c3cf44678483995da3c1f7c1f4109e1921e2f80f72a12",
+      "count": 1
+    },
+    {
+      "rule": "py-assert-in-shipped-code",
+      "path": "golden-thread/<ver>/scripts/qrcodegen.py",
+      "hash": "sha256:b3f7bfbdf641e8e4ddaf52d335b6b40bfadc7923883c878e2081f74524357402",
+      "count": 1
+    },
+    {
+      "rule": "py-assert-in-shipped-code",
+      "path": "golden-thread/<ver>/scripts/qrcodegen.py",
+      "hash": "sha256:ce323725841923f0aadb7817958dc003cabdcb4050cc0482bcd3b351a7b641ea",
+      "count": 1
+    },
+    {
+      "rule": "py-assert-in-shipped-code",
+      "path": "golden-thread/<ver>/scripts/qrcodegen.py",
+      "hash": "sha256:e3efe38e955388cffff97111b96ae076e53955aa36acf03527b4cc3bf13214c5",
+      "count": 1
+    },
+    {
+      "rule": "py-assert-in-shipped-code",
+      "path": "golden-thread/<ver>/scripts/qrcodegen.py",
+      "hash": "sha256:f29a0fd0fa67a78fb72956eb2ffdecd0be7c0a044b1b30b1c1f81d6993171edd",
+      "count": 1
+    }
   ],
   "reasons": {
     "golden-thread/0.16.5/templates/githooks/post-commit::sh-missing-nounset": "DELIBERATE. This hook must fail OPEN -- a commit may never be blocked by attribution bookkeeping -- and `set -u` turns an unset variable into a non-zero exit, which for a commit hook means a blocked commit. The rule's advice is right in general and wrong here, so the code is correct and the finding is accepted. Accepted 2026-09-27.",

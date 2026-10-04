@@ -1,4 +1,4 @@
-"""Regression tests for the independent security review of gt 0.20.0 (2026-10-03 16:15 CDT).
+"""Regression tests for the independent security review of gt 0.20.1 (2026-10-03 16:15 CDT).
 
 Each test is one of the review's exploit harnesses (Projects/golden-thread/research/
 review-0.20.0-harnesses/: test_exploits.py, test_exploits2.py, lotr/poc_unlock.py,

@@ -52,7 +52,7 @@ on. An unreachable runner is SKIPPED AND REPORTED and its units go to the others
 reported is a failure, never a pass. GT_PRUN_SSH replaces `ssh` (tests use a local stand-in).
 
 prun.py runs tests and nothing else: it records no receipt and runs no gate. tests/run.sh does
-both, and since 0.20.0 its options (-j, --hosts, --no-load-aware) never make a run a subset:
+both, and since 0.20.1 its options (-j, --hosts, --no-load-aware) never make a run a subset:
 `tests/run.sh --hosts a,b` with no selector is a FULL run, and the secrets and code gates run
 here, on the tree that was shipped.
 
@@ -121,7 +121,7 @@ def classes_in(module):
     return ["%s.%s" % (module, n) for n in names] or [module]
 
 
-# ---- temp dirs a unit leaves behind (0.20.0) ------------------------------------
+# ---- temp dirs a unit leaves behind (0.20.1) ------------------------------------
 #
 # Every unit runs with its OWN empty TMPDIR under one run root, and whatever is still in it when
 # the unit's process has exited is a leak: the unit FAILS, naming what it left and how big. Before
@@ -219,7 +219,7 @@ def run_unit(unit):
                     "mkdtemp/TemporaryDirectory needs addCleanup/tearDown (or use Sandbox):\n  %s\n"
                     % (unit, len(left), "y" if len(left) == 1 else "ies", "\n  ".join(left[:20])))
             rc = rc or 1
-    # (0.20.0) Python 3.12+ exits 5 when a unit ran no tests; a helper base class (WatchTest,
+    # (0.20.1) Python 3.12+ exits 5 when a unit ran no tests; a helper base class (WatchTest,
     # ChooseCase...) is exactly that, and older Pythons exit 0 for it, as the note in
     # classes_in() assumes. Only the "no tests" exit is forgiven, never a real failure.
     if rc == 5 and "NO TESTS RAN" in out and not (m and int(m.group(1))):

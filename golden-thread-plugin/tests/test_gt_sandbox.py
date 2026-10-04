@@ -1,4 +1,4 @@
-"""gt sandbox mode (0.20.0): gt_sandbox.py, the settings it merges into ~/.claude/settings.json,
+"""gt sandbox mode (0.20.1): gt_sandbox.py, the settings it merges into ~/.claude/settings.json,
 the queue inbox, and the gt_settings / doctor / verify / surface wiring.
 
 The load-bearing assertions are about BOUNDARIES of what gt writes:
@@ -453,7 +453,7 @@ class BareApply(Sandbox):
 
 
 class Rollback(InProcess):
-    """M3: installing a gt that has no gt_sandbox.py (before 0.20.0) left the deny rules with
+    """M3: installing a gt that has no gt_sandbox.py (before 0.20.1) left the deny rules with
     nothing to remove them. install.sh asks rollback-check first."""
 
     def release(self, *scripts):
@@ -773,7 +773,7 @@ if __name__ == "__main__":
 
 class CredentialsDeny(InProcess):
     """0.20.1: Claude Code's login file is read-denied to the shell and the file tools. Live-
-    checked on macOS (claude 2.1.289, CHANGELOG 0.20.0): Claude Code still runs with it denied."""
+    checked on macOS (claude 2.1.289, CHANGELOG 0.20.1): Claude Code still runs with it denied."""
 
     def test_credentials_file_is_in_deny_read_and_a_file_read_rule(self):
         cred = str(self.home / ".claude" / ".credentials.json")

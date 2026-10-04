@@ -3,17 +3,17 @@
 > **Reader:** a daily user — the deepest document, where the *why* lives
 > **Claims last checked against the code:** 2026-10-02 (gt 0.19.1) — see *The documents, and what belongs in each* in [`CLAUDE.md`](../CLAUDE.md).
 
-Complete reference for gt's thirty-six skills and its nine modules. Written against **gt v0.20.0**
-(gt-wiki 0.2.7; gt-usage 0.1.6; gt-demo, gt-watch, gt-report-card, gt-farm and gt-flow 0.20.0; gt-visualize 0.4.4;
-gt-lotr 0.3.0 — the five named with 0.20.0 are versioned with gt and move with every release, changed or not).
+Complete reference for gt's thirty-six skills and its nine modules. Written against **gt v0.20.1**
+(gt-wiki 0.2.7; gt-usage 0.1.6; gt-demo, gt-watch, gt-report-card, gt-farm and gt-flow 0.20.1; gt-visualize 0.4.4;
+gt-lotr 0.3.0 — the five named with 0.20.1 are versioned with gt and move with every release, changed or not).
 
-> **0.20.0 adds gt unlock**, off by default: agents need your presence (TOTP + Touch ID /
+> **0.20.1 adds gt unlock**, off by default: agents need your presence (TOTP + Touch ID /
 > Windows Hello, optionally Entra ID) for LOTR, credentials, publishing and gt's own guards.
-> See [Security: gt unlock](#security-gt-unlock-0200) and [`SECURITY.md`](SECURITY.md).
+> See [Security: gt unlock](#security-gt-unlock-0201) and [`SECURITY.md`](SECURITY.md).
 > And **gt sandbox mode**, off by default: Claude Code's own sandbox and permission rules keep
 > the assistant's shell and file tools off the vault and gt's state, and the vault is reached
 > through gt's read-only MCP server and the write queue (native Windows: permission rules only,
-> friction). See [Security: gt sandbox mode](#security-gt-sandbox-mode-0200).
+> friction). See [Security: gt sandbox mode](#security-gt-sandbox-mode-0201).
 > It also ships each pipeline stage as a plugin agent carrying its own model and effort
 > (`gt:extract` … `gt:place`), a `gt:pipeline-stage` workflow with schema-checked output, and
 > typed LOTR results; each falls back to the earlier route on an older Claude Code.
@@ -204,13 +204,13 @@ them, so `/gt:gt-validate` names what actually runs.
 classify and draft haiku, extract and place sonnet, reconcile, verify and generalize opus —
 whatever profile the skills use. The `agent_models` setting (`task` default, `session`) turns it off.
 
-**Each stage is a plugin agent that carries its effort too (0.20.0).** gt ships one agent
+**Each stage is a plugin agent that carries its effort too (0.20.1).** gt ships one agent
 definition per stage in `agents/<stage>.md`, run as `gt:extract`, `gt:classify`, `gt:reconcile`,
 `gt:draft`, `gt:verify`, `gt:generalize` and `gt:place`. Each is generated from its stage spec's
 `agent` block (`gt_agent_spec.py agents`) and holds:
 
 - the **model and effort** for its tier: haiku with no effort (Haiku has no effort levels), sonnet
-  medium, opus high. The Agent tool's own `model` parameter has no effort, so until 0.20.0 every
+  medium, opus high. The Agent tool's own `model` parameter has no effort, so until 0.20.1 every
   agent ran at the session's effort;
 - the **tools** the stage needs and no more: no stage agent can write, edit or spawn agents, and
   extract, which reads untrusted material, gets only Read, Grep and Glob (no shell, no fetch);
@@ -252,7 +252,7 @@ route. When the version cannot be read, a skill relies on what its own tool list
 
 **No skill forks (`context: fork`).** A forked skill runs in a subagent that sees none of the
 conversation and, by default, in the background, so it cannot stop and ask you anything. The
-heavy skills were weighed for it in 0.20.0 and none forks:
+heavy skills were weighed for it in 0.20.1 and none forks:
 
 - gt-ingest stops for you on a contradiction or a security issue, and asks for a missing slug;
 - gt-lint has an approval loop;
@@ -1491,7 +1491,7 @@ written. With no stop the ingest finishes with no prompt at all.
 `<vault>/Projects/golden-thread/ingest-units.json` (in the vault on purpose: a config file inside
 the ingested repo would be untrusted material).
 
-**The workflow route (0.20.0).** On a Claude Code with workflows (the Workflow tool, 2.1.154+,
+**The workflow route (0.20.1).** On a Claude Code with workflows (the Workflow tool, 2.1.154+,
 not turned off), a stage with many units can run as gt's `gt:pipeline-stage` workflow instead of
 one Agent call per unit. The deterministic half stays in gt:
 
@@ -1520,7 +1520,7 @@ workflow's own resume also works. A workflow cannot ask you anything, so every s
 after it returns, exactly as on the per-agent route. Without the Workflow tool, that per-agent
 route is the fallback and runs the same pipeline.
 
-**A writing agent's private scratch folder (0.20.0).** The run's spool folder is per run, not
+**A writing agent's private scratch folder (0.20.1).** The run's spool folder is per run, not
 per agent, and it is inside the vault -- the wrong place for extracted raw material, and a place
 sandbox mode denies every write to. So every unit of a stage whose agent **can write** gets its
 own folder **outside the vault**:
@@ -1548,7 +1548,7 @@ reached you with nothing waiting -- and by `cleanup <run>` for one you abandon. 
 check` (and the `scratch` row of `/gt:gt-doctor`) names any folder a finished or vanished run left
 behind; it never removes anything itself. Sandbox mode allows writes to `~/.gt-scratch` (below).
 
-**`--dry-run` counts wherever it is placed (0.20.0).** `gt_ingest_pipeline.py --dry-run draft …`
+**`--dry-run` counts wherever it is placed (0.20.1).** `gt_ingest_pipeline.py --dry-run draft …`
 used to write: the subcommand's own default overwrote the global flag, so a preview queued and
 drained a real entry. Now the flag means the same before or after the subcommand.
 
@@ -2067,7 +2067,7 @@ packet uses whichever clipboard tool the machine has — `pbcopy`, `wl-copy`, `x
 
 ---
 
-## Security: gt unlock (0.20.0)
+## Security: gt unlock (0.20.1)
 
 **Off by default.** Turned on, gt's unlock authority (`gt_unlockd.py`, one per user, started on
 demand) decides which processes may use LOTR connections, sealed and brokered credentials,
@@ -2085,7 +2085,7 @@ enterprise admin floor, recovery. This section is the reference.
 | off | nothing gated (default) | `unlock: off` |
 | L1 | TOTP / SSO only: friction against agents and accidents — not a boundary against any program running as you, the assistant's shell included | `level L1` |
 | L2 | Touch ID or Windows Hello required in every unlock; credentials sealed under that key, and **every sealed open needs your finger or PIN** (or one per `secrets_window_s`). The gate itself is still friction against a program running as you | `level L2` |
-| L3 | authority as a service account, admin-owned code and policy — the agent boundary | not shipped in 0.20.0 |
+| L3 | authority as a service account, admin-owned code and policy — the agent boundary | not shipped in 0.20.1 |
 
 ### `gt_unlock.py`
 
@@ -2119,7 +2119,7 @@ enterprise admin floor, recovery. This section is the reference.
 | Publishing credentials (git helper, AWS) | `gt:publish` | the grant |
 | LOTR hub client enrol / revoke | `gt:hub:enroll` | fresh confirmation |
 | Opening a locked vault file | `gt:lock:<folder>` | the grant |
-| A read through gt's vault MCP server ([gt sandbox mode](#security-gt-sandbox-mode-0200)) | `gt:vault:read` | open (`read_without_unlock`), and served under `mcp_only` only to the session's registered `gt_vault_mcp.py` — never the assistant's shell or LOTR's shim |
+| A read through gt's vault MCP server ([gt sandbox mode](#security-gt-sandbox-mode-0201)) | `gt:vault:read` | open (`read_without_unlock`), and served under `mcp_only` only to the session's registered `gt_vault_mcp.py` — never the assistant's shell or LOTR's shim |
 | Ordinary vault work, lint, daily notes, model settings | — | never gated |
 
 With unlock on and the authority unreachable, these **fail closed** — the one deliberate
@@ -2176,7 +2176,7 @@ use re-checks the record; a mismatch makes Touch ID unavailable. `gt_unlock_hell
 checks Windows Hello at the console. Doctor rows `unlock` and `security` report the state and
 run `verify`.
 
-## Security: gt sandbox mode (0.20.0)
+## Security: gt sandbox mode (0.20.1)
 
 **Off by default.** `gt_settings.py set sandbox_mode on` makes gt configure Claude Code so that
 the assistant's own shell and file tools are fenced off the vault and gt's state, and the vault
@@ -2341,7 +2341,7 @@ lotr status            # connections, whether each credential is present (never 
   `state/audit.jsonl` with a hash of its arguments, never the arguments.
 - **On a work machine** connections use that machine's own keychain, and employer hostnames stay
   in its local registry, never in the vault — vault notes use connection ids.
-- **Typed results (lotr 0.3.0, gt 0.20.0):** every tool declares an `outputSchema` for the
+- **Typed results (lotr 0.3.0, gt 0.20.1):** every tool declares an `outputSchema` for the
   envelope it returns as `structuredContent` (`ok`, the error object, and for calls `data`,
   `next_cursor`, `notes`, `withheld`). It is offered only to a client that negotiated MCP
   2025-06-18 or later, the protocol that introduced it, so an older client sees the tool list as
@@ -2951,8 +2951,8 @@ is registered here and can be switched off.
 | `surface` | `off` · `on` | `on` | At session start, shows the MUST DO block from `<vault>/deadlines.md` and every waiting handoff each session, and pre-compaction state files once each (0.17.2). Never writes the vault. See [`gt_surface.py`](#gt_surfacepy-what-the-last-session-left-shown-to-the-next) |
 | `handoff_surface` | `any` · `project` · `manual` | `any` | Where a handoff that has not been handled is shown (0.17.2): `any` every session start, whatever project is opened; `project` only when `/gt:gt-open` opens the handoff's own project; `manual` only in `/gt:gt-handle handoff`. `project` needs `/gt:gt-open` — a session that never opens the project never sees it, which is why `any` is the default |
 | `task_surface` | `off` · `on` | `on` | At session start, one line counting `p:: 1` tasks waiting on you — how many overdue, how many open over a week — with the commands to list and work them (0.17.2). A count, never the tasks; deferred tasks are not counted until their date |
-| `unlock` | `off` · `on` | `off` | gt unlock (0.20.0): agents need your presence for LOTR, credentials, publishing and gt's guards. The source of truth is the unlock policy, not vault-config.json: `set unlock on\|off` runs `gt_unlock.py policy enable\|disable`, which needs your enrolled factors. See [Security: gt unlock](#security-gt-unlock-0200) |
-| `sandbox_mode` | `off` · `on` | `off` | gt sandbox mode (0.20.0; a **preview** in 0.20.1 — most skills' shell steps are refused with a one-line next step): writes Claude Code's sandbox and permission rules into `~/.claude/settings.json` so the assistant's shell and file tools cannot write the vault or gt's state (nor read the unlock home, LOTR or locked folders); the vault is reached through the gt-vault MCP tools and the write queue. Native Windows: permission rules only (friction). Restart Claude Code after switching; switch off from a terminal. See [Security: gt sandbox mode](#security-gt-sandbox-mode-0200) |
+| `unlock` | `off` · `on` | `off` | gt unlock (0.20.1): agents need your presence for LOTR, credentials, publishing and gt's guards. The source of truth is the unlock policy, not vault-config.json: `set unlock on\|off` runs `gt_unlock.py policy enable\|disable`, which needs your enrolled factors. See [Security: gt unlock](#security-gt-unlock-0201) |
+| `sandbox_mode` | `off` · `on` | `off` | gt sandbox mode (0.20.1; a **preview**: most skills' shell steps are refused with a one-line next step): writes Claude Code's sandbox and permission rules into `~/.claude/settings.json` so the assistant's shell and file tools cannot write the vault or gt's state (nor read the unlock home, LOTR or locked folders); the vault is reached through the gt-vault MCP tools and the write queue. Native Windows: permission rules only (friction). Restart Claude Code after switching; switch off from a terminal. See [Security: gt sandbox mode](#security-gt-sandbox-mode-0201) |
 | `sandbox_vault_reads` | `deny` · `allow` | `deny` | Under sandbox mode, whether the shell and file tools may still READ the vault (writes stay denied; locked folders stay unreadable) |
 | `vault_mcp` | `auto` · `on` · `off` | `auto` | Whether the gt-vault MCP server offers its tools: `auto` = while sandbox mode is on |
 | `protected_paths` | `off` · `ask` | `ask` | A Write or Edit to the vault's `core-rules/` or `global-memory/`, to `~/.claude/golden-thread/`, or to `~/.claude/settings.json` always shows the permission prompt; editing an existing file in `Sources/` is refused (supersede it with a new file). Shell commands that write those files are not seen |
@@ -2982,7 +2982,7 @@ is registered here and can be switched off.
 | `execution_metrics` | `off` · `on` | `on` | Record one row per execution of tests, release-pipeline steps and gt skills (`gt_metrics.py`); `off` records nothing anywhere (0.18.1) |
 | `scoped_receipts` | `off` · `on` | `on` | On a feature branch, a commit may rely on a scoped receipt from `tests/run.sh --affected`; the default branch and release gates always need a full-suite receipt (0.18.1) |
 | `test_tmpdir` | `off` · `noindex` | `off` | Where the test runner puts throwaway files; `noindex` = `~/Library/Caches/gt-tests.noindex` on macOS, `$XDG_CACHE_HOME/gt-tests` elsewhere (0.18.1) |
-| `agent_models` | `task` · `session` | `task` | Each specialist agent's model set by its task (haiku/sonnet/opus by tier), whatever the skill profile; `session` passes no model (0.19.1). Since 0.20.0 the stage agent definitions carry model and effort, and changing this rewrites them at once. See [Model and effort profiles](#model-and-effort-profiles-gt_model_policypy-0191) |
+| `agent_models` | `task` · `session` | `task` | Each specialist agent's model set by its task (haiku/sonnet/opus by tier), whatever the skill profile; `session` passes no model (0.19.1). Since 0.20.1 the stage agent definitions carry model and effort, and changing this rewrites them at once. See [Model and effort profiles](#model-and-effort-profiles-gt_model_policypy-0191) |
 | `vault_hints` | `off` · `on` | `off` | Up to three vault page titles relevant to each prompt, from `index.md` only, never a page body (0.19.1). See [Recall benchmark and prompt hints](#recall-benchmark-and-prompt-hints-gt_keyword_recallpy-0191) |
 | `allin_timeout` | `300` · `600` · `1200` · `1800` · `3600` | `300` | Seconds each all-in check may take, in `/gt:gt-allin` and the commit gate (0.19.1); the gate gives the whole run twelve times this |
 | `runners` | empty · comma-separated ssh aliases | empty | Remote hosts that may run tests and calibration: `dev/remote-test.sh`, `prun.py --hosts`, `gt_bench.py --hosts` (0.18.1) |
@@ -3565,7 +3565,7 @@ not drown the ones that arrived today. `--write-baseline` records the current se
 before you accept it; a baseline written without looking is a decision to ignore whatever was
 there.
 
-**Baselines are content-keyed (0.20.0), for both `gt_secrets` and `gt_scan_code`.** An entry
+**Baselines are content-keyed (0.20.1), for both `gt_secrets` and `gt_scan_code`.** An entry
 matches by the rule, the path with every release-version segment written as `<ver>`
 (`golden-thread/0.20.0/x.py` and `golden-thread/0.20.1/x.py` are one path), and a hash of the
 normalised line, with a count. So a version cut that copies a release directory no longer
@@ -3573,7 +3573,7 @@ re-flags lines you already accepted, while an edited line, the same text in anot
 different rule, or one more copy of an accepted line still fails. The secrets baseline stores no
 matched text, no value and no fast hash: its hash is PBKDF2-HMAC-SHA256 (200,000 rounds, salted
 with the rule and the path), because a plain digest of a short line is a lookup away from the
-line; the code baseline uses SHA-256 (code is not a secret). A baseline written before 0.20.0
+line; the code baseline uses SHA-256 (code is not a secret). A baseline written before 0.20.1
 (path-keyed `accepted` tuples) is still honoured exactly as before -- it just does not survive a
 cut. `--write-baseline` writes the new format; run it once (and read what it records) to migrate.
 
@@ -4474,8 +4474,11 @@ duplicated across projects' runbooks — the detection step of `/gt:gt-runbook-l
 | `gt_load.py [--cap N] [--json]` | what a parallel run would start with now, and why | |
 | `gt_ingest_pipeline.py stages · survey · packet · fan-in · reconcile · draft · promote-scan · promote-plan · status` | the deterministic stages of ingest and promote | `1` a stop · `3` incomplete |
 | `~/.claude/golden-thread/hooks/guard_foreign_checkout.py list` · `add PATH [--label L] [--route R] [--dry-run]` · `remove PATH [--dry-run]` | declare checkouts another machine owns ([Foreign checkouts](#foreign-checkouts-a-commit-in-another-machines-checkout)) | |
-| `gt_sandbox.py status · plan · apply [--force] · remove · check · verify · managed · rollback-check [--json]` (hooks dir, 0.20.0) | gt sandbox mode's Claude Code settings ([gt sandbox mode](#security-gt-sandbox-mode-0200)) | `1` refused, drift or FAIL |
-| `gt_vault_mcp.py [--vault V]` (0.20.0) | the gt-vault MCP server over stdio; Claude Code starts it | |
+| `gt_sandbox.py status · plan · apply [--force] · remove · check · verify · managed · rollback-check [--json]` (hooks dir, 0.20.1) | gt sandbox mode's Claude Code settings ([gt sandbox mode](#security-gt-sandbox-mode-0201)) | `1` refused, drift or FAIL |
+| `gt_vault_mcp.py [--vault V]` (0.20.1) | the gt-vault MCP server over stdio; Claude Code starts it | |
+| `gt_mcp_inventory.py [--json] [--cwd D] [--home D]` · `managed` (0.20.1) | every MCP server Claude Code may load here (user, local, project, plugin, claude.ai, built-in, managed), marking the ones connected directly, outside unlock and the sandbox; `managed` prints the managed-settings recipe (guidance only). Read-only; the doctor and `gt_unlock.py verify` use it | |
+| `gt_uninstall.py --check` · `[--yes]` · `--keep-vault-config` · `--discard-queued` · `--purge-backups` · `--purge-lotr` · `--json` (0.20.1) | remove gt from this machine (jobs, plugin dirs and registries, sandbox entries, unlock daemon, `~/.gt-inbox`, `~/.gt-scratch`), then re-scan to prove it is gone; also `install.sh --uninstall [--check]` and `install.cmd /uninstall` | `1` a step failed or the re-scan found something · `2` refused (not confirmed, queued writes, no `~/.claude`) |
+| `gt_errors.py` (0.20.1; a library, shipped in the hooks dir and `templates/tools/`) | a vault tool the OS refuses prints ONE line, not a traceback, and says which cause: gt sandbox mode (use the gt-vault MCP or a terminal) or a macOS provenance refusal (another interpreter, or Full Disk Access); exit `5` | |
 
 ---
 
@@ -4486,7 +4489,7 @@ duplicated across projects' runbooks — the detection step of `/gt:gt-runbook-l
 **"Operation not permitted" writing the vault on macOS (EPERM).** macOS can refuse one Python
 writes it allows another: a file carrying `com.apple.provenance`, or a privacy-protected folder.
 Seen 2026-10-03: Homebrew's `python3.9` -- the default `python3` on that Mac -- could not replace
-the vault's `log.md`, while `/usr/bin/python3` could. Since 0.20.0 gt words this as one line
+the vault's `log.md`, while `/usr/bin/python3` could. Since 0.20.1 gt words this as one line
 naming the interpreter and the fix (`gt_log.py` exits `5`; the broker holds the request; nothing
 is half-written), and `install.sh` picks ONE interpreter for hooks, tools and scheduled jobs by
 an actual write probe -- create, write, `os.replace`, remove in the vault and in

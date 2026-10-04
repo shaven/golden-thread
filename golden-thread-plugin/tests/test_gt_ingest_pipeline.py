@@ -559,7 +559,7 @@ class SessionKindTest(PipelineBase):
 
 
 
-# -- 0.20.0: the dry-run flag counts wherever it is placed ---------------------------------------
+# -- 0.20.1: the dry-run flag counts wherever it is placed ---------------------------------------
 class DryRunPlacementTest(PipelineBase):
     """research.md 2026-10-03: `--dry-run draft` WROTE -- the subcommand's own --dry-run default
     (False) overwrote the global flag, and a 55-line entry was queued and drained by a preview.
@@ -593,7 +593,7 @@ class DryRunPlacementTest(PipelineBase):
         self.assertFalse((self.spool / "r9").exists())
 
 
-# -- 0.20.0: the workflow route (gt:pipeline-stage) --------------------------------------------
+# -- 0.20.1: the workflow route (gt:pipeline-stage) --------------------------------------------
 class WorkflowArgsTest(PipelineBase):
     def args(self, run, stage, *extra, expect=0):
         p = self.pipe("workflow-args", run, "--stage", stage, "--json", *extra, expect=expect)

@@ -1,4 +1,4 @@
-"""Shared fixture for the unlock tests (0.20.0): an authority on a real socket / pipe in a
+"""Shared fixture for the unlock tests (0.20.1): an authority on a real socket / pipe in a
 throwaway home, test factors, and real client processes (tests/_unlock_child.py).
 
 The platform factor here is a SOFTWARE P-256 key standing in for the Secure Enclave / TPM:

@@ -1,4 +1,4 @@
-"""Every text-mode file write in shipped gt code says newline="\\n" (0.20.0).
+"""Every text-mode file write in shipped gt code says newline="\\n" (0.20.1).
 
 On native Windows, Python's text mode turns every "\\n" written into "\\r\\n". 0.19.2 found it
 in vault_init.py and gt_upgrade.py: a vault built on Windows differed byte for byte from the
