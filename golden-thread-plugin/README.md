@@ -39,8 +39,11 @@ A Claude Code plugin that turns an Obsidian vault into the single source of trut
 > sonnet·medium, opus·high; a new install's default), `very-high` (opus·xhigh) or `inherit` —
 > with per-skill and per-plugin overrides (`gt_model_policy.py`) and a doctor `model-policy` row;
 > specialist agents run on the model their task needs (`agent_models`, haiku/sonnet/opus by tier).
-> **LOTR handles SSO:** `lotr add-mcp` fronts an SSO/OAuth MCP endpoint by reusing its client's
-> token by reference, refreshing on 401 (gt-lotr 0.2.0). **Recall:** `gt_bench.py recall` measures
+> **LOTR handles SSO:** `lotr connect <name> --url <mcp-url>` signs in to an OAuth MCP server from your own
+> terminal (native OAuth, gt-lotr 0.3.0). The refresh token is sealed when unlock is on, the server's hosts are
+> pinned, and sign-in refuses to run from inside Claude Code. Verified live against Linear; Google and Microsoft
+> are tested against fake servers only. `lotr add-mcp` still reuses an existing client's token by reference
+> (gt-lotr 0.2.0). **Recall:** `gt_bench.py recall` measures
 > how often lookup finds the right page; optional prompt hints (`vault_hints`, off by default).
 > **Supersession and expiry** applied when notes are read (`gt_supersede.py`). **Fixes:** the
 > queue guard reads shell tokens and follows `cd`; nothing writes bytecode into gt-src; post-install
