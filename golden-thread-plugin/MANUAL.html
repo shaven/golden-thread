@@ -1204,7 +1204,23 @@ python3 $H/gt_broker.py audit --vault &lt;vault&gt; [--since 24]     # .md files
 <li><strong>Escalated means the owner decides.</strong> Conflicting replacements, a target that changed after the
   request was queued, a target moved or deleted since (the broker never recreates a file at its
   old path), and <strong>every</strong> write to a <code>design.md</code> or <code>global-memory/</code> write nothing: each version is
-  kept in <code>spool/broker/conflicts/</code> and a <code>#conflict</code> task points at it.</li>
+  kept in <code>spool/broker/conflicts/</code> and a <code>#conflict</code> task points at it. A review target is
+  decided by <strong>identity, not spelling</strong> (0.20.1): a file named <code>design.md</code> in any case, Unicode
+  form (U+017F long s, fullwidth letters), with trailing dots, spaces, zero-width characters, an
+  NTFS <code>::$DATA</code> suffix or a Windows 8.3 short name (<code>DESIGN~1.MD</code>); anything under the vault-root
+  <code>global-memory/</code> by any of those spellings; and anything that resolves to either through a
+  symlink or the same inode (<code>os.path.samefile</code>). A symlink in the path that dangles, or that
+  leaves the directory it sits in, is escalated too, since where it lands is not what the path
+  says. <code>xdesign.md</code>, <code>design-notes.md</code>, <code>global-memory-x/</code> and <code>notes/global-memory/x.md</code> are
+  ordinary files. The spelling rules apply on every platform: on a case-sensitive volume
+  <code>DESIGN.md</code> is a different file, and is escalated all the same.</li>
+<li><strong>A claim holds the file, however it is spelled (0.20.1).</strong> A claim is matched by identity,
+  not as a string: a case or Unicode variant of a claimed path (<code>Research.md</code>, a long s), a
+  trailing dot or space, a Windows 8.3 short name, or a symlink to the file is the claimed file,
+  for the guard, for <code>gt_session.py check</code> / <code>claim</code> and for the broker's hold. The case folding
+  is deliberate on every platform: on a case-sensitive volume (Linux) <code>Research.md</code> and
+  <code>research.md</code> are two files, and a claim on one holds the other all the same — a write the
+  holder did not expect waits one drain, which is cheap; a write through a variant is not.</li>
 <li><strong>What the guard denies.</strong> <code>guard_session_claims</code> denies a direct <code>Write</code>/<code>Edit</code> to any vault
   <code>.md</code> outside <code>Sources/</code>, <code>core-rules/</code>, <code>.obsidian/</code>, <code>.git/</code>, <code>.gt/</code> and gt's own <code>spool/</code>,
   <code>sessions/</code> and <code>tools/</code> — claimed or not — and the visible shell writes: <code>&gt;</code>, <code>&gt;&gt;</code>, <code>tee</code>,
@@ -1267,7 +1283,9 @@ under <code>spool/events/</code>, merged into <code>events.jsonl</code>. The too
   <code>--dry-run</code>). <code>archive-project</code> is the only source of <code>archive</code>: <code>gt_closeout.py answer
   &lt;slug&gt; yes</code> records your decision to close, not the move, and emits no event.</li>
 <li><code>gt_tasks.py</code> emits <code>task.open</code> / <code>task.done</code> for checkbox lines that changed — once the
-  stream has been seeded with task events by a backfill.</li>
+  stream has been seeded with task events by a backfill. A task event is always stamped after
+  the latest event for the same task (0.20.1), so a flip made in the same second as the event
+  it follows still sorts after it.</li>
 </ul>
 <p>An event can never fail the operation it describes: a failure is one line on stderr.</p>
 <p>A vault older than the events has none. <code>backfill</code> rebuilds the history from git and
@@ -5269,7 +5287,7 @@ that changed after a replace was requested, write nothing: every version is save
 <code>spool/broker/conflicts/</code> and a <code>#conflict</code> P1 task points at it. A file another live session has
 claimed stays queued (Core rule 1). Generated and protected files (<code>log.md</code>, <code>TASKS.md</code>,
 <code>decisions.md</code>, <code>Sources/</code>, <code>core-rules/</code>) are refused; <code>design.md</code> and <code>global-memory/</code> always go
-to the owner. Decisions are logged to <code>spool/broker/log-&lt;date&gt;.jsonl</code>. gt-farm files its results
+to the owner, recognised by identity rather than spelling (see <em>Writing to the shared files</em>). Decisions are logged to <code>spool/broker/log-&lt;date&gt;.jsonl</code>. gt-farm files its results
 this way, and a farmed result can only create a new file, never edit an existing note (ADR-8).</p>
 <p><strong>Specialist agents by job type (<code>agent_specialization</code>, off by default).</strong> With it on,
 <code>/gt:gt-ingest</code> hands work to a specialist agent (<code>ingest-code</code>, <code>ingest-docs</code>, <code>ingest-tool</code>) and
@@ -5577,6 +5595,11 @@ duplicated across projects' runbooks — the detection step of <code>/gt:gt-runb
 <td><code>gt_uninstall.py --check</code> · <code>[--yes]</code> · <code>--keep-vault-config</code> · <code>--discard-queued</code> · <code>--purge-backups</code> · <code>--purge-lotr</code> · <code>--json</code> (0.20.1)</td>
 <td>remove gt from this machine (jobs, plugin dirs and registries, sandbox entries, unlock daemon, <code>~/.gt-inbox</code>, <code>~/.gt-scratch</code>), then re-scan to prove it is gone; also <code>install.sh --uninstall [--check]</code> and <code>install.cmd /uninstall</code></td>
 <td><code>1</code> a step failed or the re-scan found something · <code>2</code> refused (not confirmed, queued writes, no <code>~/.claude</code>)</td>
+</tr>
+<tr>
+<td><code>gt_review_target.py</code> (0.20.1; a library, shipped in the hooks dir and <code>templates/tools/</code>)</td>
+<td><code>review_target(vault, rel)</code> -&gt; <code>None</code> or <code>(kind, why)</code>: is a vault path a <code>design.md</code> / <code>global-memory/</code> review target, by identity (inode, symlink) and by every spelling a file system folds; the broker's escalation test</td>
+<td></td>
 </tr>
 <tr>
 <td><code>gt_errors.py</code> (0.20.1; a library, shipped in the hooks dir and <code>templates/tools/</code>)</td>

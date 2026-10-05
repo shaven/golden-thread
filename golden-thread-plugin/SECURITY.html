@@ -264,7 +264,16 @@ host. This is a convenience, not a boundary: a process of yours can start its ow
 (<code>bash -lc</code>, <code>script</code>, a scripted Terminal window). For a boundary set <code>read_without_unlock</code>
 false. Terminals that start non-login shells (GNOME Terminal's default) need an unlock for
 these reads. Writes and anything gated need the grant. Consent-tier operations
-(send, merge, delete) still get LOTR's own confirmation, and you can require a Touch ID / Hello
+still get LOTR's own confirmation. Consent is: the curated <code>send_mail</code> and <code>merge_pull</code>; the raw
+spellings of the same acts (<code>PUT /repos/o/r/pulls/N/merge</code> and <code>/repositories/ID/pulls/N/merge</code>,
+trailing slash or case aside; Graph <code>sendMail</code> and a message's <code>send</code>, <code>forward</code>, <code>reply</code>,
+<code>replyAll</code>, <code>createReply</code>, <code>createForward</code>; Graph <code>POST /$batch</code>, which can carry a send); a
+GraphQL mutation naming <code>mergePullRequest</code> or <code>enablePullRequestAutoMerge</code>; and an HTTP <code>DELETE</code>
+on any connection. Any other destructive endpoint on a generic REST connection is only a write
+unless you add <code>policy.consent</code> globs to the connection (for example
+<code>"consent": ["POST /v1/payments/*", "PUT /admin/*"]</code>, matched as <code>METHOD /path</code>).
+Pagination cursors are held in the daemon, bound to the connection, seat and operation, expire
+after ten minutes, and only <code>call_read</code> accepts one. and you can require a Touch ID / Hello
 approval per operation instead (<code>gt_unlock.py policy consent platform --window 300</code> approves
 consent operations for five minutes, then asks again). Stopping the authority while unlock is
 on needs a fresh factor; <code>gt_unlock.py lock</code> never does.</p>
@@ -834,11 +843,19 @@ itself.</p>
   and session <code>unknown-inbox</code>, whatever the body claimed — a writer in the sandbox cannot speak
   for a session, so <strong>no live session's claim lets an inbox request through</strong> (Core rule 1),
   not even the claim of the session running the drain; it waits until the claim ends. It is
-  then decided like any request — conflicts and <code>design.md</code> / <code>global-memory</code> go to you.
+  then decided like any request — conflicts and <code>design.md</code> / <code>global-memory</code> go to you. Those
+  two are recognised <strong>by identity, not by spelling</strong> (0.20.1): a file named <code>design.md</code> in any
+  case, Unicode form, trailing-dot/space, <code>::$DATA</code> or 8.3 (<code>DESIGN~1.MD</code>) spelling, anything under
+  the vault-root <code>global-memory/</code> by those spellings, and anything that reaches either through a
+  symlink or the same inode. A symlink in the path that dangles or leaves its own directory is
+  escalated as well. Look-alikes (<code>xdesign.md</code>, <code>global-memory-x/</code>) are ordinary files.
   Rejected inbox files are kept in <code>spool/broker/rejected/</code> up to 50; past that they are logged
   and deleted. An oversized file is never read and is left for you. <code>vault_queue_write</code> stamps
   its requests the same way, with the MCP server's own session id: a tool call cannot name
-  another session to write through its claim. Native Windows has no sandbox, so there the inbox
+  another session to write through its claim. A claim is matched <strong>by identity, not spelling</strong>
+  (0.20.1): a case, Unicode, trailing-dot, 8.3 or symlink variant of a claimed path is held like
+  the claimed path itself — on every platform, so on a case-sensitive volume a claim on
+  <code>research.md</code> also holds <code>Research.md</code>, deliberately. Native Windows has no sandbox, so there the inbox
   is not a boundary at all: the broker still refuses links and reparse points and checks that
   the open file is the one it listed, inside the inbox, but Claude's shell can open your files
   directly anyway.</li>
