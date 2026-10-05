@@ -343,6 +343,13 @@ class SeatbeltLikeGt(Sandbox):
         p = self.py(SCRIPTS / "gt_write_queue.py", "--vault", self.vault, "--path", "INBOX.md",
                     "--op", "append", "--content", "- [ ] queued before the fence")
         self.assertOk(p)
+        # gt_tasks writes nothing when the roll-up is unchanged (0.20.1, install branch), and
+        # then a write-denied profile has no write to refuse. Remove the receipt so the roll-up
+        # is pending and the tool has a write the OS must refuse (same fix as ReadOnlyVault).
+        try:
+            (self.vault / "Projects" / "golden-thread" / ".tasks-digest").unlink()
+        except FileNotFoundError:
+            pass
 
     def profile(self, reads):
         v, h = os.path.realpath(self.vault), os.path.realpath(self.home)
