@@ -720,6 +720,20 @@ with `claude mcp list`.
 authorization spec 2026-07-28: PKCE S256, `resource`, loopback redirect) and keeps the login
 inside LOTR, so the server is gated like any LOTR connection. What that does and does not give:
 
+**Using gt-lotr adds no new attack surface for a process running as you.** Each downstream service
+is reachable with the same credentials whether or not you use the gateway. The gateway adds a
+local socket and a token store, both readable only by your user. It never gives the model a token,
+and its controls limit what the model does on its own. It doesn't stop a process already running
+as you.
+
+**Scope of protection.** gt is built to stop the mistakes and ordinary misuse that a person or an
+assistant working in a closed, local setup would make. It does not stop an attacker who already
+runs code as you on this machine. Anything running as your user can act as you, and gt doesn't
+block that. If the machine is compromised, gt can't protect it. We keep hardening gt against
+deliberate attempts, and we test those attempts to learn what is possible. Until the hardening is
+complete, treat gt's protections as protections against accidents and against misuse through the
+tool, not against a hostile process with your access.
+
 | Item | Where it lives | Rating |
 |---|---|---|
 | Refresh token, gt unlock on | `sealed:` in the authority (re-sealed on rotation without a prompt on macOS; Windows asks Hello for the re-seal: a daemon with no person present then keeps the rotated token in memory only and reports it) | **L2** |
