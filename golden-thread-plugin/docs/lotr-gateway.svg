@@ -1,0 +1,37 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="960" height="470" viewBox="0 0 960 470" font-family="-apple-system, Helvetica, Arial, sans-serif">
+  <rect width="960" height="470" fill="#ffffff"/>
+  <text x="480" y="34" text-anchor="middle" font-size="22" font-weight="700" fill="#1f2328">One gateway in front of your MCP servers (LOTR)</text>
+  <text x="480" y="58" text-anchor="middle" font-size="13" fill="#57606a">Measured on one connected server with 23 tools (self-verified, tiktoken). The gap grows with every server.</text>
+
+  <!-- LEFT: direct -->
+  <text x="235" y="96" text-anchor="middle" font-size="16" font-weight="600" fill="#cf222e">Connected directly</text>
+  <rect x="60" y="112" width="350" height="62" rx="8" fill="#ffebe9" stroke="#cf222e"/>
+  <text x="235" y="138" text-anchor="middle" font-size="13" fill="#1f2328">Claude session</text>
+  <text x="235" y="158" text-anchor="middle" font-size="12" fill="#57606a">all 23 tool schemas loaded, every session</text>
+  <line x1="235" y1="174" x2="235" y2="214" stroke="#cf222e" stroke-width="2"/>
+  <rect x="60" y="214" width="350" height="62" rx="8" fill="#ffffff" stroke="#cf222e"/>
+  <text x="235" y="240" text-anchor="middle" font-size="13" fill="#1f2328">MCP server (direct)</text>
+  <text x="235" y="260" text-anchor="middle" font-size="12" fill="#57606a">full JSON responses land in the conversation</text>
+  <text x="235" y="306" text-anchor="middle" font-size="15" font-weight="700" fill="#cf222e">~7,400 tokens schema, every session</text>
+  <text x="235" y="326" text-anchor="middle" font-size="13" fill="#57606a">~15,000 tokens per 20-ticket query, uncapped</text>
+
+  <!-- RIGHT: LOTR -->
+  <text x="725" y="96" text-anchor="middle" font-size="16" font-weight="600" fill="#1a7f37">Through LOTR</text>
+  <rect x="550" y="112" width="350" height="62" rx="8" fill="#dafbe1" stroke="#1a7f37"/>
+  <text x="725" y="138" text-anchor="middle" font-size="13" fill="#1f2328">Claude session</text>
+  <text x="725" y="158" text-anchor="middle" font-size="12" fill="#57606a">4 gateway tools loaded: find, read, write, consent</text>
+  <line x1="725" y1="174" x2="725" y2="204" stroke="#1a7f37" stroke-width="2"/>
+  <rect x="550" y="204" width="350" height="62" rx="8" fill="#ffffff" stroke="#1a7f37"/>
+  <text x="725" y="230" text-anchor="middle" font-size="13" fill="#1f2328">LOTR gateway</text>
+  <text x="725" y="250" text-anchor="middle" font-size="12" fill="#57606a">tiers, consent, unlock, sealed credentials, capped replies</text>
+  <line x1="725" y1="266" x2="725" y2="296" stroke="#1a7f37" stroke-width="2"/>
+  <rect x="550" y="296" width="350" height="46" rx="8" fill="#ffffff" stroke="#1a7f37"/>
+  <text x="725" y="324" text-anchor="middle" font-size="13" fill="#1f2328">MCP servers (behind the gateway)</text>
+  <text x="725" y="368" text-anchor="middle" font-size="15" font-weight="700" fill="#1a7f37">~720 tokens schema, every session</text>
+  <text x="725" y="388" text-anchor="middle" font-size="13" fill="#57606a">~7,500 tokens per call, capped</text>
+
+  <!-- specialist agent path, across the bottom -->
+  <rect x="60" y="412" width="840" height="46" rx="8" fill="#ddf4ff" stroke="#0969da"/>
+  <text x="480" y="432" text-anchor="middle" font-size="14" font-weight="700" fill="#0969da">Specialist agent: the query runs in the agent's own context</text>
+  <text x="480" y="450" text-anchor="middle" font-size="13" fill="#1f2328">the main conversation gets a 313-token table (self-verified, one generic subagent run), not the payload</text>
+</svg>
