@@ -165,7 +165,7 @@ class McpConnection:
             return oauth.access_token(self.conn, self._octx, force=force)
         if self._auth.get("scheme") != "bearer":
             return None
-        return oauth.refuse_envelope(self._resolve(self._ref), self.conn.get("id"))
+        return oauth.refuse_envelope(self._resolve(self._ref), self.conn.get("id"), ref=self._ref)
 
     def _refresh(self):
         cmd = self.conn.get("refresh_cmd")

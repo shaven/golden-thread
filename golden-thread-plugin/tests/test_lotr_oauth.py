@@ -2340,6 +2340,55 @@ class EndToEnd(WorldCase):
         self.assertEqual(r["error"]["code"], "oauth_binding_mismatch", r)
         self.assertEqual(hits, [], "nothing was sent through the daemon path either")
 
+    def test_a_bearer_ref_to_a_plain_oauth_named_store_value_is_refused_before_any_request(self):
+        """Third review (coordinator): the downgrade test above uses a WRAPPED envelope. The residual
+        is a PLAIN value under an OAuth-named store: entry (a legacy refresh token), pointed at by a
+        bearer connection: it must never reach a bearer header, on either transport."""
+        from lotrlib import secrets as sm
+        from lotrlib import profiles
+        from lotrlib.conn_mcp import McpConnection
+        from lotrlib.conn_http import HttpConnection
+        from http.server import BaseHTTPRequestHandler, HTTPServer
+        hits = []
+
+        class Spy(BaseHTTPRequestHandler):
+            def do_POST(self):
+                hits.append(self.headers.get("Authorization"))
+                self.send_response(200)
+                self.send_header("Content-Type", "application/json")
+                self.end_headers()
+                self.wfile.write(b'{"jsonrpc":"2.0","id":1,"result":{}}')
+            do_GET = do_POST
+
+            def log_message(self, *a):
+                pass
+        spy = HTTPServer(("127.0.0.1", 0), Spy)
+        threading.Thread(target=spy.serve_forever, daemon=True).start()
+        self.addCleanup(spy.shutdown)
+        self.connect()
+        reg = json.loads((self.home / "registry.json").read_text())
+        plain = "PLAIN-LEGACY-RT-NOT-A-BEARER"
+        oauth.write_store_secret("lotr-oauth-legacy-rt", plain, self.store_dir)
+        bearer = {"id": "legacy@personal", "identity": "me", "zone": "personal", "kind": "mcp",
+                  "profile": "mcp", "endpoint": "http://127.0.0.1:%d/mcp" % spy.server_address[1],
+                  "transport": "http", "refresh_cmd": None, "tools": reg["connections"][0]["tools"], "enabled": True,
+                  "network": {"hosts": ["127.0.0.1"]}, "trust": "T1",
+                  "policy": {"deny": [], "consent": [], "write": [], "read": []},
+                  "auth": {"scheme": "bearer", "token_ref": "store:lotr-oauth-legacy-rt"}}
+        mc = McpConnection(bearer, profiles.mcp_profile(bearer), secret_resolver=sm.resolve)
+        (opd,) = [o for o in profiles.mcp_profile(bearer)["ops"] if o["name"] == "search_issues"]
+        with self.assertRaises(GatewayError) as cm:
+            mc.call(opd, {})
+        self.assertEqual(cm.exception.code, "oauth_binding_mismatch")
+        self.assertNotIn(plain, json.dumps(cm.exception.to_dict()))
+        self.assertEqual(hits, [], "no request was made, so no Authorization header was sent")
+        http_bearer = dict(bearer, kind="http", endpoint="https://api.example/x")
+        hc = HttpConnection(http_bearer, {}, secret_resolver=sm.resolve)
+        with self.assertRaises(GatewayError) as cm2:
+            hc._auth_header()
+        self.assertEqual(cm2.exception.code, "oauth_binding_mismatch")
+        self.assertNotIn(plain, json.dumps(cm2.exception.to_dict()))
+
     def test_a_legacy_plain_l1_refresh_token_is_wrapped_at_its_next_refresh_and_status_says_so(self):
         from lotrlib import secrets as sm
         self.connect()

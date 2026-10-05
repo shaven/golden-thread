@@ -1437,10 +1437,21 @@ def unwrap_secret(block, ref, raw):
                "sign in again: lotr disconnect <name>, then lotr connect <name> --url ..."])
 
 
-def refuse_envelope(value, conn_id=None):
+_OAUTH_NAMED_REF = re.compile(r"^(sealed|store):lotr-oauth-")
+
+
+def refuse_envelope(value, conn_id=None, ref=None):
     """`value`, unless it is a bound envelope: that is an OAuth sign-in's secret and never a token
     for the wire. The bearer paths call this, so a record edited away from scheme oauth (blocker
-    1 of the independent review) cannot hand the sealed refresh token to the host it names."""
+    1 of the independent review) cannot hand the sealed refresh token to the host it names.
+    Third review: a PLAIN value under an OAuth-named ref (a legacy store: refresh token) is refused
+    too, because the name alone says what it is; the value is never sent on a bearer path."""
+    if isinstance(ref, str) and _OAUTH_NAMED_REF.match(ref):
+        raise GatewayError("oauth_binding_mismatch",
+                           f"{conn_id or 'the connection'}: the secret it points at is an OAuth "
+                           "sign-in's (lotr-oauth-*), not a bearer token; it is not sent",
+                           hints=["the registry record no longer says scheme oauth; sign in again "
+                                  "with lotr connect, or point token_ref at the bearer token"])
     if isinstance(value, str) and value.startswith(BOUND_PREFIX + "."):
         raise GatewayError("oauth_binding_mismatch",
                            f"{conn_id or 'the connection'}: the stored secret is an OAuth sign-in's "
