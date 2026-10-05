@@ -21,6 +21,31 @@ and blocks it if the rule was broken.
 
 
 > [!IMPORTANT]
+## One gateway for your MCP servers (LOTR)
+
+Connecting an MCP server directly to Claude Code costs you twice: every tool's schema is loaded into
+every session whether you use it or not, and every response lands in your conversation in full.
+**LOTR** is Golden Thread's gateway. It sits in front of the MCP servers you connect and changes both
+costs.
+
+- **One gateway instead of many schemas.** Measured on one connected server with 23 tools, LOTR's
+  gateway exposes 4 tools to the session: about 720 tokens of schema instead of about 7,400
+  (self-verified, tiktoken, one server; the gap grows with each server you add).
+- **Capped responses.** A connected server's answer is capped before it reaches the conversation.
+- **Specialist agents keep the payload out of the conversation.** A domain agent makes the call in
+  its own context and returns only the compact result. In one measured case a 20-ticket query
+  returned 313 tokens to the main context (self-verified, one run; the shipped specialists are
+  queued for 0.20.2 and are not part of this release).
+- **Native OAuth sign-in** (`lotr connect`). You sign in from your own terminal. The refresh token
+  is sealed when unlock is on, the server's hosts are pinned, and sign-in refuses to run from inside
+  Claude Code. Verified against Linear's live server; Google and Microsoft are tested against fake
+  servers only.
+- **Consent and reader/writer tiers.** Writes that delete, send or merge need consent, and the
+  consent prompt is raised by the gateway, not by the model.
+
+**What it does not do:** it does not stop a process already running as you. See
+[SECURITY.md](golden-thread-plugin/SECURITY.md) for the threat model.
+
 > **0.20.1: gt unlock and gt sandbox mode (both off by default), and Windows, finished.** Turned on, agents need your
 > presence — TOTP plus Touch ID (macOS) or Windows Hello, optionally Microsoft Entra ID sign-in —
 > before they use LOTR connections, credentials, publishing or gt's own guards. Callers are
@@ -188,31 +213,6 @@ and blocks it if the rule was broken.
 > stay responsive for something else, if you are on battery, or if a remote end is
 > rate-limited. `off` is the full stop: nothing runs in parallel and the rule is not
 > asserted at all.
-
-## One gateway for your MCP servers (LOTR)
-
-Connecting an MCP server directly to Claude Code costs you twice: every tool's schema is loaded into
-every session whether you use it or not, and every response lands in your conversation in full.
-**LOTR** is Golden Thread's gateway. It sits in front of the MCP servers you connect and changes both
-costs.
-
-- **One gateway instead of many schemas.** Measured on one connected server with 23 tools, LOTR's
-  gateway exposes 4 tools to the session: about 720 tokens of schema instead of about 7,400
-  (self-verified, tiktoken, one server; the gap grows with each server you add).
-- **Capped responses.** A connected server's answer is capped before it reaches the conversation.
-- **Specialist agents keep the payload out of the conversation.** A domain agent makes the call in
-  its own context and returns only the compact result. In one measured case a 20-ticket query
-  returned 313 tokens to the main context (self-verified, one run; the shipped specialists are
-  queued for 0.20.2 and are not part of this release).
-- **Native OAuth sign-in** (`lotr connect`). You sign in from your own terminal. The refresh token
-  is sealed when unlock is on, the server's hosts are pinned, and sign-in refuses to run from inside
-  Claude Code. Verified against Linear's live server; Google and Microsoft are tested against fake
-  servers only.
-- **Consent and reader/writer tiers.** Writes that delete, send or merge need consent, and the
-  consent prompt is raised by the gateway, not by the model.
-
-**What it does not do:** it does not stop a process already running as you. See
-[SECURITY.md](golden-thread-plugin/SECURITY.md) for the threat model.
 
 ## Who this is for
 
