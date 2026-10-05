@@ -23,7 +23,7 @@ and blocks it if the rule was broken.
 > [!IMPORTANT]
 ## One gateway for your MCP servers (LOTR)
 
-![One gateway in front of your MCP servers: direct connections load every schema and every full response; through LOTR the session loads four gateway tools and gets capped replies, with specialist agents keeping payloads out of the conversation](golden-thread-plugin/docs/lotr-gateway.svg)
+![One tool connection, a fraction of the tokens: the same Jira query measured three ways, 98% fewer main-context tokens over 25 queries through LOTR with a specialized agent](golden-thread-plugin/docs/lotr-token-savings.png)
 
 Connecting an MCP server directly to Claude Code costs you twice: every tool's schema is loaded into
 every session whether you use it or not, and every response lands in your conversation in full.
