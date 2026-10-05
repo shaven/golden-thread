@@ -18,7 +18,7 @@ import subprocess
 import unittest
 from pathlib import Path
 
-from _harness import Sandbox, REPO, needs_dev, latest_version_dir
+from _harness import Sandbox, REPO, SCRIPTS, needs_dev, latest_version_dir
 import test_install as _ti   # module import only: its TestCases must not be collected here
 
 COPYGT = REPO / "dev" / "copygt.sh"
@@ -388,6 +388,42 @@ class EndToEndTest(CopygtBase):
         self.assertEqual(p2.returncode, 0, p2.stdout[-3000:])
         self.assertIn("nothing to commit", p2.stdout)
         self.assertEqual(self.head(self.dest), head)
+
+    def fresh_vault_without_config(self):
+        # A vault built the way /gt:gt-init builds one, but touching nothing in HOME: vault_init's
+        # plain `fresh` writes ~/.claude/vault-config.json, and a new machine has no such file.
+        v = self.tmp / "vault"
+        self.assertOk(self.py(SCRIPTS / "vault_init.py", "fresh", "--vault", v, "--domain", "Test",
+                              "--no-config"), "vault_init.py fresh --no-config failed")
+        self.assertFalse((self.home / ".claude" / "vault-config.json").exists())
+        return v
+
+    def test_a_new_machine_with_no_vault_config_is_clean_with_the_vault_given_to_copygt(self):
+        # The 0.20.1 rehearsal's failure: no ~/.claude/vault-config.json, the vault named with
+        # --vault. copygt gave it to validate-install.py but not to install.sh, so install.sh
+        # found no vault and exited 4 ("INSTALL INCOMPLETE"); the run was never clean.
+        vault = self.fresh_vault_without_config()
+        before = self.head(self.remote)
+        p = self.copygt("--dest", self.dest, "--vault", vault, "--report", self.report)
+        report = self.report.read_text() if self.report.exists() else ""
+        self.assertEqual(p.returncode, 0, p.stdout[-6000:] + p.stderr[-2000:] + report)
+        self.assertIn("install.sh exited 0", p.stdout)
+        self.assertNotEqual(self.head(self.dest), before, "the clean run did not commit")
+        self.assertEqual(self.head(self.remote), before, "copygt.sh pushed; it must never push")
+        cfg = json.loads((self.home / ".claude" / "vault-config.json").read_text())
+        self.assertEqual(Path(cfg["vault_path"]).resolve(), vault.resolve(),
+                         "install.sh did not connect the vault copygt was given")
+
+    def test_a_relative_vault_path_is_read_from_where_copygt_was_run(self):
+        # install.sh runs from inside the repository's plugin folder, so a relative --vault must be
+        # made absolute before that, or it names a directory that does not exist there.
+        self.fresh_vault_without_config()                   # <tmp>/vault
+        p = self.run_cmd(["bash", self.src / "copygt.sh", "--dest", self.dest, "--vault", "vault",
+                          "--report", self.report], cwd=self.tmp, timeout=900)
+        report = self.report.read_text() if self.report.exists() else ""
+        self.assertEqual(p.returncode, 0, p.stdout[-6000:] + p.stderr[-2000:] + report)
+        cfg = json.loads((self.home / ".claude" / "vault-config.json").read_text())
+        self.assertEqual(Path(cfg["vault_path"]).resolve(), (self.tmp / "vault").resolve())
 
     def test_a_run_that_is_not_clean_does_not_commit(self):
         # No vault: the gate's vault rows cannot run, and "could not run" is never a pass.

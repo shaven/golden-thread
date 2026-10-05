@@ -11,7 +11,7 @@ doc:
     ./copygt.sh --dest <repo path> --dry-run   list every add, change and delete; write nothing
 
     It never pushes. Pushing is a separate step, outside this script (owner, 2026-10-01).
-    --vault V       the vault the validation runs against (default: ~/.claude/vault-config.json)
+    --vault V       the vault install.sh connects and the validation checks (default: ~/.claude/vault-config.json)
     --report FILE   where the report goes (default ~/.claude/golden-thread/copygt/report-<time>.md,
                     with a .json beside it). Never inside the destination.
 
@@ -46,13 +46,13 @@ usage:
     ./copygt.sh --dest <repo path> --dry-run   list every add, change and delete; write nothing
 
     It never pushes. Pushing is a separate step, outside this script (owner, 2026-10-01).
-    --vault V       the vault the validation runs against (default: ~/.claude/vault-config.json)
+    --vault V       the vault install.sh connects and the validation checks (default: ~/.claude/vault-config.json)
     --report FILE   where the report goes (default ~/.claude/golden-thread/copygt/report-<time>.md,
                     with a .json beside it). Never inside the destination.
 option: --dest | value | DEST | | the repository to copy into (required; never inferred)
 option: --dry-run | flag | DRY | yes | list every add, change and delete; write nothing
 option: --no-push | ignore | | | accepted for older notes; copygt.sh never pushes
-option: --vault | value | VAULT | | the vault the validation runs against
+option: --vault | value | VAULT | | the vault install.sh connects and the validation checks
 option: --report | value | REPORT | | where the report goes (never inside the destination)
 prologue:
   SRC="$(cd "$(dirname "$0")" && pwd -P)"
@@ -62,6 +62,13 @@ prologue:
     exit 2
   fi
   PY="${GT_PYTHON:-python3}"
+  # (0.20.1) install.sh runs from inside the repository, so a relative --vault is made absolute
+  # here, from the directory copygt was run in. ~ is expanded by hand: --vault=~/x is not.
+  case "$VAULT" in
+    ""|/*|[A-Za-z]:[/\\]*) ;;
+    "~"|"~/"*) VAULT="$HOME${VAULT#\~}" ;;
+    *) VAULT="$PWD/$VAULT" ;;
+  esac
 step: verify | gate | gt-src matches its SHA256SUMS and SOURCE.json before anything is written | - | yes
   # ── 1. gt-src must be exactly what was published ──────────────────────────────
   echo "== 1. verify gt-src ($SRC)"
@@ -244,7 +251,9 @@ step: install | step | install.sh ran from the destination | - | yes
   echo "== 3. install.sh from $PLUGIN_DIR"
   INSTALL_RC=0
   if [ -f "$PLUGIN_DIR/install.sh" ]; then
-    (cd "$PLUGIN_DIR" && bash ./install.sh) < /dev/null > "$WORK/install.log" 2>&1 || INSTALL_RC=$?
+    # (0.20.1) the vault goes to install.sh as it goes to validate-install.py. Without it, a new
+    # machine (no ~/.claude/vault-config.json) got exit 4 "INSTALL INCOMPLETE" and never ran clean.
+    (cd "$PLUGIN_DIR" && bash ./install.sh ${VAULT:+--vault "$VAULT"}) < /dev/null > "$WORK/install.log" 2>&1 || INSTALL_RC=$?
     tail -25 "$WORK/install.log" | sed 's/^/    /'
     cp "$WORK/install.log" "${REPORT%.md}.install.log"
     echo "      install.sh exited $INSTALL_RC (full log: ${REPORT%.md}.install.log)"
