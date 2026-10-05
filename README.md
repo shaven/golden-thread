@@ -61,7 +61,7 @@ and blocks it if the rule was broken.
 > (gt-lotr 0.2.0). **Recall:** `gt_bench.py recall` measures
 > how often lookup finds the right page; optional prompt hints (`vault_hints`, off by default).
 > **Supersession and expiry** applied when notes are read (`gt_supersede.py`). **Fixes:** the
-> queue guard reads shell tokens and follows `cd`; nothing writes bytecode into gt-src; post-install
+> queue guard reads shell tokens and follows `cd`; nothing writes bytecode into the published copy; post-install
 > resolves the installed release from any path and every completed run writes its receipt; one
 > recorded interpreter for every launchd job; the commit gate fits a large repo; the Stop validator
 > no longer demands a timestamp from a turn that was never given one (the install-time alert).
@@ -94,7 +94,7 @@ and blocks it if the rule was broken.
 >
 > **0.17.11** made every vault write go through the write queue (Core rule 1) and added the
 > optional `gt-lotr` gateway; **0.17.10** a write broker and specialist agents; **0.17.3–0.17.5**
-> gt-src checksums and install fixes. Details in the [CHANGELOG](CHANGELOG.md).
+> published-copy checksums and install fixes. Details in the [CHANGELOG](CHANGELOG.md).
 
 > **0.17.2: what is waiting on you is in front of you when a session starts — and easy to clear.**
 >

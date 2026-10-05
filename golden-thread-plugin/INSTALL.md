@@ -382,7 +382,7 @@ each command you had, adding `(module <name> is off: ./install.sh --with <name>)
 module ends up off. One install over 0.14.0 ends where a fresh 0.15.0 install with the
 same module choices would, and your hook-dir files and your own hooks are left in place.
 
-**Installing from a gt-src copy (0.17.3+):** gt-src has the repository's layout, so run
+**Installing from a published copy (0.17.3+):** the published copy has the repository's layout, so run
 `install.sh` from its `golden-thread-plugin/` folder. Before copying anything, `install.sh` checks
 every file against the `SHA256SUMS` at the repository root and names any file that is missing,
 changed or not where the list puts it. **By default it then installs anyway, marked unverified**
@@ -438,7 +438,7 @@ which stays CRLF — so a Windows clone neither breaks the shell scripts nor fai
 check. Not yet exercised: the hooks as Claude Code for Windows itself runs them (they have been
 run directly, with the same payloads). WSL is Linux, and installs as Linux does.
 
-**Rollback:** the repo (and a gt-src copy) keeps the previous release, so
+**Rollback:** the repo (and a published copy) keeps the previous release, so
 `bash install.sh <previous version> --vault <vault>` reinstalls it; your recorded module
 choices and vault are kept. **If you turned on sandbox mode or gt unlock, turn them off
 first** — a release from before them cannot undo their settings, so the vault could be left

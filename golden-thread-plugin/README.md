@@ -46,7 +46,7 @@ A Claude Code plugin that turns an Obsidian vault into the single source of trut
 > (gt-lotr 0.2.0). **Recall:** `gt_bench.py recall` measures
 > how often lookup finds the right page; optional prompt hints (`vault_hints`, off by default).
 > **Supersession and expiry** applied when notes are read (`gt_supersede.py`). **Fixes:** the
-> queue guard reads shell tokens and follows `cd`; nothing writes bytecode into gt-src; post-install
+> queue guard reads shell tokens and follows `cd`; nothing writes bytecode into the published copy; post-install
 > resolves the installed release from any path and every completed run writes its receipt; one
 > recorded interpreter for every launchd job; the commit gate fits a large repo; the Stop validator
 > no longer demands a timestamp from a turn that was never given one (the install-time alert).
