@@ -14,6 +14,7 @@ Paths are relative to the connection's base_url:
 import copy
 import difflib
 import re
+import unicodedata
 from urllib.parse import parse_qsl
 
 from .errors import GatewayError
@@ -277,18 +278,28 @@ _MCP_RISKY = frozenset((
     "revoke", "run", "exec", "execute", "publish", "wipe", "upload", "cancel", "transfer", "share",
     "approve", "deploy", "reset", "set", "close", "archive", "purge", "clear", "apply", "destroy",
     "kill", "invite", "assign", "move", "rename", "restore", "enable", "disable", "install",
-    "uninstall", "trigger", "submit", "commit", "push", "force"))
+    "uninstall", "trigger", "submit", "commit", "push", "force",
+    # third review (3): the verbs a deny-list must not miss
+    "erase", "unlink", "edit", "modify", "add_comment", "addcomment", "reply", "replace", "empty"))
 
 
 # Read-only words that CONTAIN a risky word (settings holds "set", running holds "run"). A risky
 # word counts unless it lies wholly inside one of these spans; a risky word that straddles or sits
 # beside them still counts, so `resetsettings`, `settingsdelete` and `presetdrop` are consent.
 _SAFE_READ_WORDS = ("setting", "asset", "dataset", "preset", "closest", "postmortem", "running",
-                    "runtime")
+                    "runtime", "credit")
+
+
+def fold_name(name):
+    """A tool name as a reader sees it, for tiering: NFKC (fullwidth letters become ASCII) with every
+    format character (zero-width space and joiners, soft hyphen, word joiner, BOM) removed, lowercased.
+    Third review (3)."""
+    text = unicodedata.normalize("NFKC", str(name or ""))
+    return "".join(c for c in text if unicodedata.category(c) != "Cf").lower()
 
 
 def _risky_name(name):
-    low = str(name or "").lower()
+    low = fold_name(name)
     safe = [(m.start(), m.end()) for w in _SAFE_READ_WORDS
             for m in re.finditer(re.escape(w), low)]
     for r in _MCP_RISKY:
@@ -301,7 +312,7 @@ def _risky_name(name):
 
 def mcp_tier(tool, strict=False):
     ann = tool.get("annotations") if isinstance(tool.get("annotations"), dict) else {}
-    name = str(tool.get("name") or "").lower()
+    name = fold_name(tool.get("name"))
     if strict:
         if ann.get("destructiveHint") is True or _risky_name(tool.get("name")) \
                 or name.startswith(_MCP_CONSENT):

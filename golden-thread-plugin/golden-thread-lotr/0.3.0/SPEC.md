@@ -657,7 +657,9 @@ every call, recorded in SECURITY.md.
 - **Tiers.** On an OAuth connection annotations may only raise a tier: `destructiveHint` or a name
   containing a risky word (delete, remove, send, write, create, update, merge, post, drop, grant,
   revoke, run, exec, publish, upload, deploy, reset, set, close, purge, ... the list is `_MCP_RISKY`
-  in `profiles.py`) is consent. The word is matched as a substring of the lowercased name, for every
+  in `profiles.py`; third review added erase, unlink, edit, modify, add_comment, reply, replace, empty)
+  is consent. Before tiering the name is folded: NFKC (fullwidth letters become ASCII) and every format
+  character (zero-width space and joiners, soft hyphen, BOM) removed. The word is matched as a substring of the lowercased name, for every
   name, read prefix or not (`get_deleteall`, `list_sendmail`, `searchdeleteall` are consent). The one
   exception is a short allow-list of read-only words that contain a risky word (`_SAFE_READ_WORDS`:
   settings, assets, dataset, preset, closest, postmortem, running, runtime): a risky word counts

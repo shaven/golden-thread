@@ -136,6 +136,10 @@ signs in itself, to the MCP authorization spec **revision 2026-07-28**:
     then. The name lookup counts against the total fetch budget. `localhost` and `*.localhost` are
     refused as the authorization endpoint (design: the browser is never sent to this machine by name).
     The RFC 2765 translated IPv4-mapped form `::ffff:0:a.b.c.d` is judged as its IPv4 address.
+    Third review: every full-stop variant (U+3002, U+FF61, U+FF0E, and their percent forms) is a dot for
+    the literal and localhost screens; the one-line catalog is tested through the real daemon dispatch
+    (the m7 skip is gone); the deny-list adds erase, unlink, edit, modify, add_comment, reply, replace,
+    empty, and names are NFKC-folded with format characters removed before tiering.
   - *Pre-registered clients:* `--client-id` with `--client-secret-file|-stdin|-prompt`,
     `--no-resource`, `--redirect-host localhost|127.0.0.1`. **The Google and Microsoft paths are
     tested against a fake authorization server only; neither real provider has been signed in to.**

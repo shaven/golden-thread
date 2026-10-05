@@ -762,7 +762,9 @@ inside LOTR, so the server is gated like any LOTR connection. What that does and
   trust boundary. On native Windows a `store:` file is protected by the profile directory's ACL, not by
   mode bits.
 * **Tiers on OAuth connections only ever go up from the server's hints**: a name containing
-  a risky word (delete, remove, send, write, create, update, merge, post, drop, grant, revoke, ...) as
+  a risky word (delete, remove, send, write, create, update, merge, post, drop, grant, revoke, erase,
+  unlink, edit, modify, add_comment, reply, replace, empty, ...; the name is NFKC-folded with format
+  characters removed first) as
   a substring of the name is consent, read prefix or not (`get_deleteall` is consent); a short allow-list
   of read words that contain one (settings, assets, presets, ...) is the only exception, and some reads
   (`list_commits`) are consent by that rule until the owner pins them with `policy.read`.

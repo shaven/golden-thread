@@ -18,6 +18,7 @@ goes into every audit line, refusals included. While it is off, nothing here cha
 """
 import hashlib
 import json
+import re
 import os
 import secrets as _pysecrets
 import threading
@@ -49,6 +50,13 @@ def _args_hash(args):
     blob = json.dumps(args or {}, sort_keys=True, default=str).encode()
     return hashlib.sha256(blob).hexdigest()
 
+
+_CONTROL = re.compile(r"[\x00-\x1f\x7f-\x9f\u2028\u2029]+")
+
+
+def _one_line(text):
+    """`text` with every newline, tab and other control character made one space."""
+    return " ".join(_CONTROL.sub(" ", str(text)).split())
 
 class Engine:
     def __init__(self, home, *, secret_resolver=None, connection_factory=None, dialog=None,
@@ -504,7 +512,11 @@ class Engine:
             lines, used, shown = [], len(head), 0
             active = self.registry.active()
             for c in active:
-                line = f"- {c['id']}: {c.get('description') or c.get('identity') or ''}"[:140] + "\n"
+                # One line per connection: a description is owner-written but lands in every
+                # session's instructions, so a newline or control character in it must not
+                # start a line of its own there (review m7, 2026-10-04).
+                text = _one_line(f"{c['id']}: {c.get('description') or c.get('identity') or ''}")
+                line = f"- {text}"[:140] + "\n"
                 if used + len(line) > max_chars - 40:
                     break
                 lines.append(line)

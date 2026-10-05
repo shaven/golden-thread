@@ -182,6 +182,24 @@ def origin(url):
 _SITE_LOCAL = ipaddress.ip_network("fec0::/10")        # deprecated site-local: private
 
 
+_FULL_STOPS = ("\u3002", "\uff61", "\uff0e")       # ideographic, halfwidth ideographic, fullwidth
+
+
+def _browser_host(host):
+    """The host as a browser (WHATWG host parsing) will resolve it, for the screens: percent-escapes
+    decoded, compatibility characters folded (NFKC), every full-stop variant (U+3002, U+FF61, U+FF0E)
+    mapped to "." (NFKC leaves U+3002 alone and folds U+FF61 INTO it, so it is mapped after NFKC),
+    one trailing dot dropped, lowercased. Third review (1)."""
+    h = urllib.parse.unquote(host)
+    h = unicodedata.normalize("NFKC", h)
+    for stop in _FULL_STOPS:
+        h = h.replace(stop, ".")
+    h = h.lower()
+    if h.endswith("."):
+        h = h[:-1]
+    return h
+
+
 class NetPolicy:
     """What a fetch may reach. Both flags are the OWNER's, set at `lotr connect` and kept in the
     registry; neither is ever inferred from a server's answer."""
@@ -229,9 +247,7 @@ class NetPolicy:
         # The screen judges what a BROWSER will resolve: percent-escapes decoded, compatibility
         # characters folded (fullwidth digits, fullwidth full stop), one trailing dot dropped (an
         # absolute DNS name; for a literal it changes nothing), then lowercased.
-        host = unicodedata.normalize("NFKC", urllib.parse.unquote(host)).lower()
-        if host.endswith("."):
-            host = host[:-1]
+        host = _browser_host(host)
         if what == "authorization_endpoint" and (host == "localhost" or host.endswith(".localhost")):
             # Design (second review): the owner's browser is sent here; a local NAME is refused.
             raise _err("oauth_ssrf_refused", f"the {what} names localhost; a sign-in is not sent to "
