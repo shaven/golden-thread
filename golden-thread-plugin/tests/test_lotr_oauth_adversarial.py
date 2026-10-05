@@ -1962,6 +1962,34 @@ class TokenEndpoint(Case):
                 with self.assertRaises(GatewayError):
                     self.parse({"access_token": at, "token_type": "Bearer", "expires_in": 60})
 
+    def test_a_malformed_token_response_prints_its_redacted_shape_and_never_a_value(self):
+        """Owner's live Linear check (2026-10-05): oauth_bad_response with no shape to act on. A
+        refused access_token must say what the answer looked like, with no value in it."""
+        secret = "SECRETPART-abc def\"xé"           # space, quote, non-ASCII: not b64token
+        raw = json.dumps({"access_token": secret, "token_type": "Bearer", "expires_in": 60,
+                          "error_description": "sensitive detail", "scope": "read"}).encode()
+        resp = oauth.Response(200, [("Content-Type", "application/json; charset=utf-8")], raw)
+        with self.assertRaises(GatewayError) as cm:
+            oauth.parse_tokens(200, resp.json(), self.BLOCK, now=1000.0, resp=resp)
+        self.assertEqual(cm.exception.code, "oauth_bad_response")
+        text = json.dumps(cm.exception.to_dict())
+        for want in ("token response: HTTP 200", "content-type application/json",
+                     "%d bytes" % len(raw), "top-level key(s)", "access_token: string, %d chars"
+                     % len(secret), "U+0020", "U+0022", "1 of them non-ASCII letters/digits",
+                     "scope: JSON string"):
+            self.assertIn(want, text)
+        for leak in ("SECRETPART", secret, "sensitive detail"):
+            self.assertNotIn(leak, text)
+
+    def test_a_token_response_that_is_not_json_or_not_an_object_names_that(self):
+        for raw, want in ((b"<html>err</html>", "does not parse as JSON"),
+                          (b"[1,2]", "top level is a JSON array")):
+            with self.subTest(body=raw[:8]):
+                resp = oauth.Response(502, [("Content-Type", "text/html")], raw)
+                with self.assertRaises(GatewayError) as cm:
+                    oauth.parse_tokens(502, None, self.BLOCK, now=1000.0, resp=resp)
+                self.assertIn(want, json.dumps(cm.exception.to_dict()))
+
     def test_missing_expires_in_gets_a_conservative_default(self):
         t = self.parse({"access_token": "abc", "token_type": "Bearer"})
         self.assertTrue(0 < t["expires_at"] - 1000.0 <= 3600)

@@ -736,14 +736,120 @@ def _client_auth(block, secret, form, headers):
 
 
 def token_request(block, secret, form, net):
-    """POST a form to the token endpoint -> (status, json dict). No redirect is followed."""
+    """POST a form to the token endpoint -> (status, json object or None, the Response). None when
+    the body is not a JSON object; the Response is kept so a refusal can describe its shape."""
     form = dict(form)
     headers = {"Content-Type": "application/x-www-form-urlencoded"}
     _client_auth(block, secret, form, headers)
     r = fetch(block["token_endpoint"], net, method="POST",
               body=urllib.parse.urlencode(form), headers=headers, max_bytes=MAX_TOKEN_BYTES,
               what="token endpoint")
-    return r.status, r.json()
+    try:
+        doc = r.json()
+    except GatewayError:
+        doc = None
+    return r.status, doc, r
+
+
+_RFC_TOKEN_ERRORS = frozenset({
+    "invalid_request", "invalid_client", "invalid_grant", "unauthorized_client",
+    "unsupported_grant_type", "invalid_scope", "access_denied", "unsupported_response_type",
+    "server_error", "temporarily_unavailable", "invalid_token", "insufficient_scope",
+    "invalid_target"})
+_B64TOKEN_CHAR = re.compile(r"[A-Za-z0-9\-._~+/]")
+_KEY_NAME = re.compile(r"[a-z_]{1,40}")
+
+
+def _jtype(v):
+    return {str: "string", bool: "boolean", type(None): "null", list: "array",
+            dict: "object"}.get(type(v), "number")
+
+
+def _char_classes(s):
+    out = set()
+    for c in s:
+        o = ord(c)
+        if "A" <= c <= "Z":
+            out.add("upper")
+        elif "a" <= c <= "z":
+            out.add("lower")
+        elif "0" <= c <= "9":
+            out.add("digit")
+        elif c in "-._~+/":
+            out.add("b64-punct")
+        elif c == "=":
+            out.add("pad")
+        elif c == " ":
+            out.add("space")
+        elif c in "\"\\":
+            out.add("quote-or-backslash")
+        elif 0x21 <= o <= 0x7E:
+            out.add("other-printable-ascii")
+        elif o < 0x20 or o == 0x7F:
+            out.add("control")
+        else:
+            out.add("non-ascii")
+    return sorted(out)
+
+
+def _describe_token_value(name, v):
+    """Redacted: length, character classes, and for characters outside RFC 6750 b64token only their
+    code points (a non-ASCII letter or digit is counted, never shown)."""
+    if not isinstance(v, str):
+        return f"{name}: JSON {_jtype(v)}"
+    if not v:
+        return f"{name}: empty string"
+    parts = [f"{name}: string, {len(v)} chars", "classes " + ",".join(_char_classes(v))]
+    if len(v) > MAX_TOKEN_CHARS:
+        parts.append(f"over the {MAX_TOKEN_CHARS}-char cap")
+    body = v.rstrip("=")                       # a trailing run of '=' is allowed by b64token
+    bad = [c for c in body if not _B64TOKEN_CHAR.fullmatch(c)]
+    if not bad:
+        parts.append("every character is b64token")
+    else:
+        shown = ["U+%04X" % ord(c) for c in bad if not c.isalnum()][:20]
+        n_alnum = sum(1 for c in bad if c.isalnum())
+        parts.append(f"{len(bad)} char(s) outside b64token")
+        if shown:
+            parts.append("code points " + " ".join(shown))
+        if n_alnum:
+            parts.append(f"{n_alnum} of them non-ASCII letters/digits (values not shown)")
+    return "; ".join(parts)
+
+
+def _describe_error_value(name, v):
+    if isinstance(v, str) and v in _RFC_TOKEN_ERRORS:
+        return f"{name}={v}"
+    if not isinstance(v, str):
+        return f"{name}: JSON {_jtype(v)}"
+    return f"{name}: string, {len(v)} chars, classes " + ",".join(_char_classes(v)) + \
+        " (not an RFC 6749 error code; text not shown)"
+
+
+def token_shape(resp):
+    """A REDACTED description of a token endpoint answer, for the owner to read in a refusal: the
+    HTTP status, the content type, the byte length, whether the body is JSON and its top-level keys
+    with their JSON types, and for the token strings only length, character classes and the code
+    points of anything outside RFC 6750 b64token. Never a value (other than an RFC error code)."""
+    ctype = (resp.header("Content-Type") or [""])[0].split(";")[0].strip().lower()[:60] or "none"
+    lines = [f"token response: HTTP {resp.status}, content-type {ctype}, {len(resp.body)} bytes"]
+    try:
+        doc = json.loads(resp.body.decode("utf-8"))
+    except (ValueError, UnicodeDecodeError, RecursionError, OverflowError, MemoryError):
+        return lines + ["body does not parse as JSON"]
+    if not isinstance(doc, dict):
+        return lines + [f"body parses as JSON, top level is a JSON {_jtype(doc)} (not an object)"]
+    lines.append(f"body parses as a JSON object with {len(doc)} top-level key(s)")
+    for k in list(doc)[:20]:
+        name = k if _KEY_NAME.fullmatch(k) else f"(non-standard key, {len(k)} chars)"
+        v = doc[k]
+        if k in ("access_token", "refresh_token"):
+            lines.append("  " + _describe_token_value(name, v))
+        elif k in ("error", "error_description"):
+            lines.append("  " + _describe_error_value(name, v))
+        else:
+            lines.append(f"  {name}: JSON {_jtype(v)}")
+    return lines
 
 
 def _server_error(doc, code_when="oauth_token_refused"):
@@ -785,9 +891,15 @@ def check_audience(access_token, resource):
                                           "audience than this MCP server; refused")
 
 
-def parse_tokens(status, doc, block, now=None, check_aud=True, refreshing=False):
+def parse_tokens(status, doc, block, now=None, check_aud=True, refreshing=False, resp=None):
     """A token endpoint answer -> {access_token, expires_at, refresh_token|None, scope|None}.
-    Raises needs_login on invalid_grant, oauth_token_refused on any other refusal."""
+    Raises needs_login on invalid_grant, oauth_token_refused on any other refusal. `resp` (the
+    Response) lets a malformed answer carry its redacted shape in the error's hints."""
+    def shape():
+        return token_shape(resp) if resp is not None else []
+    if doc is None:
+        raise _err("oauth_bad_response", "a server answered with something that is not a JSON "
+                                         "object", hints=shape())
     if status != 200:
         code = _server_error(doc)
         if code == "invalid_grant" and refreshing:
@@ -798,7 +910,7 @@ def parse_tokens(status, doc, block, now=None, check_aud=True, refreshing=False)
     at = doc.get("access_token")
     if not isinstance(at, str) or not at or len(at) > MAX_TOKEN_CHARS or not _B64TOKEN.match(at):
         raise _err("oauth_bad_response", "the token response carries no usable access_token "
-                                         "(RFC 6750 b64token syntax)")
+                                         "(RFC 6750 b64token syntax)", hints=shape())
     if str(doc.get("token_type", "")).lower() != "bearer":
         raise _err("oauth_bad_response", "the token response is not a Bearer token (DPoP and "
                                          "other token types are not supported)")
@@ -812,7 +924,8 @@ def parse_tokens(status, doc, block, now=None, check_aud=True, refreshing=False)
         exp = DEFAULT_EXPIRES_S
     rt = doc.get("refresh_token")
     if rt is not None and (not isinstance(rt, str) or not rt or len(rt) > MAX_TOKEN_CHARS):
-        raise _err("oauth_bad_response", "the token response carries an unusable refresh_token")
+        raise _err("oauth_bad_response", "the token response carries an unusable refresh_token",
+                   hints=shape())
     if check_aud:
         check_audience(at, block["resource"])
     sc = doc.get("scope")
@@ -825,10 +938,10 @@ def refresh(block, refresh_token, client_secret, net=None):
     form = {"grant_type": "refresh_token", "refresh_token": refresh_token}
     if block.get("send_resource", True):
         form["resource"] = block["resource"]
-    status, doc = token_request(block, client_secret, form, net)
+    status, doc, resp = token_request(block, client_secret, form, net)
     try:
         return parse_tokens(status, doc, block, check_aud=block.get("audience_check", True),
-                            refreshing=True)
+                            refreshing=True, resp=resp)
     except GatewayError as e:
         # A 200 that fails validation AFTER the server rotated (an unusable access token, a wrong
         # audience): the old refresh token is spent at the server, so the new one travels with the
@@ -1306,9 +1419,9 @@ def login(endpoint, net, *, scope=None, extra_scope=None, client_id=None, client
     if use_resource:
         form["resource"] = disc["resource"]
     code = verifier = None
-    status, doc = token_request(block, reg["client_secret"], form, net)
+    status, doc, resp = token_request(block, reg["client_secret"], form, net)
     form = None
-    tokens = parse_tokens(status, doc, block, check_aud=not skip_audience_check)
+    tokens = parse_tokens(status, doc, block, check_aud=not skip_audience_check, resp=resp)
     doc = None
     if tokens["refresh_token"] is None:
         notes.append("the authorization server issued no refresh token: this sign-in lasts only "

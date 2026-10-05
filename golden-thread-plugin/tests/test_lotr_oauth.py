@@ -841,7 +841,7 @@ class Lifecycle(WorldCase):
         """MAJOR 3 (independent review of 7473a24): the server has rotated (the old refresh token
         is spent) and then the response fails validation; NEW-RT must still be stored."""
         resp = (200, {"access_token": "bad token with spaces", "token_type": "Bearer",
-                      "refresh_token": "NEW-RT", "expires_in": 60})
+                      "refresh_token": "NEW-RT", "expires_in": 60}, None)
         with mock.patch.object(oauth, "token_request", lambda *a, **k: resp):
             with self.assertRaises(GatewayError) as cm:
                 oauth.access_token(self.conn, self.ctx())
@@ -851,7 +851,7 @@ class Lifecycle(WorldCase):
         self.assertNotIn("NEW-RT", json.dumps(cm.exception.to_dict()))
 
     def test_a_bad_access_token_after_rotation_is_held_when_the_store_fails(self):
-        resp = (200, {"access_token": "ok-token", "token_type": "DPoP", "refresh_token": "NEW-RT"})
+        resp = (200, {"access_token": "ok-token", "token_type": "DPoP", "refresh_token": "NEW-RT"}, None)
 
         def no_write(ref, value):
             raise GatewayError("oauth_persist_failed", "disk full")
