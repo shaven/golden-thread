@@ -1990,6 +1990,33 @@ class TokenEndpoint(Case):
                     oauth.parse_tokens(502, None, self.BLOCK, now=1000.0, resp=resp)
                 self.assertIn(want, json.dumps(cm.exception.to_dict()))
 
+    def test_a_colon_or_other_visible_character_in_a_token_is_accepted(self):
+        """Owner's live Linear run (2026-10-05): both tokens are 86 chars with two ':' each. RFC 6749
+        access tokens are opaque visible characters (%x21-7E without DQUOTE and backslash), which
+        is wider than RFC 6750 b64token. The old b64token-only check refused a valid token."""
+        visible = "lin_oauth:ab!#$%&'()*+,-./0129:;<=>?@AZ[]^_`az{|}~"
+        for tok in ("lin_oauth_" + "a1" * 40 + ":" + "b2" * 2, visible, "x" * 86 + ":" + "y" * 86):
+            with self.subTest(token=tok[:12]):
+                t = self.parse({"access_token": tok, "token_type": "Bearer", "expires_in": 60,
+                                "refresh_token": tok})
+                self.assertEqual(t["access_token"], tok)
+                self.assertEqual(t["refresh_token"], tok)
+
+    def test_a_token_with_space_quote_backslash_crlf_or_non_ascii_never_reaches_a_header(self):
+        """The Bearer header is built from the parsed token, so a value refused here is never sent:
+        the parse is the only place a token enters the header path. Space, double quote, backslash,
+        CR, LF, DEL, control and non-ASCII are all refused, for access and refresh tokens alike."""
+        bad = ("abc def", 'abc"def', "abc\\def", "abc\r\nX: 1", "abc\ndef", "abc\x7fdef",
+               "abc\x00def", "caf\u00e9", "")
+        for tok in bad:
+            with self.subTest(token=repr(tok)):
+                with self.assertRaises(GatewayError) as cm:
+                    self.parse({"access_token": tok, "token_type": "Bearer", "expires_in": 60})
+                self.assertEqual(cm.exception.code, "oauth_bad_response")
+                with self.assertRaises(GatewayError):
+                    self.parse({"access_token": "ok-at", "token_type": "Bearer", "expires_in": 60,
+                                "refresh_token": tok})
+
     def test_missing_expires_in_gets_a_conservative_default(self):
         t = self.parse({"access_token": "abc", "token_type": "Bearer"})
         self.assertTrue(0 < t["expires_at"] - 1000.0 <= 3600)

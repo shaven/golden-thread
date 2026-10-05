@@ -106,7 +106,10 @@ def _err(code, message, hints=None):
 
 # --------------------------------------------------------------------------- URLs and policy
 
-_B64TOKEN = re.compile(r"^[A-Za-z0-9\-._~+/]+=*\Z")
+# RFC 6749 access_token charset: %x21-7E without DQUOTE and backslash (visible ASCII). Wider than
+# RFC 6750 b64token: a real provider token carried ":" (Linear, 2026-10-05). Space, control,
+# DEL and non-ASCII stay refused, so nothing a header cannot carry reaches the Bearer header.
+_VISIBLE_TOKEN = re.compile(r"^[\x21\x23-\x5b\x5d-\x7e]+\Z")
 _UNSAFE = re.compile(r"[^\x21-\x7e]")
 _HINT_SCOPE = re.compile(r"[A-Za-z0-9][A-Za-z0-9:._/+=@-]{0,127}")   # used with fullmatch: $ would pass "a\n"
 
@@ -756,7 +759,7 @@ _RFC_TOKEN_ERRORS = frozenset({
     "unsupported_grant_type", "invalid_scope", "access_denied", "unsupported_response_type",
     "server_error", "temporarily_unavailable", "invalid_token", "insufficient_scope",
     "invalid_target"})
-_B64TOKEN_CHAR = re.compile(r"[A-Za-z0-9\-._~+/]")
+_VISIBLE_TOKEN_CHAR = re.compile(r"[\x21\x23-\x5b\x5d-\x7e]")
 _KEY_NAME = re.compile(r"[a-z_]{1,40}")
 
 
@@ -793,8 +796,8 @@ def _char_classes(s):
 
 
 def _describe_token_value(name, v):
-    """Redacted: length, character classes, and for characters outside RFC 6750 b64token only their
-    code points (a non-ASCII letter or digit is counted, never shown)."""
+    """Redacted: length, character classes, and for characters outside the RFC 6749 visible set only
+    their code points (a non-ASCII letter or digit is counted, never shown)."""
     if not isinstance(v, str):
         return f"{name}: JSON {_jtype(v)}"
     if not v:
@@ -802,14 +805,13 @@ def _describe_token_value(name, v):
     parts = [f"{name}: string, {len(v)} chars", "classes " + ",".join(_char_classes(v))]
     if len(v) > MAX_TOKEN_CHARS:
         parts.append(f"over the {MAX_TOKEN_CHARS}-char cap")
-    body = v.rstrip("=")                       # a trailing run of '=' is allowed by b64token
-    bad = [c for c in body if not _B64TOKEN_CHAR.fullmatch(c)]
+    bad = [c for c in v if not _VISIBLE_TOKEN_CHAR.fullmatch(c)]
     if not bad:
-        parts.append("every character is b64token")
+        parts.append("every character is RFC 6749 visible")
     else:
         shown = ["U+%04X" % ord(c) for c in bad if not c.isalnum()][:20]
         n_alnum = sum(1 for c in bad if c.isalnum())
-        parts.append(f"{len(bad)} char(s) outside b64token")
+        parts.append(f"{len(bad)} char(s) outside RFC 6749 visible")
         if shown:
             parts.append("code points " + " ".join(shown))
         if n_alnum:
@@ -830,7 +832,7 @@ def token_shape(resp):
     """A REDACTED description of a token endpoint answer, for the owner to read in a refusal: the
     HTTP status, the content type, the byte length, whether the body is JSON and its top-level keys
     with their JSON types, and for the token strings only length, character classes and the code
-    points of anything outside RFC 6750 b64token. Never a value (other than an RFC error code)."""
+    points of anything outside the RFC 6749 visible set. Never a value (other than an RFC error code)."""
     ctype = (resp.header("Content-Type") or [""])[0].split(";")[0].strip().lower()[:60] or "none"
     lines = [f"token response: HTTP {resp.status}, content-type {ctype}, {len(resp.body)} bytes"]
     try:
@@ -908,9 +910,9 @@ def parse_tokens(status, doc, block, now=None, check_aud=True, refreshing=False,
         raise _err("oauth_token_refused", f"the authorization server refused the token request "
                    f"(HTTP {status}, error {code})")
     at = doc.get("access_token")
-    if not isinstance(at, str) or not at or len(at) > MAX_TOKEN_CHARS or not _B64TOKEN.match(at):
+    if not isinstance(at, str) or not at or len(at) > MAX_TOKEN_CHARS or not _VISIBLE_TOKEN.match(at):
         raise _err("oauth_bad_response", "the token response carries no usable access_token "
-                                         "(RFC 6750 b64token syntax)", hints=shape())
+                                         "(RFC 6749 visible characters)", hints=shape())
     if str(doc.get("token_type", "")).lower() != "bearer":
         raise _err("oauth_bad_response", "the token response is not a Bearer token (DPoP and "
                                          "other token types are not supported)")
@@ -923,8 +925,10 @@ def parse_tokens(status, doc, block, now=None, check_aud=True, refreshing=False,
     except (OverflowError, ValueError):
         exp = DEFAULT_EXPIRES_S
     rt = doc.get("refresh_token")
-    if rt is not None and (not isinstance(rt, str) or not rt or len(rt) > MAX_TOKEN_CHARS):
-        raise _err("oauth_bad_response", "the token response carries an unusable refresh_token",
+    if rt is not None and (not isinstance(rt, str) or not rt or len(rt) > MAX_TOKEN_CHARS
+                           or not _VISIBLE_TOKEN.match(rt)):
+        raise _err("oauth_bad_response", "the token response carries an unusable refresh_token "
+                                         "(RFC 6749 visible characters)",
                    hints=shape())
     if check_aud:
         check_audience(at, block["resource"])
