@@ -14,17 +14,25 @@ connection reuses both:
 Transport: MCP streamable HTTP. Each JSON-RPC message is a POST; the reply is JSON or an SSE
 stream (`data:` lines), and `Mcp-Session-Id` from `initialize` is carried on later requests.
 Redirects are refused, so a token is never re-sent to another host.
+
+0.3.0 (gt 0.20.1): `auth.scheme == "oauth"` -- LOTR's own OAuth (lotrlib.oauth). The access
+token is minted from the sealed/stored refresh token on demand, lives only in this process's
+memory, and is renewed on expiry or a 401 (once). A 401 that survives a fresh refresh, or a
+refresh the authorization server refuses, is `needs_login` naming the exact command.
 """
 import json
 import subprocess
 import urllib.error
 import urllib.request
 
+from . import oauth
 from .errors import GatewayError
 
 PROTOCOL = "2025-03-26"
 REFRESH_TIMEOUT_S = 60
 USER_AGENT = "gt-lotr/0.3.0"
+MAX_REPLY_BYTES = 8 * 1024 * 1024       # an oauth connection's reply is read to this, no further
+RUNTIME_TIMEOUT_S = 120                  # and for at most this long, whole exchange
 
 
 class _NoRedirect(urllib.request.HTTPRedirectHandler):
@@ -38,7 +46,8 @@ class _Unauthorized(Exception):
 
 
 class McpConnection:
-    def __init__(self, conn, profile, *, secret_resolver=None, timeout=20):
+    def __init__(self, conn, profile, *, secret_resolver=None, timeout=20, oauth_writer=None,
+                 oauth_seat="-"):
         if secret_resolver is None:
             from .secrets import resolve as secret_resolver
         self.conn = conn
@@ -48,8 +57,11 @@ class McpConnection:
         self.endpoint = conn["endpoint"]
         self._auth = conn.get("auth") or {}
         self._ref = self._auth.get("token_ref")
-        self._opener = urllib.request.build_opener(_NoRedirect)
+        # No proxy: a bearer token never rides an environment or system proxy.
+        self._opener = urllib.request.build_opener(urllib.request.ProxyHandler({}), _NoRedirect)
         self._next_id = 0
+        self._oauth = self._auth.get("scheme") == "oauth"
+        self._octx = oauth.Context(self._resolve, oauth_writer, oauth_seat) if self._oauth else None
 
     # -- plumbing ----------------------------------------------------------------------------
 
@@ -63,24 +75,51 @@ class McpConnection:
             h["Mcp-Session-Id"] = session
         return h
 
-    def _post(self, message, token, session):
-        """-> (reply message or None, session id from the reply's headers)."""
-        req = urllib.request.Request(self.endpoint, data=json.dumps(message).encode("utf-8"),
-                                     headers=self._headers(token, session), method="POST")
+    def _exchange(self, message, token, session):
+        """One POST -> (status, WWW-Authenticate values, session id, content type, body text).
+        An oauth connection goes through oauth.fetch: the address that is connected to is checked
+        against the owner's network policy (no private / link-local / metadata address unless the
+        owner allowed it), no proxy is consulted, redirects are refused, size and time are
+        bounded. Other mcp connections keep the urllib path, minus any environment proxy."""
+        data = json.dumps(message).encode("utf-8")
+        hdrs = self._headers(token, session)
+        if self._oauth:
+            r = oauth.fetch(self.endpoint, oauth.NetPolicy.from_block(self._auth["oauth"]),
+                            method="POST", body=data, headers=hdrs, max_bytes=MAX_REPLY_BYTES,
+                            timeout=RUNTIME_TIMEOUT_S, what="MCP endpoint")
+            return (r.status, r.header("WWW-Authenticate"), (r.header("Mcp-Session-Id") or [None])[0],
+                    ((r.header("Content-Type") or [""])[0]).lower(),
+                    r.body.decode("utf-8", errors="replace"))
+        req = urllib.request.Request(self.endpoint, data=data, headers=hdrs, method="POST")
         try:
             resp = self._opener.open(req, timeout=self.timeout)
         except urllib.error.HTTPError as e:
-            if e.code == 401:
-                raise _Unauthorized()
-            raise GatewayError("downstream_error", f"{self.conn['id']}: the MCP endpoint "
-                                                   f"answered HTTP {e.code}")
+            return e.code, e.headers.get_all("WWW-Authenticate") or [], None, "", ""
         except urllib.error.URLError as e:
             raise GatewayError("unreachable", f"{self.conn['id']}: cannot reach the MCP "
                                               f"endpoint ({getattr(e, 'reason', e)})")
         with resp:
-            sid = resp.headers.get("Mcp-Session-Id")
-            body = resp.read().decode("utf-8", errors="replace")
-            ctype = (resp.headers.get("Content-Type") or "").lower()
+            return (resp.status, [], resp.headers.get("Mcp-Session-Id"),
+                    (resp.headers.get("Content-Type") or "").lower(),
+                    resp.read().decode("utf-8", errors="replace"))
+
+    def _post(self, message, token, session):
+        """-> (reply message or None, session id from the reply's headers)."""
+        status, www, sid, ctype, body = self._exchange(message, token, session)
+        if status == 401:
+            raise _Unauthorized()
+        if status == 403 and self._oauth:
+            ch = oauth.parse_www_authenticate(www)
+            if ch.get("error") == "insufficient_scope":
+                need = oauth.hint_scope(ch.get("scope"))
+                raise GatewayError(
+                    "insufficient_scope", f"{self.conn['id']}: the MCP server needs more "
+                    "permission than this sign-in was granted",
+                    hints=["run: " + oauth.login_command(self.conn["id"], self.conn.get("zone"))
+                           + (f" --scope {need}" if need else "")])
+        if status >= 400 or status < 200:
+            raise GatewayError("downstream_error", f"{self.conn['id']}: the MCP endpoint "
+                                                   f"answered HTTP {status}")
         if "id" not in message or not body.strip():
             return None, sid
         want = message["id"]
@@ -121,10 +160,12 @@ class McpConnection:
         self._post({"jsonrpc": "2.0", "method": "notifications/initialized"}, token, sid)
         return sid
 
-    def _token(self):
+    def _token(self, force=False):
+        if self._oauth:
+            return oauth.access_token(self.conn, self._octx, force=force)
         if self._auth.get("scheme") != "bearer":
             return None
-        return self._resolve(self._ref)
+        return oauth.refuse_envelope(self._resolve(self._ref), self.conn.get("id"))
 
     def _refresh(self):
         cmd = self.conn.get("refresh_cmd")
@@ -140,10 +181,16 @@ class McpConnection:
     def _authed(self, fn):
         """Run fn(token, session) in a fresh session; on 401 refresh once and retry once."""
         for attempt in (1, 2):
-            token = self._token()
+            token = self._token(force=self._oauth and attempt == 2)
             try:
                 return fn(token, self._session(token))
             except _Unauthorized:
+                if self._oauth:
+                    oauth.invalidate(self.conn, self._octx.seat)
+                    if attempt == 1:
+                        continue
+                    raise oauth.needs_login(self.conn, "the MCP server rejected a freshly "
+                                                       "refreshed token (HTTP 401)")
                 if attempt == 1 and self._refresh():
                     continue
                 raise GatewayError(
@@ -191,5 +238,6 @@ class McpConnection:
                     data = json.loads(joined) if len(texts) == 1 else joined
                 except ValueError:
                     data = joined
-            return {"status": 200, "data": data, "next_cursor": None, "notes": []}
+            return {"status": 200, "data": data, "next_cursor": None,
+                    "notes": oauth.notes_for(self.conn) if self._oauth else []}
         return self._authed(run)

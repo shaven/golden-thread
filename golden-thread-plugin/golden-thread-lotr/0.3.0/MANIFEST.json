@@ -1,8 +1,8 @@
 {
  "files": {
   "scripts/lotr.py": {
-   "bytes": 14391,
-   "sha256": "91f3453f5222cb45a75829570c3a788607c66be7017855c94a056136de843520"
+   "bytes": 36721,
+   "sha256": "8e241af0e6e11bf040cb66ebc60a7ad1d6296180deedcaa23a1a75424e5ef6f0"
   },
   "scripts/lotr_mcp.py": {
    "bytes": 18008,
@@ -33,16 +33,16 @@
    "sha256": "60d475b40486b55268d31a036f6039f34aa587e0ac5abe244c54a923ad49211c"
   },
   "scripts/lotrlib/conn_http.py": {
-   "bytes": 17299,
-   "sha256": "ebccc586c99c24053df5a6108c4a361f404a352470af62d2aec121300b61de63"
+   "bytes": 17408,
+   "sha256": "e3714e72039d4b9ca6c510bc27b55595aed2e2e1fffa4c411f2a240efc137e9e"
   },
   "scripts/lotrlib/conn_mcp.py": {
-   "bytes": 8769,
-   "sha256": "9393f43745dab800f31aa4d8e688d1a755504e3330f5a1c0ca4cbade09794dde"
+   "bytes": 12092,
+   "sha256": "3da2ba78640d2538d01cbaf87a7b4c1b60712b28a8431d96ebb41aac3a622499"
   },
   "scripts/lotrlib/engine.py": {
-   "bytes": 25182,
-   "sha256": "1d37f82f928997571f0fe73aa9ed86b547913df5a12151349de8ccb6c2e89588"
+   "bytes": 27364,
+   "sha256": "89f9c073fa9ecf7d3f8665fa71f6ee6345f5d647ccf072f3e8097ece1aa883a5"
   },
   "scripts/lotrlib/errors.py": {
    "bytes": 632,
@@ -52,29 +52,33 @@
    "bytes": 6040,
    "sha256": "1b8465a298ed6b2395bd9a8d2b0fcac8dbd8ae18ff5d0f799b87cde0bc108071"
   },
+  "scripts/lotrlib/oauth.py": {
+   "bytes": 82512,
+   "sha256": "d59aea4146e17e134edbd9d2d4cd729e0e6e6909e722ffc578125fc827a09320"
+  },
   "scripts/lotrlib/policy.py": {
    "bytes": 9436,
    "sha256": "e391ded4987295854960e2a4600f8d3bfd3200595a6a48a39a7b42b7ace7ddc4"
   },
   "scripts/lotrlib/profiles.py": {
-   "bytes": 19668,
-   "sha256": "ad4a6105a29d12473c2fb96334e7f942de7fce551ca265ead5fad7cf320c1349"
+   "bytes": 22208,
+   "sha256": "cc9c4cdb656d7aee88a8c605b0fdb48fbbab4a6fe3a697d060a9141d4a8df9bb"
   },
   "scripts/lotrlib/recipes.py": {
    "bytes": 6670,
    "sha256": "5d2f47f6f03fe953a3571c94ac467d7ba0a04d534d9d7d3d38edd5775018ca85"
   },
   "scripts/lotrlib/registry.py": {
-   "bytes": 17540,
-   "sha256": "5ada17c7a4bc2bfacc42092007aeb851e90bc32ab6d5def6af6228a340feb695"
+   "bytes": 24287,
+   "sha256": "bd76326fb480ce6571234d1520496515bbd3d07bd43a2b05b98a6118d554d916"
   },
   "scripts/lotrlib/secrets.py": {
    "bytes": 13711,
    "sha256": "a207fdae6c56b8675f06b6f2f42d6770916600da3e453b50bc1b7b4a33485b6a"
   },
   "scripts/lotrlib/server.py": {
-   "bytes": 23903,
-   "sha256": "cb2d54cf8ff9de78fe6af0fc6eed50d77337e3b805b32cebd1d31194509f6529"
+   "bytes": 24437,
+   "sha256": "86281adccfbc26692fcd02533431cc6f20d08cf76cca26c98cf67e665b46a4d9"
   },
   "scripts/lotrlib/shaping.py": {
    "bytes": 9077,
@@ -85,8 +89,8 @@
    "sha256": "5d63d21860dce55f3588e22cb2227a2b2d5b46776eb8b9cc5fe6246a388cb993"
   },
   "scripts/lotrlib/util.py": {
-   "bytes": 1558,
-   "sha256": "1dd28e5a17817bd9cf3389549c810db7fda28984a8d7786717c89a073bbcd642"
+   "bytes": 1741,
+   "sha256": "8afc55eb6b1c8b12d42783dfd4c49533592669a29394e4ceb48b4483ba2741dd"
   },
   "scripts/mcp.py": {
    "bytes": 437,
@@ -109,6 +113,6 @@
    "sha256": "0a5dc06c80759b3c11ce748a9cfea2213d37f4138bb4e97010ee01db27b6ea66"
   }
  },
- "generated": "2026-10-04T18:13:14",
+ "generated": "2026-10-04T21:17:39",
  "version": "0.3.0"
 }

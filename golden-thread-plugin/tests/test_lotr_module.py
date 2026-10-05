@@ -28,12 +28,12 @@ SCRIPTS = GW / "scripts"
 # Python 3.9 has no sys.stdlib_module_names; this is the set the gateway may use.
 STDLIB = {
     "__future__", "argparse", "ast", "base64", "binascii", "collections", "contextlib", "copy", "dataclasses",
-    "datetime", "difflib", "errno", "fnmatch", "functools", "getpass", "hashlib", "hmac", "ipaddress", "ipaddress",
+    "datetime", "difflib", "errno", "fnmatch", "functools", "getpass", "hashlib", "hmac", "ipaddress", "unicodedata",
     "importlib", "winreg",
     "http", "io", "itertools", "json", "logging", "math", "os", "pathlib", "platform", "queue",
     "re", "runpy", "secrets", "select", "selectors", "shlex", "shutil", "signal", "socket",
     "socketserver", "ssl", "stat", "string", "struct", "subprocess", "sys", "tempfile",
-    "textwrap", "threading", "time", "traceback", "typing", "urllib", "uuid", "warnings",
+    "textwrap", "threading", "time", "traceback", "typing", "urllib", "uuid", "warnings", "webbrowser",
 }
 
 

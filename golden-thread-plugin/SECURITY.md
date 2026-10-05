@@ -691,8 +691,9 @@ named like one is UNGATED.
 **Route through LOTR.** A remote HTTP server can be put behind LOTR today as an `mcp`
 connection (`lotr add-mcp …`, see the gt-lotr skill), then removed from Claude Code with
 `claude mcp remove <name>`, which also deletes Claude Code's copy of its login. It is then gated
-like any LOTR connection. stdio servers, and LOTR holding a server's OAuth login itself, are
-planned (0.21); until then such a server stays outside. To stop a server without moving it,
+like any LOTR connection. stdio servers are planned (0.21) and stay outside until then. A remote
+server that wants an OAuth login can have LOTR hold it (section 9.1) instead of reusing Claude
+Code's. To stop a server without moving it,
 disable it in `/mcp`, or remove it.
 
 **Enterprise: make it a boundary.** Only managed settings can stop a user or repository adding
@@ -712,3 +713,97 @@ Merge it into `managed-settings.json` (or a file in `managed-settings.d/`) at
 in the same folder. `serverName` is a label, not a security control — prefer `serverCommand` /
 `serverUrl` entries where you can — and a `deniedMcpServers` match always wins. Check the result
 with `claude mcp list`.
+
+### 9.1 LOTR as the OAuth client (`lotr connect`, gt-lotr 0.3.0)
+
+`lotr connect NAME --url https://…/mcp` signs in to a remote MCP server at your terminal (MCP
+authorization spec 2026-07-28: PKCE S256, `resource`, loopback redirect) and keeps the login
+inside LOTR, so the server is gated like any LOTR connection. What that does and does not give:
+
+| Item | Where it lives | Rating |
+|---|---|---|
+| Refresh token, gt unlock on | `sealed:` in the authority (re-sealed on rotation without a prompt on macOS; Windows asks Hello for the re-seal: a daemon with no person present then keeps the rotated token in memory only and reports it) | **L2** |
+| Refresh token, unlock off or `--l1` | a mode-600 file the store wrote | **L1**: any process of your user can read it |
+| Access token | lotrd's memory only, per calling seat, never written | gone at daemon exit |
+| Client id / secret | registry ref (`sealed:` / `store:`); a secret never appears in the registry, argv or output | as the refresh token |
+
+* The access token **outlives the unseal that minted it** for at most the server's `expires_in`
+  (capped by `max_access_cache_s`, default 3600 s). While gt unlock demands a fresh factor for
+  every unseal, one unseal therefore serves that many minutes of calls for that seat. Lower
+  `max_access_cache_s` in the connection's `auth.oauth` block to tighten it.
+* An OAuth connection **never** serves an unattended write or consent (a hub client gets
+  `oauth_unattended_refused`). **Unattended reads are supported only with an L1 `store:` refresh
+  token** (connect with `--l1`; any process of your user can read that file, which is the honest
+  cost). A hub client asking for a read on a connection whose refresh token is `sealed:` is refused
+  with `oauth_unattended_refused` before any request is made -- adding a `secret:<ref>` allow-list
+  entry does NOT make it work, because the seat that would use the opened token could not re-store
+  the rotation, and presenting an already-rotated token ends the sign-in at the server.
+* `lotr connect` asks the server's authorization server for its metadata, so the issuer and every
+  endpoint it names are fetched by LOTR: https only, redirects only within an origin, private /
+  loopback / link-local / cloud-metadata addresses refused (the metadata addresses even with
+  `--allow-private-network`), every response size- and time-limited.
+* Tool tiers are unchanged and still derived from the server's own annotations and names, which
+  are hints a server controls (hardening is the open 0.21 item): a server that mislabels a
+  destructive tool as read-only can have it run at the read tier.
+* It does not sign Claude Code out of its own copy of a login; `claude mcp remove <name>` does.
+* **Reuse detection can end a sign-in.** Rotating refresh tokens are one-time: a server that follows
+  RFC 9700 revokes the whole grant when a used one is presented again. LOTR therefore never presents a
+  token it knows is stale, and a caller that cannot re-store a rotated token (an unattended hub client
+  with a sealed refresh token) is refused before any request is made. If a grant ends anyway, run
+  `lotr login <name>`: it signs in again and revokes the old token.
+* **A sign-in is started by you.** `lotr connect|login|disconnect` refuse to run from inside Claude
+  Code's process tree and, with gt unlock on, ask for the hub-admin step-up. A program running as you
+  can still detach from that tree: the guard stops a model's Bash tool, not malware. Without gt core
+  the process tree cannot be read; the `CLAUDECODE` marker is then a convenience only (a caller can
+  unset it), and a sign-in with no terminal on stdin is refused.
+* **Direct connections only.** LOTR ignores `HTTP_PROXY`/`NO_PROXY`, so a token never passes through an
+  environment or system proxy (a proxy-only network cannot use OAuth connections). TLS verification
+  trusts the platform store, so `SSL_CERT_FILE` / `SSL_CERT_DIR` in lotrd's environment are part of the
+  trust boundary. On native Windows a `store:` file is protected by the profile directory's ACL, not by
+  mode bits.
+* **Tiers on OAuth connections only ever go up from the server's hints**: a name containing
+  a risky word (delete, remove, send, write, create, update, merge, post, drop, grant, revoke, ...) as
+  a substring of the name is consent, read prefix or not (`get_deleteall` is consent); a short allow-list
+  of read words that contain one (settings, assets, presets, ...) is the only exception, and some reads
+  (`list_commits`) are consent by that rule until the owner pins them with `policy.read`.
+* **A sealed secret is bound to its record.** `registry.json` can be edited by any process of your
+  user, and lotrd posts the refresh token to the token endpoint the record names. A `sealed:` refresh
+  token or client secret is therefore stored inside an envelope whose SHA-256 digest covers the
+  record's `issuer`, `token_endpoint`, `revocation_endpoint`, `client_id` and `resource`. If any of
+  those no longer matches, or a sealed ref holds a value with no envelope, lotrd and the CLI refuse
+  with `oauth_binding_mismatch` and send nothing. An L1 `store:` OAuth secret is wrapped the same way,
+  so a copy of it pointed at by a bearer connection is refused (the bearer paths refuse every envelope).
+  What this does **not** cover: an L1 file is still readable by any process of your user, and a value
+  written before this change is plain until its next refresh (`lotr status` says which connections are
+  still plain), and the fields outside the digest (the authorization endpoint, scopes) are not bound. **A sealed OAuth connection
+  made before the binding existed is refused the same way: run `lotr disconnect <name>`, then
+  `lotr connect <name> --url ...` once.** A record edited away from `scheme: oauth` (to `bearer`,
+  keeping the OAuth secret's ref) is refused by the registry, and the bearer paths refuse to send an
+  envelope at all, so the downgrade cannot turn the sealed token into a bearer header.
+* **The record is checked again at use.** The connection's `endpoint` must be the `resource` the
+  sign-in was issued for (`oauth_resource_mismatch`, at registry load and before every token use),
+  and an OAuth `token_ref` may only be a `sealed:` or `store:` ref, so an edited record cannot point
+  the refresh at another file or environment variable.
+* **The unattended refusal comes before any dialog.** A hub client's write or consent request to an
+  OAuth connection is refused (`oauth_unattended_refused`) before a consent dialog is raised: nobody
+  is asked to approve something that cannot happen.
+* **Scope hints need no quoting.** `--scope` may be repeated, and a hint built from a server's scope
+  list is printed as `--scope a --scope b`; a scope word that is not plain letters, digits and
+  `: . _ / + = @ -` (starting with a letter or digit) is left out of the hint altogether.
+* **Translated IPv4 forms.** `::ffff:0:a.b.c.d` (RFC 2765) is judged as the IPv4 address it carries,
+  like `::ffff:a.b.c.d` and NAT64; a DNS lookup counts against the same total time budget as the connect.
+* **Local names as the authorization endpoint** (design): `localhost` and `*.localhost` are refused
+  there, so the browser is never sent to this machine by name.
+* **The browser.** `GT_LOTR_NO_BROWSER=1` makes `connect` / `login` print the sign-in URL and never
+  open a browser, `--open-browser` included. Without it a browser is opened only when stdin is a
+  terminal, or when you pass `--open-browser`.
+* **Pre-registered clients (`--client-id`): what is tested and what is not.** The flags are
+  `--client-id`, a secret from `--client-secret-file`, `--client-secret-stdin` or
+  `--client-secret-prompt` (never argv; stored as a ref like the refresh token), `--no-resource`
+  (omit the RFC 8707 `resource` parameter for a provider that rejects it; the token is then not
+  audience-bound by that parameter) and `--redirect-host localhost|127.0.0.1` (the name in the
+  redirect URI; the listener binds 127.0.0.1 either way). **The Google and Microsoft paths are tested
+  only against a fake authorization server** (`dev/fake_oauth_mcp.py`); no sign-in against either
+  real provider has been run. Linear (dynamic registration, no flags) is the provider the live check
+  is written for: `dev/oauth-live-check-linear.md`.
+

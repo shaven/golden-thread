@@ -51,6 +51,11 @@ os.environ.update(UNLOCK_TEST_ENV)
 # UNLOCK_TEST_ENV: every test process, and every process a test starts (Sandbox.env).
 SANDBOX_TEST_ENV = {"GT_TEST_SANDBOX": "1"}
 os.environ.update(SANDBOX_TEST_ENV)
+# gt-lotr OAuth (0.3.0): a test must NEVER open a real browser (2026-10-04: a manual run against a
+# fake authorization server sent the owner's Chrome to a dead loopback port). Every test process,
+# and every process a test starts (Sandbox.env), refuses to call webbrowser.open.
+LOTR_TEST_ENV = {"GT_LOTR_NO_BROWSER": "1"}
+os.environ.update(LOTR_TEST_ENV)
 needs_dev = unittest.skipUnless(HAS_DEV, "dev-only: needs dev/, which the published tree "
                                          "does not carry")
 
@@ -317,6 +322,7 @@ class Sandbox(unittest.TestCase):
         env.update(GIT_ID)
         env.update(UNLOCK_TEST_ENV)            # no real prompt, no stray daemon (0.20.1)
         env.update(SANDBOX_TEST_ENV)           # never the real launchd/schtasks (0.20.1)
+        env.update(LOTR_TEST_ENV)              # never a real browser (0.3.0 OAuth)
         env["HOME"] = str(self.home)
         if IS_WINDOWS:
             # Windows Python's expanduser reads USERPROFILE, not HOME: without this every tool a

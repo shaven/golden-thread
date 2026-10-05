@@ -297,6 +297,13 @@ def serve_unix(engine_factory, sock_path, *, stop_event=None, on_ready=None):
     exit if it is still ours.
     """
     sock_path = str(sock_path)
+    limit = 108 if sys.platform.startswith("linux") else 104       # sun_path, NUL included
+    if len(os.fsencode(sock_path)) >= limit:
+        raise GatewayError("socket_path_too_long",
+                           f"the daemon socket path is {len(os.fsencode(sock_path))} bytes; this "
+                           f"kernel allows {limit - 1} for a unix socket, so lotrd cannot listen there",
+                           hints=["use a shorter --home (or a shorter TMPDIR for a test home)",
+                                  sock_path])
     if os.path.lexists(sock_path):
         if socket_alive(sock_path):
             raise GatewayError("daemon_running", f"a daemon already answers on {sock_path}",

@@ -21,6 +21,11 @@ def atomic_write(path, text, mode=0o600):
     try:
         with os.fdopen(fd, "w", encoding="utf-8", newline="\n") as f:
             f.write(text)
+            f.flush()
+            try:
+                os.fsync(f.fileno())                 # the bytes are on disk before the rename
+            except OSError:
+                pass
         os.chmod(tmp, mode)
         os.replace(tmp, path)
     except BaseException:

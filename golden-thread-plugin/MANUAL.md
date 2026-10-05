@@ -2351,6 +2351,31 @@ lotr status            # connections, whether each credential is present (never 
   once; each is tiered by its `readOnlyHint`/`destructiveHint` annotations, else its name, else
   write. Transport `http` (JSON or SSE replies); stdio and legacy `sse` servers are not supported
   yet. A work endpoint on a personal gateway needs the owner's zone ruling first.
+- **Native OAuth for remote MCP servers (lotr 0.3.0):** `lotr connect NAME --url https://…/mcp`
+  signs in at your terminal (spec revision 2026-07-28: discovery from the server's 401, a client
+  registered automatically or the `--client-id` you pass, PKCE S256, `resource`, loopback redirect;
+  the browser opens, or on a headless host the URL is printed) and registers the connection with its
+  tools. `lotr login NAME` signs in again (add `--scope` to widen), `lotr disconnect NAME` revokes at
+  the server, deletes the stored secrets and unregisters. The refresh token is sealed (L2) while gt
+  unlock is on, else a mode-600 file (L1, said plainly in `lotr status`); the access token lives
+  only in the daemon's memory. When a login lapses a call returns `needs_login` naming the exact
+  command. An OAuth connection serves a hub client reads only, never writes or consent (refused
+  with `oauth_unattended_refused` before any consent dialog). Flags:
+  `--scope` (repeat it for several: `--scope read --scope write`; hints are printed that way, with
+  no quoting), `--client-id`, `--client-secret-file` / `--client-secret-stdin` /
+  `--client-secret-prompt`, `--client-metadata-url`, `--authorization-server`,
+  `--redirect-port`, `--redirect-host localhost|127.0.0.1`, `--no-resource` (for a provider that
+  rejects the `resource` parameter), `--open-browser`, `--offline-access`, `--l1`, and the two owner
+  opt-outs `--allow-insecure-localhost` and `--allow-private-network` (tests and local servers).
+  `GT_LOTR_NO_BROWSER=1` always prints the sign-in URL instead of opening a browser. A sealed
+  refresh token or client secret is bound to the issuer, token and revocation endpoints, client id
+  and resource it was issued under: if the registry record is changed afterwards the call fails
+  with `oauth_binding_mismatch` and nothing is sent. A sealed OAuth connection made before this
+  binding needs `lotr disconnect NAME` then `lotr connect NAME --url …` once. The pre-registered
+  client paths for Google and Microsoft (`--client-id` with a secret, `--no-resource`,
+  `--redirect-host`) are tested against a fake authorization server only; Linear is the provider
+  the live check covers (`dev/oauth-live-check-linear.md`). Details and
+  threat model: `golden-thread-lotr/0.3.0/SPEC.md`; security ratings: SECURITY.md 9.1.
 - **Credentials are references** — `keychain:`, `store:`, `file:` — never values. The owner puts
   the secret in place; the skill never asks for a token's value. An enrolled client's secret goes
   to a mode-600 file, never to the screen; revoking a client needs no external credential rotated.

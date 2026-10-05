@@ -26,6 +26,8 @@ from .util import now_iso, read_json, write_json
 CONN_ID = re.compile(r"^[a-z0-9][a-z0-9._-]*@[a-z0-9][a-z0-9._-]*$")
 CLIENT_ID = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]*$")
 # 0.3.0: the brokered schemes, resolved only by gt core's unlock authority (secrets.BROKERED).
+OAUTH_TOKEN_REF = re.compile(r"^(sealed|store):[A-Za-z0-9][A-Za-z0-9._-]{0,63}$")
+OAUTH_SECRET_NAME = re.compile(r"^(sealed|store):lotr-oauth-")     # what oauth.secret_name writes
 TOKEN_REF = re.compile(r"^(file|store|keychain|env|sealed|sops|op|bw|vault|wincred):")
 SHA256_HEX = re.compile(r"^[0-9a-f]{64}$")
 AUTH_SCHEMES = ("bearer", "basic", "header", "none")
@@ -93,6 +95,7 @@ def validate_connection(entry, zone):
     scheme = auth.get("scheme")
     if scheme not in AUTH_SCHEMES:
         raise _bad(f"{where}: auth.scheme must be one of {', '.join(AUTH_SCHEMES)}")
+    _not_oauth_in_disguise(auth, where)
     if scheme != "none":
         ref = auth.get("token_ref")
         if not isinstance(ref, str) or not TOKEN_REF.match(ref):
@@ -137,6 +140,109 @@ def _endpoint_ok(where, url, network, field):
         raise _bad(f"{where}: {field} host {host} is not in network.hosts")
 
 
+def _not_oauth_in_disguise(auth, where):
+    """A record whose scheme was edited AWAY from oauth (independent review of 7473a24, blocker 1):
+    the bearer path would read the OAuth sign-in's sealed envelope and send it raw to whatever
+    endpoint the edited record names. Neither an `oauth` block nor an OAuth secret's name may
+    appear under any other scheme."""
+    if auth.get("scheme") == "oauth":
+        return
+    if "oauth" in auth:
+        raise _bad(f"{where}: auth.oauth belongs to scheme oauth only; a record edited away from "
+                   "oauth is refused")
+    ref = auth.get("token_ref")
+    if isinstance(ref, str) and OAUTH_SECRET_NAME.match(ref):
+        raise _bad(f"{where}: auth.token_ref names an OAuth sign-in's secret, which only scheme "
+                   "oauth may use")
+
+
+def _validate_oauth(entry, auth, where):
+    """auth.scheme "oauth" (0.3.0): LOTR's own OAuth. `token_ref` is the REFRESH token's ref
+    (sealed: when gt unlock is on, else store:), or null when the AS issued none; the access
+    token is never stored. The `oauth` block holds only public facts and REFS."""
+    block = auth.get("oauth")
+    if not isinstance(block, dict):
+        raise _bad(f"{where}: auth.oauth must be an object")
+    if entry.get("refresh_cmd"):
+        raise _bad(f"{where}: refresh_cmd does not apply to an oauth connection")
+    ref = auth.get("token_ref")
+    if ref is not None and (not isinstance(ref, str) or not OAUTH_TOKEN_REF.match(ref)):
+        # Only the two kinds LOTR itself writes: a tampered file:/env:/keychain: ref would be read
+        # and POSTed to the token endpoint.
+        raise _bad(f"{where}: an oauth connection's auth.token_ref must be a sealed: or store: "
+                   "ref or null, never a literal token or another kind of ref")
+    net = block.get("net", {})
+    if not isinstance(net, dict) or not all(isinstance(net.get(k, False), bool)
+                                            for k in ("allow_private", "allow_insecure_localhost")):
+        raise _bad(f"{where}: auth.oauth.net must hold booleans allow_private / "
+                   "allow_insecure_localhost")
+    hosts = [h.lower() for h in (entry.get("network") or {}).get("hosts", []) if isinstance(h, str)]
+    for key in ("issuer", "authorization_endpoint", "token_endpoint", "resource"):
+        if not isinstance(block.get(key), str):
+            raise _bad(f"{where}: auth.oauth.{key} is required")
+    # The token is for ONE resource: the endpoint it is sent to must be that resource (scheme,
+    # host, port and path), not merely a pinned host.
+    from .oauth import canonical_resource
+    try:
+        bound = canonical_resource(entry.get("endpoint") or "") == canonical_resource(block["resource"])
+    except GatewayError:
+        bound = False
+    if not bound:
+        raise _bad(f"{where}: endpoint is not the resource this sign-in was issued for "
+                   "(auth.oauth.resource); sign in again with lotr connect")
+    for key in ("issuer", "authorization_endpoint", "token_endpoint", "revocation_endpoint",
+                "registration_endpoint"):
+        url = block.get(key)
+        if url is None and key in ("revocation_endpoint", "registration_endpoint"):
+            continue
+        if not isinstance(url, str):
+            raise _bad(f"{where}: auth.oauth.{key} must be a URL")
+        parts = urlsplit(url)
+        host = (parts.hostname or "").lower()
+        if parts.scheme == "https" and host:
+            pass
+        elif parts.scheme == "http" and host in LOCAL_HOSTS + ("::1",) and \
+                net.get("allow_insecure_localhost"):
+            pass
+        else:
+            raise _bad(f"{where}: auth.oauth.{key} must be https (plain http to a loopback host "
+                       "only when the owner passed --allow-insecure-localhost)")
+        if parts.username or parts.password or parts.fragment:
+            raise _bad(f"{where}: auth.oauth.{key} must not carry credentials or a fragment")
+        if host not in hosts:
+            raise _bad(f"{where}: auth.oauth.{key} host {host} is not in network.hosts")
+    ep = urlsplit(entry.get("endpoint") or "")
+    if ep.scheme == "http" and not net.get("allow_insecure_localhost"):
+        raise _bad(f"{where}: a plain-http endpoint needs --allow-insecure-localhost")
+    if not isinstance(block.get("client_id"), str) or not block["client_id"]:
+        raise _bad(f"{where}: auth.oauth.client_id is required")
+    if block.get("client_id_source") not in ("preregistered", "cimd", "dcr"):
+        raise _bad(f"{where}: auth.oauth.client_id_source must be preregistered, cimd or dcr")
+    if block.get("token_endpoint_auth_method", "none") not in ("none", "client_secret_basic",
+                                                               "client_secret_post"):
+        raise _bad(f"{where}: auth.oauth.token_endpoint_auth_method is not supported")
+    csr = block.get("client_secret_ref")
+    if csr is not None and (not isinstance(csr, str) or not OAUTH_TOKEN_REF.match(csr)):
+        # The same two kinds as token_ref: anything else (env:, file:, keychain:) an edited record
+        # named would be read and POSTed to the token endpoint.
+        raise _bad(f"{where}: auth.oauth.client_secret_ref must be a sealed: or store: ref or null, never a "
+                   "literal secret")
+    if block.get("token_endpoint_auth_method", "none") != "none" and not csr:
+        raise _bad(f"{where}: a confidential client needs auth.oauth.client_secret_ref")
+    sc = block.get("scopes", [])
+    if not isinstance(sc, list) or not all(isinstance(x, str) and x and " " not in x for x in sc):
+        raise _bad(f"{where}: auth.oauth.scopes must be a list of scope tokens")
+    if not isinstance(block.get("send_resource", True), bool):
+        raise _bad(f"{where}: auth.oauth.send_resource must be true or false")
+    if block.get("redirect_host", "127.0.0.1") not in ("127.0.0.1", "localhost"):
+        raise _bad(f"{where}: auth.oauth.redirect_host must be 127.0.0.1 or localhost")
+    if not isinstance(block.get("audience_check", True), bool):
+        raise _bad(f"{where}: auth.oauth.audience_check must be true or false")
+    mac = block.get("max_access_cache_s", 3600)
+    if isinstance(mac, bool) or not isinstance(mac, (int, float)) or mac <= 0:
+        raise _bad(f"{where}: auth.oauth.max_access_cache_s must be a positive number")
+
+
 def _validate_mcp(entry, where):
     """An `mcp` connection (0.2.0): a downstream MCP endpoint behind SSO/OAuth, reached with the
     bearer token its local client already holds -- by REF, never a literal -- and refreshed by
@@ -150,8 +256,11 @@ def _validate_mcp(entry, where):
     if entry.get("trust") not in TRUST:
         raise _bad(f"{where}: trust must be one of {', '.join(TRUST)}")
     auth = entry.get("auth")
-    if not isinstance(auth, dict) or auth.get("scheme") not in ("bearer", "none"):
-        raise _bad(f"{where}: auth.scheme must be bearer or none for an mcp connection")
+    if not isinstance(auth, dict) or auth.get("scheme") not in ("bearer", "none", "oauth"):
+        raise _bad(f"{where}: auth.scheme must be bearer, oauth or none for an mcp connection")
+    _not_oauth_in_disguise(auth, where)
+    if auth.get("scheme") == "oauth":
+        _validate_oauth(entry, auth, where)
     if auth.get("scheme") == "bearer":
         ref = auth.get("token_ref")
         if not isinstance(ref, str) or not TOKEN_REF.match(ref):

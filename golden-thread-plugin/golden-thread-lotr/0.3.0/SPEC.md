@@ -499,3 +499,236 @@ authority raises the prompts), then one retry. Never a loop.
 
 `enroll` / `revoke`: while unlock is on, scope `gt:hub:enroll` with `request=True` (step-up)
 before anything is written. `add-mcp --refresh-cmd` is split with Windows rules on Windows.
+
+## 0.3.0: native OAuth for remote MCP servers
+
+**Spec implemented: MCP authorization, revision 2026-07-28** (modelcontextprotocol.io/specification/
+2026-07-28/basic/authorization, fetched 2026-10-04; the module docstring of `lotrlib/oauth.py` says
+the same). RFCs relied on: OAuth 2.1 draft-13, 9728 (protected-resource metadata), 8414 (+ OpenID
+Connect discovery), 7591 (DCR), 8707 (resource indicators), 7636 (PKCE S256), 7009 (revocation),
+9207 (`iss`), 8252 (loopback), and the Client ID Metadata Document draft-00. Until now an `mcp`
+connection could only reuse another client's token by ref (`add-mcp`); it still can. `connect`
+makes LOTR the OAuth client.
+
+### Commands (admin plane, run by a person at a terminal on the machine holding the registry)
+
+    lotr connect NAME --url HTTPS_MCP_ENDPOINT [--scope "s1 s2"] [--client-id ID]
+         [--client-secret-file PATH | --client-secret-stdin] [--client-metadata-url URL]
+         [--authorization-server ISSUER] [--redirect-port N] [--offline-access] [--l1]
+         [--allow-insecure-localhost] [--allow-private-network] [--skip-audience-check]
+         [--identity S] [--description D] [--trust T0|T1|T2]
+    lotr login NAME [--scope "extra scopes"] [--redirect-port N]
+    lotr disconnect NAME
+
+`NAME` is `name@zone` or a bare name in the registry's zone. `connect` runs discovery, registers a
+client, opens the browser (or prints the URL), waits on the loopback listener, exchanges the code,
+stores the refresh token, lists the server's tools (so `find` works at once) and registers the
+connection. `login` repeats the sign-in for an existing connection (scopes are only ever added,
+the step-up rule of the spec). `disconnect` revokes at the server (RFC 7009, best effort and
+reported), deletes the stored secrets and unregisters. All three refuse in `mode: client`.
+
+### Registry shape
+
+`kind: mcp`, `auth.scheme: "oauth"`:
+
+    "auth": {"scheme": "oauth",
+             "token_ref": "sealed:lotr-oauth-<name>-<hash>-rt" | "store:lotr-oauth-…-rt" | null,
+             "oauth": {"issuer", "resource", "authorization_endpoint", "token_endpoint",
+                       "revocation_endpoint"|null, "registration_endpoint"|null,
+                       "client_id", "client_id_source": "preregistered"|"cimd"|"dcr",
+                       "token_endpoint_auth_method": "none"|"client_secret_basic"|"client_secret_post",
+                       "client_secret_ref": <ref>|null, "scopes": [...],
+                       "net": {"allow_private": bool, "allow_insecure_localhost": bool},
+                       "audience_check": bool, "max_access_cache_s": 3600, "spec": "2026-07-28"}}
+
+`token_ref` is the REFRESH token's ref, `null` when the server issued none. The ACCESS token is not
+stored anywhere. Every endpoint host is pinned in `network.hosts`; validation refuses a literal
+token or secret, a non-https URL (plain http only with `net.allow_insecure_localhost`), an unpinned
+host, a confidential client without `client_secret_ref`, and `refresh_cmd` on an oauth connection.
+
+### Flow (what `lotrlib/oauth.py` does, in order)
+
+1. **Discovery.** Unauthenticated `initialize` POST -> must be 401. `WWW-Authenticate: Bearer
+   resource_metadata="…"` (same origin as the endpoint) else the RFC 9728 well-known URIs (path,
+   then root). Protected-resource `resource` must equal the endpoint (canonical form). With no
+   protected-resource metadata at all, the endpoint's own origin is used as the issuer and a note
+   says so (pre-2025-06 servers). AS metadata: RFC 8414 then OpenID Connect locations, with and
+   without path insertion; the `issuer` in the document must be identical to the one the URL was
+   built from. Refused: no `S256` in `code_challenge_methods_supported`.
+2. **Scope.** `--scope`, else the 401 challenge's `scope`, else `scopes_supported`, else none.
+   `offline_access` only with `--offline-access`.
+3. **Client.** Pre-registered `--client-id` (+ secret from a file or stdin, never argv); else a
+   Client ID Metadata Document when `--client-metadata-url` is given AND the AS advertises
+   `client_id_metadata_document_supported`; else DCR (`application_type: native`, `none` auth,
+   redirect URI exactly the one about to be used; a response that alters it is refused); else
+   refuse with the way forward. A DCR client is registered afresh at every `connect`/`login` (the
+   loopback port changes), so an AS may collect unused client records.
+4. **Authorization.** Loopback listener on 127.0.0.1 only, ephemeral port (or `--redirect-port`),
+   path `/callback`, `state` 256 bits, PKCE S256, `resource`. The browser is opened with
+   `webbrowser`; on a headless host (or if it fails) the URL is printed with the port. The
+   listener accepts one callback and closes on every exit; wrong Host or path -> 404 and the wait
+   goes on; wrong state, a contradicting or (when advertised) missing `iss`, an AS error, or the
+   timeout (180 s) ends the attempt.
+5. **Token exchange** with `resource` and `code_verifier`; Bearer only; `expires_in` honoured; a
+   JWT access token whose `aud` does not name the resource is refused (defence in depth, off with
+   `--skip-audience-check`).
+6. **Lifecycle in lotrd.** `oauth.access_token(conn, Context)`: cached per connection AND per
+   seat (kernel-identified caller; `-` while unlock is off); renewed 60 s before expiry or on a
+   401 (once); one refresh at a time per connection; a rotated refresh token is persisted BEFORE
+   the access token is returned (sealed: via the authority's `seal_put` for the calling subject
+   with `request: false` -- a public-key seal, no prompt on macOS; store: by atomic rename); if
+   persisting fails the token is held in memory for that seat, a note rides in the result and
+   `lotr status` shows `refresh_unpersisted`. `invalid_grant` on refresh, or a 401 that survives a
+   fresh token, is `needs_login`, with hint `run: lotr [--zone Z] login <id>`. A 403
+   `insufficient_scope` is reported with `lotr login <id> --scope "<needed>"` (no automatic
+   step-up).
+
+### Where the refresh token rests (honest ratings)
+
+- gt unlock **on**: `sealed:` (L2) -- sealed at `connect` through the authority (a person is at the
+  terminal and may be asked a factor; `--l1` overrides), opened per grant or per `secrets_window_s`
+  like any sealed ref, re-sealed on rotation without a prompt on macOS (Windows seals through
+  Windows Hello, so a rotation there by a daemon with nobody present cannot be sealed and falls into
+  the held-in-memory case above: the rotated token is kept in memory only and `lotr login` is needed
+  after a restart).
+- gt unlock **off**, or `--l1`: `store:` -- a mode-600 file the store wrote (L1: any process of
+  this user can read it). On native Windows the 0600/0700 chmod calls are no-ops: the protection is
+  the profile directory's ACL, and `lotr status` / `connect` say so. The macOS keychain is not written (its CLI takes the secret in argv).
+- A client secret gets the same treatment under its own name.
+- `lotr status` shows the level (`L2` via the authority, `L1` for store), `refresh_token:
+  stored as sealed:|store:|none issued`, and `access_cached` / `refresh_unpersisted`, never a value.
+
+### Authority interplay (unchanged rules)
+
+Per-seat grants for `lotr:<conn>:<tier>`, `mcp_only`, step-up and consent are exactly as for any
+connection; the engine's gate runs before the connection is built. `profiles.mcp_tier` still
+assigns tiers (annotations are hints: the open 0.21 item). **An OAuth connection never qualifies
+for an unattended write or consent**: a hub client calling it with `call_write` / `call_consent`
+gets `oauth_unattended_refused`. **Unattended reads are supported only with an L1 `store:`
+refresh token** (`connect --l1`; the honest cost of L1). A hub client's read on a connection with a
+`sealed:` refresh token is refused (`oauth_unattended_refused`) BEFORE any request to the server:
+the hub seat has no subject, so it cannot re-seal a rotation, and a refresh it could not store
+would leave the stored token already-rotated (a later presentation then looks like a replay and a
+server with reuse detection ends the sign-in). A `secret:<ref>` allow-list entry does not change
+that. The local seat that holds the grant keeps working.
+
+`login` is pinned to the stored issuer (Authorization Server Binding): if the server's
+protected-resource metadata no longer lists it, `login` fails with `oauth_as_not_listed`; use
+`disconnect` then `connect` to move to a new authorization server. `login` re-seals into `sealed:`
+when gt unlock is now on and the stored token was L1 (the old file is deleted).
+
+### Threat model
+
+| Threat | Control |
+|---|---|
+| SSRF through discovery metadata (issuer, endpoints pointing inward) | every fetch: https only, address checked at connect time (private / loopback / link-local / CGNAT / metadata refused; metadata addresses refused even with `--allow-private-network`), same-origin redirects only, byte and time limits |
+| Mix-up / forged callback | recorded issuer vs `iss` (RFC 9207 table), exact state, exact redirect URI, one-shot loopback with Host check |
+| Code interception | PKCE S256, AS must advertise it, verifier never leaves the process |
+| Token for another server | `resource` in both requests; JWT `aud` check; the MCP server validates audience (spec) |
+| Token theft at rest | refresh token sealed (L2) or mode-600 (L1, said plainly); access token memory only; never in argv, environment, logs, audit lines, errors or results (tests scan for issued token strings) |
+| Refresh-token replay after rotation | rotation persisted before use, one refresh at a time, reuse -> `needs_login` |
+| Another seat riding a cached token | access tokens cached per seat; a new seat must read the refresh secret (so unseal under its own grant) |
+| Hostile AS error text | only a plain error code is quoted, never `error_description` |
+
+### What it does not do
+
+No device-code, client_credentials, private_key_jwt or DPoP; no automatic step-up; no stdio servers;
+no hosting of a Client ID Metadata Document (you give it a URL you host); no deletion of DCR client
+records at the AS; it does not read or sign out Claude Code's own copy of a login (`claude mcp
+remove` does that); `connect` needs a person with a browser on the machine (or a forwarded port).
+The cached access token outlives the unseal that minted it, for at most `max_access_cache_s`
+(default 3600, shortened by the server's `expires_in`): a deliberate trade-off against prompting on
+every call, recorded in SECURITY.md.
+
+### Hardening from the independent review (2026-10-04)
+
+- **Server-controlled text is inert.** A `scope` from a 403 reaches a hint only when every token is a
+  plain scope word (`A-Za-z0-9 : . _ / + = @ -`, at most 20 words); otherwise it is left out, never
+  quoted in. Every other server-supplied string in a message (URLs, host names) goes through
+  `oauth.clean` (control, space and non-ASCII characters become `?`) and `safe_url` strips query,
+  fragment and userinfo. Only a plain error CODE is quoted from an AS, never its description.
+- **Refresh-token reuse can end a sign-in.** Public clients get rotating refresh tokens, and a server
+  that follows RFC 9700 revokes the whole grant when an already-rotated token is presented. So LOTR
+  never presents one it knows is stale: held (unpersisted) tokens are kept per seat; while any seat holds
+  one the stored copy is stale and every other seat gets `needs_login` without contacting the server;
+  a caller that cannot re-store the rotation (a hub client with a `sealed:` ref) is refused up front with
+  `oauth_unattended_refused`, before any request. When a grant does end, `lotr login <name>` signs in
+  again and revokes the previous refresh token after the new one is saved.
+- **Tiers.** On an OAuth connection annotations may only raise a tier: `destructiveHint` or a name
+  containing a risky word (delete, remove, send, write, create, update, merge, post, drop, grant,
+  revoke, run, exec, publish, upload, deploy, reset, set, close, purge, ... the list is `_MCP_RISKY`
+  in `profiles.py`) is consent. The word is matched as a substring of the lowercased name, for every
+  name, read prefix or not (`get_deleteall`, `list_sendmail`, `searchdeleteall` are consent). The one
+  exception is a short allow-list of read-only words that contain a risky word (`_SAFE_READ_WORDS`:
+  settings, assets, dataset, preset, closest, postmortem, running, runtime): a risky word counts
+  unless it lies wholly inside one of them, so `list_assets`, `get_settings_page` and
+  `describe_runtime` stay reads while `resetsettings` and `presetdrop` are consent. The cost is that
+  some reads are consent (`list_commits`, which contains "commit"); the owner keeps them reads with a
+  `policy.read` glob on the connection. A `readOnlyHint` counts only for a name that begins with a read
+  prefix and has no risky word; an unknown name is write. (So `create_*` on an OAuth connection is a
+  consent-tier operation.)
+
+- **Local names are refused as the authorization endpoint (design, second review).** The owner's
+  browser is sent to the authorization endpoint, so an endpoint whose host is `localhost` or ends in
+  `.localhost` (any case, trailing dot allowed) is refused with `oauth_ssrf_refused`. A DNS name that
+  merely starts with "localhost" and the owner's literal `127.0.0.1` test servers are not affected.
+- **Who may sign in.** `connect`, `login` and `disconnect` refuse to run from inside Claude Code's
+  process tree (or with `CLAUDECODE` set, or with no interactive shell above them), and while gt unlock
+  is on require `gt:hub:enroll` with step-up. Honest limit: a same-user program can detach from the
+  tree; the check stops a model's Bash tool, not a determined local process.
+- **Runtime traffic.** An OAuth connection's calls to the MCP server use the same pinned, SSRF-checked
+  connect as discovery (the owner's `net` flags apply), consult no proxy at all (`HTTP_PROXY`,
+  `NO_PROXY` and the system proxy are ignored: connections are direct; non-OAuth `mcp` connections also
+  bypass proxies), refuse redirects, and read at most 8 MiB for at most 120 s. Embedded IPv4 forms
+  (IPv4-mapped, RFC 2765 translated `::ffff:0:a.b.c.d`, NAT64, 6to4, IPv4-compatible) are judged by the address inside; metadata addresses
+  (169.254.169.254, 168.63.129.16, 192.0.0.192, fd00:ec2::254, 100.100.100.200) and multicast are never allowed.
+- **Listener.** Each connection is read on its own thread (3 s), so idle sockets cannot stall the login;
+  a request with the wrong state is a stray, not an abort (a forged callback cannot kill the owner's
+  login); a state-valid answer from the wrong issuer, or an AS error, is terminal; one terminal verdict
+  closes the socket.
+- **Housekeeping.** The daemon forgets the cached tokens of a connection no longer in the registry on every
+  reload; the per-connection access cache holds at most 64 seats and drops expired entries; a `connect`
+  whose registry write fails deletes the secrets it wrote; `atomic_write` fsyncs before the rename.
+- **Trust anchors.** TLS uses the platform trust store; `SSL_CERT_FILE` / `SSL_CERT_DIR` (and the
+  system store) are therefore part of the trust boundary. On native Windows there are no mode bits: a
+  `store:` file is protected by the profile directory's ACL, not by mode 600.
+- **Not changed.** The engine holds its lock across a downstream call (pre-existing; a slow MCP server
+  delays other callers), a connection's `tools/call` error text is still the server's own (untrusted data).
+
+### Added after the adversarial test pass (2026-10-04)
+
+- **Sealed secrets are bound to their record.** A `sealed:` refresh token or client secret is stored as
+  `lotr-bound-v1.<sha256>.<value>`; the digest covers `issuer`, `token_endpoint`, `revocation_endpoint`,
+  `client_id` and `resource`. lotrd and the CLI refuse (`oauth_binding_mismatch`, nothing is sent) when
+  the record no longer matches or a sealed ref holds an unbound value. registry.json is editable by any
+  process of the user; this keeps an edited token endpoint from being handed the sealed token. The
+  L1 `store:` form of an OAuth secret is wrapped in the same envelope (second review): a plain copy
+  of it under another name is refused by the bearer paths, which refuse any envelope. A value written
+  before this is plain; it is read, and wrapped at its next refresh (`lotr status` says so until then).
+  The L1 file is still readable by any process of the user, as it always was.
+- **Rotation survives any store failure**: a GatewayError or a raw OSError while re-storing keeps the new
+  token in memory for the seat (`refresh_unpersisted`).
+- **Registry rules**: `endpoint` must equal `auth.oauth.resource` (canonical form; checked at load and again
+  before every token use, `oauth_resource_mismatch`); `auth.token_ref` may only be `sealed:` or `store:`;
+  the connection name is checked (`bad_connection_name`) before any network request; `login_nonce` in the
+  block makes every sign-in a distinct cache key in lotrd.
+- **Hints**: `--scope` may be given more than once, and a scope hint is printed as `--scope a --scope b`
+  with no quoting, so it is inert in sh, cmd.exe and PowerShell alike.
+- **Pre-registered clients (Google, Microsoft)**: with `--client-id`, the RFC 9728 well-known document is
+  fetched first (Google answers `initialize` with 200 and challenges only tool calls); a listed issuer
+  that is an origin plus `/` matches the same origin published without it (one direction only); a client
+  secret from `--client-secret-file|-stdin|-prompt` is sent as `client_secret_post` when offered and
+  stored as a ref; `--no-resource` omits the RFC 8707 parameter (remembered as `send_resource: false`);
+  `--redirect-host localhost|127.0.0.1` names the redirect host (the listener binds 127.0.0.1 only).
+  Microsoft, best effort and tested only against a fake: OpenID Connect discovery fallback, the
+  `{tenantid}` issuer template (the authority's tenant segment is substituted), PKCE sent although not
+  advertised (pre-registered clients only), `offline_access` added, `resource` withheld unless it matches
+  the scope's audience.
+- **Browser**: `webbrowser` is reached through one gate. `GT_LOTR_NO_BROWSER=1` always prints the URL
+  instead; without it a browser opens only with a terminal on stdin and outside a test run, or with
+  `--open-browser`. The launcher runs on its own thread.
+
+### Tests
+
+`tests/test_lotr_oauth_adversarial.py` (199 hostile-server tests), `tests/test_lotr_oauth.py` against `dev/fake_oauth_mcp.py` (in-process AS + protected MCP server,
+rotating refresh with reuse detection). Real-server behaviour is verified by hand: `dev/oauth-live-check.md`.

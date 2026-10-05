@@ -69,6 +69,82 @@ The folding applies on every platform, deliberately: on a case-sensitive volume 
 too. A vault's own `tools/gt_session.py` must be refreshed (`/gt:gt-upgrade`) to get this, with
 `gt_review_target.py` beside it; without that file the tool compares strings as before.
 
+### gt-lotr 0.3.0: native OAuth for remote MCP servers
+
+(Owner requirement 2026-10-04 14:36 CDT, scope 15:07: lands in 0.20.1; module version stays 0.3.0.)
+LOTR could front an OAuth-protected MCP server only by reusing another client's token file. It now
+signs in itself, to the MCP authorization spec **revision 2026-07-28**:
+
+- **`lotr connect NAME --url https://…/mcp`, `lotr login NAME`, `lotr disconnect NAME`.** Discovery
+  from the server's 401 (RFC 9728, RFC 8414 with the OpenID Connect fallbacks, issuer must match),
+  a client from `--client-id`, a Client ID Metadata Document URL you host, or dynamic registration;
+  authorization code + PKCE S256 with `resource` in both requests, a one-shot loopback listener on
+  127.0.0.1 (state, redirect URI and RFC 9207 `iss` checked; the URL is printed on a headless
+  host), scopes minimised (the server's challenge, `--scope` to override), revocation on
+  `disconnect`. The connection is `kind: mcp`, `auth.scheme: oauth`.
+- **Where tokens rest.** The refresh token is a sealed ref (L2) while gt unlock is on, re-sealed on
+  rotation without a prompt on macOS; otherwise a mode-600 store file (L1, labelled so in
+  `lotr status`). The access token lives only in lotrd's memory, per calling seat, never on disk;
+  no token is ever in argv, environment, logs, audit lines, errors or results.
+- **Lifecycle.** Renewed 60 s before expiry and once on a 401, one refresh at a time, rotation
+  persisted before use (held in memory and reported if it cannot be). A refused refresh or a 401
+  after a fresh token is `needs_login` with the exact command; `insufficient_scope` names the
+  step-up `--scope`.
+- **Safety.** https only (plain http to loopback only with `--allow-insecure-localhost`),
+  same-origin redirects only, private / link-local / cloud-metadata addresses refused unless
+  `--allow-private-network`, every response size- and time-limited, an AS without PKCE S256 refused.
+  An OAuth connection never serves an unattended write or consent.
+- **Review hardening (2026-10-04):** server-supplied text (scope, URLs) is inert in hints; a rotated
+  refresh token that cannot be re-stored is held per seat and a stale one is never presented (no
+  accidental family revocation); strict tiers (create/update/send/... are consent on OAuth
+  connections); connect/login/disconnect refuse to run from Claude Code's process tree and need the
+  hub-admin step-up under unlock; runtime calls use the pinned SSRF-checked connect, no proxy;
+  NAT64/6to4/IPv4-compatible addresses unwrapped; loopback listener ignores forged callbacks and idle
+  sockets; `login` revokes the old token; `atomic_write` fsyncs.
+- **After the adversarial test pass (2026-10-04):**
+  - *Sealed secrets are bound to their record.* A `sealed:` refresh token or client secret is stored
+    in an envelope whose digest covers issuer, token endpoint, revocation endpoint, client id and
+    resource; an edited registry record gets `oauth_binding_mismatch` and nothing is sent. The L1
+    `store:` form is wrapped too, so a copy of it under a neutral name is refused by a bearer
+    connection (second review). A plain L1 value from before is wrapped at its next refresh, and
+    `lotr status` names it until then. **A sealed OAuth connection made before this needs
+    `lotr disconnect` then `lotr connect` once.**
+  - A rotated refresh token survives any failure to store it, a raw OS error included.
+  - The endpoint must be the resource the sign-in was issued for (checked at load and at use); an
+    OAuth `token_ref` may only be `sealed:` or `store:`; the connection name is validated before
+    any network request; a re-connect can never be served the previous sign-in's cached token.
+  - `--scope` may be repeated, and scope hints are printed as `--scope a --scope b` with no quoting
+    (inert in sh, cmd.exe and PowerShell).
+  - An unattended hub write or consent request is refused (`oauth_unattended_refused`) before any
+    consent dialog.
+  - `GT_LOTR_NO_BROWSER=1` always prints the sign-in URL; otherwise a browser opens only with a
+    terminal on stdin or with `--open-browser`.
+  - *Independent review of the adversarial pass (2026-10-04):* a record edited from `oauth` to
+    `bearer` can no longer send the sealed envelope as a bearer token (registry and both bearer
+    paths refuse); a risky word glued into a tool name (`deletefile`, `createissue`, `sendmessage`)
+    is consent again; a rotated refresh token survives a reply that fails validation after the
+    rotation; the IP-literal screen folds trailing dots, percent-escapes and fullwidth digits; the
+    fetch deadline covers connecting to every address; `client_secret_ref` is `sealed:`/`store:`
+    only; without gt core a sign-in needs a terminal on stdin; lotrd refuses a too-long socket path
+    with `socket_path_too_long`.
+  - *Second independent review (2026-10-04):* a risky word is consent in every tool name, read prefix
+    or not (`get_deleteall`, `list_sendmail`, `searchdeleteall` are consent); a short allow-list of read
+    words that contain one (settings, assets, presets, closest, ...) is the only exception, so some
+    reads (`list_commits`) are consent until the owner pins them with `policy.read`. The L1 store form
+    of an OAuth secret is wrapped in the envelope, so a copy under a neutral name is refused by a bearer
+    connection; a value from before is wrapped at its next refresh and `lotr status` names it until
+    then. The name lookup counts against the total fetch budget. `localhost` and `*.localhost` are
+    refused as the authorization endpoint (design: the browser is never sent to this machine by name).
+    The RFC 2765 translated IPv4-mapped form `::ffff:0:a.b.c.d` is judged as its IPv4 address.
+  - *Pre-registered clients:* `--client-id` with `--client-secret-file|-stdin|-prompt`,
+    `--no-resource`, `--redirect-host localhost|127.0.0.1`. **The Google and Microsoft paths are
+    tested against a fake authorization server only; neither real provider has been signed in to.**
+    Linear (dynamic registration) is the provider the live check covers.
+- **Tests:** `tests/test_lotr_oauth.py` and `tests/test_lotr_oauth_adversarial.py` (199 hostile-server
+  tests) against in-process fake authorization and MCP servers (`dev/fake_oauth_mcp.py`: rotating
+  refresh tokens, reuse detection). A real-server login is a manual step:
+  `dev/oauth-live-check-linear.md`.
+
 ### gt-lotr: a GraphQL mutation can no longer ride `call_read` (review finding M2)
 
 `_graphql_tier` classified a document by its first word, so `fragment F on X {id} mutation M {...}`

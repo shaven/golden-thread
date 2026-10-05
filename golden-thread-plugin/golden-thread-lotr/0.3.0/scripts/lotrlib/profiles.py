@@ -263,13 +263,54 @@ _MCP_READ = ("get_", "list_", "search", "find_", "read_", "fetch_", "query", "de
 _MCP_CONSENT = ("delete_", "remove_", "send_", "merge_", "drop_", "destroy_", "purge_")
 
 
-def mcp_tier(tool):
+# OAuth connections (0.3.0): annotations are HINTS a server controls, so they may only raise a
+# tier here. A name containing any of these WORDS is consent, whatever the hints say. The word is
+# matched as a SUBSTRING of the lowercased name, for every name: deletefile, get_deleteall,
+# list_sendmail and searchdeleteall are all consent. The only exception is the short allow-list
+# _SAFE_READ_WORDS (settings, assets, presets, closest, ...), which may contain a risky word
+# without making the name a write. A readOnlyHint counts only for a name that begins with a read
+# prefix and has no such word. This is a deny-list and so
+# incomplete by nature: the real fix is the 0.21 allow-list-by-token approach; until then an owner
+# pins what matters with `policy.consent` globs on the connection.
+_MCP_RISKY = frozenset((
+    "delete", "remove", "send", "write", "create", "update", "merge", "post", "drop", "grant",
+    "revoke", "run", "exec", "execute", "publish", "wipe", "upload", "cancel", "transfer", "share",
+    "approve", "deploy", "reset", "set", "close", "archive", "purge", "clear", "apply", "destroy",
+    "kill", "invite", "assign", "move", "rename", "restore", "enable", "disable", "install",
+    "uninstall", "trigger", "submit", "commit", "push", "force"))
+
+
+# Read-only words that CONTAIN a risky word (settings holds "set", running holds "run"). A risky
+# word counts unless it lies wholly inside one of these spans; a risky word that straddles or sits
+# beside them still counts, so `resetsettings`, `settingsdelete` and `presetdrop` are consent.
+_SAFE_READ_WORDS = ("setting", "asset", "dataset", "preset", "closest", "postmortem", "running",
+                    "runtime")
+
+
+def _risky_name(name):
+    low = str(name or "").lower()
+    safe = [(m.start(), m.end()) for w in _SAFE_READ_WORDS
+            for m in re.finditer(re.escape(w), low)]
+    for r in _MCP_RISKY:
+        for m in re.finditer("(?=%s)" % re.escape(r), low):      # every occurrence, overlapping too
+            a, b = m.start(), m.start() + len(r)              # the lookahead itself has no width
+            if not any(x <= a and b <= y for x, y in safe):
+                return True
+    return False
+
+
+def mcp_tier(tool, strict=False):
     ann = tool.get("annotations") if isinstance(tool.get("annotations"), dict) else {}
+    name = str(tool.get("name") or "").lower()
+    if strict:
+        if ann.get("destructiveHint") is True or _risky_name(tool.get("name")) \
+                or name.startswith(_MCP_CONSENT):
+            return "consent"
+        return "read" if name.startswith(_MCP_READ) else "write"
     if ann.get("destructiveHint") is True:
         return "consent"
     if ann.get("readOnlyHint") is True:
         return "read"
-    name = str(tool.get("name") or "").lower()
     if name.startswith(_MCP_CONSENT):
         return "consent"
     if name.startswith(_MCP_READ):
@@ -278,6 +319,7 @@ def mcp_tier(tool):
 
 
 def mcp_profile(conn):
+    oauth_strict = (conn.get("auth") or {}).get("scheme") == "oauth"
     ops = []
     for t in conn.get("tools") or []:
         if not isinstance(t, dict) or not t.get("name"):
@@ -287,7 +329,7 @@ def mcp_profile(conn):
                        (t.get("description") or t["name"]).strip().split("\n")[0][:200],
                        params={k: (v or {}).get("description", "") if isinstance(v, dict) else ""
                                for k, v in props.items()},
-                       tags=["mcp"], tier=mcp_tier(t)))
+                       tags=["mcp"], tier=mcp_tier(t, strict=oauth_strict)))
     return {"name": MCP_PROFILE, "title": "MCP endpoint", "ops": ops, "noise_keys": ()}
 
 

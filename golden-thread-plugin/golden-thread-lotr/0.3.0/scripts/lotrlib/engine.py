@@ -93,6 +93,8 @@ class Engine:
             dirs = [SHIPPED_RECIPES, self.home / "recipes"]
             self.recipes = recipes_mod.load_recipes([d for d in dirs if d.is_dir()])
             self.index = Index(build_docs(self.registry.active(), self.recipes))
+            from . import oauth
+            oauth.prune(self.registry.connections)      # a removed connection's tokens go too
             self._stamp = self._current_stamp()
 
     def reload_if_changed(self):
@@ -229,6 +231,14 @@ class Engine:
                     # use this connection at this tier at all (mcp_only, locked, step-up).
                     base["grant"] = self._gate(connection, tier, subject, tool, op)
                 policy.check_client(client, connection, tier)
+                if (conn.get("auth") or {}).get("scheme") == "oauth" and not local and tier != "read":
+                    # 0.3.0: an OAuth sign-in is a person's. A hub client (unattended) may use
+                    # it to read, never to write or consent. Refused BEFORE any cursor is spent
+                    # or any consent dialog raised: nobody is asked to approve something that
+                    # cannot happen.
+                    raise GatewayError("oauth_unattended_refused",
+                                       f"{connection} is an OAuth sign-in; {tier} operations are "
+                                       "never available to an unattended hub client")
                 entry = self._take_cursor(cursor, connection, client_id or LOCAL_CLIENT,
                                           op) if cursor else None
                 if entry and tier != "read":
@@ -248,10 +258,13 @@ class Engine:
                 factory = self._connection_factory
                 if conn.get("kind") == "mcp" and factory is HttpConnection:
                     factory = McpConnection           # 0.2.0: an SSO/OAuth MCP downstream
+                is_oauth = (conn.get("auth") or {}).get("scheme") == "oauth"
                 resolver = self._secret_resolver or self._brokered_resolver(
                     subject, None if local else client_id)
-                http = factory(
-                    conn, prof, **({"secret_resolver": resolver} if resolver else {}))
+                kw = {"secret_resolver": resolver} if resolver else {}
+                if is_oauth and factory is McpConnection:
+                    kw.update(self._oauth_kwargs(subject, None if local else client_id))
+                http = factory(conn, prof, **kw)
                 if entry:
                     self._check_cursor_target(conn, http, entry["raw"])
                 result = None
@@ -397,6 +410,18 @@ class Engine:
             raise GatewayError("op_denied", f"the cursor points at GET {rel}, which policy on "
                                f"{conn.get('id')} does not allow as a read")
 
+    def _oauth_kwargs(self, subject, hub_client):
+        """The seat (whose access token this is) and the writer that persists a rotated refresh
+        token for that seat. A hub client has a seat of its own and cannot seal (no subject)."""
+        if subject is not None:
+            seat = "pid:%s:%s" % (subject["pid"], subject["start"])
+        elif hub_client:
+            seat = "job:%s" % hub_client
+        else:
+            seat = "-"
+        from . import oauth
+        return {"oauth_seat": seat, "oauth_writer": oauth.make_writer(self._unlock, subject)}
+
     def _classify(self, conn, opd, args):
         probe = {"name": opd.get("name"), "method": opd["method"], "path": opd["path"],
                  "tier": opd.get("tier")}
@@ -449,9 +474,19 @@ class Engine:
                             cred["note"] = d["note"]
                     except GatewayError as e:
                         cred = {"error": e.code}
-                conns.append({"id": c["id"], "identity": c.get("identity"), "profile": c.get("profile"),
-                              "trust": c.get("trust"), "enabled": c.get("enabled", True),
-                              "credential": cred})
+                row = {"id": c["id"], "identity": c.get("identity"), "profile": c.get("profile"),
+                       "trust": c.get("trust"), "enabled": c.get("enabled", True),
+                       "credential": cred}
+                if (c.get("auth") or {}).get("scheme") == "oauth":
+                    from . import oauth
+                    ob = c["auth"]["oauth"]
+                    row["oauth"] = dict(
+                        {"issuer": ob.get("issuer"), "scopes": ob.get("scopes"),
+                         "client_source": ob.get("client_id_source"),
+                         "refresh_token": "none issued" if not c["auth"].get("token_ref")
+                         else "stored as " + c["auth"]["token_ref"].split(":", 1)[0] + ":"},
+                        **oauth.status_of(c))
+                conns.append(row)
             return {"ok": True, "zone": self.registry.zone, "mode": self.settings["mode"],
                     "connections": conns, "clients": len(self.registry.clients),
                     "recipes": len(self.recipes), "index_docs": len(self.index.docs)

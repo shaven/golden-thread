@@ -253,7 +253,8 @@ class HttpConnection:
         ref = auth.get("token_ref")
         if not ref:
             raise GatewayError("auth_invalid", f"{self.conn.get('id')} has no auth.token_ref")
-        token = self._resolve(ref)
+        from .oauth import refuse_envelope
+        token = refuse_envelope(self._resolve(ref), self.conn.get("id"))   # never a sealed envelope
         if scheme == "bearer":
             return "Authorization", "Bearer " + token
         if scheme == "basic":
