@@ -11,7 +11,7 @@ release's own summary line, kept short rather than reconstructed after the fact.
 
 ---
 
-## gt 0.20.2 — unreleased
+## gt 0.20.2 — 2026-10-06
 
 ### gt-lotr 0.4.0: domain agents that keep gateway payloads out of the conversation
 
@@ -311,7 +311,7 @@ becomes a `#conflict` task and a conflict file, and the owner applies it in an e
 step. Not refused, by design: read-only reports, event names, and a new project's `design.md`
 made by the create-project scaffold.
 
-## gt 0.20.1 — unreleased
+## gt 0.20.1 — 2026-10-05
 
 > **There is no published 0.19.3.** The Windows completion was built as 0.19.3 and never
 > released; the owner moved it into 0.20.0 together with the unlock layer (2026-10-03), so the
