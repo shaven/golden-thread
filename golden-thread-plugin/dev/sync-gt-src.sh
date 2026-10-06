@@ -233,11 +233,13 @@ while IFS= read -r f; do bash -n "$f" 2>/dev/null || vbad "bash -n $f"; done < <
 # lacked packs/community and every file-level check passed, because each compared against a
 # commit that lacked it too. Ask the published release's own registry for its pack directories.
 if [ -n "$GTV" ]; then
-  REG_OUT=$("$PY" -c "import sys; sys.path.insert(0, sys.argv[1]); import gt_registry as r; bad=[(t,d,f) for t,d,f in r.pack_dirs() if t!='local' and f]; [print('%s %s %s' % b) for b in bad]; sys.exit(1 if bad else 0)" "$DEST/${PREFIX}golden-thread/$GTV/scripts" 2>&1) \
+  REG_OUT=$("$PY" -B -c "import sys; sys.path.insert(0, sys.argv[1]); import gt_registry as r; bad=[(t,d,f) for t,d,f in r.pack_dirs() if t!='local' and f]; [print('%s %s %s' % b) for b in bad]; sys.exit(1 if bad else 0)" "$DEST/${PREFIX}golden-thread/$GTV/scripts" 2>&1) \
     && vok "the published release finds every pack directory it ships (community, core)" \
     || { printf '%s\n' "$REG_OUT" | sed 's/^/    /'; vbad "the published release cannot load its pack directories"; }
 fi
 VCOPY=$(mktemp -d); cp -Rp "$DEST/." "$VCOPY/"
-if OUT=$(cd "$VCOPY/$PREFIX" && ./selftest.sh 2>&1); then vok "$(echo "$OUT" | tail -1) — run from a copy of gt-src"; else echo "$OUT" | grep FAIL | head || true; vbad "selftest.sh from gt-src"; fi
+# GT_INSTALL_FROM_SHARED=1: since 0.20.2 install.sh refuses the shared copy (SOURCE.json at the
+# root); this selftest installs from a throwaway COPY of it on purpose, so it says so.
+if OUT=$(cd "$VCOPY/$PREFIX" && GT_INSTALL_FROM_SHARED=1 ./selftest.sh 2>&1); then vok "$(echo "$OUT" | tail -1) — run from a copy of gt-src"; else echo "$OUT" | grep FAIL | head || true; vbad "selftest.sh from gt-src"; fi
 rm -rf "$VCOPY"
 [ $VFAIL -eq 0 ] && echo "gt-src VERIFIED — tree_sha256 $TREE_SHA (compare on the receiving machine: shasum -a 256 SHA256SUMS)" || { echo "gt-src FAILED verification ($VFAIL) — do not let the other machine copy it"; exit 3; }
