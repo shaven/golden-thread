@@ -528,7 +528,8 @@ class LotrView(Sandbox):
         (plug / "scripts").mkdir(parents=True)
         (plug / "scripts" / "lotr.py").write_text(
             "import sys\nassert sys.argv[1:3] == ['status', '--table'], sys.argv\n"
-            "sys.stdout.write(%r + ('CHECKED\\n' if '--check' in sys.argv else ''))\n" % self.TABLE)
+            "sys.stdout.write(%r + ('CHECKED\\n' if '--check' in sys.argv else ''))\n" % self.TABLE,
+            encoding="utf-8")   # the table carries ✓/✗; Windows would write cp1252
         rec = self.home / ".claude" / "plugins" / "installed_plugins.json"
         rec.parent.mkdir(parents=True, exist_ok=True)
         rec.write_text(json.dumps({"version": 2, "plugins": {
