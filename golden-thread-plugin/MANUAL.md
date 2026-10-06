@@ -2605,6 +2605,26 @@ Design and decisions: vault `Projects/golden-thread/mcp-gateway/`, ADR-1..6.
 
 ---
 
+#### Connection status (lotr 0.4.0, gt 0.20.2)
+
+See what is connected to LOTR and whether each connection works, the way Claude Code's `/mcp` shows MCP servers:
+
+```bash
+/gt:gt-settings lotr            # every connection and its state
+/gt:gt-settings lotr --check    # test every MCP connection now (one read-only tools/list each)
+lotr status --check --table     # the same view from a terminal (plain `lotr status` stays JSON)
+```
+
+| State | Meaning |
+|---|---|
+| ✓ connected | its last call or check succeeded |
+| ⚠ needs sign-in | its last failure was a sign-in failure (expired, refused or missing token); the line carries the fix, e.g. `run: lotr login <id>` |
+| ✗ error | its last failure was the connection itself (unreachable, server error), with the code and when |
+| ○ not used yet | nothing called or checked it since the gateway started |
+| – disabled | the registry turns it off |
+
+Plain `/gt:gt-settings` ends with one summary line (`LOTR: 3 connected, 1 needs sign-in -- details: /gt:gt-settings lotr`) when LOTR is installed. The assistant sees the same state in `find("")`, so it knows a connection is down before calling it. Caller and policy errors (`wrong_tool`, `op_denied`, ...) never change a connection's state. States live in the gateway's memory and start again at "not used yet" when `lotrd` restarts; `--check` probes MCP connections only, plain web connections are judged by use.
+
 ## Knowledge management
 
 ### `/gt:gt-promote`

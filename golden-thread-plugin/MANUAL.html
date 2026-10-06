@@ -3155,6 +3155,43 @@ Jira, GitHub and Graph, and the injection trials (a poisoned issue and mail for 
 poisoned payload for a writer) produced no stray write. The full tables are in the CHANGELOG.</p>
 <p>Design and decisions: vault <code>Projects/golden-thread/mcp-gateway/</code>, ADR-1..6.</p>
 <hr />
+<h4 id="connection-status-lotr-040-gt-0202">Connection status (lotr 0.4.0, gt 0.20.2)</h4>
+<p>See what is connected to LOTR and whether each connection works, the way Claude Code's <code>/mcp</code> shows MCP servers:</p>
+<pre><code class="language-bash">/gt:gt-settings lotr            # every connection and its state
+/gt:gt-settings lotr --check    # test every MCP connection now (one read-only tools/list each)
+lotr status --check --table     # the same view from a terminal (plain `lotr status` stays JSON)
+</code></pre>
+<table>
+<thead>
+<tr>
+<th>State</th>
+<th>Meaning</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>✓ connected</td>
+<td>its last call or check succeeded</td>
+</tr>
+<tr>
+<td>⚠ needs sign-in</td>
+<td>its last failure was a sign-in failure (expired, refused or missing token); the line carries the fix, e.g. <code>run: lotr login &lt;id&gt;</code></td>
+</tr>
+<tr>
+<td>✗ error</td>
+<td>its last failure was the connection itself (unreachable, server error), with the code and when</td>
+</tr>
+<tr>
+<td>○ not used yet</td>
+<td>nothing called or checked it since the gateway started</td>
+</tr>
+<tr>
+<td>– disabled</td>
+<td>the registry turns it off</td>
+</tr>
+</tbody>
+</table>
+<p>Plain <code>/gt:gt-settings</code> ends with one summary line (<code>LOTR: 3 connected, 1 needs sign-in -- details: /gt:gt-settings lotr</code>) when LOTR is installed. The assistant sees the same state in <code>find("")</code>, so it knows a connection is down before calling it. Caller and policy errors (<code>wrong_tool</code>, <code>op_denied</code>, ...) never change a connection's state. States live in the gateway's memory and start again at "not used yet" when <code>lotrd</code> restarts; <code>--check</code> probes MCP connections only, plain web connections are judged by use.</p>
 <h2 id="knowledge-management">Knowledge management</h2>
 <h3 id="gtgt-promote"><code>/gt:gt-promote</code></h3>
 <p>The judgement call: <strong>has a second project proved this general?</strong></p>

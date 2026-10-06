@@ -390,6 +390,11 @@ changed or not where the list puts it. **By default it then installs anyway, mar
 `GT_REQUIRE_CHECKSUM=1`) turns a mismatch into a refusal (exit 8, nothing copied); use it on the
 machine receiving a publish. A tree with no `SHA256SUMS` installs as it stands.
 
+**The shared transfer copy is not installed from (0.20.2).** gt-src passes code between machines;
+`install.sh` run inside it (it sees `SOURCE.json` at the root) refuses with exit 9 before anything is
+copied. Copy it into your repository with `copygt.sh` and run `install.sh` there. To install from the
+shared copy on purpose: `GT_INSTALL_FROM_SHARED=1 bash install.sh`.
+
 **Windows** (native since 0.19.2, complete in 0.20.1; tested on Windows 11 with Git for Windows
 2.56 and Python 3.12).
 `install.sh` and the hooks are bash scripts and run under Git Bash; `install.cmd` is only a

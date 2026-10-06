@@ -151,8 +151,11 @@ travel over the network.
   - The secret goes to a mode-600 file, never to the screen. The owner moves it into that
     machine's keychain.
 - **Revoke a machine:** `lotr revoke mbp-shaven`. No external credential needs rotating.
-- **Check state:** `lotr status`. It shows connections, whether each credential is present
-  (never its value), clients and recipes.
+- **Check state:** `lotr status --table` (`--check` tests every MCP connection now). Each
+  connection is connected, needs sign-in, error (with the code), not used yet or disabled, with
+  the fix when it needs one; plain `lotr status` is the JSON, with whether each credential is
+  present (never its value), clients and recipes. The user's view is `/gt:gt-settings lotr`;
+  `find("")` carries each connection's state too. Show a fix, never run a sign-in for the user.
 
 ## With gt unlock on (0.3.0, gt 0.20.1)
 
