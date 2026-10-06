@@ -11,6 +11,81 @@ release's own summary line, kept short rather than reconstructed after the fact.
 
 ---
 
+## gt 0.20.3 — beta (not released; the release is 0.20.4)
+
+**0.20.3 is a beta.** It was published only to a beta drop for one owner machine (2026-10-06), so by
+ADR-13 the number is spent and the release that follows it is **0.20.4**. Known limits of the beta,
+fixed for 0.20.4: the sealed token and the GitHub signing rule are github.com only; `push_fingerprint on`
+sets every other unlock scope to `open` when unlock was already on; a push that will be refused still
+asks for a fingerprint first; `gt_push_guard.py check` reports FAIL lines when the guard is off.
+
+Also in the beta:
+- **demo, farm, flow and watch are cut at 0.20.3.** They had been left at 0.20.2, and the installer
+  silently skips a module whose version does not match gt.
+- **`commit_fingerprint` points `user.signingkey` at a key file** (`commit-sign.pub`, mode 600), not at
+  a literal `key::` value. Given a literal key, git copies it into `$TMPDIR` on every signature, and
+  Apple git 2.50 left each copy behind.
+
+### A fingerprint before every push: `push_fingerprint`
+
+One switch instead of four manual steps (owner, 2026-10-06). `gt_settings.py set push_fingerprint_repos /path/to/repo`, then
+`gt_settings.py set push_fingerprint on`:
+
+- needs one enrolled factor (`gt_unlock.py enroll touchid` once; the one human step, by design);
+- turns gt unlock on in a **push-only profile**: every scope `open` except `gt:publish` (push, tag, release) and the
+  unlock policy and enrollment scopes, which need a fresh confirmation, so nothing else starts asking for you;
+- installs a git `pre-push` hook in each listed repo (worktrees share it). Before a push it asks gt unlock for
+  `gt:publish`; a push of `main` or a tag from a repo that ships `dev/release-check.sh` runs it `--quick` first
+  (the docs gate). With unlock off, a push is refused;
+- `off` removes exactly those hooks and restores the earlier unlock policy; `gt_push_guard.py check` proves the setup.
+
+Limit, said plainly: a git hook is skipped by `git push --no-verify`. The lock is the push credential sealed
+behind `gt:publish`, below.
+
+The push-only profile sets `step_up.fresh_s=0`, so every push asks. The default 60 s window let a second push
+through with no prompt in the live test. When the current factor count cannot be met, the profile records the
+enrolled factors as the choice (`factors.required=1`), so a Mac with only Touch ID enrolled works.
+
+### Opt-in lockdown: `push_fingerprint_seal_token`
+
+Off by default. With it `on`, `push_fingerprint on` also:
+
+- pipes `gh auth token` straight into gt unlock's sealed store (`seal put --name github`); the value is never
+  captured, printed or logged;
+- maps `github.com` to `sealed:github` in the unlock home's `credentials.json` (mode 600, earlier content saved);
+- sets a repo-local credential helper in each listed repo (an empty entry first, which drops gh's global helper for
+  that repo only), so git gets the token only under `gt:publish`. `--no-verify` no longer gets round it, and a
+  helper-guarded push asks **once**: the hook leaves the asking to the helper.
+
+This guards HTTPS remotes; a repo pushing over SSH (`git@github.com:`) is guarded by the hook alone.
+
+Run it from your own terminal. gt unlock serves secrets only outside an assistant session, so once the token is
+sealed, pushes an assistant session starts are refused. That is why it is opt-in. `off` removes the helper, the
+mapping and the sealed copy; gh keeps its own keyring token, and `gh auth logout` stays your choice.
+
+### A fingerprint on every commit: `commit_fingerprint`
+
+`gt_settings.py set commit_fingerprint on` (macOS) signs every commit and tag in the repos in
+`push_fingerprint_repos`:
+
+- a Secure Enclave P-256 key, created by gt-presence (the helper behind gt unlock's Touch ID), needs a
+  currently enrolled finger for **every** signature. It is its own key, never the unlock presence key;
+- `gt_sign.py` is git's ssh signing program. It builds a standard SSH signature (SSHSIG) over the commit,
+  the Secure Enclave signs it after one Touch ID prompt naming the repo and the commit subject, and the
+  signature is verified in Python under the enrolled key and by OpenSSH before git gets it. Any other key,
+  and every verify call, goes to the real `ssh-keygen` unchanged;
+- `off` puts the earlier git config back exactly; `gt_sign.py check --live` proves the setup.
+
+**The server half** is what makes it secure rather than a habit: `gt_sign.py github` shows the plan
+(register the key as a GitHub signing key, add a repository ruleset requiring signed commits on the
+default branch with **no bypass actors**, since an admin bypass would let an unsigned push through with a
+notice). `--apply` asks before changing anything. `--remove` deletes the ruleset and leaves the key
+registered, so commits it signed stay Verified.
+
+Limits, said plainly: it proves you approved each signature, not that the change is right. Every commit
+asks, so a rebase of ten commits is ten touches. Adding or removing a fingerprint kills the key: enroll
+again (`gt_sign.py enroll --force`), register the new key, and keep the old one. Windows Hello is planned.
+
 ## gt 0.20.2 — 2026-10-06
 
 ### gt-lotr 0.4.0: domain agents that keep gateway payloads out of the conversation

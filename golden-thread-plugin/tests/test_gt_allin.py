@@ -61,7 +61,9 @@ class AllInTest(unittest.TestCase):
         spec.loader.exec_module(mod)
         for name in mod.MEMBERS:
             cmd = mod.build_cmd(name, mod.MEMBERS[name], str(self.vault), str(self.repo))
-            self.assertNotIn("push", " ".join(cmd))
+            # the words of the command, not the folders in its paths: a checkout under a
+            # directory named `...-push` once failed this with no push anywhere (2026-10-06)
+            self.assertFalse([a for a in cmd if "push" in os.path.basename(a)], cmd)
             self.assertNotIn("git", os.path.basename(cmd[1]))
 
     def test_suggest_push_refuses_when_a_member_could_not_run(self):
