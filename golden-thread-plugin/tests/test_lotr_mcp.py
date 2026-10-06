@@ -285,8 +285,21 @@ class ThroughTheGateway(McpBase):
         r = self.engine.call("call_read", "jira@personal", "create_issue", {"summary": "s"})
         self.assertFalse(r["ok"])
         self.assertEqual(r["error"]["code"], "wrong_tool")
-        self.assertIn("call_write", json.dumps(r["error"]))
+        # "create" is a risky word: strict rating (every mcp connection since 0.4.0) makes it
+        # consent, so the hint names call_consent.
+        self.assertIn("call_consent", json.dumps(r["error"]))
 
+
+    def test_an_mcp_read_never_issues_a_cursor_and_refuses_a_forged_one(self):
+        """An mcp connection does not page tool results (only tools/list pages, inside the
+        connector), so no read on it carries a next_cursor, and a cursor handed to one is refused
+        rather than passed downstream (open item from the 0.20.1 cursor fix, 2026-10-04)."""
+        r = self.engine.call("call_read", "jira@personal", "search_issues", {"query": "x"})
+        self.assertTrue(r["ok"], r)
+        self.assertFalse(r.get("next_cursor"))
+        r = self.engine.call("call_read", "jira@personal", "search_issues", {"query": "x"},
+                             cursor="eyJmb3JnZWQiOiB0cnVlfQ")
+        self.assertFalse(r["ok"], "a forged cursor must not reach the server")
 
 class AddMcpCommand(McpBase):
     def lotr(self, *args):

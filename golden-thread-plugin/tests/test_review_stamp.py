@@ -137,6 +137,8 @@ class ReviewStamp(Sandbox):
     # -- the skills ----------------------------------------------------------------------
     def test_gt_query_stamps_after_answering(self):
         text = (GT / "skills" / "gt-query" / "SKILL.md").read_text(encoding="utf-8")
+        # the steps, not the sandbox route table above them (0.20.2), which names every script
+        text = text[text.index("## Steps"):]
         self.assertIn("gt_review_stamp.py", text)
         self.assertLess(text.index("Step 7"), text.index("gt_review_stamp.py"),
                         "the stamp must come after the answer and log, not before")

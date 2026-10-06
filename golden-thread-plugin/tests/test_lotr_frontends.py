@@ -635,9 +635,11 @@ class McpShimTests(unittest.TestCase):
         self.assertEqual(sorted(by_id), [1, 2, 3, 4, 5, 6], "a notification got a reply")
         init = by_id[1]["result"]
         self.assertEqual(init["protocolVersion"], "2025-11-25")
-        self.assertEqual(init["serverInfo"], {"name": "gt-lotr", "version": "0.3.0"})
+        # The shim names the release it ships in (0.3.0 pinned "0.3.0" here; 0.4.0 bumped it).
+        self.assertEqual(init["serverInfo"], {"name": "gt-lotr", "version": SCRIPTS.parent.name})
         self.assertEqual(init["capabilities"], {"tools": {"listChanged": False}})
         self.assertIn("CATALOG", init["instructions"])
+        self.assertLessEqual(len(init["instructions"]), 2048)
 
         tools = by_id[2]["result"]["tools"]
         self.assertEqual([t["name"] for t in tools], ["find", "call_read", "call_write", "call_consent"])

@@ -405,9 +405,11 @@ class SettingsSwitch(Sandbox):
                 else:
                     sys.modules[k] = v
 
-    def test_a_label_says_preview(self):
+    def test_the_label_is_no_longer_preview(self):
+        """0.20.1 labelled sandbox mode a preview (most skills still ran vault scripts from the
+        shell). Since 0.20.2 every skill routes its vault steps, so the label says so."""
         m = load_module(SETTINGS, "gt_settings_preview")
-        self.assertIn("preview", m.SETTINGS["sandbox_mode"]["summary"])
+        self.assertNotIn("preview", m.SETTINGS["sandbox_mode"]["summary"].lower())
         self.assertIn("0.20.2", m.SETTINGS["sandbox_mode"]["detail"])
 
 

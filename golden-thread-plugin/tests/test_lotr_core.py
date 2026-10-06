@@ -603,12 +603,57 @@ class TestPolicy(unittest.TestCase):
         self.assertEqual(self._gql("query { mergePullRequest }"), "read")
 
     def test_allowed_through(self):
-        cases = {"call_read": {"read"}, "call_write": {"read", "write"},
+        loose = {"call_read": {"read"}, "call_write": {"read", "write"},
                  "call_consent": {"read", "write", "consent"}}
-        for tool, ok in cases.items():
+        strict = {"call_read": {"read"}, "call_write": {"write"}, "call_consent": {"consent"}}
+        for tool in loose:
             for tier in ("read", "write", "consent", "deny"):
-                self.assertEqual(policy.allowed_through(tool, tier), tier in ok, (tool, tier))
-        self.assertFalse(policy.allowed_through("find", "read"))
+                # strict is the default (0.4.0): a tool carries only its own tier
+                self.assertEqual(policy.allowed_through(tool, tier), tier in strict[tool],
+                                 (tool, tier))
+                self.assertEqual(policy.allowed_through(tool, tier, True), tier in strict[tool])
+                self.assertEqual(policy.allowed_through(tool, tier, False), tier in loose[tool],
+                                 (tool, tier))
+        for s in (True, False):
+            self.assertFalse(policy.allowed_through("find", "read", s))
+        self.assertTrue(policy.strict_tools({}))
+        self.assertTrue(policy.strict_tools({"strict_tools": True}))
+        self.assertTrue(policy.strict_tools({"strict_tools": "no"}))    # only exactly false
+        self.assertFalse(policy.strict_tools({"strict_tools": False}))
+
+    def test_read_only_posts_are_read_on_their_own_profile_only(self):
+        def c(profile, method, path, kind="http"):
+            return policy.classify(dict(self.conn(), profile=profile, kind=kind),
+                                   {"name": None, "method": method, "path": path})
+        for prof, path in [("jira-v3", "/rest/api/3/search"), ("jira-v3", "/rest/api/3/search/jql"),
+                           ("jira-v3", "/rest/api/3/search/jql/"),
+                           ("jira-v3", "/rest/api/3/search/approximate-count"),
+                           ("jira-v2", "/rest/api/2/search"), ("jira-v2", "/rest/api/latest/search"),
+                           ("jira-v2", "/REST/api/2/Search"),
+                           ("graph", "/search/query"), ("graph", "/v1.0/search/query"),
+                           ("graph", "/me/calendar/getSchedule"),
+                           ("graph", "/users/a@b.c/findMeetingTimes"),
+                           ("graph", "/me/getMemberGroups"), ("graph", "/me/checkMemberGroups")]:
+            self.assertEqual(c(prof, "POST", path), "read", f"{prof} POST {path}")
+        for prof, method, path, want in [
+                ("generic", "POST", "/rest/api/3/search", "write"),     # unknown profile: write
+                ("github", "POST", "/search/query", "write"),
+                ("graph", "POST", "/rest/api/3/search", "write"),
+                ("jira-v3", "POST", "/search/query", "write"),
+                ("jira-v3", "POST", "/rest/api/3/issue", "write"),
+                ("jira-v3", "POST", "/rest/api/3/search/x", "write"),
+                ("jira-v3", "POST", "/rest/api/3/issue/K-1/comment", "write"),
+                ("jira-v3", "PUT", "/rest/api/3/search", "write"),
+                ("jira-v3", "DELETE", "/rest/api/3/search", "consent"),
+                ("graph", "POST", "/me/sendMail", "consent"),
+                ("graph", "POST", "/me/messages", "write"),
+                ("graph", "POST", "/me/events", "write")]:
+            self.assertEqual(c(prof, method, path), want, f"{prof} {method} {path}")
+        self.assertEqual(c("jira-v3", "POST", "/rest/api/3/search", kind="mcp"), "write")
+        # the owner's policy still wins
+        conn = dict(self.conn(deny=["POST /rest/api/3/search"]), profile="jira-v3")
+        self.assertEqual(policy.classify(conn, {"method": "POST", "path": "/rest/api/3/search"}),
+                         "deny")
 
     def test_check_client(self):
         client = {"id": "mbp", "allow": ["github@*", "jira@personal"], "max_tier": "write",

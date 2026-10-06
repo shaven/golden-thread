@@ -359,6 +359,17 @@ class PlatformConsent(LotrUnlockCase):
                                   MERGE)["ok"])
         self.assertEqual(self.platform.calls, 2)
 
+    def test_the_platform_prompt_names_the_merge_target(self):
+        # 0.20.1 (review): the prompt showed op, connection and a 16-char hash only. The
+        # authority now re-hashes the arguments lotrd sends and summarises a known op.
+        p = self._unlocked_shim(consent_requires_factor="platform")
+        args = dict(MERGE, merge_method="squash", sha="0123456789abcdef0123")
+        self.assertTrue(self.tool(p, "call_consent", "github@personal", "merge_pull",
+                                  args)["ok"])
+        text = self.platform.reasons[-1]
+        self.assertIn("\n  Merge: a/b#1 (squash, head 0123456789a\u2026)\n", text)
+        self.assertIn("arguments sha256", text)
+
     def test_consent_window_is_honoured(self):
         p = self._unlocked_shim(consent_requires_factor="platform", consent_window_s=300)
         for _ in range(3):

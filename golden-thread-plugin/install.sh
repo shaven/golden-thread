@@ -962,6 +962,9 @@ install.sh — install the Golden Thread Claude Code plugins (gt and every plugi
   ./install.sh --no-vault             install the plugin only, on purpose
   ./install.sh --require-checksum     REFUSE to install unless every file matches the tree's
                                       SHA256SUMS (see below); also GT_REQUIRE_CHECKSUM=1
+  GT_INSTALL_FROM_SHARED=1 ./install.sh  install from the shared transfer copy (gt-src) anyway;
+                                      without it, a tree with SOURCE.json at its root is
+                                      refused with exit 9 (copy it with copygt.sh first)
   ./install.sh --list-plugins         print "<dir> <version> <name>" for every plugin
                                       this tree ships, install nothing
   ./install.sh --with NAME            install module NAME (repeatable); remembered
@@ -1089,6 +1092,22 @@ checksum_problem() {   # $1 = what went wrong; stops only when verification was 
   echo "  pass --require-checksum to refuse instead."
 }
 checksum_block() {
+  # 0.20.2 (owner, 2026-10-06: "We just need to use it to pass the code back and forth"): the
+  # shared gt-src folder is a transfer copy, not an install source. dev/sync-gt-src.sh leaves
+  # SOURCE.json at its root and copygt.sh does not carry it into the repository it copies to,
+  # so SOURCE.json beside this tree means "you are inside the transfer copy". Refused before
+  # anything is copied; GT_INSTALL_FROM_SHARED=1 installs from it deliberately.
+  if [ -f "$SCRIPT_DIR/../SOURCE.json" ] || [ -f "$SCRIPT_DIR/SOURCE.json" ]; then
+    if [ "${GT_INSTALL_FROM_SHARED:-}" = 1 ]; then
+      echo "⚠ installing from the shared transfer copy (GT_INSTALL_FROM_SHARED=1)"
+    else
+      echo "✗ This is the shared transfer copy (gt-src). It passes code between machines; it is"
+      echo "  not installed from. Copy it into your repository with copygt.sh, then run install.sh"
+      echo "  there. To install from this copy anyway: GT_INSTALL_FROM_SHARED=1 bash install.sh"
+      echo "  NOTHING was installed."
+      exit 9
+    fi
+  fi
   SUMS_ROOT=""
   for _d in "$SCRIPT_DIR/.." "$SCRIPT_DIR"; do
     if [ -f "$_d/SHA256SUMS" ]; then SUMS_ROOT="$(cd "$_d" && pwd)"; break; fi

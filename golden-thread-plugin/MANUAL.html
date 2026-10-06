@@ -118,7 +118,7 @@ th, td { border:1px solid #ddd; padding:3px 5px; text-align:left; vertical-align
 <p><strong>Reader:</strong> a daily user — the deepest document, where the <em>why</em> lives
 <strong>Claims last checked against the code:</strong> 2026-10-02 (gt 0.19.1) — see <em>The documents, and what belongs in each</em> in <a href="../CLAUDE.md"><code>CLAUDE.md</code></a>.</p>
 </blockquote>
-<p>Complete reference for gt's thirty-six skills and its nine modules. Written against <strong>gt v0.20.1</strong>
+<p>Complete reference for gt's thirty-six skills and its nine modules. Written against <strong>gt v0.20.2</strong>
 (gt-wiki 0.2.7; gt-usage 0.1.6; gt-demo, gt-watch, gt-report-card, gt-farm and gt-flow 0.20.1; gt-visualize 0.4.4;
 gt-lotr 0.3.0 — the five named with 0.20.1 are versioned with gt and move with every release, changed or not).</p>
 <blockquote>
@@ -333,6 +333,18 @@ python3 $SCRIPTS/gt_model_policy.py set --agent extract --model haiku       # ev
 python3 $SCRIPTS/gt_model_policy.py set --agent verify --model opus --effort xhigh
 python3 $SCRIPTS/gt_model_policy.py clear --agent extract
 python3 $SCRIPTS/gt_agent_spec.py features                                 # what this Claude Code supports
+</code></pre>
+<p><strong>A module's own agents follow the same policy (0.20.2).</strong> A module plugin may ship agents of its
+own — gt-lotr's readers <code>gt-lotr:jira</code>, <code>gt-lotr:m365</code>, <code>gt-lotr:github</code>, <code>gt-lotr:runner</code> and
+writers <code>gt-lotr:jira-writer</code>, <code>gt-lotr:m365-writer</code>, <code>gt-lotr:github-writer</code>, <code>gt-lotr:writer</code>
+(see <a href="#domain-agents-readers-read-writers-act-lotr-040-gt-0202">Domain agents</a>). Each one that
+declares a <code>model_intent</code> gets its model and effort from that intent through the intent pack,
+whatever the skill profile: readers are <code>fast</code> (haiku), writers <code>balanced</code> (sonnet). An override
+is keyed by its full name and may carry an effort (one file is one agent); <code>agent_models</code> at
+<code>session</code> clears both. A module agent with no <code>model_intent</code> is left as shipped.</p>
+<pre><code class="language-bash">python3 $SCRIPTS/gt_model_policy.py set --agent gt-lotr:github --model sonnet
+python3 $SCRIPTS/gt_model_policy.py set --agent gt-lotr:m365-writer --model opus --effort high
+python3 $SCRIPTS/gt_model_policy.py show                                    # module agents listed after the stages
 </code></pre>
 <p><strong>What the running Claude Code supports.</strong> <code>gt_agent_spec.py features</code> reads the version from
 <code>claude --version</code>, asking only inside a Claude Code session, and gates each feature at the
@@ -2554,7 +2566,7 @@ anti-malware. If something already runs as you, it can wait for you to unlock."<
 <td>fresh confirmation (<code>guard_protected_paths</code>, before the <code>protected_paths</code> switch)</td>
 </tr>
 <tr>
-<td><code>gt_settings.py set</code> of <code>protected_paths</code>, <code>test_gate</code>, <code>foreign_checkout_guard</code>, <code>component_updates</code>, <code>commit_checks</code>, <code>addon_fixes</code>, <code>unlock</code>, <code>sandbox_mode</code>, <code>sandbox_vault_reads</code></td>
+<td><code>gt_settings.py set</code> of <code>protected_paths</code>, <code>test_gate</code>, <code>foreign_checkout_guard</code>, <code>component_updates</code>, <code>commit_checks</code>, <code>addon_fixes</code>, <code>unlock</code>, <code>sandbox_mode</code>, <code>sandbox_vault_reads</code>, <code>symlink_writes_outside_vault</code></td>
 <td><code>gt:settings:security</code></td>
 <td>fresh confirmation</td>
 </tr>
@@ -2587,6 +2599,11 @@ anti-malware. If something already runs as you, it can wait for you to unlock."<
 <td>A read through gt's vault MCP server (<a href="#security-gt-sandbox-mode-0201">gt sandbox mode</a>)</td>
 <td><code>gt:vault:read</code></td>
 <td>open (<code>read_without_unlock</code>), and served under <code>mcp_only</code> only to the session's registered <code>gt_vault_mcp.py</code> — never the assistant's shell or LOTR's shim</td>
+</tr>
+<tr>
+<td>A write or operation through gt's vault MCP server (<code>vault_queue_write</code>, <code>vault_queue_drain</code>, <code>vault_task</code>, <code>vault_log_add</code>, … ; 0.20.2)</td>
+<td><code>gt:vault:write</code></td>
+<td>the grant (never opened by <code>read_without_unlock</code>); the vault seat only</td>
 </tr>
 <tr>
 <td>Ordinary vault work, lint, daily notes, model settings</td>
@@ -2777,12 +2794,112 @@ its instructions say which setting decided (with <code>auto</code>, sandbox mode
 </tr>
 </tbody>
 </table>
-<p>Read-only (it never opens a vault file for writing); nothing outside the vault (a symlink out
-of it is not followed, by <code>vault_search</code> either), nothing in a locked folder or a dot-folder,
-no <code>.age</code> file; every result marked untrusted. With unlock on,
-reads need <code>gt:vault:read</code> for the server itself, which registers at startup as the session's
-vault seat (<code>register_shim</code>, role <code>vault</code>; parent must be <code>claude</code>, file must be the installed
-one).</p>
+<p>Nothing outside the vault (a symlink out of it is not followed, by <code>vault_search</code> either),
+nothing in a locked folder or a dot-folder, no <code>.age</code> file; every result marked untrusted. With
+unlock on, reads need <code>gt:vault:read</code> and writes <code>gt:vault:write</code> for the server itself, which
+registers at startup as the session's vault seat (<code>register_shim</code>, role <code>vault</code>; parent must be
+<code>claude</code>, file must be the installed one). <code>vault_queue_write</code> also takes <code>origin: farm</code> for a
+farmed result (stricter: it may only create a new file); it can never be made looser.</p>
+<p><strong>The operation tools (0.20.2).</strong> Every vault script a skill runs from the shell has a tool,
+because under sandbox mode the shell cannot run it (<code>gt_vault_ops.py</code>). Each maps a closed set of
+actions to one fixed script — the same one the skill's shell step runs, with its own checks — and
+takes typed arguments only (never a vault, a session, a command or a flag-shaped value):</p>
+<table>
+<thead>
+<tr>
+<th>Tool</th>
+<th>Runs</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>vault_report {report, …}</code></td>
+<td>read-only: <code>tasks</code> / <code>task_count</code> (<code>gt_task.py list</code> / <code>count</code>), <code>handoffs</code> (<code>gt_handoff_status.py list</code>), <code>close_check</code> (<code>gt_close.py project</code>), <code>lint</code>, <code>runbook_lint</code>, <code>closeout_candidates</code> / <code>closeout_signals</code>, <code>promote_candidates</code>, <code>memory_check</code>, <code>digest_check</code>, <code>supersede_listing</code> / <code>supersede_rank</code>, <code>catchup</code>, <code>handoffs_surface</code>, <code>adr_lineage</code> / <code>adr_status</code>, <code>entities</code>, <code>link_suggest</code>, <code>optimize</code>, <code>upgrade_status</code> / <code>upgrade_preview</code>, <code>broker_status</code>, <code>brief</code>, <code>doctor</code>, <code>context</code>, <code>wiki_lint</code>, <code>wiki_refresh</code> (no fetch)</td>
+</tr>
+<tr>
+<td><code>vault_task {action: add\|close\|drop\|defer\|shelve\|move, …}</code></td>
+<td><code>gt_task.py</code> (close: <code>gt_close.py task</code>)</td>
+</tr>
+<tr>
+<td><code>vault_tasks_regen {}</code></td>
+<td><code>gt_tasks.py</code> (TASKS.md)</td>
+</tr>
+<tr>
+<td><code>vault_log_add {line, event?, …}</code></td>
+<td><code>gt_log.py add</code> — the full line shape is checked</td>
+</tr>
+<tr>
+<td><code>vault_events_emit {kind, item, …}</code></td>
+<td><code>gt_events.py emit</code></td>
+</tr>
+<tr>
+<td><code>vault_adr {action: allocate\|merge, project, title, body, …}</code></td>
+<td><code>gt_adr.py allocate</code>, then the body into the new slot, then <code>merge</code></td>
+</tr>
+<tr>
+<td><code>vault_project {action: create\|archive, …}</code></td>
+<td><code>vault_init.py create-project</code> (no <code>--project-dir</code>); <code>gt_close.py project --archive</code> (no <code>--move</code>)</td>
+</tr>
+<tr>
+<td><code>vault_handoff {action: write\|close\|mark, …}</code></td>
+<td><code>gt_handoff.py</code>; <code>gt_close.py handoff</code>; <code>gt_handoff_status.py mark</code></td>
+</tr>
+<tr>
+<td><code>vault_closeout {action: ask\|answer, …}</code></td>
+<td><code>gt_closeout.py ask</code> / <code>answer</code></td>
+</tr>
+<tr>
+<td><code>vault_derived_write {action: digest\|links\|review_stamp\|lint_queue\|wiki_lint_queue, …}</code></td>
+<td><code>gt_digest.py write</code>, <code>gt_link_suggest.py apply</code>, <code>gt_review_stamp.py</code>, <code>gt_lint.py --queue review-queue.md</code>, gt-wiki's <code>wiki_lint.py --queue</code></td>
+</tr>
+<tr>
+<td><code>vault_source_store {name, content}</code></td>
+<td>a new <code>Sources/YYYY-MM-DD &lt;title&gt;.md</code> — write-once (refused if it exists)</td>
+</tr>
+<tr>
+<td><code>vault_optimize {action: archive\|supersede, …, apply}</code></td>
+<td><code>gt_optimize.py --archive</code> / <code>--supersede</code> (a preview unless <code>apply</code>); <code>--demote</code> (out of <code>global-memory/</code>) is a terminal step</td>
+</tr>
+</tbody>
+</table>
+<p>Every text argument is one line (no control character, no Unicode line or paragraph separator), a
+pattern must match the whole value, and a vault path may not start with <code>-</code>. <code>vault_report</code>
+runs <code>doctor</code> with every check and <code>optimize</code> with every member (no <code>--only</code> / <code>--member</code>);
+<code>catchup</code> and <code>handoffs_surface</code> write gt's own state under <code>~/.claude/golden-thread/</code> (so the
+tool is not read-only). A <code>vault_task</code> / <code>vault_handoff</code> write that another live session's claim
+holds comes back <code>ok: true, held: true</code> — queued, applied by the next drain — not as an error.
+<code>vault_project create</code> also keeps gt's <code>## Golden Thread</code> section in <code>~/.claude/CLAUDE.md</code>, as the
+shell route does. <code>lint_queue</code> runs <code>gt_lint.py --queue</code> under the broker lock and the claim
+check; <code>wiki_lint_queue</code> queues wiki-lint's output as a <code>replace-file</code>, into
+<code>review-queue-wiki.md</code> when <code>review-queue.md</code> is not its own.</p>
+<p>Not offered, by design — the skills hand the user the command for a terminal: settings and
+install (<code>gt_settings.py set</code>, <code>gt_sandbox.py</code>, <code>gt_model_policy.py</code>, <code>gt_doctor.py --fix</code> /
+<code>post-install</code>, <code>vault_init.py fresh</code> / <code>install-core-rules</code>), whole-vault rewrites
+(<code>gt_upgrade.py run</code>, rename / merge / archive <code>--move</code> of a project), <code>gt_sync.py</code>, Core-rule
+files, the demo, watches. Every SKILL.md starts with its own route table, and
+<code>tests/test_skill_sandbox_routes.py</code> fails if a skill names a vault script with no route.</p>
+<h3 id="designmd-and-global-memory-are-yours-0202">design.md and global-memory/ are yours (0.20.2)</h3>
+<p>No gt MCP tool edits <code>design.md</code> (in any project) or anything under <code>global-memory/</code> — with
+sandbox mode on or off. <code>vault_queue_write</code> and every operation tool that takes a path
+(<code>vault_handoff</code>, <code>vault_derived_write</code>, <code>vault_optimize</code>, <code>vault_source_store</code>) refuse them with
+<code>owner_only</code>: "design.md and global-memory/ are changed by you, in an editor — gt tools never
+write them". The refusal is by identity (the file system says it is the same file or folder: a
+hard link, a case-insensitive volume's other spelling, an 8.3 name, a symlink) and by name (NFKC
+and case-folded, so <code>deſign.md</code> and fullwidth letters match; invisible characters, surrounding
+whitespace, trailing dots and <code>::$DATA</code> removed), covers a page name that would become
+<code>&lt;name&gt;.md</code>, and is made <strong>before</strong> the unlock authority is asked for anything, so a refused
+target does not cost a fingerprint. A project folder must resolve to itself: one that is a symlink
+(to <code>global-memory/</code> or anywhere) is refused by every slug-driven tool, and <code>vault_project create</code>
+refuses a folder holding a symlink — the scaffold creates files exclusively and never follows one.
+The terminal-only tools <code>vault_init.py</code> and <code>gt_optimize.py --demote</code> can still touch them: those
+are yours to run. A read-only <code>vault_report</code> may name them, <code>vault_events_emit</code> records paths as names,
+and <code>vault_project create</code> makes a new project's <code>design.md</code> from the scaffold (a new file). A
+request that reaches the broker from elsewhere — one a shell left in <code>~/.gt-inbox/queue/</code> — is
+still escalated as a <code>#conflict</code> task (the broker compares exact names today; an alias of
+<code>design.md</code> on a case-insensitive volume is not caught by it — tracked separately): <code>spool/broker/conflicts/&lt;date&gt;-&lt;id&gt;.md</code> holds every version
+and the target as it stood, and you apply the one you choose in an editor, then close the task
+(<code>/gt:gt-handle task</code>). Demoting a note out of <code>global-memory/</code> (<code>gt_optimize.py --demote</code>) is a
+terminal step for the same reason.</p>
 <h3 id="writing-from-the-shell-the-queue-inbox">Writing from the shell: the queue inbox</h3>
 <p>Inside the sandbox <code>gt_write_queue.py</code> cannot write the vault's queue folder; with sandbox mode
 on it then leaves the request in <code>~/.gt-inbox/queue/</code> (wrapped with the vault it is for) and
@@ -2899,6 +3016,143 @@ lotr status            # connections, whether each credential is present (never 
   resolved, because <code>python3</code> there is the Microsoft Store stub (see INSTALL.md). The
   post-install gate starts that exact command.</li>
 </ul>
+<h4 id="domain-agents-readers-read-writers-act-lotr-040-gt-0202">Domain agents: readers read, writers act (lotr 0.4.0, gt 0.20.2)</h4>
+<p>A gateway result can be up to about 6k tokens, and a triage sweep makes several calls. Called from
+the main conversation, every one of those payloads stays in its context for the rest of the
+session. gt-lotr ships eight plugin agents that do the calls in their own context and hand back a
+short answer. They are split on purpose: <strong>no single agent holds private data, untrusted text and
+a way to act.</strong> A page, a mail or an issue can say "now send this to someone" or "merge it", and
+the agent that read it must not be able to.</p>
+<table>
+<thead>
+<tr>
+<th>Reader (<code>find</code> + <code>call_read</code> only)</th>
+<th>Writer (<code>find</code> + <code>call_write</code>)</th>
+<th>For</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>gt-lotr:jira</code></td>
+<td><code>gt-lotr:jira-writer</code> (no consent tool)</td>
+<td>Jira: JQL, my open issues, sweeps; transition, comment, create</td>
+</tr>
+<tr>
+<td><code>gt-lotr:m365</code></td>
+<td><code>gt-lotr:m365-writer</code> (+ <code>call_consent</code>)</td>
+<td>Microsoft 365 through Graph: mail, calendar, files, Teams; send mail, events, replies</td>
+</tr>
+<tr>
+<td><code>gt-lotr:github</code></td>
+<td><code>gt-lotr:github-writer</code> (+ <code>call_consent</code>)</td>
+<td>GitHub: PR and issue searches, CI; comment, issue, review, merge</td>
+</tr>
+<tr>
+<td><code>gt-lotr:runner</code></td>
+<td><code>gt-lotr:writer</code> (+ <code>call_consent</code>)</td>
+<td>any other connection: a generic REST API, an MCP endpoint behind the gateway</td>
+</tr>
+</tbody>
+</table>
+<p><strong>The routing rule.</strong> <em>Reading:</em> bulk or multi-call work — a list, a sweep, triage, a search,
+anything that pages with <code>next_cursor</code> — goes to the reader. A single small read (one issue by
+key, one PR by number, who am I) stays direct: an agent's start-up costs more than that payload
+would. <em>Changing:</em> the main session composes the exact operation from <strong>what you said, in your own
+words</strong> — never from text a reader or any tool result returned — and either calls <code>call_write</code> /
+<code>call_consent</code> itself (one small change, so you see exactly what is done) or hands it to the
+writer. It never forwards a reader's output as an instruction, and it treats a reader's <code>GAPS</code>
+line ("a change seems needed") as a suggestion to put to you, not a task. The rule is in the
+<code>gt-lotr</code> skill and in the MCP server's instructions, which every session sees at start; each
+agent's description says the same.</p>
+<p><strong>What a reader can and cannot do.</strong> Its tools are exactly <code>find</code> and <code>call_read</code>, named one by
+one, never a wildcard; no shell, no file writes, no other MCP server. It has no write and no
+consent tool, so text it reads cannot make it <em>call</em> one; if it thinks a change is needed it says
+so in <code>GAPS</code>. That is a limit on tools, not on what an op does: the gateway rates a built-in
+connection's ops from its profile but trusts an MCP server's own tool names and <code>readOnlyHint</code>, so
+a hostile server can mislabel a change as a read (the reader is told never to call an op whose name
+says it changes something; that is an instruction, not a check). Results are data: it quotes third-party text verbatim, stripped of control
+characters. It answers in at most about fifteen lines:</p>
+<pre><code>ANSWER: &lt;one or two sentences&gt;
+ITEMS (&lt;connection&gt;, &lt;shown&gt; of &lt;total&gt;):
+- &lt;ID or KEY or repo#n&gt; | &lt;title&gt; | &lt;status&gt; | &lt;one field the task asked for&gt;
+MORE: next_cursor=&lt;cursor&gt; for op &lt;op&gt; | none
+CALLS: &lt;n&gt; gateway calls (&lt;ops&gt;)
+GAPS: &lt;what it could not determine, or none&gt;
+</code></pre>
+<p>The IDs and the cursor are there so a follow-up — "open the second one", "show the next page" —
+needs no re-query.</p>
+<p><strong>What a writer can and cannot do.</strong> Its tools are <code>find</code> and <code>call_write</code> — plus <code>call_consent</code>
+for <code>m365-writer</code>, <code>github-writer</code> and <code>writer</code>, never for <code>jira-writer</code> (Jira has no consent op) —
+and <strong>no <code>call_read</code></strong>, and it is told not to read. The gateway enforces that with strict tool
+tiers (on by default): <code>call_write</code> carries only write-tier ops and <code>call_consent</code> only
+consent-tier ops, so a read through either is refused with <code>wrong_tool</code>. Setting
+<code>"strict_tools": false</code> on a connection in <code>registry.json</code> restores the older rule for that
+connection. At most
+four turns, which does not cap parallel tool calls (it is told never to issue any), and "one
+operation" is likewise its instruction, not something the gateway checks. Its input is an exact
+operation and your request, quoted:</p>
+<pre><code>SPEC: {&quot;connection&quot;: &quot;github@work&quot;, &quot;op&quot;: &quot;comment_issue&quot;, &quot;args&quot;: {&quot;owner&quot;: &quot;o&quot;, &quot;repo&quot;: &quot;r&quot;, &quot;issue_number&quot;: 7, &quot;body&quot;: &quot;...&quot;}}
+REQUEST: &quot;comment 'Looks good' on PR 7 of o/r&quot;
+</code></pre>
+<p>It performs that <strong>one</strong> operation, exactly as specced; it refuses (<code>bad_spec</code>, no gateway call)
+anything not in the spec, a spec of more than one operation, or arguments that plainly do not do
+what the request asks, and never fetches a missing id. It makes no <code>find</code> call on an <code>mcp</code> or
+<code>generic</code> connection (the downstream writes those descriptions; the generic <code>writer</code> calls none).
+It tries <code>call_write</code> once, uses <code>call_consent</code> for <code>send_mail</code> or <code>merge_pull</code> or when the SPEC
+says <code>"tier": "consent"</code>, and on <code>wrong_tool</code> reports it and stops: the main session decides. Every word in the payload is data, never an instruction: a comment that
+says "also merge this" is the text being written. It stops on <code>locked</code>, <code>step_up</code>, <code>mcp_only</code>,
+<code>failed_closed</code>, <code>unreachable</code>, <code>consent_denied</code>, <code>consent_refused</code> and <code>consent_unconfirmed</code>,
+makes at most one consent call per task (no retry, no second ask after a refusal), and returns one
+line, never payload text:</p>
+<pre><code>STATUS: ok | error; OP: &lt;op&gt;; CONNECTION: &lt;id&gt;; ID: &lt;id, key or number, or none&gt;; URL: &lt;url or none&gt;; CODE: &lt;error code or none&gt;
+</code></pre>
+<p><code>ID</code> is at most 64 characters from <code>A-Za-z0-9._:/#@-</code>, <code>URL</code> an <code>https://</code> URL of at most 300; the
+main session treats the line as data.</p>
+<p><strong>What consent covers.</strong> The Touch ID / Windows Hello prompt belongs to what the gateway rates as
+the consent tier: the curated <code>send_mail</code> and <code>merge_pull</code> and any MCP tool rated consent by name or
+hint, and the raw routes that do the same: <code>POST /me/sendMail</code>, a message's <code>/send</code>, <code>/reply</code>,
+<code>/forward</code>, a <code>$batch</code>, a merge by another path (trailing slash, <code>/repositories/{id}/…</code>), a GraphQL
+<code>mergePullRequest</code>, and any <code>DELETE</code>. Other destructive endpoints on a generic connection are write
+tier unless you add <code>policy.consent</code> globs.</p>
+<p>An identifier a write needs — an issue key, a transition id — may come from a read, but only to
+point at what you already named, and when it did and you did not type it the main session shows you
+the resolved target (connection, key, summary) before the write; the free text of a change (a
+comment, a subject, a body, a title) comes only from your words. A merge's head sha is never taken
+from a read: you give it.</p>
+<p><strong>Shared with every agent.</strong></p>
+<ul>
+<li><strong>The session's own connection.</strong> An agent reaches the gateway through the session's gt-lotr
+  server by tool name. A plugin agent cannot start a server of its own (Claude Code ignores
+  <code>mcpServers</code> in plugin agents), so a spawn opens <strong>no new LOTR seat</strong>: with gt unlock on there is
+  no new fingerprint prompt and no new grant, and the per-seat rule is untouched. A consent op a
+  writer makes goes through the same shim and daemon as one made from the main session, so it
+  raises the same Touch ID / Windows Hello prompt that call would. Agents hold no credentials.</li>
+<li><strong>Not a security boundary.</strong> Because the connection is shared, so are the session's grants and
+  permission rules: the main session can call the same tools, and the gateway enforces neither side
+  of the split, so it guards against a poisoned page steering an agent, not against a compromised
+  session. (Strict per-connection
+  isolation needs an inline server, generated per machine; that is the 0.21 proxy design, not
+  this.)</li>
+<li><strong>Model:</strong> readers <code>model_intent: fast</code>, so haiku; writers <code>balanced</code>, so sonnet; both through
+  the model policy — overridable per agent
+  (<code>gt_model_policy.py set --agent gt-lotr:jira-writer --model opus</code>), and on the session's model
+  when <code>agent_models</code> is <code>session</code>. A turn cap (readers 12, writers 4) and at most five pages per
+  sweep bound a runaway loop.</li>
+<li><strong>Domain know-how in the agent, not in your session:</strong> JQL that works (statusCategory, sprint
+  functions, relative dates), Graph OData shapes and paging (<code>$select</code>, <code>$filter</code> vs <code>$search</code>,
+  <code>calendarView</code> windows, raw Teams paths), GitHub search qualifiers (<code>review-requested:@me</code>,
+  <code>status:failure</code>, date ranges), which recipes to prefer — and, for a writer, the shapes of the
+  write payloads (Jira ADF comments and transitions, Graph <code>sendMail</code> and event bodies, GitHub
+  comments, reviews and merges).</li>
+</ul>
+<p><strong>Measured, not assumed.</strong> <code>dev/lotr_agents_measure.py</code> runs headless <code>claude -p</code> sessions against
+a fake LOTR-shaped server (the release's own four tools and shaping over deterministic Jira, Graph
+and GitHub data — never a real connection) and compares main-context growth with and without the
+agents. Over three bulk scenarios per domain the median saving was 74% (16–94%), every answer
+correct both ways; a single small read was answered directly. With the split, a spot-check of three
+read scenarios saved 89%, 94% and 46%, a delegated write was one correct <code>call_write</code> each for
+Jira, GitHub and Graph, and the injection trials (a poisoned issue and mail for the readers, a
+poisoned payload for a writer) produced no stray write. The full tables are in the CHANGELOG.</p>
 <p>Design and decisions: vault <code>Projects/golden-thread/mcp-gateway/</code>, ADR-1..6.</p>
 <hr />
 <h2 id="knowledge-management">Knowledge management</h2>
@@ -3758,6 +4012,12 @@ is registered here and can be switched off.</p>
 <td><code>deny</code> · <code>allow</code></td>
 <td><code>deny</code></td>
 <td>Under sandbox mode, whether the shell and file tools may still READ the vault (writes stay denied; locked folders stay unreadable)</td>
+</tr>
+<tr>
+<td><code>symlink_writes_outside_vault</code></td>
+<td><code>refuse</code> · <code>allow</code></td>
+<td><code>refuse</code></td>
+<td>Whether a vault tool may append through a link that points outside the vault. A link inside the vault is written through; one reaching <code>design.md</code> or <code>global-memory/</code> never is. Every write <code>allow</code> lets through is logged in <code>Projects/golden-thread/outside-vault-writes.jsonl</code> (0.20.2)</td>
 </tr>
 <tr>
 <td><code>vault_mcp</code></td>

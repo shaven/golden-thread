@@ -38,6 +38,7 @@ class SoftPlatform(F.Factor):
         self.key = K.P256Key()
         self.mode = "ok"
         self.calls = 0
+        self.reasons = []             # the prompt text each proof was asked under
         self._first = None
         self.pad = os.urandom(32)
 
@@ -59,6 +60,7 @@ class SoftPlatform(F.Factor):
 
     def prove(self, record, challenge, ctx):
         self.calls += 1
+        self.reasons.append(getattr(ctx, "reason", None))
         if self.mode == "cancel":
             raise F.FactorError("cancelled", "cancelled")
         sig = self._signature(challenge)

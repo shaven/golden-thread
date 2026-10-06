@@ -1,0 +1,298 @@
+{
+ "files": {
+  "agents/github-writer.md": {
+   "bytes": 4966,
+   "sha256": "66a36e7d1e3a052421aed5d055a4ab4a21ce68ac9e1d5a0237989b8da327ecca"
+  },
+  "agents/github.md": {
+   "bytes": 4860,
+   "sha256": "ed01fd096b6b918f7b47692925edb20e81ff0b76059a0623a3f4bb80b16da3b0"
+  },
+  "agents/jira-writer.md": {
+   "bytes": 4468,
+   "sha256": "c45ac73b8805167f1875cacd53c0b354af002f24ba0817530436f67534f8970c"
+  },
+  "agents/jira.md": {
+   "bytes": 4580,
+   "sha256": "1fa476fe80e7a4b610e3b63ebac547817dbcca0ff0ef2656c32972642add8893"
+  },
+  "agents/m365-writer.md": {
+   "bytes": 5019,
+   "sha256": "0504e46e3385dbd3825ebdf1d64e3d71e88d7ff7fc1635f7c0ef48af2dbfb6d8"
+  },
+  "agents/m365.md": {
+   "bytes": 5158,
+   "sha256": "186c522fdaa92d5bfd5223a119724e8ec83edb45d52e5eae79127bba35d40969"
+  },
+  "agents/runner.md": {
+   "bytes": 3822,
+   "sha256": "2d52ceee7ffcf77abb3ddc577f53ea5221a105c8775a4e4b1dc167ab43ad8396"
+  },
+  "agents/writer.md": {
+   "bytes": 4494,
+   "sha256": "6758f0c920e8768cceb8d174f691a18b2fe5bfc38592a1c3ccc2bae6cb997702"
+  },
+  "scripts/lotr.py": {
+   "bytes": 37445,
+   "sha256": "b9b12c155525f43263711ec9bb8495ee0e341ef7c849819baa8fd12d407acfe4"
+  },
+  "scripts/lotr_mcp.py": {
+   "bytes": 19709,
+   "sha256": "1fa40fdf80be9e8cc69f6a3ff5dc4a83d305da9e49c02ef2ec1817ae2c7e4422"
+  },
+  "scripts/lotrd.py": {
+   "bytes": 4827,
+   "sha256": "de61d4642ef6bb877cd71c785764f602a80af9c2763681045222b493846cb0fd"
+  },
+  "scripts/lotrlib/__init__.py": {
+   "bytes": 0,
+   "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  "scripts/lotrlib/audit.py": {
+   "bytes": 4017,
+   "sha256": "26714c698b30913451b809a27a16596c09806c647aef8008ed7b5a33ea6213a8"
+  },
+  "scripts/lotrlib/client.py": {
+   "bytes": 9262,
+   "sha256": "834b266b12434ce609a8588fee2e2cb645c7fc3c4966753269ff61728b394073"
+  },
+  "scripts/lotrlib/config.py": {
+   "bytes": 5093,
+   "sha256": "b09c4b9e234a9976eb7149176d6c6ec47292293a73b12c5809cf70314b6bdf15"
+  },
+  "scripts/lotrlib/confirm.py": {
+   "bytes": 6422,
+   "sha256": "b8c275ac7376196665dcd9139b709b27d0e15049a488cbf4175f70cda03a9155"
+  },
+  "scripts/lotrlib/conn_http.py": {
+   "bytes": 17417,
+   "sha256": "41d1134082602babf33c6665fc8da28d41fdace23600cebfca82f045d2de3e22"
+  },
+  "scripts/lotrlib/conn_mcp.py": {
+   "bytes": 12107,
+   "sha256": "2bc3f1452eda2ea3af012bd6d6818e1640ee05d27d181b5124fc2921b3de535e"
+  },
+  "scripts/lotrlib/engine.py": {
+   "bytes": 32550,
+   "sha256": "27e2c0439705d34f520383913ced559aad60dad3d410ac12ee5d3de24bf12c4a"
+  },
+  "scripts/lotrlib/errors.py": {
+   "bytes": 632,
+   "sha256": "0351ca471deeb379362fd64e5599e6616db134324260b3bb4c45ab3c93d4bf3f"
+  },
+  "scripts/lotrlib/index.py": {
+   "bytes": 6040,
+   "sha256": "1b8465a298ed6b2395bd9a8d2b0fcac8dbd8ae18ff5d0f799b87cde0bc108071"
+  },
+  "scripts/lotrlib/oauth.py": {
+   "bytes": 89121,
+   "sha256": "223d0babba0c16ccd4467a5e99fee708d500163d3fb5190454c35cbd1559e158"
+  },
+  "scripts/lotrlib/policy.py": {
+   "bytes": 11424,
+   "sha256": "7609a9de38fed635cbaf055625227ccadc683cccd9704e47f7f494e7dcebc4c3"
+  },
+  "scripts/lotrlib/profiles.py": {
+   "bytes": 23175,
+   "sha256": "bf91fa7520bd69da2c2778969b1fb08cb617c43246886f94b157788adbc348da"
+  },
+  "scripts/lotrlib/recipes.py": {
+   "bytes": 6670,
+   "sha256": "5d2f47f6f03fe953a3571c94ac467d7ba0a04d534d9d7d3d38edd5775018ca85"
+  },
+  "scripts/lotrlib/registry.py": {
+   "bytes": 24545,
+   "sha256": "62b8b2e5f6d93229cf141f547a6c3c5dc38cbc12ca36255f6732ab62a3896f25"
+  },
+  "scripts/lotrlib/secrets.py": {
+   "bytes": 13711,
+   "sha256": "a207fdae6c56b8675f06b6f2f42d6770916600da3e453b50bc1b7b4a33485b6a"
+  },
+  "scripts/lotrlib/server.py": {
+   "bytes": 24614,
+   "sha256": "3180d34f6f28438604f02b93e4dc9510910645e42e79d6e90d453652bdfda7e7"
+  },
+  "scripts/lotrlib/shaping.py": {
+   "bytes": 9077,
+   "sha256": "3da0f42263bb928d54124a5566aed68e5126a2c0c017dc52cb7284a96acdd603"
+  },
+  "scripts/lotrlib/status_view.py": {
+   "bytes": 2754,
+   "sha256": "b8fa3f24076784864fb47efe872e1da648b21fff40fb69893721ba5d3106791d"
+  },
+  "scripts/lotrlib/unlock.py": {
+   "bytes": 9987,
+   "sha256": "5d63d21860dce55f3588e22cb2227a2b2d5b46776eb8b9cc5fe6246a388cb993"
+  },
+  "scripts/lotrlib/util.py": {
+   "bytes": 1741,
+   "sha256": "8afc55eb6b1c8b12d42783dfd4c49533592669a29394e4ceb48b4483ba2741dd"
+  },
+  "scripts/mcp.py": {
+   "bytes": 437,
+   "sha256": "218338276a970641c1592e7e80789d5a52c71c31859b24e77982d221e1b4974c"
+  },
+  "templates/recipes/github.my_open_prs.json": {
+   "bytes": 860,
+   "sha256": "f3305301926164e2aa5cf1d591036c94bc4e887e9517398e545ad40f301e2477"
+  },
+  "templates/recipes/github.pr_status.json": {
+   "bytes": 800,
+   "sha256": "767550399bd212085d0296a02dd256cc6a3a43952c5d609dc5e3686d38749647"
+  },
+  "templates/recipes/jira.my_open_issues.json": {
+   "bytes": 986,
+   "sha256": "27761fbb27c5644162532d9c4197e694afabc86f8a2b2e9857e16e960feed4ab"
+  },
+  "templates/recipes/m365.today.json": {
+   "bytes": 772,
+   "sha256": "0a5dc06c80759b3c11ce748a9cfea2213d37f4138bb4e97010ee01db27b6ea66"
+  }
+ },
+ "generated": "2026-10-06T07:54:06",
+ "hooks": [
+  {
+   "args": [
+    "check",
+    "{src}",
+    "--hook"
+   ],
+   "event": "SessionStart",
+   "owner": "install.sh",
+   "script": "gt_components.py"
+  },
+  {
+   "args": [
+    "check",
+    "--hook"
+   ],
+   "event": "SessionStart",
+   "owner": "install.sh",
+   "script": "gt_workers.py"
+  },
+  {
+   "args": [
+    "check",
+    "{plugin_root}",
+    "--hook"
+   ],
+   "event": "SessionStart",
+   "owner": "install.sh",
+   "script": "gt_version_check.py"
+  },
+  {
+   "args": [
+    "check",
+    "--hook"
+   ],
+   "event": "SessionStart",
+   "owner": "install.sh",
+   "script": "gt_push_check.py"
+  },
+  {
+   "args": [
+    "check",
+    "--write"
+   ],
+   "event": "UserPromptSubmit",
+   "owner": "install.sh",
+   "script": "gt_state.py"
+  },
+  {
+   "args": [
+    "hook"
+   ],
+   "event": "PreCompact",
+   "owner": "install.sh",
+   "script": "gt_state.py"
+  },
+  {
+   "args": [
+    "check",
+    "--hook"
+   ],
+   "event": "SessionStart",
+   "owner": "install.sh",
+   "script": "gt_surface.py"
+  },
+  {
+   "args": [],
+   "event": "PreToolUse",
+   "owner": "install.sh",
+   "script": "guard_protected_paths.sh"
+  },
+  {
+   "args": [],
+   "event": "PreToolUse",
+   "owner": "install.sh",
+   "script": "guard_foreign_checkout.sh"
+  },
+  {
+   "args": [],
+   "event": "PostToolUse",
+   "owner": "install.sh",
+   "script": "log_knowledge_read.sh"
+  },
+  {
+   "args": [],
+   "event": "UserPromptSubmit",
+   "owner": "install.sh",
+   "script": "vault_hints.py"
+  },
+  {
+   "args": [
+    "hook",
+    "session-start"
+   ],
+   "event": "SessionStart",
+   "owner": "install.sh",
+   "script": "gt_unlock.py"
+  },
+  {
+   "args": [
+    "hook",
+    "session-end"
+   ],
+   "event": "SessionEnd",
+   "owner": "install.sh",
+   "script": "gt_unlock.py"
+  },
+  {
+   "args": [],
+   "event": "UserPromptSubmit",
+   "owner": "vault_init.py install-core-rules",
+   "script": "inject_core_rules.sh"
+  },
+  {
+   "args": [],
+   "event": "SessionStart",
+   "owner": "vault_init.py install-core-rules",
+   "script": "inject_core_rules.sh"
+  },
+  {
+   "args": [],
+   "event": "Stop",
+   "owner": "vault_init.py install-core-rules",
+   "script": "validate_response.sh"
+  },
+  {
+   "args": [],
+   "event": "PreToolUse",
+   "owner": "vault_init.py install-core-rules",
+   "script": "guard_session_claims.sh"
+  },
+  {
+   "args": [],
+   "event": "PreToolUse",
+   "owner": "vault_init.py install-core-rules",
+   "script": "guard_test_before_commit.sh"
+  },
+  {
+   "args": [],
+   "event": "PreToolUse",
+   "owner": "vault_init.py install-core-rules",
+   "script": "guard_vault_writes.sh"
+  }
+ ],
+ "version": "0.4.0"
+}

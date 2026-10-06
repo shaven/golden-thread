@@ -1,0 +1,50 @@
+{
+  "schema": 1,
+  "name": "visualize",
+  "plugin": "gt-visualize",
+  "version": "0.4.5",
+  "requires_gt": ">=0.20.1,<0.21.0",
+  "summary": "A codebase in 3D: a scroll-driven walkthrough of how its parts work together (explain), or a code city of its files (render) -- one offline HTML file drawn with three.js",
+  "default": "on",
+  "skills": [
+    "gt-visualize",
+    "tour",
+    "whatis",
+    "trace",
+    "explain-back"
+  ],
+  "scripts": [
+    "gt_visualize.py"
+  ],
+  "templates": [],
+  "hooks": [],
+  "hookdir_scripts": [],
+  "settings": [
+    {
+      "key": "visualize_publish",
+      "default": "local",
+      "values": [
+        "local",
+        "claude",
+        "github-pages",
+        "gist"
+      ],
+      "summary": "Where gt-visualize publishes a page by default: kept local, a claude.ai Artifact, a GitHub Pages folder, or a gist.",
+      "detail": "local         the file stays on this machine  (default)\nclaude        a private claude.ai Artifact Claude publishes for you; updates keep the URL\ngithub-pages  <repo>/<dir>/<slug>/index.html in a repo you name, pushed with your git login\ngist          a secret (link) or public gist, with your gh login. GitHub shows a gist's\n              HTML as source, not as a page\n\nEvery publish shows its plan (target, visibility, URL) and waits for your yes.\nNo credential is ever stored: the targets use the logins you already have.\nTarget details: gt_visualize.py targets set github-pages repo=... base_url=..."
+    },
+    {
+      "key": "visualize_publish_visibility",
+      "default": "private",
+      "values": [
+        "private",
+        "link",
+        "public"
+      ],
+      "summary": "Who can see a published page by default -- checked against what the target can enforce.",
+      "detail": "private  only you (local, claude)\nlink     anyone with the link (claude once shared, a secret gist)\npublic   anyone (github-pages is always public; a public gist)\n\nA visibility a target cannot deliver is refused, never quietly upgraded."
+    }
+  ],
+  "requires_modules": [],
+  "replaces_core": [],
+  "demo": "demo/act.md"
+}

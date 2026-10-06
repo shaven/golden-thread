@@ -658,7 +658,49 @@ and gt's own scopes can never be allowed unattended; jobs are never prompted.</p
 <li>Credentials that also exist somewhere else in plaintext.</li>
 <li>Files outside the folders you lock.</li>
 <li>MCP servers Claude Code connects to directly, not through LOTR (section 9).</li>
+<li>What the gt-lotr domain agents can and cannot do (below): a split that stops a poisoned page
+  steering an agent, not a boundary against your own session.</li>
 </ul>
+<h4 id="gt-lotr-agents-a-readerwriter-split-and-what-it-does-not-enforce-0202">gt-lotr agents: a reader/writer split, and what it does not enforce (0.20.2)</h4>
+<p>gt-lotr ships eight plugin agents split so that no one agent holds private data, untrusted text
+and a way to act. The four <strong>readers</strong> (<code>jira</code>, <code>m365</code>, <code>github</code>, <code>runner</code>) are given <code>find</code> and
+<code>call_read</code> only, so a mail, an issue or a page that says "now send this" or "merge it" reaches an
+agent with <strong>no write or consent tool to call</strong>. That is a limit on what the agent can <em>call</em>, not
+on what an op does: the gateway rates a built-in connection's ops from its own profile, but for an
+<code>mcp</code> connection it trusts the downstream's tool names and <code>readOnlyHint</code>, so a hostile MCP server
+can mislabel a change as a read and a reader would call it. The readers are told never to call an
+op whose name says it changes something, whatever <code>find</code> rates it; that is an instruction, not a
+check. The four <strong>writers</strong> (<code>jira-writer</code>, <code>m365-writer</code>, <code>github-writer</code>, <code>writer</code>) are given
+<code>find</code> and <code>call_write</code> (and <code>call_consent</code> except <code>jira-writer</code>) and <strong>no <code>call_read</code></strong>, and are
+<strong>told not to read</strong>. The gateway enforces that with <strong>strict tool tiers</strong> (on by default): each
+tool carries only its own tier, so a read-tier op sent through <code>call_write</code> or <code>call_consent</code> is
+refused with <code>wrong_tool</code> before anything is sent, as is a write through <code>call_consent</code>. The
+setting is per connection in <code>registry.json</code> (<code>"strict_tools": false</code> restores the older rule,
+where <code>call_write</code> also carried reads and <code>call_consent</code> carried everything; it is an admin-plane
+file, like the rest of a connection's policy), and on a connection where you turn it off "a writer
+reads nothing" is its instruction again. Jira's JQL search by <code>POST</code> and Graph's <code>POST
+/search/query</code> are rated read, so readers can use them and writers cannot. Each writer performs the one operation
+in an exact <code>SPEC</code> that the main session composed from <em>your</em> words, treats every payload word as
+data, asks consent at most once and never retries a refusal. "One operation" is likewise the
+writer's instruction: <code>maxTurns: 4</code> does not cap parallel tool calls (the writers are told never to
+issue any), and nothing at the gateway checks that a writer made only one.</p>
+<p><strong>What consent covers.</strong> gt unlock's platform consent (Touch ID / Windows Hello over the operation)
+applies to what the gateway rates as the <strong>consent tier</strong>: the curated ops <code>send_mail</code> (Graph) and
+<code>merge_pull</code> (GitHub) at their path templates; an MCP tool the gateway rates consent by its name or hint; and, since gt-lotr 0.3.0 (gt 0.20.1), the
+raw routes that do the same thing by another name: <code>POST /me/sendMail</code> or <code>/users/X/sendMail</code>, a
+message's <code>send</code>, <code>forward</code>, <code>reply</code>, <code>replyAll</code>, <code>createReply</code>, <code>createForward</code>, Graph <code>POST
+/$batch</code>, a merge through a path with a trailing slash or <code>/repositories/{id}/…</code>, a GraphQL
+mutation naming <code>mergePullRequest</code> or <code>enablePullRequestAutoMerge</code>, and an HTTP <code>DELETE</code> on any
+connection. A writer's <code>call_write</code> cannot perform any of them. What it does <strong>not</strong> cover: any
+other destructive endpoint on a generic REST connection, which is write tier unless you add
+<code>policy.consent</code> globs to that connection.</p>
+<p>This is <strong>not a security boundary</strong>. The agents share the session's own gt-lotr connection, grants
+and permission rules, and the main session can call the same tools: a compromised or fooled main
+session can still write, and the read-then-act path through it is guarded by rules in its
+instructions and your attention, not by the platform. When a write's target came from a read (an
+issue key, a transition id), the main session is told to show you the resolved target (connection,
+key, summary) before the write; a merge's head sha is never taken from a read. Strict
+per-connection isolation is the 0.21 proxy design.</p>
 <h3 id="worked-example-macos">Worked example (macOS)</h3>
 <pre><code class="language-bash">gt_unlock.py enroll touchid &amp;&amp; gt_unlock.py enroll totp &amp;&amp; gt_unlock.py recovery
 gt_unlock.py policy enable
@@ -710,9 +752,38 @@ python $u verify
 <h2 id="8-gt-sandbox-mode">8. gt sandbox mode</h2>
 <p><code>gt_settings.py set sandbox_mode on</code> (off by default). gt then configures <strong>Claude Code's own
 sandbox and permission rules</strong> so that the assistant's shell and file tools cannot touch the
-vault or gt's state, and the vault is reached only through gt's channels: a read-only MCP
-server and the write queue. It is independent of unlock — on together, unlock also gates the
-MCP server's reads (<code>gt:vault:read</code>, door <code>mcp_only</code>).</p>
+vault or gt's state, and the vault is reached only through gt's channels: its MCP server and
+the write queue. It is independent of unlock — on together, unlock also gates the MCP server's
+reads (<code>gt:vault:read</code>) and writes (<code>gt:vault:write</code>, never opened by <code>read_without_unlock</code>),
+both under door <code>mcp_only</code>.</p>
+<p><strong>gt's MCP tools never edit <code>design.md</code> or anything under <code>global-memory/</code></strong> (owner decision,
+2026-10-04) — with sandbox mode on or off. Every gt MCP tool that can write refuses them with one
+line — "design.md and global-memory/ are changed by you, in an editor" — and checks <strong>before</strong> it
+asks the unlock authority for anything, so a refused target does not cost you a fingerprint. The
+check is the write broker's own shared helper (<code>gt_review_target.py</code>, 0.20.1), by <strong>identity</strong> and
+by <strong>name</strong>, and it also refuses a symlink that dangles or leaves the folder it sits in. Identity: any existing part of the path that the file
+system says is the same folder as <code>global-memory/</code>, or a final component that is the same file as
+the <code>design.md</code> beside it (a hard link, a bind mount, a case-insensitive or Unicode-normalising
+volume's other spelling, a Windows 8.3 name, a symlink); a project folder must also resolve to
+itself, so a project that is a link is refused. Name: the path as any file system may read it —
+NFKC and case-folded (so the long s <code>deſign.md</code> and fullwidth letters match), with invisible
+characters, leading and trailing whitespace, trailing dots and spaces and an NTFS <code>::$DATA</code> suffix
+removed. A scaffold run for a new project never follows a symlink (it creates files exclusively).
+The two terminal-only tools that can touch them — <code>vault_init.py</code> (the new-project scaffold) and
+<code>gt_optimize.py --demote</code> — are yours to run. The broker still escalates a write it is handed
+(a request a shell leaves in the sandbox inbox): that becomes a <code>#conflict</code> task with a conflict
+file holding every version, and <strong>you</strong> apply it, in an editor or a terminal. (The broker's own
+check is by exact name; moving it to the same identity check is tracked separately — until then a
+case-insensitive volume's alias of <code>design.md</code>, sent by a shell, is not escalated by the broker.)
+Nothing in the sandbox-mode design depends on an automated way to apply one. The exceptions are
+deliberate: a read-only report may name them, <code>vault_events_emit</code> records
+paths as names, and <code>vault_project create</code> makes a new project's <code>design.md</code> from the scaffold
+(a new file, by the existing create-project script — never an edit).</p>
+<p><strong>Every skill works under it (0.20.2).</strong> Each vault step a skill used to run from the shell has a
+route: a gt-vault MCP tool that runs the same script with the same checks (8.2), or — for the
+steps that change settings, install state or the whole vault — an honest "run this from a
+terminal". Each SKILL.md carries the table, and a test holds every skill of every gt plugin to it
+(<code>tests/test_skill_sandbox_routes.py</code>). Sandbox mode is no longer a preview.</p>
 <blockquote>
 <p><strong>Preview in 0.20.1.</strong> The fence is what this section says it is. What is not finished is the
 work inside it: most skills still run gt's vault scripts from the assistant's shell, and the
@@ -859,6 +930,46 @@ itself.</p>
   is not a boundary at all: the broker still refuses links and reparse points and checks that
   the open file is the one it listed, inside the inbox, but Claude's shell can open your files
   directly anyway.</li>
+<li><strong>A skill's vault scripts (0.20.2):</strong> the operation tools run them for the assistant —
+  <code>vault_report</code> (read-only reports: tasks, handoffs, lint, close-out signals, promotion
+  candidates, memory contradictions, digests, supersession, ADR lineage, entities, link
+  suggestions, optimize, upgrade status, broker status, doctor, context, wiki lint),
+  <code>vault_task</code>, <code>vault_tasks_regen</code>, <code>vault_log_add</code>, <code>vault_events_emit</code>, <code>vault_adr</code>,
+  <code>vault_project</code>, <code>vault_handoff</code>, <code>vault_closeout</code>, <code>vault_derived_write</code>,
+  <code>vault_source_store</code> and <code>vault_optimize</code>. Each maps a closed set of actions to <strong>one fixed
+  script and subcommand</strong> — there is no "run a script" tool. Arguments are typed by a closed
+  schema and checked again: slugs, task ids and dates by pattern (a whole-string match: a trailing
+  newline does not pass), every text field one line — no ASCII control and no Unicode line or
+  paragraph separator (<code>\x0b \x0c \x1c-\x1e \x85 U+2028 U+2029</code>), because <code>gt_adr merge</code> and the
+  log merge split on all of them and a separator would forge a heading or a second log line; only
+  an ADR body and a source's content may span lines, and the ADR body is checked for a forged
+  <code>## ADR-N</code> heading after every such separator — paths through the same resolver as
+  <code>vault_read</code> (inside the vault, never a locked folder) with no leading <code>-</code>, passed after <code>--</code>
+  where the script supports it, so a path is never an option. The vault and the session are the
+  server's own, never arguments. The script is the one the skill's shell step runs (the vault's
+  own <code>tools/</code> copy, or gt's installed one), so its checks apply unchanged: content goes through
+  the write queue and the broker (claims, dedupe, escalation). The server writes vault content
+  itself in exactly two places: a <strong>new</strong> <code>Sources/</code> file (<code>vault_source_store</code>, an exclusive
+  create — never an overwrite) and the body of an ADR slot its own session just allocated.
+  Settings, install and wiring (<code>gt_settings.py set</code>, <code>gt_sandbox.py</code>, <code>gt_doctor.py --fix</code>,
+  <code>vault_init.py fresh</code> / <code>install-core-rules</code>), whole-vault rewrites (<code>gt_upgrade.py run</code>, a
+  project rename, merge or move), <code>gt_sync.py</code> and Core-rule files are <strong>not</strong> offered: the skills
+  say to run them from a terminal. Two reports write gt's own state outside the vault
+  (<code>catchup</code>: <code>~/.claude/golden-thread/state/last-open.json</code>; <code>handoffs_surface</code>:
+  <code>surface/seen.json</code>), so <code>vault_report</code> is not marked read-only. <code>vault_derived_write</code>'s two
+  review-queue actions are not blind overwrites: <code>gt_lint.py --queue</code> replaces <code>review-queue.md</code>
+  itself (atomically, keeping ticks, copying aside anything it did not generate), run under the
+  broker's drain lock (POSIX only: on Windows the lock is not held, as for the broker itself) and
+  only when no other live session claims the file; gt-wiki's
+  <code>wiki_lint.py --queue</code> would clobber it with a plain open, so it runs against a scratch file
+  and its output is queued as a <code>replace-file</code> — into <code>review-queue.md</code> only when that file is
+  absent, a new vault's empty stub or wiki-lint's own untouched output, else into
+  <code>review-queue-wiki.md</code>. Under sandbox mode a session is not registered (<code>gt_session.py</code> is
+  skipped), so it records no claim of its own; every server write still carries the server's
+  session and is held by another live session's claim. With unlock on, a report needs <code>gt:vault:read</code>; every write
+  tool (and <code>vault_queue_write</code> / <code>vault_queue_drain</code>) needs <code>gt:vault:write</code>, which is never
+  opened by <code>read_without_unlock</code>. The <code>design.md</code> / <code>global-memory/</code> refusal comes before that
+  gate.</li>
 <li><strong>Hooks and the broker</strong> run outside the sandbox by Claude Code's design, so gt's
   enforcement keeps working.</li>
 </ul>
@@ -944,9 +1055,14 @@ in its own process, which the sandbox does not wrap.</p>
   gt's sandbox entries are still in <code>settings.json</code>, with the exact commands to switch them off
   first (0.20.1): the older release could never remove them. A rollback to a release that carries <code>gt_sandbox.py</code> is allowed.</li>
 <li>gt's vault tools run from the assistant's shell (<code>gt_tasks</code>, <code>gt_lint</code>, <code>gt_log</code>, …) cannot
-  read or write the vault: the assistant uses the MCP tools, or you run them in a terminal —
-  each tool's one-line refusal names the command (see the preview note above).
-  <code>sandbox_vault_reads allow</code> gives the shell read access back (writes stay denied).</li>
+  read or write the vault. Every skill says which gt-vault tool takes each such step instead
+  (0.20.2); the few that need you — settings, install, upgrade, sync, Core rules — it hands you as
+  one command for a terminal. <code>sandbox_vault_reads allow</code> gives the shell read access back
+  (writes stay denied).</li>
+<li><code>design.md</code> and <code>global-memory/</code> are yours: no gt MCP tool edits them, so under sandbox mode too
+  the assistant shows you the text and you apply it in an editor. A <code>#conflict</code> task (a write
+  the broker held for you, or two competing writes) points at a conflict file with every version;
+  decide, edit, and close the task.</li>
 <li>Test receipts, worker declarations and other state under <code>~/.claude/golden-thread</code> cannot be
   written from the shell: run a release's test suite from a terminal.</li>
 <li>Git over SSH and <code>open</code> / <code>osascript</code> fail inside Claude Code's sandbox (its troubleshooting

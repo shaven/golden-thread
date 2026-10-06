@@ -1,0 +1,166 @@
+{
+ "files": {
+  "scripts/gt_visualize.py": {
+   "bytes": 111290,
+   "sha256": "14d82e57b404c20247967d8cea688f90dbd3ec92f0932593d11acb10d28397c2"
+  },
+  "scripts/vendor/THREE-LICENSE": {
+   "bytes": 1081,
+   "sha256": "8b378ebe60e2fe500158cb0ac71cb5e8b7d92953c2abcc63a0eb90499653b5bc"
+  },
+  "scripts/vendor/VENDOR.json": {
+   "bytes": 1223,
+   "sha256": "4d5f28deb6282bb82c7412621ed619352aaf4737b96e2e1df6e154eaa4dbffc6"
+  },
+  "scripts/vendor/three-bundle.min.js": {
+   "bytes": 591684,
+   "sha256": "84747b01d6856104f9888ffa55707dfbfd5f5c9e2b9fe6c116b21fa993e4c7a6"
+  }
+ },
+ "generated": "2026-10-06T06:53:01",
+ "hooks": [
+  {
+   "args": [
+    "check",
+    "{src}",
+    "--hook"
+   ],
+   "event": "SessionStart",
+   "owner": "install.sh",
+   "script": "gt_components.py"
+  },
+  {
+   "args": [
+    "check",
+    "--hook"
+   ],
+   "event": "SessionStart",
+   "owner": "install.sh",
+   "script": "gt_workers.py"
+  },
+  {
+   "args": [
+    "check",
+    "{plugin_root}",
+    "--hook"
+   ],
+   "event": "SessionStart",
+   "owner": "install.sh",
+   "script": "gt_version_check.py"
+  },
+  {
+   "args": [
+    "check",
+    "--hook"
+   ],
+   "event": "SessionStart",
+   "owner": "install.sh",
+   "script": "gt_push_check.py"
+  },
+  {
+   "args": [
+    "check",
+    "--write"
+   ],
+   "event": "UserPromptSubmit",
+   "owner": "install.sh",
+   "script": "gt_state.py"
+  },
+  {
+   "args": [
+    "hook"
+   ],
+   "event": "PreCompact",
+   "owner": "install.sh",
+   "script": "gt_state.py"
+  },
+  {
+   "args": [
+    "check",
+    "--hook"
+   ],
+   "event": "SessionStart",
+   "owner": "install.sh",
+   "script": "gt_surface.py"
+  },
+  {
+   "args": [],
+   "event": "PreToolUse",
+   "owner": "install.sh",
+   "script": "guard_protected_paths.sh"
+  },
+  {
+   "args": [],
+   "event": "PreToolUse",
+   "owner": "install.sh",
+   "script": "guard_foreign_checkout.sh"
+  },
+  {
+   "args": [],
+   "event": "PostToolUse",
+   "owner": "install.sh",
+   "script": "log_knowledge_read.sh"
+  },
+  {
+   "args": [],
+   "event": "UserPromptSubmit",
+   "owner": "install.sh",
+   "script": "vault_hints.py"
+  },
+  {
+   "args": [
+    "hook",
+    "session-start"
+   ],
+   "event": "SessionStart",
+   "owner": "install.sh",
+   "script": "gt_unlock.py"
+  },
+  {
+   "args": [
+    "hook",
+    "session-end"
+   ],
+   "event": "SessionEnd",
+   "owner": "install.sh",
+   "script": "gt_unlock.py"
+  },
+  {
+   "args": [],
+   "event": "UserPromptSubmit",
+   "owner": "vault_init.py install-core-rules",
+   "script": "inject_core_rules.sh"
+  },
+  {
+   "args": [],
+   "event": "SessionStart",
+   "owner": "vault_init.py install-core-rules",
+   "script": "inject_core_rules.sh"
+  },
+  {
+   "args": [],
+   "event": "Stop",
+   "owner": "vault_init.py install-core-rules",
+   "script": "validate_response.sh"
+  },
+  {
+   "args": [],
+   "event": "PreToolUse",
+   "owner": "vault_init.py install-core-rules",
+   "script": "guard_session_claims.sh"
+  },
+  {
+   "args": [],
+   "event": "PreToolUse",
+   "owner": "vault_init.py install-core-rules",
+   "script": "guard_test_before_commit.sh"
+  },
+  {
+   "args": [],
+   "event": "PreToolUse",
+   "owner": "vault_init.py install-core-rules",
+   "script": "guard_vault_writes.sh"
+  }
+ ],
+ "version": "0.4.5"
+}

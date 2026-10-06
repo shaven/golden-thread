@@ -339,5 +339,225 @@ class AgentDefinitionFiles(PolicyBase):
         self.assertIn("agent:reconcile", p.stdout)
 
 
+class ModuleAgentDefinitions(PolicyBase):
+    """0.20.2: a module plugin's agents (gt-lotr's jira, m365, github, runner) are managed like
+    the stage agents: their model_intent through the intent pack whatever the skills' profile,
+    a per-agent override keyed by the full name (effort allowed: one file is one agent),
+    nothing under agent_models=session -- and the release source is never touched."""
+
+    def setUp(self):
+        super().setUp()
+        from _harness import REPO, latest_version_dir
+        self.lotr = latest_version_dir(REPO / "golden-thread-lotr")
+        plugins = self.home / ".claude" / "plugins"
+        self.lcache = plugins / "cache" / MARKET / "gt-lotr" / self.lotr.name
+        self.lmarket = plugins / "marketplaces" / MARKET / "plugins" / "gt-lotr"
+        for root in (self.lcache, self.lmarket):
+            shutil.copytree(self.lotr / "agents", root / "agents")
+        inst = json.loads((plugins / "installed_plugins.json").read_text())
+        inst["plugins"]["gt-lotr@%s" % MARKET] = [{"scope": "user", "installPath":
+                                                   str(self.lcache), "version": self.lotr.name}]
+        # An entry with no installPath must not make the policy read the working directory.
+        inst["plugins"]["gt-demo@%s" % MARKET] = [{"scope": "user"}]
+        (plugins / "installed_plugins.json").write_text(json.dumps(inst))
+        (self.home / ".claude" / "vault-config.json").write_text(
+            json.dumps({"vault_path": str(self.vault)}))
+
+    def agent(self, root, name):
+        fm = frontmatter(root / "agents" / (name + ".md"))
+        return fm.get("model"), fm.get("effort")
+
+    def test_fast_intent_is_haiku_whatever_the_profile_and_source_untouched(self):
+        src = self.tree_hash(self.lotr / "agents")
+        self.assertOk(self.policy("apply", "--profile", "very-high"))
+        for root in (self.lcache, self.lmarket):
+            for name in ("jira", "m365", "github", "runner"):
+                self.assertEqual(self.agent(root, name), ("haiku", None))
+        self.assertEqual(self.got(self.cache, "gt-list"), ("opus", "xhigh"))
+        rows = {r["stage"]: r for r in json.loads(self.policy("show", "--json").stdout)["agents"]}
+        self.assertEqual(rows["gt-lotr:jira"]["model"], "haiku")
+        self.assertEqual(rows["gt-lotr:jira"]["tier"], "fast")
+        self.assertOk(self.policy("verify"))
+        self.assertEqual(src, self.tree_hash(self.lotr / "agents"))
+
+    def test_a_per_agent_override_with_effort_reaches_only_that_definition(self):
+        self.assertOk(self.policy("set", "--agent", "gt-lotr:github", "--model", "sonnet",
+                                  "--effort", "low"))
+        self.assertEqual(self.agent(self.lcache, "github"), ("sonnet", "low"))
+        self.assertEqual(self.agent(self.lcache, "jira"), ("haiku", None))
+        self.assertOk(self.policy("verify"))
+        self.assertOk(self.policy("clear", "--agent", "gt-lotr:github"))
+        self.assertEqual(self.agent(self.lcache, "github"), ("haiku", None))
+
+    def test_agent_models_session_runs_them_on_the_session_model(self):
+        self.assertOk(self.policy("apply", "--profile", "average"))
+        self.assertOk(self.py(SCRIPTS / "gt_settings.py", "set", "agent_models", "session"))
+        for root in (self.lcache, self.lmarket):
+            self.assertEqual(self.agent(root, "m365"), (None, None))
+        self.assertOk(self.policy("verify"))
+        self.assertOk(self.py(SCRIPTS / "gt_settings.py", "set", "agent_models", "task"))
+        self.assertEqual(self.agent(self.lcache, "m365"), ("haiku", None))
+
+    READERS = ("jira", "m365", "github", "runner")
+    WRITERS = ("jira-writer", "m365-writer", "github-writer", "writer")
+
+    def test_readers_run_on_fast_and_writers_on_balanced_in_every_installed_copy(self):
+        # 0.20.2 reader/writer split: the model follows each agent's own model_intent.
+        self.assertOk(self.policy("apply", "--profile", "average"))
+        for root in (self.lcache, self.lmarket):
+            for name in self.READERS:
+                self.assertEqual(self.agent(root, name), ("haiku", None), name)
+            for name in self.WRITERS:
+                self.assertEqual(self.agent(root, name), ("sonnet", "medium"), name)
+        rows = {r["stage"]: r for r in json.loads(self.policy("show", "--json").stdout)["agents"]}
+        for name in self.READERS:
+            self.assertEqual((rows["gt-lotr:" + name]["tier"], rows["gt-lotr:" + name]["model"]),
+                             ("fast", "haiku"))
+        for name in self.WRITERS:
+            self.assertEqual((rows["gt-lotr:" + name]["tier"], rows["gt-lotr:" + name]["model"]),
+                             ("balanced", "sonnet"))
+        self.assertOk(self.policy("verify"))
+
+    def test_a_writer_has_its_own_override_and_agent_models_session_reaches_all_eight(self):
+        self.assertOk(self.policy("apply", "--profile", "average"))
+        self.assertOk(self.policy("set", "--agent", "gt-lotr:m365-writer", "--model", "opus",
+                                  "--effort", "high"))
+        self.assertEqual(self.agent(self.lcache, "m365-writer"), ("opus", "high"))
+        self.assertEqual(self.agent(self.lcache, "m365"), ("haiku", None))
+        self.assertEqual(self.agent(self.lcache, "jira-writer"), ("sonnet", "medium"))
+        self.assertOk(self.policy("verify"))
+        self.assertOk(self.policy("clear", "--agent", "gt-lotr:m365-writer"))
+        self.assertEqual(self.agent(self.lcache, "m365-writer"), ("sonnet", "medium"))
+        self.assertOk(self.py(SCRIPTS / "gt_settings.py", "set", "agent_models", "session"))
+        for name in self.READERS + self.WRITERS:
+            self.assertEqual(self.agent(self.lcache, name), (None, None), name)
+        self.assertOk(self.policy("verify"))
+
+    def test_a_writes_model_line_from_the_first_0_20_2_build_is_removed_and_the_flag_is_gone(self):
+        # The line is redundant now (a writer is its own agent), so a machine that carries it
+        # converges, and --writes-model is no longer accepted.
+        f = self.lcache / "agents" / "jira.md"
+        text = f.read_text()
+        f.write_text(text.replace("\n---\n", "\nwrites_model: opus\n---\n", 1))
+        self.assertIn("writes_model: opus", f.read_text())
+        self.assertOk(self.policy("apply", "--profile", "average"))
+        self.assertNotIn("writes_model", f.read_text())
+        self.assertEqual(self.policy("set", "--agent", "gt-lotr:jira", "--writes-model",
+                                     "opus").returncode, 2)
+        self.assertEqual(self.policy("set", "--agent", "gt-lotr:jira").returncode, 2)
+
+    def test_a_cached_unsplit_build_with_call_write_on_a_reader_is_flagged(self):
+        # Review m9: the tool list is the security property of the reader/writer split, and an
+        # install can keep an older copy beside the new one. The installed copy's `tools:` is
+        # compared with the shipped (marketplace) file's, before and after the policy ran.
+        for applied in (False, True):
+            with self.subTest(applied=applied):
+                for root in (self.lcache, self.lmarket):
+                    shutil.rmtree(root / "agents")
+                    shutil.copytree(self.lotr / "agents", root / "agents")
+                if applied:
+                    self.assertOk(self.policy("apply", "--profile", "average"))
+                self.assertOk(self.policy("verify"))
+                f = self.lcache / "agents" / "jira.md"
+                f.write_text(f.read_text().replace("__call_read\n", "__call_read, "
+                             "mcp__plugin_gt-lotr_gt-lotr__call_write\n", 1))
+                self.assertIn("call_write", f.read_text())
+                p = self.policy("verify")
+                self.assertEqual(p.returncode, 1, p.stdout)
+                self.assertIn("agent:gt-lotr:jira", p.stdout)
+                self.assertIn("the shipped definition has", p.stdout)
+                self.assertIn("reinstall gt-lotr", p.stdout)
+                # a re-apply does not paper over it: the tool list is not the policy's to set
+                self.policy("apply", "--profile", "average")
+                self.assertEqual(self.policy("verify").returncode, 1)
+
+    def test_a_writer_overridden_to_haiku_is_warned_about_not_refused(self):
+        # Review m9: allowed, and said, on apply (stderr) and on verify (stdout, exit 0).
+        self.assertOk(self.policy("apply", "--profile", "average"))
+        p = self.policy("set", "--agent", "gt-lotr:jira-writer", "--model", "haiku")
+        self.assertOk(p)
+        self.assertIn("WARNING gt-lotr:jira-writer runs on haiku", p.stderr)
+        self.assertEqual(self.agent(self.lcache, "jira-writer"), ("haiku", None))
+        v = self.policy("verify")
+        self.assertOk(v)
+        self.assertIn("WARNING gt-lotr:jira-writer runs on haiku", v.stdout)
+        self.assertNotIn("WARNING gt-lotr:github-writer", v.stdout)
+        self.assertNotIn("WARNING gt-lotr:jira ", v.stdout)         # a reader on haiku is as shipped
+        self.assertOk(self.policy("clear", "--agent", "gt-lotr:jira-writer"))
+        self.assertNotIn("WARNING", self.policy("verify").stdout)
+
+    def test_a_writer_left_without_a_model_is_flagged_by_verify(self):
+        self.assertOk(self.policy("apply", "--profile", "average"))
+        (self.home / ".claude" / "golden-thread" / "model-policy-applied.json").write_text(
+            json.dumps({"version": 1, "files": {}}))
+        f = self.lcache / "agents" / "github-writer.md"
+        f.write_text("\n".join(l for l in f.read_text().split("\n")
+                               if not l.startswith(("model:", "effort:"))))
+        p = self.policy("verify")
+        self.assertEqual(p.returncode, 1, p.stdout)
+        self.assertIn("agent:gt-lotr:github-writer", p.stdout)
+
+    def test_an_entry_without_install_path_never_touches_the_working_directory(self):
+        # Review m1/m2 (2026-10-04): Path("") is ".", so an installed_plugins.json entry with no
+        # installPath (setUp adds one for gt-demo; here also one for gt itself) made apply rewrite
+        # skills/*/SKILL.md and agents/*.md in whatever directory it ran from.
+        cwd = self.tmp / "elsewhere"
+        (cwd / "skills" / "x").mkdir(parents=True)
+        (cwd / "agents").mkdir()
+        files = {cwd / "skills" / "x" / "SKILL.md": "---\nname: x\ndescription: x\n"
+                                                    "model_intent: fast\n---\nbody\n",
+                 cwd / "agents" / "extract.md": "---\nname: extract\ndescription: x\n"
+                                                "model_intent: fast\n---\nbody\n",
+                 cwd / "agents" / "jira.md": "---\nname: jira\ndescription: x\n"
+                                             "model_intent: fast\n---\nbody\n"}
+        for f, text in files.items():
+            f.write_text(text)
+        inst_path = self.home / ".claude" / "plugins" / "installed_plugins.json"
+        inst = json.loads(inst_path.read_text())
+        inst["plugins"]["gt@%s" % MARKET].append({"scope": "project"})
+        inst["plugins"]["gt-lotr@%s" % MARKET].append({"scope": "project", "installPath": ""})
+        inst_path.write_text(json.dumps(inst))
+        for args in (("apply", "--profile", "average"), ("verify",), ("show",)):
+            p = self.py(POLICY, *args, "--home", self.home, "--vault", self.vault, cwd=cwd)
+            self.assertNotIn("Traceback", p.stdout + p.stderr)
+        for f, text in files.items():
+            self.assertEqual(f.read_text(), text, "%s was rewritten" % f)
+        self.assertEqual(self.agent(self.lcache, "jira"), ("haiku", None))   # the real one was
+
+    def test_apply_names_and_verify_flags_an_agent_left_on_the_session_model(self):
+        # Review m3: an unresolvable module agent is left as shipped and so runs on the
+        # session's model -- apply says so per agent, and verify fails on it.
+        self.assertOk(self.policy("apply", "--profile", "average"))
+        odd = self.lcache / "agents" / "odd.md"
+        odd.write_text("---\nname: odd\ndescription: x\nmodel_intent: turbo\n---\nbody\n")
+        p = self.policy("apply", "--profile", "average")
+        self.assertIn("REFUSED gt-lotr:odd", p.stderr)
+        p = self.policy("verify")
+        self.assertEqual(p.returncode, 1, p.stdout)
+        self.assertIn("agent:gt-lotr:odd", p.stdout)
+        self.assertIn("session's model", p.stdout)
+        odd.unlink()
+        # A resolvable agent whose model line was removed (and the record lost) is flagged too.
+        (self.home / ".claude" / "golden-thread" / "model-policy-applied.json").write_text(
+            json.dumps({"version": 1, "files": {}}))
+        f = self.lcache / "agents" / "runner.md"
+        f.write_text(f.read_text().replace("model: haiku\n", ""))
+        p = self.policy("verify")
+        self.assertEqual(p.returncode, 1, p.stdout)
+        self.assertIn("agent:gt-lotr:runner): no model, the policy resolves haiku", p.stdout)
+
+    def test_a_hand_edit_is_drift_and_a_definition_without_intent_is_left_alone(self):
+        plain = self.lcache / "agents" / "plain.md"
+        plain.write_text("---\nname: plain\ndescription: x\nmodel: opus\n---\nbody\n")
+        self.assertOk(self.policy("apply", "--profile", "average"))
+        self.assertEqual(frontmatter(plain).get("model"), "opus")
+        f = self.lcache / "agents" / "jira.md"
+        self.assertIn("model: haiku", f.read_text())
+        f.write_text(f.read_text().replace("model: haiku", "model: opus"))
+        p = self.policy("verify")
+        self.assertEqual(p.returncode, 1, p.stdout)
+        self.assertIn("agent:gt-lotr:jira", p.stdout)
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -25,6 +25,7 @@ SERVER = SCRIPTS / "gt_vault_mcp.py"
 sys.path.insert(0, str(SCRIPTS))
 import gt_unlock_policy as P     # noqa: E402
 import gt_unlockd as D           # noqa: E402
+import gt_vault_ops as OPS       # noqa: E402  the operation tools (0.20.2)
 
 
 class VaultFixture(Sandbox):
@@ -82,7 +83,7 @@ class ToolList(VaultFixture):
     def test_offered_with_sandbox_mode_and_annotated(self):
         t = {x["name"]: x for x in self.tools()}
         self.assertEqual(set(t), {"vault_list", "vault_read", "vault_search",
-                                  "vault_queue_write", "vault_queue_drain"})
+                                  "vault_queue_write", "vault_queue_drain"} | OPS.TOOL_NAMES)
         for n in ("vault_list", "vault_read", "vault_search"):
             self.assertIs(t[n]["annotations"]["readOnlyHint"], True)
             self.assertIn("outputSchema", t[n])
@@ -101,7 +102,7 @@ class ToolList(VaultFixture):
                         "params": {"name": "vault_read", "arguments": {"path": "index.md"}}})
         self.assertIn("error", out[2])
         self.config(vault_path=str(self.vault), vault_mcp="on")  # explicitly on, no sandbox
-        self.assertEqual(len(self.tools()), 5)
+        self.assertEqual(len(self.tools()), 5 + len(OPS.TOOL_NAMES))
         self.config(vault_path=str(self.vault), sandbox_mode="on", vault_mcp="off")
         self.assertEqual(self.tools(), [])
 
@@ -256,7 +257,10 @@ class QueueWrites(VaultFixture):
             self.assertFalse(r["ok"], (path, r))
         self.assertFalse((self.vault / "core-rules").exists())
 
-    def test_a_design_write_escalates_to_the_owner(self):
+    def test_a_design_write_is_refused_to_the_owner_not_queued(self):
+        """0.20.2 (owner decision): no gt tool writes design.md or global-memory/ -- not even as an
+        escalation request. (The broker still escalates one that arrives from the shell's inbox:
+        tests/test_gt_vault_ops.py ReviewTargets.)"""
         a = self.vault / "Projects" / "alpha"
         a.mkdir(parents=True)
         (a / "README.md").write_text("# alpha\n\n## Tasks\n")
@@ -264,8 +268,12 @@ class QueueWrites(VaultFixture):
         r = self.call("vault_queue_write", {"path": "Projects/alpha/design.md",
                                             "op": "replace-section", "section": "A",
                                             "content": "new\n"})
-        self.assertEqual(r["decision"], "escalate", r)
+        self.assertFalse(r["ok"], r)
+        self.assertEqual(r["error"]["code"], "owner_only", r)
+        self.assertIn("in an editor", r["error"]["message"])
         self.assertIn("old", (a / "design.md").read_text())
+        q = self.vault / "Projects/golden-thread/spool/queue"
+        self.assertEqual(list(q.glob("*.json")) if q.is_dir() else [], [])
 
     def test_drain_picks_up_the_inbox(self):
         inbox = self.home / ".gt-inbox" / "queue"

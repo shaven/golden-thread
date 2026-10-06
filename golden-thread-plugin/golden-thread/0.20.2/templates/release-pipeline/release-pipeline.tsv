@@ -1,0 +1,13 @@
+# release pipeline -- the steps as DATA. release.sh is GENERATED from this file.
+# Columns, TAB-separated: id  kind(step|gate)  guarantee  command  after(-|id)  required(yes|no)  origin(default|user)
+# A command starting @ is a gt builtin; anything else runs from this directory.
+# Change it with gt_pipeline.py add / set / remove (they re-render release.sh), or edit it
+# and run gt_pipeline.py render. `gt_pipeline.py check` validates it.
+# script: release.sh
+tests	step	the test suite passed and a receipt was recorded	@tests	-	yes	default
+allin	gate	every gt-allin check ran: scan, credentials, lint, validations	@allin	tests	yes	default
+branch	gate	the work is on a branch, never the default branch	@branch	allin	yes	default
+install	step	installed, and the post-install validation passed	@install	branch	yes	default
+owner-gate	gate	the owner gave an explicit go-ahead	@owner-gate	install	yes	default
+push	step	the branch is on the remote others read	@push	owner-gate	yes	default
+sync	step	every downstream copy is updated	@sync	push	yes	default

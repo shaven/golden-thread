@@ -25,6 +25,7 @@ EXPECTED = {
     # 0.20.1: gt sandbox mode (gt_sandbox.py), its read sub-option, and the vault MCP switch.
     "sandbox_mode": ("off", ["off", "on"]),
     "sandbox_vault_reads": ("deny", ["deny", "allow"]),
+    "symlink_writes_outside_vault": ("refuse", ["refuse", "allow"]),
     "vault_mcp": ("auto", ["auto", "on", "off"]),
     "component_updates": ("report", ["off", "report", "confirm", "auto"]),
     "version_check": ("report", ["off", "report"]),
@@ -509,3 +510,49 @@ class SettingsInProcess(Sandbox):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class LotrView(Sandbox):
+    """Owner, 2026-10-06: what is connected to LOTR, and whether it works, must be easy to find:
+    `/gt:gt-settings lotr` shows the full table, and plain `/gt:gt-settings` ends with a one-line
+    summary and that command. gt core cannot import gt-lotr, so it runs the installed lotr.py."""
+
+    TABLE = ("LOTR gateway: zone personal, mode local, 2 connection(s)\n"
+             "  ✗ jira@personal  error  since 10-06 07:30 (unreachable)\n"
+             "  ✓ m365@work      connected  last ok 10-06 07:50\n"
+             "LOTR: 1 error, 1 connected\n"
+             "States come from the gateway's own calls since it started; ...\n")
+
+    def install_fake_lotr(self):
+        plug = self.tmp / "gt-lotr-0.4.0"
+        (plug / "scripts").mkdir(parents=True)
+        (plug / "scripts" / "lotr.py").write_text(
+            "import sys\nassert sys.argv[1:3] == ['status', '--table'], sys.argv\n"
+            "sys.stdout.write(%r + ('CHECKED\\n' if '--check' in sys.argv else ''))\n" % self.TABLE)
+        rec = self.home / ".claude" / "plugins" / "installed_plugins.json"
+        rec.parent.mkdir(parents=True, exist_ok=True)
+        rec.write_text(json.dumps({"version": 2, "plugins": {
+            "gt-lotr@golden-thread-plugin": [{"installPath": str(plug)}]}}))
+
+    def test_settings_lotr_shows_the_connection_table(self):
+        self.install_fake_lotr()
+        p = self.py(TOOL, "lotr")
+        self.assertOk(p)
+        self.assertIn("jira@personal", p.stdout)
+        self.assertIn("unreachable", p.stdout)
+
+    def test_settings_lotr_check_passes_check_through(self):
+        self.install_fake_lotr()
+        self.assertIn("CHECKED", self.py(TOOL, "lotr", "--check").stdout)
+
+    def test_plain_show_ends_with_the_summary_and_the_command(self):
+        self.install_fake_lotr()
+        out = self.py(TOOL, "show").stdout
+        self.assertIn("LOTR: 1 error, 1 connected", out)
+        self.assertIn("/gt:gt-settings lotr", out)
+
+    def test_without_lotr_installed_it_says_so_and_show_stays_quiet(self):
+        p = self.py(TOOL, "lotr")
+        self.assertOk(p)
+        self.assertIn("not installed", p.stdout)
+        self.assertNotIn("LOTR:", self.py(TOOL, "show").stdout)

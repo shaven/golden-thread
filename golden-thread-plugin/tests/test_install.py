@@ -1192,6 +1192,30 @@ class ChecksumBeforeInstall(Sandbox):
         self.assertEqual(p.returncode, 8)
         self.assertIn("README.md", p.stdout)
 
+    # -- the shared transfer copy (0.20.2) ------------------------------------------------
+    def publish_shared(self):
+        """What dev/sync-gt-src.sh leaves in gt-src: SHA256SUMS plus SOURCE.json at the root.
+        copygt.sh deliberately does not carry SOURCE.json into the repository it copies to."""
+        self.publish_sums()
+        (self.root / "SOURCE.json").write_text('{"commit": "abc123", "tree_sha256": "x"}\n')
+
+    def test_the_shared_transfer_copy_is_refused(self):
+        """Owner, 2026-10-06: gt-src is for passing code back and forth, not for installing
+        from. Copy it into a repository (copygt.sh) and install there."""
+        self.publish_shared()
+        p = self.install()
+        self.assertEqual(p.returncode, 9, p.stdout + p.stderr)
+        self.assertIn("shared transfer copy", p.stdout)
+        self.assertIn("copygt.sh", p.stdout)
+        self.assertFalse(self.gt_cache().exists(), "a refused install must copy nothing")
+
+    def test_the_shared_copy_installs_with_the_explicit_override(self):
+        self.publish_shared()
+        self.env["GT_INSTALL_FROM_SHARED"] = "1"
+        p = self.install()
+        self.assertOk(p)
+        self.assertIn("installing from the shared transfer copy", p.stdout)
+
     def test_require_checksum_with_no_sums_refuses(self):
         p = self.install("--require-checksum")
         self.assertEqual(p.returncode, 8)

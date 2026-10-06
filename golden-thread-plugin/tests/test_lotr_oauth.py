@@ -1837,7 +1837,10 @@ class TiersForOAuthConnections(unittest.TestCase):
         self.assertEqual(op["tier"], "consent")
         conn["auth"] = {"scheme": "bearer"}
         (op,) = profiles.mcp_profile(conn)["ops"]
-        self.assertEqual(op["tier"], "read", "unchanged for other kinds")
+        self.assertEqual(op["tier"], "consent", "every mcp connection is strict since 0.4.0 (m1)")
+        conn["strict_tools"] = False
+        (op,) = profiles.mcp_profile(conn)["ops"]
+        self.assertEqual(op["tier"], "read", "strict_tools: false keeps the old rule (not for OAuth)")
 
 
 class SourceHygiene(unittest.TestCase):

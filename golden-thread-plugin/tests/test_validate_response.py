@@ -7,8 +7,9 @@ Contract:
   * core_no_secrets_in_transcript: any high-confidence secret in ANY assistant text of
     the turn -> {"decision":"block"}. Placeholders, variable references, redactions
     and the sudoers NOPASSWD tag are allowed.
-  * core_timestamp_every_message: the FIRST assistant text of the turn must begin with
-    YYYY-MM-DD HH:MM (markdown wrappers allowed) -> otherwise block.
+  * core_timestamp_every_message: the FINAL assistant text of the turn (the answer) or the
+    FIRST one must begin with YYYY-MM-DD HH:MM (markdown wrappers allowed) -> otherwise
+    block. Text between them does not count either way (0.20.2; before, only the first).
   * Allow == exit 0 with no stdout. Block == exit 0 with the decision JSON.
   * FAIL OPEN: empty/malformed stdin, stop_hook_active, no/missing/garbled transcript,
     tool-only turn -> allow.
@@ -158,11 +159,31 @@ class ValidateResponseTest(Sandbox):
         self.assertBlocked(self.stop([user("hi"), say(f"Done. ({TS})")]),
                            "core_timestamp_every_message")
 
-    def test_untimestamped_preamble_before_tool_call_is_blocked(self):
+    # -- the final answer counts (0.20.2) ---------------------------------------------
+    def test_untimestamped_preamble_with_timestamped_final_answer_is_allowed(self):
+        """Until 0.20.2 only the FIRST text of the turn counted, so a one-line lead-in before a
+        tool call blocked a turn whose answer carried the stamp. The answer is what the user
+        reads; it now satisfies the rule on its own."""
         entries = [user("hi"), say("Let me check that:", tool=True), tool_result(),
                    say(f"{TS} — here is the answer")]
-        self.assertBlocked(self.stop(entries), "core_timestamp_every_message",
-                           "the FIRST text of the turn is what must carry the timestamp")
+        self.assertAllowed(self.stop(entries))
+
+    def test_untimestamped_middle_text_does_not_matter(self):
+        entries = [user("hi"), say("Checking:", tool=True), tool_result(),
+                   say("Still looking:", tool=True), tool_result(),
+                   say(f"{TS} — the answer")]
+        self.assertAllowed(self.stop(entries))
+
+    def test_neither_opening_nor_final_answer_stamped_is_blocked(self):
+        entries = [user("hi"), say("Let me check that:", tool=True), tool_result(),
+                   say(f"Here is the answer ({TS} was the time).")]
+        self.assertBlocked(self.stop(entries), "core_timestamp_every_message")
+
+    def test_stamped_middle_text_alone_is_not_enough(self):
+        entries = [user("hi"), say("Checking:", tool=True), tool_result(),
+                   say(f"{TS} — progress", tool=True), tool_result(),
+                   say("Here is the answer.")]
+        self.assertBlocked(self.stop(entries), "core_timestamp_every_message")
 
     def test_tool_result_does_not_start_a_new_turn(self):
         entries = [user("hi"), say(f"{TS} — checking", tool=True), tool_result(),
