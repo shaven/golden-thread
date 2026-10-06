@@ -1379,12 +1379,14 @@ def _lotr_table(check=False, timeout=60):
     script = _lotr_script()
     if not script:
         return None
-    args = [sys.executable, "-I", script, "status", "--table"] + (["--check"] if check else [])
+    # -X utf8, not PYTHONIOENCODING: -I ignores every PYTHON* variable, so on Windows the
+    # child printed the table's ✓/✗ through cp1252 and crashed (found on gt-win11d, 0.20.2)
+    args = ([sys.executable, "-I", "-X", "utf8", script, "status", "--table"]
+            + (["--check"] if check else []))
     try:
-        # UTF-8 both ways (Windows): the table carries ✓/⚠/✗, and a cp1252 console would lose it
-        env = dict(os.environ, PYTHONIOENCODING="utf-8")
+        # read it back as UTF-8 too (Windows would decode the marks as cp1252)
         p = subprocess.run(args, capture_output=True, encoding="utf-8", errors="replace",
-                           timeout=timeout, env=env)
+                           timeout=timeout)
     except (OSError, subprocess.TimeoutExpired) as e:
         return "LOTR: the gateway did not answer (%s)\n" % type(e).__name__
     return p.stdout or p.stderr or "LOTR: no answer (exit %s)\n" % p.returncode

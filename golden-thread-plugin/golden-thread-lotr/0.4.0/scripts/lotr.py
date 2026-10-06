@@ -837,6 +837,10 @@ def main(argv=None):
         _out({"ok": False, "error": {"code": "internal", "message": type(e).__name__, "hints": []}})
         return 1
     if isinstance(result, _Text):
+        try:                      # a cp1252 console cannot show ✓/✗: replace, never crash
+            sys.stdout.reconfigure(errors="replace")
+        except (AttributeError, ValueError):
+            pass
         sys.stdout.write(result)
         return 0
     _out(result)
