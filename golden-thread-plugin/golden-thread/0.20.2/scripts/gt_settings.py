@@ -1392,7 +1392,7 @@ def _lotr_table(check=False, timeout=60):
 
 def _lotr_summary():
     """The one LOTR line plain `show` ends with; None when LOTR is not installed."""
-    out = _lotr_table(timeout=8)
+    out = _lotr_table(timeout=20)          # a cold Python start on a busy Windows box can take >8 s
     if out is None:
         return None
     lines = [l for l in out.splitlines() if l.startswith("LOTR:")]
