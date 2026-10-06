@@ -1381,7 +1381,10 @@ def _lotr_table(check=False, timeout=60):
         return None
     args = [sys.executable, "-I", script, "status", "--table"] + (["--check"] if check else [])
     try:
-        p = subprocess.run(args, capture_output=True, text=True, timeout=timeout)
+        # UTF-8 both ways (Windows): the table carries ✓/⚠/✗, and a cp1252 console would lose it
+        env = dict(os.environ, PYTHONIOENCODING="utf-8")
+        p = subprocess.run(args, capture_output=True, encoding="utf-8", errors="replace",
+                           timeout=timeout, env=env)
     except (OSError, subprocess.TimeoutExpired) as e:
         return "LOTR: the gateway did not answer (%s)\n" % type(e).__name__
     return p.stdout or p.stderr or "LOTR: no answer (exit %s)\n" % p.returncode

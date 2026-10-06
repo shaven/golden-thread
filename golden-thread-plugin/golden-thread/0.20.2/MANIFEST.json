@@ -409,8 +409,8 @@
    "sha256": "1b19a57d024ed9f8b102aa08d73bbe74e2ea4e58c346da3284a12c540621d3a6"
   },
   "scripts/gt_settings.py": {
-   "bytes": 86324,
-   "sha256": "3ba6855a416139d731de5821e2db7e044dcba87d31735c9f14f6c28e06f0aa90"
+   "bytes": 86545,
+   "sha256": "d02b9dd04cbe98ce6dfe6bf23fa6fc913632a3dd50c2c37c684cbd2d389556be"
   },
   "scripts/gt_staged.py": {
    "bytes": 3529,
@@ -809,7 +809,7 @@
    "sha256": "a9d18e4994333a07064fe001f199900d7e56833d967b2c65c304ab877df36fd7"
   }
  },
- "generated": "2026-10-06T09:05:40",
+ "generated": "2026-10-06T10:17:37",
  "hooks": [
   {
    "args": [
