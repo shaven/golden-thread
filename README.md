@@ -1,7 +1,7 @@
 # Golden Thread
 
 > **Reader:** someone who has never heard of Golden Thread
-> **Claims last checked against the code:** 2026-10-02 (gt 0.19.1) — see *The documents, and what belongs in each* in [`CLAUDE.md`](CLAUDE.md).
+> **Claims last checked against the code:** 2026-10-06 (gt 0.20.2) — see *The documents, and what belongs in each* in [`CLAUDE.md`](CLAUDE.md).
 
 A memory system for AI coding sessions, built on plain markdown and git — and,
 unusually, one where the rules that matter most are **mechanically enforced** rather
@@ -30,24 +30,36 @@ every session whether you use it or not, and every response lands in your conver
 **LOTR** is Golden Thread's gateway. It sits in front of the MCP servers you connect and changes both
 costs.
 
-- **One gateway instead of many schemas.** Measured on one connected server with 23 tools, LOTR's
-  gateway exposes 4 tools to the session: about 720 tokens of schema instead of about 7,400
-  (self-verified, tiktoken, one server; the gap grows with each server you add).
+- **One gateway instead of many tool lists.** The session sees LOTR's 4 tools and finds
+  operations on demand. Recent Claude Code already defers MCP tool schemas (names only until a
+  tool is used), so the saving today is mostly the per-server tool-name lists and the servers'
+  own instructions blocks, which LOTR replaces with one short catalog. Our earlier figure (about
+  720 tokens instead of about 7,400) measured full schemas offline with tiktoken on one server,
+  not what deferral leaves in context. Check your own setup with `/context`, direct vs. through
+  the gateway.
 - **Capped responses.** A connected server's answer is capped before it reaches the conversation.
 - **Specialist agents keep the payload out of the conversation.** A domain agent makes the call in
   its own context and returns only the compact result. In one measured case a 20-ticket query
-  returned 313 tokens to the main context (self-verified, one run; the shipped specialists are
-  queued for 0.20.2 and are not part of this release).
+  returned 313 tokens to the main context (self-verified, one run). Shipped in 0.20.2 for Jira,
+  Microsoft 365 and GitHub, split into readers (no write tools) and writers (act only on a
+  structured instruction built from your own words).
 - **Native OAuth sign-in** (`lotr connect`). You sign in from your own terminal. The refresh token
   is sealed when unlock is on, the server's hosts are pinned, and sign-in refuses to run from inside
   Claude Code. Verified against Linear's live server; Google and Microsoft are tested against fake
   servers only.
-- **Consent and reader/writer tiers.** Writes that delete, send or merge need consent, and the
-  consent prompt is raised by the gateway, not by the model.
+- **Consent and strict tiers.** Writes that delete, send or merge need consent, raised by the
+  gateway, not by the model, and the prompt says who and what (a mail's recipients, a merge's
+  target). Each call tool carries only its own tier, and MCP tools are rated by name on every
+  connection, so a server's "read-only" hint cannot clear a `delete_*` tool.
+- **See what is connected.** `/gt:gt-settings lotr` shows every connection and whether it works
+  (connected, needs sign-in, error, not used yet), like Claude Code's `/mcp`.
 
 **What it does not do:** it does not stop a process already running as you. See
 [SECURITY.md](golden-thread-plugin/SECURITY.md) for the threat model.
 
+> **0.20.2: LOTR connection status, reader/writer domain agents, strict tool tiers, and gt sandbox
+> mode in every skill.** See the [release notes](https://github.com/shaven/golden-thread/releases/tag/v0.20.2).
+>
 > **0.20.1: gt unlock and gt sandbox mode (both off by default), and Windows, finished.** Turned on, agents need your
 > presence — TOTP plus Touch ID (macOS) or Windows Hello, optionally Microsoft Entra ID sign-in —
 > before they use LOTR connections, credentials, publishing or gt's own guards. Callers are
