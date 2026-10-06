@@ -47,6 +47,7 @@ import stat
 import unittest
 from pathlib import Path
 
+from _harness import IS_WINDOWS
 from _harness import (WIN_CRON, skip_on_windows, py_hook_command, Sandbox, REPO, GT, WIKI, WATCH, REPORT_CARD, FARM, latest_version_dir,
                       load_module, PYTHON)
 
@@ -346,6 +347,7 @@ OLD_0_13 = ("2c5ca48", "0.13.0", "0.1.3")
 
 
 @unittest.skipIf(DEMO is None, "golden-thread-demo module not in this tree")
+@unittest.skipIf(IS_WINDOWS, "the old release it upgrades from (0.12-0.14) predates Windows support; its install.sh cannot run here")
 class DemoChoiceFromA013Home(Sandbox):
     """0.13.0 honoured install_demo=no by stripping the demo out of gt. After 0.14.0 the
     demo is module `demo`; the machine migration records the setting and install.sh must
@@ -658,6 +660,7 @@ class RealModulesOff(RealModulesBase):
         self.assertNotIn("Machine migrations changed a module choice", p.stdout)
 
 
+@unittest.skipIf(IS_WINDOWS, "the old release it upgrades from (0.12-0.14) predates Windows support; its install.sh cannot run here")
 class UpgradeFrom014Converges(RealModulesBase):
     """R1 for the 0.15.0 extraction: one install over 0.14.0 equals a fresh 0.15.0 install
     with the same module choices, and no feature the user had is silently lost."""

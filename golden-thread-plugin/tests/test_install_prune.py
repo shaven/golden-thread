@@ -22,7 +22,9 @@ import json
 import os
 import shutil
 
-from _harness import Sandbox, REPO, GT, WIKI, WATCH, REPORT_CARD, FARM, latest_version_dir
+import unittest
+
+from _harness import IS_WINDOWS, Sandbox, REPO, GT, WIKI, WATCH, REPORT_CARD, FARM, latest_version_dir
 
 INSTALL = REPO / "install.sh"
 IGNORE = shutil.ignore_patterns("__pycache__", "*.pyc", ".DS_Store")
@@ -212,6 +214,7 @@ class RetiresHookFiles(RetiredBase):
 OLD_RELEASE = ("0f82843", "0.12.8", "0.1.2")     # commit, gt, gt-wiki at that commit
 
 
+@unittest.skipIf(IS_WINDOWS, "the old release it upgrades from (0.12-0.14) predates Windows support; its install.sh cannot run here")
 class UpgradeConverges(Sandbox):
     """One run of install.sh over an OLD release leaves what a fresh install leaves.
 
