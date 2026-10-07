@@ -550,7 +550,7 @@ SETTINGS = {
             "off  the pre-push hook asks for the fingerprint; git uses gh's token as usual, so an\n"
             "     assistant session can still push after your touch  (default)\n"
             "on   the token moves into gt unlock's sealed store and git gets it only under gt:publish,\n"
-            "     so `git push --no-verify` cannot get round it. gt unlock serves secrets only to its\n"
+            "     so a plain `git push --no-verify` still asks (limits: SECURITY.md 5.5a). gt unlock serves secrets only to its\n"
             "     MCP shim: run `push_fingerprint on` from YOUR terminal, and expect pushes started by an\n"
             "     assistant session to be refused. Set this before turning push_fingerprint on."),
     },
@@ -574,7 +574,7 @@ SETTINGS = {
             "     push_fingerprint_repos to sign every commit and tag with it (git's ssh signing).\n"
             "     Every commit asks for Touch ID; a rebase of ten commits is ten touches.\n"
             "     `off` puts the earlier git config back exactly; the key is kept.\n"
-            "The server half makes it secure rather than a habit: `gt_sign.py github` shows the\n"
+            "The server half makes the server refuse unsigned commits: `gt_sign.py github` shows the\n"
             "plan (the key as a GitHub signing key, and a ruleset requiring signed commits on the\n"
             "default branch with no bypass), `--apply` asks before changing it. Proof: gt_sign.py check --live."),
     },
@@ -979,7 +979,10 @@ def _save(d):
 # cannot loosen its own guards with one command. With unlock off nothing changes.
 SECURITY_KEYS = ("protected_paths", "test_gate", "foreign_checkout_guard", "component_updates",
                  "commit_checks", "addon_fixes", "unlock", "sandbox_mode", "sandbox_vault_reads",
-                 "symlink_writes_outside_vault")
+                 "symlink_writes_outside_vault",
+                 # the fingerprint guards (0.20.4, independent review): off from a session must ask
+                 "push_fingerprint", "push_fingerprint_seal_token", "push_fingerprint_repos",
+                 "commit_fingerprint")
 
 
 def _sandbox_switch(name, value, d):

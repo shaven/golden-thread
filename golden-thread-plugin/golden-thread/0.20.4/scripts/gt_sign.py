@@ -17,7 +17,7 @@ The setting `commit_fingerprint` (gt_settings.py) drives this. It guards the sam
   check [--live]     prove it; --live also signs a sample (one Touch ID) and verifies it with
                      OpenSSH against the allowed-signers file.
   github [--apply|--remove] [--yes]
-                     the server half, the part that makes this SECURE rather than a habit: the key
+                     the server half, which makes the server refuse an unsigned commit: the key
                      registered as a GitHub signing key, and a repository ruleset requiring signed
                      commits on the default branch with NO bypass actors (an admin bypass would
                      let an unsigned push through with a notice). Without --apply/--remove it only
@@ -437,7 +437,24 @@ def cmd_on(repos):
     return 0
 
 
+def _confirm_off():
+    """-> None when allowed. With gt unlock on, putting the unsigned config back needs a fresh
+    confirmation (re-review of 0.20.4: it needed none). With unlock off, `check` allows."""
+    cli = os.environ.get("GT_SIGN_UNLOCK") or os.path.join(HERE, "gt_unlock.py")
+    if not os.path.isfile(cli):
+        return None
+    rc = subprocess.run([sys.executable, cli, "check", "--scope", "gt:settings:security",
+                         "--request", "--reason", "commit_fingerprint off"],
+                        capture_output=True, text=True).returncode
+    return None if rc == 0 else rc
+
+
 def cmd_off():
+    refused = _confirm_off()
+    if refused is not None:
+        print("refused: turning commit_fingerprint off needs a fresh confirmation (gt unlock exit "
+              "%s); nothing changed. Run it from your own terminal." % refused)
+        return 1
     state = _read_json(_state_path())
     for r, saved in (state.get("repos") or {}).items():
         if _git(r, "rev-parse", "--git-dir").returncode != 0:
@@ -527,7 +544,10 @@ def _our_ruleset(host, slug):
         return rc, None
     for rs in data:
         if isinstance(rs, dict) and rs.get("name") == RULESET_NAME:
-            return 0, rs
+            # the list holds summaries without rules or bypass_actors: read the ruleset itself
+            # (independent review of 0.20.4: a ruleset given a bypass still checked PASS)
+            rc, full = _gh(host, "repos/%s/rulesets/%s" % (slug, rs.get("id")))
+            return (0, full) if rc == 0 and isinstance(full, dict) else (rc or 1, None)
     return 0, None
 
 
@@ -674,7 +694,9 @@ def cmd_check(live):
             rc, rs = _our_ruleset(*_unslot(slot))
             lines.append(("%s ruleset requires signatures, no bypass" % slot,
                           bool(rs) and rs.get("enforcement") == "active"
-                          and not rs.get("bypass_actors")))
+                          and not rs.get("bypass_actors")
+                          and any(isinstance(x, dict) and x.get("type") == "required_signatures"
+                                  for x in rs.get("rules") or [])))
     if live and rec:
         msg = b"tree 0\n\ngt_sign check --live\n"
         try:

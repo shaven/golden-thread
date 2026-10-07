@@ -289,6 +289,17 @@ class Off(SignCase):
         self.git("commit", "-q", "--allow-empty", "-m", "unsigned again")
         self.assertEqual(self.git("log", "-1", "--format=%G?").stdout.strip(), "N")
 
+    def test_off_asks_gt_unlock_first_and_a_refusal_changes_nothing(self):
+        """Re-review: `gt_sign.py off` restored the unsigned config with no confirmation."""
+        fake = self.tmp / "unlock.py"
+        fake.write_text("import sys\nsys.exit(12 if sys.argv[1:2] == ['check'] else 0)\n")
+        self.env["GT_SIGN_UNLOCK"] = str(fake)
+        self.assertEqual(self.sign("on", str(self.repo)).returncode, 0)
+        r = self.sign("off")
+        self.assertNotEqual(r.returncode, 0)
+        self.assertIn("nothing changed", r.stdout)
+        self.assertEqual(self.git("config", "--local", "commit.gpgsign").stdout.strip(), "true")
+
     def test_on_twice_keeps_the_first_saved_values(self):
         self.git("config", "--local", "commit.gpgsign", "false")
         self.assertEqual(self.sign("on", str(self.repo)).returncode, 0)
@@ -323,7 +334,13 @@ keys, rulesets = load("keys.json", []), load("rulesets.json", [])
 if path == "user/ssh_signing_keys" and method == "GET": print(json.dumps(keys))
 elif path == "user/ssh_signing_keys" and method == "POST":
     keys.append(dict(body, id=11)); save("keys.json", keys); print(json.dumps(keys[-1]))
-elif path.endswith("/rulesets") and method == "GET": print(json.dumps(rulesets))
+elif path.endswith("/rulesets") and method == "GET":
+    # like GitHub: the list holds summaries, without rules or bypass_actors
+    print(json.dumps([{k: v for k, v in r.items() if k not in ("rules", "bypass_actors")}
+                      for r in rulesets]))
+elif "/rulesets/" in path and method == "GET":
+    rid = int(path.rsplit("/", 1)[1])
+    print(json.dumps([r for r in rulesets if r.get("id") == rid][0]))
 elif path.endswith("/rulesets") and method == "POST":
     save("ruleset-body.json", body); rulesets.append(dict(body, id=77)); save("rulesets.json", rulesets)
     print(json.dumps(rulesets[-1]))
@@ -387,6 +404,21 @@ class GitHub(SignCase):
         self.assertIn("DELETE repos/someone/proj/rulesets/77", self.calls())
         self.assertNotIn("DELETE user/ssh_signing_keys", self.calls())
         self.assertEqual(json.loads((self.ghd / "rulesets.json").read_text()), [])
+
+    def test_check_reads_the_ruleset_itself_not_the_list_summary(self):
+        """Review #7: the list endpoint has no rules or bypass_actors, so a ruleset given a
+        bypass actor, or stripped of its rule, still checked PASS."""
+        self.assertEqual(self.sign("github", "--apply", "--yes").returncode, 0)
+        self.assertEqual(self.sign("check").returncode, 0)
+        rs = json.loads((self.ghd / "rulesets.json").read_text())
+        rs[0]["bypass_actors"] = [{"actor_type": "RepositoryRole", "actor_id": 5}]
+        (self.ghd / "rulesets.json").write_text(json.dumps(rs))
+        r = self.sign("check")
+        self.assertEqual(r.returncode, 1, r.stdout)
+        rs[0]["bypass_actors"] = []
+        rs[0]["rules"] = []
+        (self.ghd / "rulesets.json").write_text(json.dumps(rs))
+        self.assertEqual(self.sign("check").returncode, 1)
 
     def test_missing_scope_names_the_refresh_command(self):
         (self.ghd / "fail").write_text("1")

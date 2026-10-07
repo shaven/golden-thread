@@ -669,8 +669,8 @@ and gt's own scopes can never be allowed unattended; jobs are never prompted.</p
 </tr>
 <tr>
 <td><code>push_fingerprint_seal_token</code></td>
-<td>the HTTPS push token moves into the sealed store; git gets it only through gt's credential helper, under <code>gt:publish</code></td>
-<td>gt unlock: <code>--no-verify</code> still needs the touch, and a process from Claude's shell is refused the token outright (<code>door: mcp_only</code>) before any prompt</td>
+<td>the HTTPS push token for each GitHub host moves into the sealed store; gt's credential helper in the guarded repo releases it to git under <code>gt:publish</code></td>
+<td>gt unlock, for git's normal path: <code>--no-verify</code> still needs the touch, and a process from Claude's shell is refused the token before any prompt. <strong>Not</strong> against a process running as you that sets its own helper (<code>git -c credential.&lt;url&gt;.helper=… push</code>) while gh is still signed in (see below)</td>
 </tr>
 <tr>
 <td><code>commit_fingerprint</code> (macOS)</td>
@@ -684,15 +684,31 @@ Hosts come from each repo's own remotes: github.com or a GitHub Enterprise serve
 no token to seal, so the hook is its only push guard.</p>
 <p><strong>What it does not prove or stop:</strong>
 * A touch proves you approved, not that you read the change.
-* gh keeps its own token in the keychain; a process running as you can still push with it outside
-  the guarded repos' git config. Removing it (<code>gh auth logout</code>) is your choice, never automatic.
+* gh keeps its own token in the keychain, and setup needs gh signed in. While it is, a process
+  running as you can push <strong>from any repo, the guarded ones included</strong>, by pointing git back at gh's
+  own helper for one command (<code>git -c credential.https://github.com.helper= -c
+  credential.https://github.com.helper='!gh auth git-credential' push --no-verify</code>): no touch, no
+  gt involved. The sealed token closes git's normal path, not that one. <code>gh auth logout -h &lt;host&gt;</code>
+  after setup closes it, at the cost of using gh there; that is your choice, never automatic.
+* The same gh token, with admin rights on the repo, can delete the ruleset. Server enforcement holds
+  against a push, not against someone who holds an admin token for the repo.
+* The sealed token can also be read from your own terminal with <code>gt_unlock.py secret</code> and one touch;
+  <code>gt:publish</code> is what gt's helper asks for, not the only way to the sealed store.
 * The ruleset covers the default branch only. A local commit can still be made unsigned
   (<code>-c commit.gpgsign=false</code>); it cannot reach the default branch.
 * Commits GitHub itself signs (web edits, merges through the UI) count as signed.
-* With unlock already on, <code>push_fingerprint on</code> keeps your policy as it is and adds step-up for push,
-  tag and the unlock policy; with unlock off, it turns unlock on with every other scope open.</p>
-<p><code>off</code> undoes each setting exactly. The signing key stays registered on the server, so past commits
-stay Verified; remove it there yourself if you want to.</p>
+* With unlock already on, <code>push_fingerprint on</code> keeps your policy as it is and makes push, tag and
+  the unlock policy at least step-up (a <code>deny</code> stays <code>deny</code>). With unlock off, it turns unlock on with
+  the scopes gt lists open; anything unlisted keeps the policy's default level.</p>
+<p><code>off</code> undoes each setting exactly: a credential helper or hook of your own is put back as it was.
+<code>off</code> asks for a fresh confirmation first (when unlock is on), then deletes the sealed copies and
+restores the policy, and only then removes the hooks and helpers: if any step is refused (for
+example from Claude's shell), it says so, <strong>leaves the guard in place</strong>, and exits non-zero; run it
+again from your own terminal. The hook is written where git looks for hooks, so with a shared
+<code>core.hooksPath</code> (a global hooks folder, or a tracked <code>.githooks/</code>) it applies to every repo that
+uses that folder. The
+signing key stays registered on the server, so past commits stay Verified; remove it there yourself
+if you want to.</p>
 <h3 id="55b-setting-it-up-proving-it-and-backing-it-out">5.5b Setting it up, proving it, and backing it out</h3>
 <p>Run these in <strong>your own terminal</strong>, not inside Claude Code: enrolling a factor and changing the
 unlock policy are meant to need you. The repo is any git repository you push from.</p>

@@ -38,6 +38,19 @@ fingerprint on every commit (`commit_fingerprint`). What changed since the beta:
 - **`gt_push_guard.py check` says "off" when nothing is set up**, with its own exit code (2), instead of
   three FAIL lines. Exit 1 still means "set up but broken", so a script using `check` as proof never
   reads off as proven.
+- **Independent review fixes (GO WITH FIXES, all eight major findings fixed, each with a test that
+  failed first):** `off` no longer deletes a repo's own credential helper and puts back one it
+  replaced; `on` records its state before changing anything, so a failure part way can be undone and
+  never loses the earlier policy; the hook goes where `core.hooksPath` points; a `deny` on
+  `gt:publish` is never lowered; `off` asks for a confirmation first and does the steps that can be
+  refused (deleting the sealed copies, restoring the policy) before it removes hooks and helpers, so a
+  refusal leaves the guard in place; the four fingerprint settings, `gt_push_guard.py off` and
+  `gt_sign.py off` need a fresh confirmation when unlock is on (the push-only profile keeps
+  `gt:settings:security` at step-up); re-running `on` over a beta state never records gt's own
+  helper as yours; `gt_sign.py check` reads the ruleset itself, so a bypass actor or a removed rule fails; a
+  remote URL with `#` or `?` before `@` is read for its real host. SECURITY.md §5.5a now says what
+  the sealed token does **not** stop: a process running as you can push through gh's own helper while
+  gh is signed in.
 - **Docs:** setup, proof and back-out step by step in SECURITY.md §5.5b; what each setting proves in
   §5.5a; INSTALL, ONBOARDING, MANUAL and the docs overview describe the three settings.
 
@@ -106,7 +119,7 @@ mapping and the sealed copy; gh keeps its own keyring token, and `gh auth logout
   and every verify call, goes to the real `ssh-keygen` unchanged;
 - `off` puts the earlier git config back exactly; `gt_sign.py check --live` proves the setup.
 
-**The server half** is what makes it secure rather than a habit: `gt_sign.py github` shows the plan
+**The server half** is what makes the server refuse an unsigned commit, instead of relying on habit: `gt_sign.py github` shows the plan
 (register the key as a GitHub signing key, add a repository ruleset requiring signed commits on the
 default branch with **no bypass actors**, since an admin bypass would let an unsigned push through with a
 notice). `--apply` asks before changing anything. `--remove` deletes the ruleset and leaves the key

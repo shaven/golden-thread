@@ -32,7 +32,10 @@ import tempfile
 
 MARK = "# gt push_fingerprint"
 HERE = os.path.dirname(os.path.abspath(__file__))
-STEP_UP = ("gt:publish", "gt:unlock:policy", "gt:unlock:enroll")
+# gt:settings:security too (re-review of 0.20.4): it gates changing the fingerprint settings, so
+# opening it would let a session switch the guard off with no touch
+STEP_UP = ("gt:publish", "gt:unlock:policy", "gt:unlock:enroll", "gt:settings:security")
+LEVELS = ("open", "unlocked", "step_up", "deny")          # least to most strict (gt_unlock_policy)
 
 
 def _home():
@@ -110,11 +113,14 @@ def _settings_repos():
 
 
 def _hooks_dir(repo):
+    # --git-path hooks honours core.hooksPath and resolves a worktree to the shared hooks; the
+    # 0.20.3 beta joined --git-common-dir + "hooks", so with core.hooksPath set git never ran
+    # the hook while check said PASS (independent review of 0.20.4)
     p = subprocess.run(["git", "-C", repo, "rev-parse", "--path-format=absolute",
-                        "--git-common-dir"], capture_output=True, text=True)
+                        "--git-path", "hooks"], capture_output=True, text=True)
     if p.returncode != 0:
         return None
-    return os.path.join(p.stdout.strip(), "hooks")
+    return p.stdout.strip()
 
 
 def _hook_text():
@@ -163,7 +169,10 @@ def push_only_policy(current, usable=None):
                      "lotr:*:read", "lotr:*:write", "lotr:*:consent"):
             scopes.setdefault(name, "open")
     for name in STEP_UP:
-        scopes[name] = "step_up"
+        # at least step_up, never lower: an owner's deny stays deny (review of 0.20.4)
+        if LEVELS.index(scopes.get(name, "open") if scopes.get(name) in LEVELS else "open") \
+                < LEVELS.index("step_up"):
+            scopes[name] = "step_up"
     p["scopes"] = scopes
     # every step-up a FRESH touch (live test 2026-10-06: the default fresh_s=60 let a second push
     # 26 s after the first through on the earlier touch, with no dialog)
@@ -212,7 +221,9 @@ def seal_name(host):
 
 
 def _https_host(url):
-    m = re.match(r"https://(?:[^@/]+@)?([^/:]+)", url or "")
+    # userinfo cannot hold / ? or #, and the host stops at any of / : ? # @ (review of 0.20.4:
+    # "https://github.com#@evil.example/x" read as evil.example)
+    m = re.match(r"https://(?:[^@/?#]+@)?([^/:?#@]+)", url or "")
     return m.group(1).lower() if m else None
 
 
@@ -285,6 +296,7 @@ def map_github(state, hosts=("github.com",)):
     except (OSError, ValueError):
         data = {}
     state.setdefault("saved_credentials", data if data else None)
+    _save_state(state)                 # recorded before the file changes, so `off` can restore it
     rows = [m for m in (data.get("git") or []) if m.get("host") not in hosts]
     data["git"] = rows + [{"protocol": "https", "host": h, "username": "x-access-token",
                            "ref": "sealed:" + seal_name(h)} for h in hosts]
@@ -311,16 +323,39 @@ def _helper_cmd():
                                           cli.replace(os.sep, "/"))
 
 
-def set_helper(repo, host="github.com"):
+def _is_ours(value):
+    # gt's exact helper line, or any gt_unlock git-credential helper (a 0.20.3 beta wrote one)
+    return value == _helper_cmd() or ("gt_unlock" in value and "git-credential" in value)
+
+
+def _local_values(repo, key):
+    p = subprocess.run(["git", "-C", repo, "config", "--local", "--get-all", key],
+                       capture_output=True, text=True)
+    return p.stdout.splitlines() if p.returncode == 0 else []
+
+
+def set_helper(repo, host="github.com", state=None):
     # an empty value resets git's helper list (dropping gh's global helper for THIS repo only)
     key = cred_key(host)
+    if state is not None:
+        saved = state.setdefault("helpers", {}).setdefault(repo, {})
+        if host not in saved:
+            vals = _local_values(repo, key)          # a helper of the user's own comes back at off
+            if any(_is_ours(v) for v in vals):
+                # gt's own lines (a 0.20.3 beta state saved none): never record them as the user's
+                vals = [v for v in vals if v and not _is_ours(v)]
+            saved[host] = vals
+            _save_state(state)
     subprocess.run(["git", "-C", repo, "config", "--local", "--replace-all", key, ""], check=True)
     subprocess.run(["git", "-C", repo, "config", "--local", "--add", key, _helper_cmd()], check=True)
 
 
-def unset_helper(repo, host="github.com"):
+def unset_helper(repo, host="github.com", restore=()):
     subprocess.run(["git", "-C", repo, "config", "--local", "--unset-all", cred_key(host)],
                    capture_output=True)
+    for v in restore:
+        subprocess.run(["git", "-C", repo, "config", "--local", "--add", cred_key(host), v],
+                       capture_output=True)
 
 
 def helper_guards(repo, url):
@@ -360,6 +395,10 @@ def cmd_on(repos):
     if (state["saved_policy"] or {}).get("enabled"):
         print("gt unlock is already on: its scopes and factor count are kept; only push, tag and "
               "the unlock policy itself now need a fresh confirmation")
+    # recorded BEFORE anything changes (review of 0.20.4): a failure part way through then leaves
+    # a state `off` can undo, and the next `on` never mistakes the push-only policy for the earlier one
+    state["repos"] = sorted(set((state.get("repos") or []) + repos))
+    _save_state(state)
     if _set_policy(push_only_policy(state["saved_policy"], _usable(st))) != 0:
         print("refused: gt unlock did not accept the push-only policy; nothing else changed")
         return 1
@@ -385,20 +424,24 @@ def cmd_on(repos):
                       "only, so the pre-push hook is its guard" % (r, u))
             if not hosts and not other:
                 print("%s has no remote yet: nothing to seal; run `on` again after adding one" % r)
-        sealed_hosts = list(state.get("sealed_hosts") or [])
         for h in sorted(by_host):
+            # recorded BEFORE sealing (re-review of 0.20.4): a failure after this still leaves a
+            # state off can undo; `seal rm` of a name that was never sealed is harmless
+            had = list(state.get("sealed_hosts") or [])
+            state["sealed_by_guard"] = True
+            state["sealed_hosts"] = sorted(set(had + [h]))
+            _save_state(state)
             sealed, msg = seal_token(h)
             print(msg)
             if not sealed:
+                state["sealed_hosts"] = had
+                state["sealed_by_guard"] = bool(had)
+                _save_state(state)
                 continue
             map_github(state, (h,))
-            sealed_hosts = sorted(set(sealed_hosts + [h]))
             for r in by_host[h]:
-                set_helper(r, h)
+                set_helper(r, h, state)
                 print("git credential helper set for %s (gt:publish): %s" % (h, r))
-        if sealed_hosts:
-            state["sealed_by_guard"] = True
-            state["sealed_hosts"] = sealed_hosts
     state["repos"] = sorted(set((state.get("repos") or []) + repos))
     _save_state(state)
     print("push_fingerprint on: a push from these repos needs a fresh confirmation; "
@@ -407,36 +450,66 @@ def cmd_on(repos):
 
 
 def cmd_off():
+    """Undo `on`. ORDER MATTERS (re-review of 0.20.4): the steps that can be refused come FIRST --
+    the confirmation, then deleting the sealed copies, then restoring the policy -- and only then are
+    the hooks, credential helpers and mapping taken away. A refusal at any step therefore leaves the
+    guard fully in place; the 0.20.3 beta removed the hooks first, so a refusal left pushes with no
+    fingerprint while the setting still read on."""
     state = _load_state()
+    if _status().get("enabled"):
+        rc, _ = _unlock("check", "--scope", "gt:unlock:policy", "--request",
+                        "--reason", "push_fingerprint off")
+        if rc != 0:
+            print("refused: turning push_fingerprint off needs a fresh confirmation (gt unlock exit "
+                  "%s); nothing changed. Run it from your own terminal." % rc)
+            return 1
+    if state.get("sealed_by_guard"):
+        failed = []
+        for h in state.get("sealed_hosts") or ["github.com"]:   # a 0.20.3 beta state: github.com
+            rc, _ = _unlock("seal", "rm", seal_name(h))
+            if rc == 0:
+                print("sealed copy for %s deleted (gh keeps its own)" % h)
+            else:
+                failed.append(h)
+                print("could not delete the sealed copy for %s (gt unlock exit %s): run "
+                      "`gt_settings.py set push_fingerprint off` again from your own terminal" % (h, rc))
+        if failed:
+            state["sealed_hosts"] = failed          # what is left; the hooks and helpers stay
+            _save_state(state)
+            return 1
+        state["sealed_by_guard"] = False
+        state["sealed_hosts"] = []
+        _save_state(state)
+    if "saved_policy" in state:
+        saved = state["saved_policy"] or {"schema": 1, "enabled": False}
+        if _set_policy(saved) != 0:
+            print("restoring the saved unlock policy failed; the hooks and helpers are still in "
+                  "place and the state is kept in %s" % _state_path())
+            return 1
+        print("policy saved (unlock %s)" % ("on" if saved.get("enabled") else "off"))
     for r in state.get("repos") or []:
         hd = _hooks_dir(r)
         path = os.path.join(hd, "pre-push") if hd else None
         if path and _ours(path):
             os.unlink(path)
             print("pre-push hook removed: %s" % r)
-        if hd:
-            for h in state.get("sealed_hosts") or ["github.com"]:
-                unset_helper(r, h)
-    if state.get("sealed_by_guard"):
+    helpers = state.get("helpers")
+    if helpers is None and state.get("saved_credentials", "absent") != "absent":
+        # a 0.20.3 beta state: it set github.com helpers and saved nothing
+        helpers = {r: {"github.com": []} for r in state.get("repos") or []}
+    for r, hosts in (helpers or {}).items():
+        if _hooks_dir(r):
+            for h, saved_vals in hosts.items():
+                unset_helper(r, h, saved_vals)      # only what gt set; a user's own helper comes back
+    if "saved_credentials" in state:
         unmap_github(state)
-        for h in state.get("sealed_hosts") or ["github.com"]:   # a 0.20.3 beta state: github.com
-            _unlock("seal", "rm", seal_name(h))
-            print("token mapping for %s removed and the sealed copy deleted (gh keeps its own)" % h)
-    if "saved_policy" in state:
-        saved = state["saved_policy"] or {"schema": 1, "enabled": False}
-        if _set_policy(saved) != 0:
-            print("the hooks are removed, but restoring the saved unlock policy failed; "
-                  "state kept in %s" % _state_path())
-            state["repos"] = []
-            _save_state(state)
-            return 1
+        print("token mapping removed")
     try:
         os.unlink(_state_path())
     except OSError:
         pass
     print("push_fingerprint off: hooks removed, the earlier unlock policy restored")
     return 0
-
 
 def cmd_check():
     state, ok = _load_state(), True

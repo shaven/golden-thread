@@ -58,8 +58,8 @@ costs.
 [SECURITY.md](golden-thread-plugin/SECURITY.md) for the threat model.
 
 > **0.20.4: a fingerprint before every push (Touch ID or Windows Hello) and on every commit (macOS).**
-> `push_fingerprint` asks for it before a push, `push_fingerprint_seal_token` seals the push token behind it so `--no-verify`
-> cannot get round it, and `commit_fingerprint` signs every commit with a Secure Enclave key, plus a
+> `push_fingerprint` asks for it before a push, `push_fingerprint_seal_token` seals the push token behind it so a plain
+> `--no-verify` push still asks, and `commit_fingerprint` signs every commit with a Secure Enclave key, plus a
 > no-bypass GitHub ruleset that refuses unsigned commits on the server. github.com and GitHub Enterprise.
 > (0.20.3 was a beta and was never released.)
 >

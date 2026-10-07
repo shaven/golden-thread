@@ -236,20 +236,6 @@ holds even then, with Touch ID / Hello (L2): every open of a sealed credential n
 or PIN, and so can each consent-tier operation. [`SECURITY.md`](SECURITY.md) says exactly what
 it stops and what it does not.
 
-## Optional: a fingerprint before every push and commit
-
-With gt unlock and one factor enrolled, two switches make a push or a commit need you
-(details, proof and the way back: [`SECURITY.md`](SECURITY.md) §5.5b):
-
-```bash
-S=~/.claude/golden-thread/hooks/gt_settings.py
-python3 $S set push_fingerprint_repos /absolute/path/to/your/repo
-python3 $S set push_fingerprint on      # Touch ID / Windows Hello before every push
-python3 $S set commit_fingerprint on    # macOS: Touch ID signs every commit
-```
-
-Both are off by default and `off` undoes each exactly.
-
 ## Optional: fence the assistant off the vault (gt sandbox mode)
 
 gt sandbox mode ships **off**. Turned on, gt writes Claude Code's own sandbox settings and

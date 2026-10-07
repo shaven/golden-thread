@@ -361,8 +361,8 @@
    "sha256": "5104663ab3724ce9648f80434ee8abdb9f272d676c25dc533ca02a186b48b759"
   },
   "scripts/gt_push_guard.py": {
-   "bytes": 21327,
-   "sha256": "792f667d1eaa30a99000c5e48be5e2190b3f9d1eaa6f049e4f6f67dfdd303147"
+   "bytes": 25921,
+   "sha256": "7a876a0d01dfd96d08c5b3ca2a6541385d41d1016bc89969d466a57314a90288"
   },
   "scripts/gt_recipe.py": {
    "bytes": 23237,
@@ -413,12 +413,12 @@
    "sha256": "1b19a57d024ed9f8b102aa08d73bbe74e2ea4e58c346da3284a12c540621d3a6"
   },
   "scripts/gt_settings.py": {
-   "bytes": 91073,
-   "sha256": "7227e09c9e7b75871ed30010ab75807ba1108babdb305a76b1c1cfbd3fdd09f2"
+   "bytes": 91337,
+   "sha256": "8813c5235b447261c42093fb261079a2fbfa514668f9e9e1da76e3e097c27f0c"
   },
   "scripts/gt_sign.py": {
-   "bytes": 29560,
-   "sha256": "8e0ccca616e0ab8d33c6aed87f648997d9be10bf83bfc47048b51ec3b0146f12"
+   "bytes": 30913,
+   "sha256": "25d7491bf4980089dc50d59ac3e9763de54bc7b201b571552c466515c60a5014"
   },
   "scripts/gt_staged.py": {
    "bytes": 3529,
@@ -817,7 +817,7 @@
    "sha256": "a9d18e4994333a07064fe001f199900d7e56833d967b2c65c304ab877df36fd7"
   }
  },
- "generated": "2026-10-06T19:00:30",
+ "generated": "2026-10-06T20:19:29",
  "hooks": [
   {
    "args": [

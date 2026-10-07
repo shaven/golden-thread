@@ -4072,13 +4072,13 @@ is registered here and can be switched off.</p>
 <td><code>push_fingerprint_seal_token</code></td>
 <td><code>off</code> · <code>on</code></td>
 <td><code>off</code></td>
-<td>With <code>push_fingerprint</code> on, also seal the push token behind gt:publish so <code>--no-verify</code> cannot get round it. The hosts come from each repo's HTTPS remotes (github.com or a GitHub Enterprise host, <code>gh auth token -h &lt;host&gt;</code>); an SSH remote is named and guarded by the hook only. Run <code>push_fingerprint on</code> from your own terminal; pushes started by an assistant session are then refused, before any fingerprint is asked for (0.20.4)</td>
+<td>With <code>push_fingerprint</code> on, also seal the push token behind gt:publish so a plain <code>git push --no-verify</code> still asks for the touch (what it does not stop: SECURITY.md §5.5a). The hosts come from each repo's HTTPS remotes (github.com or a GitHub Enterprise host, <code>gh auth token -h &lt;host&gt;</code>); an SSH remote is named and guarded by the hook only. Run <code>push_fingerprint on</code> from your own terminal; pushes started by an assistant session are then refused, before any fingerprint is asked for (0.20.4)</td>
 </tr>
 <tr>
 <td><code>commit_fingerprint</code></td>
 <td><code>off</code> · <code>on</code></td>
 <td><code>off</code></td>
-<td>A fingerprint on every commit (macOS): a Secure Enclave key that needs a currently enrolled finger for every use signs each commit and tag in the repos in <code>push_fingerprint_repos</code>, as git's ssh signing program (<code>gt_sign.py</code>; <code>user.signingkey</code> is the key file <code>commit-sign.pub</code>). <code>off</code> restores the earlier git config exactly; the key is kept. The server half, which makes it secure rather than a habit: <code>gt_sign.py github</code> shows the plan on the remote's own host, github.com or GitHub Enterprise (the key registered as a signing key, a ruleset requiring signed commits on the default branch with no bypass actors) and <code>--apply</code> asks before changing it. Proof: <code>gt_sign.py check --live</code> (0.20.4)</td>
+<td>A fingerprint on every commit (macOS): a Secure Enclave key that needs a currently enrolled finger for every use signs each commit and tag in the repos in <code>push_fingerprint_repos</code>, as git's ssh signing program (<code>gt_sign.py</code>; <code>user.signingkey</code> is the key file <code>commit-sign.pub</code>). <code>off</code> restores the earlier git config exactly; the key is kept. The server half, which makes the server refuse an unsigned commit instead of relying on habit: <code>gt_sign.py github</code> shows the plan on the remote's own host, github.com or GitHub Enterprise (the key registered as a signing key, a ruleset requiring signed commits on the default branch with no bypass actors) and <code>--apply</code> asks before changing it. Proof: <code>gt_sign.py check --live</code> (0.20.4)</td>
 </tr>
 <tr>
 <td><code>vault_mcp</code></td>

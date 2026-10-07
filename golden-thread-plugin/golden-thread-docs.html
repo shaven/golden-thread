@@ -716,7 +716,7 @@ GitHub Enterprise (the host comes from each repo's remote).</p>
 </tr>
 <tr>
 <td><code>push_fingerprint_seal_token on\|off</code></td>
-<td>The HTTPS push token is sealed behind <code>gt:publish</code>, so <code>git push --no-verify</code> still needs the touch; a process from Claude's shell is refused the token before any prompt</td>
+<td>The HTTPS push token is sealed behind <code>gt:publish</code>, so a plain <code>git push --no-verify</code> still needs the touch (not a helper the caller sets itself while gh is signed in); a process from Claude's shell is refused the token before any prompt</td>
 </tr>
 <tr>
 <td><code>commit_fingerprint on\|off</code> (macOS)</td>

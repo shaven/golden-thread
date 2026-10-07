@@ -36,7 +36,8 @@ elif a[:3] == ["seal", "put", "--name"]:
     n = len(sys.stdin.read())          # the length only: the value is never written anywhere
     open(os.path.join(d, "sealed.len"), "w").write(str(n))
 elif a[:2] == ["seal", "rm"]:
-    pass
+    rc = os.path.join(d, "seal_rm_rc")
+    sys.exit(int(open(rc).read()) if os.path.exists(rc) else 0)
 elif a[:1] == ["check"]:
     sys.exit(int(open(os.path.join(d, "check_rc")).read()) if os.path.exists(os.path.join(d, "check_rc")) else 0)
 '''
@@ -320,6 +321,151 @@ class PushGuard(Sandbox):
         self.assertFalse((self.fake / "gh.log").exists())
         self.assertEqual(self.helpers(self.ENT), [])
         self.assertTrue(self.hook.exists(), "the hook still guards")
+
+    # -- independent review of 0.20.4 (2026-10-06): GO WITH FIXES -----------------------------
+    def local_helpers(self, host="github.com"):
+        return self.helpers(host)
+
+    def test_a_repos_own_credential_helper_survives_on_and_off(self):
+        """Review #1: `off` ran --unset-all on the helper key for every repo (seal or not), and
+        set_helper's --replace-all "" overwrote a helper of the user's own without saving it."""
+        key = "credential.https://github.com.helper"
+        subprocess.run(["git", "-C", str(self.repo), "config", "--local", key, "!mine"], check=True)
+        self.assertEqual(self.guard("on", str(self.repo)).returncode, 0)
+        self.assertEqual(self.guard("off").returncode, 0)
+        self.assertEqual(self.helpers(), ["!mine"], "without sealing nothing touches the helper")
+        self.seal_on()
+        self.assertEqual(self.guard("on", str(self.repo)).returncode, 0)
+        self.assertEqual(self.helpers()[0], "")
+        self.assertEqual(self.guard("off").returncode, 0)
+        self.assertEqual(self.helpers(), ["!mine"], "off puts the user's own helper back")
+
+    def test_a_failure_part_way_through_on_keeps_the_original_policy(self):
+        """Review #2: state was saved only at the end of `on`, so a failure after the policy was
+        set left no state; `off` did nothing, and the next `on` saved the push-only policy as
+        the 'earlier' one."""
+        original = json.loads((self.fake / "policy.json").read_text())["user"]
+        self.seal_on()
+        self.uhome.mkdir(parents=True, exist_ok=True)
+        (self.uhome / "credentials.json").mkdir()          # the mapping write will fail
+        p = self.guard("on", str(self.repo))
+        self.assertNotEqual(p.returncode, 0)
+        state = json.loads((self.home / ".claude" / "golden-thread" / "push-guard.json").read_text())
+        self.assertEqual(state["saved_policy"], original)
+        (self.uhome / "credentials.json").rmdir()
+        self.guard("off")
+        self.assertEqual(json.loads(self.sets()[-1].read_text()), original)
+        self.assertFalse(self.hook.exists())
+
+    def test_core_hooks_path_is_where_the_hook_goes(self):
+        """Review #3: with core.hooksPath set, git never runs .git/hooks/pre-push, yet check
+        said PASS."""
+        subprocess.run(["git", "-C", str(self.repo), "config", "core.hooksPath", ".githooks"],
+                       check=True)
+        self.assertEqual(self.guard("on", str(self.repo)).returncode, 0)
+        self.assertTrue((self.repo / ".githooks" / "pre-push").exists())
+        self.assertFalse(self.hook.exists())
+        self.assertEqual(self.guard("check").returncode, 0)
+        self.guard("off")
+        (self.repo / ".githooks" / "pre-push").write_text("#!/bin/sh\necho mine\n")
+        p = self.guard("on", str(self.repo))
+        self.assertEqual(p.returncode, 1, "a hook of the user's own in core.hooksPath is left alone")
+
+    def test_a_deny_is_never_lowered(self):
+        """Review #6: STEP_UP scopes were forced to step_up even over the owner's deny."""
+        user = {"schema": 1, "enabled": True, "scopes": {"gt:publish": "deny"}}
+        (self.fake / "policy.json").write_text(json.dumps({"user": user, "effective": {"scopes": {}}}))
+        self.status(enrolled=True, enabled=True)
+        self.assertEqual(self.guard("on", str(self.repo)).returncode, 0)
+        pol = json.loads(self.sets()[-1].read_text())
+        self.assertEqual(pol["scopes"]["gt:publish"], "deny")
+        self.assertEqual(pol["scopes"]["gt:unlock:policy"], "step_up")
+
+    def test_off_keeps_its_state_when_the_sealed_copy_cannot_be_removed(self):
+        """Review #5: the result of `seal rm` was ignored, 'deleted' was printed, and the state
+        was removed, orphaning the sealed token."""
+        self.seal_on()
+        self.assertEqual(self.guard("on", str(self.repo)).returncode, 0)
+        (self.fake / "seal_rm_rc").write_text("12")
+        p = self.guard("off")
+        self.assertNotEqual(p.returncode, 0)
+        self.assertNotIn("sealed copy deleted", p.stdout)
+        self.assertIn("could not delete", p.stdout)
+        state = json.loads((self.home / ".claude" / "golden-thread" / "push-guard.json").read_text())
+        self.assertEqual(state.get("sealed_hosts"), ["github.com"])
+        self.assertTrue(self.hook.exists(), "re-review: the guard stays fully in place on a refusal")
+        self.assertIn("git-credential", " ".join(self.helpers()))
+
+    def test_a_refused_confirmation_at_off_changes_nothing(self):
+        """Re-review: off removed hooks and helpers BEFORE the steps that need a confirmation,
+        so a refusal left pushes with no fingerprint at all while the setting read on."""
+        self.seal_on()
+        self.assertEqual(self.guard("on", str(self.repo)).returncode, 0)
+        self.status(enrolled=True, enabled=True)
+        n = len(self.sets())
+        (self.fake / "check_rc").write_text("12")
+        p = self.guard("off")
+        self.assertNotEqual(p.returncode, 0)
+        self.assertIn("nothing changed", p.stdout)
+        self.assertTrue(self.hook.exists())
+        self.assertIn("git-credential", " ".join(self.helpers()))
+        self.assertEqual(len(self.sets()), n, "the policy was not touched")
+        self.assertNotIn("seal rm", (self.fake / "calls.log").read_text())
+
+    def test_on_over_a_beta_state_never_saves_gts_own_helper_as_the_users(self):
+        """Re-review: a 0.20.3 beta state has no "helpers"; re-running on recorded the beta's
+        "" + git-credential lines as the user's own, and off put gt's helper back."""
+        self.seal_on()
+        self.assertEqual(self.guard("on", str(self.repo)).returncode, 0)
+        sp = self.home / ".claude" / "golden-thread" / "push-guard.json"
+        st = json.loads(sp.read_text())
+        st.pop("helpers", None)                              # what the beta wrote
+        sp.write_text(json.dumps(st))
+        self.assertEqual(self.guard("on", str(self.repo)).returncode, 0)
+        self.assertEqual(self.guard("off").returncode, 0)
+        self.assertEqual(self.helpers(), [], "no gt helper left behind")
+
+    def test_the_settings_gate_needs_a_touch_in_the_push_only_profile(self):
+        """Re-review: with unlock off before on, gt:settings:security was opened, so the gate on
+        the fingerprint settings never asked."""
+        self.assertEqual(self.guard("on", str(self.repo)).returncode, 0)
+        pol = json.loads(self.sets()[-1].read_text())
+        self.assertEqual(pol["scopes"]["gt:settings:security"], "step_up")
+
+    def test_a_sealed_host_is_recorded_before_it_is_sealed(self):
+        """Re-review #2 remainder: sealed_by_guard/sealed_hosts were written after the loop, so a
+        failure after sealing left a sealed copy off would never remove."""
+        self.seal_on()
+        self.uhome.mkdir(parents=True, exist_ok=True)
+        (self.uhome / "credentials.json").mkdir()            # fails after seal put
+        self.assertNotEqual(self.guard("on", str(self.repo)).returncode, 0)
+        st = json.loads((self.home / ".claude" / "golden-thread" / "push-guard.json").read_text())
+        self.assertTrue(st.get("sealed_by_guard"))
+        self.assertEqual(st.get("sealed_hosts"), ["github.com"])
+        (self.uhome / "credentials.json").rmdir()
+        self.guard("off")
+        self.assertIn("seal rm github", (self.fake / "calls.log").read_text())
+
+    def test_a_remote_url_is_read_for_its_real_host(self):
+        """Review minor: '#' or '?' before '@' was taken as userinfo."""
+        import importlib.util
+        spec = importlib.util.spec_from_file_location("pg_for_tests", str(GUARD))
+        m = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(m)
+        self.assertEqual(m._https_host("https://github.com#@evil.example/x"), "github.com")
+        self.assertEqual(m._https_host("https://github.com?a=@evil.example/x"), "github.com")
+        self.assertEqual(m._https_host("https://user@github.example.com/o/r.git"), "github.example.com")
+        self.assertEqual(m._https_host("https://github.example.com:8443/o/r.git"), "github.example.com")
+
+    def test_the_guard_settings_are_security_keys(self):
+        """Review #4: switching a guard off from a session needed no confirmation."""
+        import importlib.util
+        spec = importlib.util.spec_from_file_location("gs_for_tests", str(SETTINGS))
+        m = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(m)
+        for k in ("push_fingerprint", "push_fingerprint_seal_token", "push_fingerprint_repos",
+                  "commit_fingerprint"):
+            self.assertIn(k, m.SECURITY_KEYS, k)
 
     # -- the setting --------------------------------------------------------------------
     def test_the_repos_setting_keeps_the_path_case_and_refuses_a_relative_path(self):

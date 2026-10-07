@@ -309,7 +309,7 @@ GitHub Enterprise (the host comes from each repo's remote).
 | Setting / command | Purpose |
 |---|---|
 | `push_fingerprint on\|off` | A pre-push hook asks gt unlock for `gt:publish`: one fresh Touch ID (macOS) or Windows Hello per push. An unlock policy already on keeps every scope; only push, tag and the policy itself become step-up |
-| `push_fingerprint_seal_token on\|off` | The HTTPS push token is sealed behind `gt:publish`, so `git push --no-verify` still needs the touch; a process from Claude's shell is refused the token before any prompt |
+| `push_fingerprint_seal_token on\|off` | The HTTPS push token is sealed behind `gt:publish`, so a plain `git push --no-verify` still needs the touch (not a helper the caller sets itself while gh is signed in); a process from Claude's shell is refused the token before any prompt |
 | `commit_fingerprint on\|off` (macOS) | A Secure Enclave key signs every commit and tag; one Touch ID each |
 | `gt_sign.py github [--apply\|--remove]` | The server half: the signing key and a ruleset requiring signed commits on the default branch, no bypass actors |
 | `gt_push_guard.py check`, `gt_sign.py check --live` | Proof (exit 0 set up, 1 broken; `check` exits 2 when the guard is off) |

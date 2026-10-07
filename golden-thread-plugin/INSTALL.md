@@ -240,7 +240,7 @@ platform, and what each level does and does not protect: [`SECURITY.md`](SECURIT
 
 Three settings, all off, for the repos you name in `push_fingerprint_repos`: `push_fingerprint`
 (Touch ID or Windows Hello before every push), `push_fingerprint_seal_token` (the push token
-sealed behind it, so `--no-verify` cannot skip it) and `commit_fingerprint` (macOS: a Secure
+sealed behind it, so a plain `--no-verify` push still asks; limits in SECURITY.md §5.5a) and `commit_fingerprint` (macOS: a Secure
 Enclave key signs every commit). They need gt unlock with one enrolled factor; turning one on
 installs a `pre-push` hook or sets the repo's git signing config, and `off` takes exactly that
 away. What it touches:

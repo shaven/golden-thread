@@ -409,7 +409,7 @@ Three settings, all off by default, for the repos named in `push_fingerprint_rep
 | Setting | What it does | What enforces it |
 |---|---|---|
 | `push_fingerprint` | a pre-push hook asks for `gt:publish` (one fresh Touch ID on macOS, or Windows Hello on Windows, per push) | the hook only: `git push --no-verify` skips it |
-| `push_fingerprint_seal_token` | the HTTPS push token moves into the sealed store; git gets it only through gt's credential helper, under `gt:publish` | gt unlock: `--no-verify` still needs the touch, and a process from Claude's shell is refused the token outright (`door: mcp_only`) before any prompt |
+| `push_fingerprint_seal_token` | the HTTPS push token for each GitHub host moves into the sealed store; gt's credential helper in the guarded repo releases it to git under `gt:publish` | gt unlock, for git's normal path: `--no-verify` still needs the touch, and a process from Claude's shell is refused the token before any prompt. **Not** against a process running as you that sets its own helper (`git -c credential.<url>.helper=… push`) while gh is still signed in (see below) |
 | `commit_fingerprint` (macOS) | a Secure Enclave key signs every commit and tag; each signature needs Touch ID | the server, once `gt_sign.py github --apply` has added a ruleset requiring signed commits on the default branch with **no bypass actors** (an admin's unsigned push is refused too) |
 
 `commit_fingerprint` is macOS only in 0.20.4: Windows Hello commit signing is planned for 0.20.5.
@@ -418,16 +418,32 @@ no token to seal, so the hook is its only push guard.
 
 **What it does not prove or stop:**
 * A touch proves you approved, not that you read the change.
-* gh keeps its own token in the keychain; a process running as you can still push with it outside
-  the guarded repos' git config. Removing it (`gh auth logout`) is your choice, never automatic.
+* gh keeps its own token in the keychain, and setup needs gh signed in. While it is, a process
+  running as you can push **from any repo, the guarded ones included**, by pointing git back at gh's
+  own helper for one command (`git -c credential.https://github.com.helper= -c
+  credential.https://github.com.helper='!gh auth git-credential' push --no-verify`): no touch, no
+  gt involved. The sealed token closes git's normal path, not that one. `gh auth logout -h <host>`
+  after setup closes it, at the cost of using gh there; that is your choice, never automatic.
+* The same gh token, with admin rights on the repo, can delete the ruleset. Server enforcement holds
+  against a push, not against someone who holds an admin token for the repo.
+* The sealed token can also be read from your own terminal with `gt_unlock.py secret` and one touch;
+  `gt:publish` is what gt's helper asks for, not the only way to the sealed store.
 * The ruleset covers the default branch only. A local commit can still be made unsigned
   (`-c commit.gpgsign=false`); it cannot reach the default branch.
 * Commits GitHub itself signs (web edits, merges through the UI) count as signed.
-* With unlock already on, `push_fingerprint on` keeps your policy as it is and adds step-up for push,
-  tag and the unlock policy; with unlock off, it turns unlock on with every other scope open.
+* With unlock already on, `push_fingerprint on` keeps your policy as it is and makes push, tag and
+  the unlock policy at least step-up (a `deny` stays `deny`). With unlock off, it turns unlock on with
+  the scopes gt lists open; anything unlisted keeps the policy's default level.
 
-`off` undoes each setting exactly. The signing key stays registered on the server, so past commits
-stay Verified; remove it there yourself if you want to.
+`off` undoes each setting exactly: a credential helper or hook of your own is put back as it was.
+`off` asks for a fresh confirmation first (when unlock is on), then deletes the sealed copies and
+restores the policy, and only then removes the hooks and helpers: if any step is refused (for
+example from Claude's shell), it says so, **leaves the guard in place**, and exits non-zero; run it
+again from your own terminal. The hook is written where git looks for hooks, so with a shared
+`core.hooksPath` (a global hooks folder, or a tracked `.githooks/`) it applies to every repo that
+uses that folder. The
+signing key stays registered on the server, so past commits stay Verified; remove it there yourself
+if you want to.
 
 ### 5.5b Setting it up, proving it, and backing it out
 
