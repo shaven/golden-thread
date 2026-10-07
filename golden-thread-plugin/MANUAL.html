@@ -4118,6 +4118,12 @@ is registered here and can be switched off.</p>
 <td>A fingerprint on every commit (macOS): a Secure Enclave key that needs a currently enrolled finger for every use signs each commit and tag in the repos in <code>push_fingerprint_repos</code>, as git's ssh signing program (<code>gt_sign.py</code>; <code>user.signingkey</code> is the key file <code>commit-sign.pub</code>). <code>off</code> restores the earlier git config exactly; the key is kept. The server half, which makes the server refuse an unsigned commit instead of relying on habit: <code>gt_sign.py github</code> shows the plan on the remote's own host, github.com or GitHub Enterprise (the key registered as a signing key, a ruleset requiring signed commits on the default branch with no bypass actors) and <code>--apply</code> asks before changing it. Proof: <code>gt_sign.py check --live</code> (0.20.4)</td>
 </tr>
 <tr>
+<td><code>lockdown</code></td>
+<td><code>very-secure</code> · <code>mostly-secure</code> · <code>partly-secure</code> · <code>insecure</code></td>
+<td><code>very-secure</code></td>
+<td>How much Claude may run without asking: each level is a set of Claude Code allow rules gt merges into <code>~/.claude/settings.json</code> (and, above <code>very-secure</code>, Read denies for credential files). gt adds and removes only its own recorded rules, backs <code>settings.json</code> up first and logs every change. Asked at install (<code>--lockdown &lt;level&gt;</code>); a security key, so with unlock on a change needs a fresh confirmation. It reduces prompts and is not a security boundary. Restart Claude Code after changing it. See <a href="#security-lockdown-levels-0205">Security: lockdown levels</a> (0.20.5)</td>
+</tr>
+<tr>
 <td><code>vault_mcp</code></td>
 <td><code>auto</code> · <code>on</code> · <code>off</code></td>
 <td><code>auto</code></td>

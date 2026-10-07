@@ -11,7 +11,7 @@ release's own summary line, kept short rather than reconstructed after the fact.
 
 ---
 
-## gt 0.20.5 — unreleased
+## gt 0.20.5 — 2026-10-07
 
 **Configurable lockdown: you choose how much Claude may run without asking.** 0.20.2–0.20.4 were
 security releases (reader/writer agents, strict tool tiers, sandbox mode, push fingerprints), and
@@ -47,9 +47,17 @@ test_install_lockdown, test_gt_settings, test_gt_sandbox, test_install (122), te
 post-install check on the owner's machine. From the next release on, every release also gets
 **at least one day of the owner's real use before it is pushed**; 0.20.5 ships the same day.
 
+- **demo, farm, flow and watch are cut at 0.20.5** (no change in them; they move with gt, and their
+  `requires_gt` is `>=0.20.5,<0.21.0`). The full suite caught them left at 0.20.4.
+- **`gt_lockdown.py` has a sandbox route** (`TERMINAL`, like `gt_unlock.py`): it writes
+  `~/.claude/settings.json`, which sandbox mode denies the assistant, so under sandbox mode a level
+  is changed from your own terminal.
+
 **Next.** A named list of individual security features — each lockdown rule group and the
 existing guards — that users can turn on and off one by one, with the four levels as presets
 that set every switch for you; and `/gt:gt-grant` (once / N minutes / forever).
+
+---
 
 ## gt 0.20.4 — 2026-10-07
 

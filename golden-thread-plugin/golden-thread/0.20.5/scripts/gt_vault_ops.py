@@ -1267,7 +1267,7 @@ SANDBOX_ROUTES = {
     "gt_intake_scan.py": "shell", "gt_ingest.py": "shell", "gt_minimize.py": "shell",
     "gt_recipe.py": "shell", "gt_validation.py": "shell", "gt_usage.py": "shell",
     "gt_ipc.py": "shell",
-    "gt_demo.sh": TERMINAL, "gt_flow.py": TERMINAL, "gt_unlock.py": TERMINAL,
+    "gt_demo.sh": TERMINAL, "gt_flow.py": TERMINAL, "gt_unlock.py": TERMINAL, "gt_lockdown.py": TERMINAL,
     "lotrd.py": TERMINAL, "lotr.py": "shell",
     "gt_watch.py": TERMINAL, "gt_watch.py list": "vault_read", "gt_watch.py show": "vault_read",
     "gt_visualize.py": "shell", "gt_visualize.py story": "vault_read",
