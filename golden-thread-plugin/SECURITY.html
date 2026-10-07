@@ -853,6 +853,43 @@ python $u verify
   <code>gt_settings.py set unlock off</code>. Off, every hook behaves exactly as before 0.20.1.</li>
 <li><strong>Check it:</strong> <code>gt_unlock.py status</code>, <code>gt_unlock.py verify</code>, <code>gt_unlock.py audit -n 50</code>.</li>
 </ul>
+<h2 id="7a-lockdown-levels-how-much-claude-may-run-without-asking-0205">7a. Lockdown levels: how much Claude may run without asking (0.20.5)</h2>
+<p>How much Claude may run without asking. Most of the friction in a session is approval prompts; a lockdown level is a set of Claude Code allow rules that gt writes into <code>~/.claude/settings.json</code> for the level <strong>you</strong> choose, so routine work stops asking. The installer asks for it (<code>./install.sh --lockdown &lt;level&gt;</code> to answer in advance; with no terminal a new install stays very secure and an upgrade keeps its level). Change it any time with <code>/gt:gt-settings lockdown &lt;level&gt;</code> (<code>gt_settings.py set lockdown &lt;level&gt;</code>), then restart Claude Code. gt writes and removes only its own rules, records them, backs <code>settings.json</code> up first and logs every change (<code>~/.claude/golden-thread/lockdown/</code>); uninstall takes them out. With gt unlock on, changing the level needs a fresh confirmation. gt never changes the level by itself.</p>
+<!-- lockdown-chart:start -->
+<table>
+<thead>
+<tr>
+<th>Level</th>
+<th>Runs without a prompt</th>
+<th>Still asks</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>very secure</strong></td>
+<td>nothing added -- exactly what Claude Code asks today (default)</td>
+<td>everything Claude Code asks today</td>
+</tr>
+<tr>
+<td><strong>mostly secure</strong></td>
+<td>read-only shell (ls, cat, grep, wc, ...) and git (status, log, diff, show, branch); edits in the project; running tests; git add/commit</td>
+<td>network, remote hosts, pushes, installs, deletes, anything not listed</td>
+</tr>
+<tr>
+<td><strong>partly secure</strong></td>
+<td>mostly secure, plus ssh/scp/rsync, git push/pull/fetch, curl/wget, npm/pip/brew install, web fetch</td>
+<td>any other shell command or edit outside the project</td>
+</tr>
+<tr>
+<td><strong>insecure</strong></td>
+<td>partly secure, plus any shell command, any edit, web search</td>
+<td>LOTR send/merge/delete still ask for consent</td>
+</tr>
+</tbody>
+</table>
+<p>At every level above very secure, Claude's Read tool is denied credential files (ssh keys, cloud and gh credentials, Claude Code's login, .env). That guards the Read tool only: from mostly secure up a shell command can still print a file, so Core rule 3 (no secret's value in the session) remains the line. These levels reduce prompts; they are not a security boundary.</p>
+<!-- lockdown-chart:end -->
+
 <h2 id="8-gt-sandbox-mode">8. gt sandbox mode</h2>
 <p><code>gt_settings.py set sandbox_mode on</code> (off by default). gt then configures <strong>Claude Code's own
 sandbox and permission rules</strong> so that the assistant's shell and file tools cannot touch the

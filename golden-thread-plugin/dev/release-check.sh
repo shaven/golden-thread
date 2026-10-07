@@ -224,6 +224,10 @@ step "docs"
 OUT=$(python3 dev/check_doc_counts.py 2>&1); rc=$?
 [ $rc -eq 0 ] && ok "$(echo "$OUT" | tail -1)" \
   || { echo "$OUT" | sed 's/^/  /'; bad "a doc count disagrees with the code"; }
+# The lockdown chart a user reads must be the rules the code applies (0.20.5).
+OUT=$(python3 dev/check_lockdown_chart.py "$GT" 2>&1); rc=$?
+[ $rc -eq 0 ] && ok "$(echo "$OUT" | tail -1)" \
+  || { echo "$OUT" | sed 's/^/  /'; bad "a lockdown chart in the docs disagrees with gt_lockdown.py"; }
 OUT=$(python3 build-docs.py 2>&1); rc=$?
 [ $rc -eq 0 ] && ok "every .html matches its .md" || { echo "$OUT" | tail -12; bad "docs drifted — fix the .md, then ./build-docs.py --build"; }
 MISSING=$(python3 - "$GT" <<'PY'

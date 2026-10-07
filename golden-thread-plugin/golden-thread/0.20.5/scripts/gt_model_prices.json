@@ -1,0 +1,11 @@
+{
+  "note": "USD per million INPUT tokens, list price, read by gt_optimize_session.py to price prompt-cache writes found in Claude Code transcripts. Matched by substring in this order; the first match wins, so specific spellings come before family names. This file RECOGNISES model ids that already appear in transcripts; it never selects a model (that is packs/core/model.intents.pack.json). It is the one other file tests/test_gt_model.py lets carry model ids.",
+  "default": 3.0,
+  "prices": [
+    ["claude-3-opus", 15.0], ["claude-opus-4-0", 15.0], ["claude-opus-4-1", 15.0],
+    ["claude-opus-4-20", 15.0],
+    ["opus", 5.0],
+    ["claude-3-haiku", 0.25], ["claude-3-5-haiku", 0.8], ["haiku", 1.0],
+    ["sonnet", 3.0]
+  ]
+}

@@ -2100,6 +2100,21 @@ packet uses whichever clipboard tool the machine has — `pbcopy`, `wl-copy`, `x
 
 ---
 
+## Security: lockdown levels (0.20.5)
+
+How much Claude may run without asking. Most of the friction in a session is approval prompts; a lockdown level is a set of Claude Code allow rules that gt writes into `~/.claude/settings.json` for the level **you** choose, so routine work stops asking. The installer asks for it (`./install.sh --lockdown <level>` to answer in advance; with no terminal a new install stays very secure and an upgrade keeps its level). Change it any time with `/gt:gt-settings lockdown <level>` (`gt_settings.py set lockdown <level>`), then restart Claude Code. gt writes and removes only its own rules, records them, backs `settings.json` up first and logs every change (`~/.claude/golden-thread/lockdown/`); uninstall takes them out. With gt unlock on, changing the level needs a fresh confirmation. gt never changes the level by itself.
+
+<!-- lockdown-chart:start -->
+| Level | Runs without a prompt | Still asks |
+|---|---|---|
+| **very secure** | nothing added -- exactly what Claude Code asks today (default) | everything Claude Code asks today |
+| **mostly secure** | read-only shell (ls, cat, grep, wc, ...) and git (status, log, diff, show, branch); edits in the project; running tests; git add/commit | network, remote hosts, pushes, installs, deletes, anything not listed |
+| **partly secure** | mostly secure, plus ssh/scp/rsync, git push/pull/fetch, curl/wget, npm/pip/brew install, web fetch | any other shell command or edit outside the project |
+| **insecure** | partly secure, plus any shell command, any edit, web search | LOTR send/merge/delete still ask for consent |
+
+At every level above very secure, Claude's Read tool is denied credential files (ssh keys, cloud and gh credentials, Claude Code's login, .env). That guards the Read tool only: from mostly secure up a shell command can still print a file, so Core rule 3 (no secret's value in the session) remains the line. These levels reduce prompts; they are not a security boundary.
+<!-- lockdown-chart:end -->
+
 ## Security: gt unlock (0.20.1)
 
 **Off by default.** Turned on, gt's unlock authority (`gt_unlockd.py`, one per user, started on

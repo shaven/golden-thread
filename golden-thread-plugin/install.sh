@@ -914,6 +914,7 @@ REQUIRE_CHECKSUM="${GT_REQUIRE_CHECKSUM:+yes}"; REQUIRE_CHECKSUM="${REQUIRE_CHEC
 LIST_MODULES=no
 MODULE_FLAGS=()          # "with:NAME" / "without:NAME", in the order given
 MODEL_PROFILE=""         # --model-profile average|very-high|inherit (0.19.1)
+LOCKDOWN=""              # --lockdown very-secure|mostly-secure|partly-secure|insecure (0.20.5)
 UNINSTALL=no             # --uninstall: run gt_uninstall.py instead (0.20.1)
 UNINSTALL_ARGS=()        # what is passed through to it: --check/--dry-run, --yes, ...
 ORIG_ARGS=("$@")         # kept for the re-run after a migration changes a module choice
@@ -935,6 +936,8 @@ while [ $# -gt 0 ]; do
     --no-vault) NO_VAULT=yes; shift ;;
     --model-profile)   MODEL_PROFILE="${2:-}"; shift 2 || true ;;
     --model-profile=*) MODEL_PROFILE="${1#--model-profile=}"; shift ;;
+    --lockdown)   LOCKDOWN="${2:-}"; shift 2 || true ;;
+    --lockdown=*) LOCKDOWN="${1#--lockdown=}"; shift ;;
     --require-checksum) REQUIRE_CHECKSUM=yes; shift ;;
     --uninstall) UNINSTALL=yes; shift ;;
     --check|--dry-run|--yes|-y|--keep-vault-config|--discard-queued|--purge-backups|--purge-lotr|--json)
@@ -973,6 +976,9 @@ install.sh — install the Golden Thread Claude Code plugins (gt and every plugi
   ./install.sh --list-modules         print each module, its state and why, install nothing
   ./install.sh --model-profile P      the model and effort each skill runs at: average (a new
                                       install's default), very-high, or inherit; remembered
+  ./install.sh --lockdown L           how much Claude may run without asking: very-secure (the
+                                      default), mostly-secure, partly-secure or insecure; asked
+                                      at a terminal when not given (gt_lockdown.py table)
   ./install.sh --uninstall --check    list everything gt put on this machine; change nothing
   ./install.sh --uninstall            remove it (asks once; --yes when not at a terminal),
                                       then re-check that nothing is left. The vault is never
@@ -1021,6 +1027,12 @@ USAGE
     *)  POSITIONAL="$1"; shift ;;
   esac
 done
+# A bad --lockdown stops here, before anything is installed (0.20.5).
+case "$LOCKDOWN" in
+  ""|very-secure|mostly-secure|partly-secure|insecure) ;;
+  *) echo "✗ --lockdown: '$LOCKDOWN' is not one of very-secure, mostly-secure, partly-secure, insecure"
+     exit 1 ;;
+esac
 if [ "$LIST_PLUGINS" = yes ]; then
   discover_plugins "$SCRIPT_DIR" | tr '\t' ' '
   exit 0
@@ -2314,6 +2326,36 @@ if [ -f "$MP" ]; then
   python3 -B "$MP" table --profile "$_prof" ${_mp_vault[@]+"${_mp_vault[@]}"} || true
   python3 -B "$MP" apply --profile "$_prof" --home "$HOME" ${_mp_vault[@]+"${_mp_vault[@]}"} || \
     echo "  ⚠ some skills were left at the session's model (a refused combination is named above)"
+fi
+
+# 5c. Lockdown level (0.20.5): how much Claude may run without asking. The level is, in order:
+# --lockdown this run, else a question at a terminal (Return keeps the current level, which is
+# very-secure on a new install), else -- no terminal -- the current level, unchanged and named.
+# gt_lockdown.py writes only gt's own allow/deny rules into ~/.claude/settings.json, records
+# them, and backs the file up first; very-secure on a machine gt never loosened writes nothing.
+LD="$SRC/scripts/gt_lockdown.py"
+if [ -f "$LD" ]; then
+  _ld="$LOCKDOWN"
+  _ld_cur=$(python3 -B "$LD" current 2>/dev/null || echo very-secure)
+  if [ -z "$_ld" ] && [ -t 0 ] && [ -t 1 ]; then
+    echo ""
+    echo "How much may Claude run without asking? (the lockdown level; these levels reduce prompts,"
+    echo "they are not a security boundary -- change it any time: gt_settings.py set lockdown <level>)"
+    python3 -B "$LD" table | sed 's/^/  /'
+    printf 'Lockdown level [1 very secure / 2 mostly secure / 3 partly secure / 4 insecure] (Return keeps %s): ' "$(echo "$_ld_cur" | tr '-' ' ')"
+    read -r _ans </dev/tty || _ans=""
+    case "$_ans" in
+      1|very*)    _ld=very-secure ;;
+      2|mostly*)  _ld=mostly-secure ;;
+      3|partly*)  _ld=partly-secure ;;
+      4|insecure) _ld=insecure ;;
+      *)          _ld="$_ld_cur" ;;
+    esac
+  fi
+  if [ -n "$_ld" ]; then
+    python3 -B "$LD" apply "$_ld" || { echo "✗ lockdown: could not apply $_ld (settings.json left as it was)"; exit 1; }
+  fi
+  echo "Lockdown: $(python3 -B "$LD" current 2>/dev/null | tr '-' ' ')  (choose with --lockdown <level>, or gt_settings.py set lockdown <level>)"
 fi
 
 # 6. Register the SessionStart / PreCompact / SessionEnd hooks.

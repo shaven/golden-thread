@@ -25,6 +25,8 @@ EXPECTED = {
     # 0.20.1: gt sandbox mode (gt_sandbox.py), its read sub-option, and the vault MCP switch.
     "sandbox_mode": ("off", ["off", "on"]),
     "sandbox_vault_reads": ("deny", ["deny", "allow"]),
+    # 0.20.5: the lockdown level (gt_lockdown.py); very-secure is exactly 0.20.4's behaviour.
+    "lockdown": ("very-secure", ["very-secure", "mostly-secure", "partly-secure", "insecure"]),
     "symlink_writes_outside_vault": ("refuse", ["refuse", "allow"]),
     "commit_fingerprint": ("off", ["off", "on"]),
     "push_fingerprint": ("off", ["off", "on"]),

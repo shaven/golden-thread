@@ -1,0 +1,37 @@
+{
+  "schema": 1,
+  "slot": "classify",
+  "name": "common",
+  "tier": "A",
+  "spdx": "MIT",
+  "provenance": {
+    "origin": "original",
+    "contributor": "Golden Thread <gt@example.com>",
+    "upstream": null
+  },
+  "dco": "Signed-off-by: Golden Thread <gt@example.com>",
+  "entries": [
+    {"path": "*.min.js", "kind": "generated"},
+    {"path": "*.min.css", "kind": "generated"},
+    {"path": "*.map", "kind": "generated"},
+    {"path": "*.lock", "kind": "generated"},
+    {"path": "package-lock.json", "kind": "generated"},
+    {"path": "poetry.lock", "kind": "generated"},
+    {"path": "Cargo.lock", "kind": "generated"},
+    {"path": "*.pb.go", "kind": "generated"},
+    {"path": "*_pb2.py", "kind": "generated"},
+    {"path": "vendor/*", "kind": "vendored"},
+    {"path": "third_party/*", "kind": "vendored"},
+    {"path": "*.tmpl", "kind": "template"},
+    {"path": "*.j2", "kind": "template"},
+    {"path": "*.sh", "kind": "executable"},
+    {"path": "*.yml", "kind": "config"},
+    {"path": "*.yaml", "kind": "config"},
+    {"path": "*.toml", "kind": "config"},
+    {"path": "*.ini", "kind": "config"},
+    {"path": "*.png", "kind": "static"},
+    {"path": "*.jpg", "kind": "static"},
+    {"path": "*.svg", "kind": "static"},
+    {"path": "*.pdf", "kind": "static"}
+  ]
+}
