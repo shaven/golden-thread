@@ -117,7 +117,7 @@
 <p><strong>Reader:</strong> quick lookup, and the printed PDF
 <strong>Claims last checked against the code:</strong> 2026-10-02 (gt 0.19.1) — see <em>The documents, and what belongs in each</em> in <a href="../CLAUDE.md"><code>CLAUDE.md</code></a>.</p>
 </blockquote>
-<h2 id="version-gt-0202-gt-wiki-028-gt-usage-017-gt-visualize-045-gt-lotr-040-gt-demo-gt-watch-gt-farm-gt-flow-0202-gt-report-card-0201">Version gt 0.20.2 / gt-wiki 0.2.8 / gt-usage 0.1.7 / gt-visualize 0.4.5 / gt-lotr 0.4.0 / gt-demo, gt-watch, gt-farm, gt-flow 0.20.2 / gt-report-card 0.20.1</h2>
+<h2 id="version-gt-0204-gt-wiki-028-gt-usage-017-gt-visualize-045-gt-lotr-040-gt-demo-gt-watch-gt-farm-gt-flow-0204-gt-report-card-0201">Version gt 0.20.4 / gt-wiki 0.2.8 / gt-usage 0.1.7 / gt-visualize 0.4.5 / gt-lotr 0.4.0 / gt-demo, gt-watch, gt-farm, gt-flow 0.20.4 / gt-report-card 0.20.1</h2>
 <hr />
 <p>Golden Thread turns an Obsidian vault into the single source of truth for all AI memory across every project and every session. The tiered rule model introduced in v0.6.0 now carries <strong>ten hook-backed Core rules</strong> enforced at three points in the turn, 0.9.12 added <code>gt-route</code> for the middle of a session, and 0.9.13 makes the session-start component check verify that the hooks are <strong>wired</strong>, not merely installed, 0.11.0 makes <code>log.md</code> and <code>decisions.md</code> generated files so concurrent sessions cannot overwrite one another, 0.12.3 stops a vault tool running against a vault it was never told to touch, 0.12.4 makes parallel execution the default for divisible work in every project, 0.12.5 stops code being committed before its tests have been seen to pass, 0.13.0 makes an upgrade from any older release end where a fresh install would, 0.14.0 splits optional parts into modules you can decline, and 0.15.0 makes six of them — gt-wiki 0.2.1 (an LLM-powered knowledge base with immutable sources and interlinked pages), gt-demo (the guided tour), gt-watch (upstream repos), gt-report-card (the session report card), gt-farm (work packets for an external AI) and the new gt-flow, which draws the vault's event stream as a timeline of knowledge climbing the ladder. 0.16.0 gave contributed <strong>packs</strong> — plain JSON data, reviewed and merged, never third-party code — somewhere to come from and something to read them, shipping <code>gt-scan</code>, <code>gt-optimize</code>, <code>gt-handoff</code>, <code>gt-allin</code> and <code>gt-allin-commit</code>; 0.16.1 added <code>gt-context</code> (the first consumer of the registry's model-reachable tier) and <code>gt-validation</code> (a verification receipt that goes stale when the file it describes changes); and 0.16.2 re-asserts the Core rules after a compaction as well as on every prompt, lets a module hook declare a <code>timeout</code>, and refuses a copyleft licence by its current SPDX spelling; 0.16.3 makes <code>install.sh</code> refuse when MANIFEST.json is tracked but missing rather than regenerating one, and stops <code>gt_tasks.py</code> overwriting TASKS.md in silence. 0.17.2 adds <code>gt_surface.py</code>, a <code>SessionStart</code> hook that finally reads what earlier sessions wrote for the next one — a live MUST DO block from <code>deadlines.md</code>, every handoff not yet handled, a count of urgent tasks waiting on you, pre-compaction state — adds five skills that create, list and handle tasks and handoffs (<code>gt-task</code>, <code>gt-task-list</code>, <code>gt-task-handle</code>, <code>gt-handoff-list</code>, <code>gt-handoff-handle</code>), and keys session claims on a machine id rather than a hostname. 0.17.11 made Core rule 1 queue-first. 0.18.1 makes the skills one verb per action — <code>gt-create</code>, <code>gt-open</code>, <code>gt-list</code>, <code>gt-handle</code> and the new <code>gt-close</code>, each taking the artifact as its argument, with the six old task and handoff names kept as deprecated aliases for 0.18.x — and adds <code>gt-plan</code> and <code>gt-implement</code> for the coding loop, <code>gt-brief</code> to draft a repo's <code>CLAUDE.md</code> from the vault, and <code>gt-minimize</code> to prune a session before cutting it. 0.20.1 adds <strong>gt unlock</strong>, off by default: agents need your presence (TOTP plus Touch ID or Windows Hello, optionally Entra ID) before they use LOTR connections, credentials, publishing or gt's guards — see the security section below and <code>SECURITY.md</code>.</p>
 <hr />
@@ -699,6 +699,41 @@ gt's MCP server and the write queue. Native Windows: permission rules only (fric
 </table>
 <p>Settings: <code>sandbox_mode</code>, <code>sandbox_vault_reads</code>, <code>vault_mcp</code>. Doctor row: <code>sandbox</code>; verify rows
 <code>sandbox-*</code>. <code>SECURITY.md</code> §8.</p>
+<h2 id="security-a-fingerprint-for-pushes-and-commits-0204">Security: a fingerprint for pushes and commits (0.20.4)</h2>
+<p>Off by default; three settings for the repos named in <code>push_fingerprint_repos</code>, on github.com or
+GitHub Enterprise (the host comes from each repo's remote).</p>
+<table>
+<thead>
+<tr>
+<th>Setting / command</th>
+<th>Purpose</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>push_fingerprint on\|off</code></td>
+<td>A pre-push hook asks gt unlock for <code>gt:publish</code>: one fresh Touch ID (macOS) or Windows Hello per push. An unlock policy already on keeps every scope; only push, tag and the policy itself become step-up</td>
+</tr>
+<tr>
+<td><code>push_fingerprint_seal_token on\|off</code></td>
+<td>The HTTPS push token is sealed behind <code>gt:publish</code>, so <code>git push --no-verify</code> still needs the touch; a process from Claude's shell is refused the token before any prompt</td>
+</tr>
+<tr>
+<td><code>commit_fingerprint on\|off</code> (macOS)</td>
+<td>A Secure Enclave key signs every commit and tag; one Touch ID each</td>
+</tr>
+<tr>
+<td><code>gt_sign.py github [--apply\|--remove]</code></td>
+<td>The server half: the signing key and a ruleset requiring signed commits on the default branch, no bypass actors</td>
+</tr>
+<tr>
+<td><code>gt_push_guard.py check</code>, <code>gt_sign.py check --live</code></td>
+<td>Proof (exit 0 set up, 1 broken; <code>check</code> exits 2 when the guard is off)</td>
+</tr>
+</tbody>
+</table>
+<p><code>off</code> undoes each one exactly; the signing key stays registered so past commits stay Verified.
+Windows Hello commit signing is planned for 0.20.5. <code>SECURITY.md</code> §5.5a and §5.5b.</p>
 <h2 id="checks-cadences-and-scheduled-jobs">Checks, Cadences and Scheduled Jobs</h2>
 <p>Scripts with their own command line, shipped with the plugin at
 <code>~/.claude/plugins/cache/golden-thread-plugin/gt/&lt;version&gt;/scripts/</code> rather than in the vault —

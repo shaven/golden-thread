@@ -7,6 +7,12 @@ A Claude Code plugin that turns an Obsidian vault into the single source of trut
 
 
 > [!IMPORTANT]
+> **0.20.4: a fingerprint before every push (Touch ID or Windows Hello) and on every commit (macOS only;
+> Windows Hello signing is planned for 0.20.5), all off by default.**
+> `push_fingerprint`, `push_fingerprint_seal_token` and `commit_fingerprint`, for the repos in
+> `push_fingerprint_repos`, on github.com or GitHub Enterprise. What each one proves, and what it does not:
+> [SECURITY.md](SECURITY.md) section 5.5a. 0.20.3 was a beta and was never released.
+>
 > **0.20.1: gt unlock and gt sandbox mode (both off by default), and Windows, finished.** Turned on, agents need your
 > presence — TOTP plus Touch ID (macOS) or Windows Hello, optionally Microsoft Entra ID sign-in —
 > before they use LOTR connections, credentials, publishing or gt's own guards. Callers are

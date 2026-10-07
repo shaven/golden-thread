@@ -651,6 +651,94 @@ grant, and <code>gt_unlock.py status</code> / doctor label each with its real le
 <code>gt_unlock.py policy unattended add &lt;job&gt; lotr:&lt;connection&gt;:read</code> (or <code>secret:&lt;ref&gt;</code> for one
 credential), and the job's definition sets <code>GT_JOB=&lt;job&gt;</code>. Write, consent, publish, wildcard
 and gt's own scopes can never be allowed unattended; jobs are never prompted.</p>
+<h3 id="55a-pushes-and-commits-a-fingerprint-and-what-it-proves-0204">5.5a Pushes and commits: a fingerprint, and what it proves (0.20.4)</h3>
+<p>Three settings, all off by default, for the repos named in <code>push_fingerprint_repos</code>:</p>
+<table>
+<thead>
+<tr>
+<th>Setting</th>
+<th>What it does</th>
+<th>What enforces it</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>push_fingerprint</code></td>
+<td>a pre-push hook asks for <code>gt:publish</code> (one fresh Touch ID on macOS, or Windows Hello on Windows, per push)</td>
+<td>the hook only: <code>git push --no-verify</code> skips it</td>
+</tr>
+<tr>
+<td><code>push_fingerprint_seal_token</code></td>
+<td>the HTTPS push token moves into the sealed store; git gets it only through gt's credential helper, under <code>gt:publish</code></td>
+<td>gt unlock: <code>--no-verify</code> still needs the touch, and a process from Claude's shell is refused the token outright (<code>door: mcp_only</code>) before any prompt</td>
+</tr>
+<tr>
+<td><code>commit_fingerprint</code> (macOS)</td>
+<td>a Secure Enclave key signs every commit and tag; each signature needs Touch ID</td>
+<td>the server, once <code>gt_sign.py github --apply</code> has added a ruleset requiring signed commits on the default branch with <strong>no bypass actors</strong> (an admin's unsigned push is refused too)</td>
+</tr>
+</tbody>
+</table>
+<p><code>commit_fingerprint</code> is macOS only in 0.20.4: Windows Hello commit signing is planned for 0.20.5.
+Hosts come from each repo's own remotes: github.com or a GitHub Enterprise server. An SSH remote has
+no token to seal, so the hook is its only push guard.</p>
+<p><strong>What it does not prove or stop:</strong>
+* A touch proves you approved, not that you read the change.
+* gh keeps its own token in the keychain; a process running as you can still push with it outside
+  the guarded repos' git config. Removing it (<code>gh auth logout</code>) is your choice, never automatic.
+* The ruleset covers the default branch only. A local commit can still be made unsigned
+  (<code>-c commit.gpgsign=false</code>); it cannot reach the default branch.
+* Commits GitHub itself signs (web edits, merges through the UI) count as signed.
+* With unlock already on, <code>push_fingerprint on</code> keeps your policy as it is and adds step-up for push,
+  tag and the unlock policy; with unlock off, it turns unlock on with every other scope open.</p>
+<p><code>off</code> undoes each setting exactly. The signing key stays registered on the server, so past commits
+stay Verified; remove it there yourself if you want to.</p>
+<h3 id="55b-setting-it-up-proving-it-and-backing-it-out">5.5b Setting it up, proving it, and backing it out</h3>
+<p>Run these in <strong>your own terminal</strong>, not inside Claude Code: enrolling a factor and changing the
+unlock policy are meant to need you. The repo is any git repository you push from.</p>
+<pre><code class="language-bash">H=~/.claude/golden-thread/hooks
+REPO=/absolute/path/to/your/repo
+</code></pre>
+<p><strong>Before you start</strong>
+1. <code>git -C "$REPO" config user.email</code> prints the address your Git host knows you by. A signature is
+   matched to it.
+2. <code>ls "$REPO/.git/hooks/pre-push"</code> finds nothing. If you have your own pre-push hook, <code>on</code> refuses
+   and changes nothing.
+3. <code>python3 $H/gt_unlock.py status</code>: if unlock is <strong>off</strong>, <code>on</code> turns it on with every other scope
+   open. If it is <strong>already on</strong>, your policy is kept and only push, tag and the policy itself
+   become step-up.</p>
+<p><strong>Set it up</strong>
+1. A factor, once: <code>python3 $H/gt_unlock.py enroll touchid</code> (Windows: <code>enroll hello</code>).
+2. The repo: <code>python3 $H/gt_settings.py set push_fingerprint_repos "$REPO"</code> (comma-separate several).
+3. Optional, the lock behind the hook: <code>python3 $H/gt_settings.py set push_fingerprint_seal_token on</code>.
+   It needs <code>gh</code> signed in to the repo's host (<code>gh auth login -h &lt;host&gt;</code>), and pushes the assistant
+   starts are then refused.
+4. <code>python3 $H/gt_settings.py set push_fingerprint on</code>.
+5. macOS: <code>python3 $H/gt_settings.py set commit_fingerprint on</code>. It prints a public key line
+   (<code>ecdsa-sha2-nistp256 …</code>).
+6. The server half: <code>python3 $H/gt_sign.py github</code> shows the plan on your repo's host, and
+   <code>--apply</code> asks before it registers the key as a <strong>signing key</strong> and adds the no-bypass ruleset.
+   It needs <code>gh auth refresh -h &lt;host&gt; -s admin:ssh_signing_key</code> and admin rights on the repo.
+   Without <code>gh</code>, register the key by hand (Settings → SSH and GPG keys → New SSH key → Key type:
+   Signing Key) and add a branch rule requiring signed commits.</p>
+<p><strong>Prove it</strong>
+* <code>python3 $H/gt_push_guard.py check</code> (every line PASS) and <code>python3 $H/gt_sign.py check --live</code>
+  (one touch, PASS).
+* On a scratch branch: <code>git commit --allow-empty -m test</code> asks for Touch ID, and <code>git verify-commit HEAD</code>
+  reports a good signature. A second commit where you press <strong>Cancel</strong> must fail with
+  <code>gt_sign: not signed (cancelled)</code>.
+* <code>git push origin &lt;scratch-branch&gt;</code> asks before it goes, and the host shows the commit Verified.
+  Delete the branch afterwards (that asks too).</p>
+<p><strong>Back it out</strong>, switches first:
+1. <code>python3 $H/gt_settings.py set commit_fingerprint off</code>: the earlier git config comes back; the key
+   is kept.
+2. <code>python3 $H/gt_sign.py github --remove</code>: the ruleset goes; the key stays registered, so past commits
+   stay Verified (remove it on the host yourself if you want).
+3. <code>python3 $H/gt_settings.py set push_fingerprint off</code>: the hook, credential helpers and sealed token
+   go, and the unlock policy is restored exactly as it was.
+4. Check: no <code>pre-push</code> in the repo, <code>git -C "$REPO" config --local --get-regexp '^(gpg|commit\.gpgsign|tag\.gpgsign|user\.signingkey|credential)'</code>
+   back to what it was, and <code>python3 $H/gt_push_guard.py check</code> saying it is off (exit 2).
+5. Optional: <code>python3 $H/gt_unlock.py unenroll touchid</code>.</p>
 <h3 id="56-what-gt-unlock-cannot-lock">5.6 What gt unlock cannot lock</h3>
 <ul>
 <li>Applications that never ask gt: a browser, an editor, any program reading its own config.</li>

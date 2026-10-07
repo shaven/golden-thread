@@ -3,7 +3,7 @@
 > **Reader:** quick lookup, and the printed PDF
 > **Claims last checked against the code:** 2026-10-02 (gt 0.19.1) — see *The documents, and what belongs in each* in [`CLAUDE.md`](../CLAUDE.md).
 
-## Version gt 0.20.2 / gt-wiki 0.2.8 / gt-usage 0.1.7 / gt-visualize 0.4.5 / gt-lotr 0.4.0 / gt-demo, gt-watch, gt-farm, gt-flow 0.20.2 / gt-report-card 0.20.1
+## Version gt 0.20.4 / gt-wiki 0.2.8 / gt-usage 0.1.7 / gt-visualize 0.4.5 / gt-lotr 0.4.0 / gt-demo, gt-watch, gt-farm, gt-flow 0.20.4 / gt-report-card 0.20.1
 
 ---
 
@@ -300,6 +300,22 @@ gt's MCP server and the write queue. Native Windows: permission rules only (fric
 
 Settings: `sandbox_mode`, `sandbox_vault_reads`, `vault_mcp`. Doctor row: `sandbox`; verify rows
 `sandbox-*`. `SECURITY.md` §8.
+
+## Security: a fingerprint for pushes and commits (0.20.4)
+
+Off by default; three settings for the repos named in `push_fingerprint_repos`, on github.com or
+GitHub Enterprise (the host comes from each repo's remote).
+
+| Setting / command | Purpose |
+|---|---|
+| `push_fingerprint on\|off` | A pre-push hook asks gt unlock for `gt:publish`: one fresh Touch ID (macOS) or Windows Hello per push. An unlock policy already on keeps every scope; only push, tag and the policy itself become step-up |
+| `push_fingerprint_seal_token on\|off` | The HTTPS push token is sealed behind `gt:publish`, so `git push --no-verify` still needs the touch; a process from Claude's shell is refused the token before any prompt |
+| `commit_fingerprint on\|off` (macOS) | A Secure Enclave key signs every commit and tag; one Touch ID each |
+| `gt_sign.py github [--apply\|--remove]` | The server half: the signing key and a ruleset requiring signed commits on the default branch, no bypass actors |
+| `gt_push_guard.py check`, `gt_sign.py check --live` | Proof (exit 0 set up, 1 broken; `check` exits 2 when the guard is off) |
+
+`off` undoes each one exactly; the signing key stays registered so past commits stay Verified.
+Windows Hello commit signing is planned for 0.20.5. `SECURITY.md` §5.5a and §5.5b.
 
 ## Checks, Cadences and Scheduled Jobs
 

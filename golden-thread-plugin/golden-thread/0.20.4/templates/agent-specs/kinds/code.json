@@ -1,0 +1,25 @@
+{
+  "kind": "code",
+  "spec_version": 1,
+  "summary": "A source-code project: architecture first, then samples.",
+  "prompt_delta": ["The material is a SOURCE-CODE project."],
+  "stages": {
+    "extract": {
+      "prompt_delta": [
+        "Read architecture-first: the README, build and dependency manifests, entry points and the top-level package layout, BEFORE opening individual source files.",
+        "Then sample: read only as many source files as it takes to confirm or correct the architecture you inferred. Do not read the whole unit; a summary built from 5 well-chosen files beats one built from 500 skimmed ones.",
+        "Sketch the dependency graph between the project's own modules as `a -> b` edges, plus the external dependencies that matter."
+      ],
+      "output_schema": {
+        "languages": {"type": "list", "description": "Languages found, most significant first."},
+        "entry_points": {"type": "list", "description": "Files or commands where execution starts."},
+        "architecture": {"type": "string", "description": "The main components and how they fit together."},
+        "dependency_sketch": {"type": "list", "description": "Edges between the project's own modules, as `a -> b` strings."}
+      },
+      "summary_fields": ["summary", "languages", "architecture", "gaps"]
+    },
+    "classify": {
+      "prompt_delta": ["For code: a constraint, rule or pattern to follow or avoid is decisions; how the components fit is design; a gotcha or measured behaviour is research."]
+    }
+  }
+}

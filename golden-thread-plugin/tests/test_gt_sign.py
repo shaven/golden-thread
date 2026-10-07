@@ -307,6 +307,10 @@ FAKE_GH = r'''#!%(python)s
 import json, os, sys
 d = os.environ["FAKE_GH_DIR"]; a = sys.argv[1:]
 open(os.path.join(d, "calls.log"), "a").write(" ".join(a) + "\n")
+host = "github.com"
+if "--hostname" in a:                       # gh api --hostname HOST: never mistake HOST for a path
+    i = a.index("--hostname"); host = a[i + 1]; a = a[:i] + a[i + 2:]
+open(os.path.join(d, "hosts.log"), "a").write(host + "\n")
 def load(n, default):
     try: return json.load(open(os.path.join(d, n)))
     except Exception: return default
@@ -330,6 +334,8 @@ elif method == "DELETE":
 
 
 class GitHub(SignCase):
+    REMOTE = "git@github.com:someone/proj.git"
+
     def setUp(self):
         super().setUp()
         self.ghd = self.tmp / "gh"
@@ -338,7 +344,7 @@ class GitHub(SignCase):
         gh.write_text(FAKE_GH % {"python": PYTHON})
         os.chmod(gh, 0o755)
         self.env.update(GT_SIGN_GH=str(gh), FAKE_GH_DIR=str(self.ghd))
-        self.git("remote", "add", "origin", "git@github.com:someone/proj.git")
+        self.git("remote", "add", "origin", self.REMOTE)
         self.assertEqual(self.sign("on", str(self.repo)).returncode, 0)
 
     def calls(self):
@@ -387,6 +393,47 @@ class GitHub(SignCase):
         r = self.sign("github")
         self.assertEqual(r.returncode, 1)
         self.assertIn("gh auth refresh -h github.com -s admin:ssh_signing_key", r.stdout)
+
+
+class GitHubEnterprise(GitHub):
+    """The 0.20.3 beta parsed github.com remotes only and called gh without a host, so a repo on a
+    GitHub Enterprise server had no server half at all (0.20.4). The inherited github.com tests
+    do not run here; these do, against the enterprise host."""
+    ENT = "github.example.com"
+    REMOTE = "git@github.example.com:team/proj.git"
+
+    test_plan_changes_nothing = None
+    test_apply_without_a_terminal_or_yes_refuses = None
+    test_apply_adds_key_and_a_no_bypass_ruleset_then_remove_keeps_the_key = None
+    test_missing_scope_names_the_refresh_command = None
+
+    def test_the_enterprise_host_gets_the_key_and_the_ruleset(self):
+        plan = self.sign("github")
+        self.assertEqual(plan.returncode, 0, plan.stdout)
+        self.assertIn("%s/team/proj: add ruleset" % self.ENT, plan.stdout)
+        self.assertIn("add signing key on %s" % self.ENT, plan.stdout)
+        r = self.sign("github", "--apply", "--yes")
+        self.assertEqual(r.returncode, 0, r.stdout)
+        hosts = set((self.ghd / "hosts.log").read_text().split())
+        self.assertEqual(hosts, {self.ENT}, "every call goes to the enterprise host, none to github.com")
+        self.assertIn("POST repos/team/proj/rulesets", self.calls())
+        self.assertEqual(self.sign("check").returncode, 0)
+        self.sign("off")
+        rm = self.sign("github", "--remove", "--yes")
+        self.assertEqual(rm.returncode, 0, rm.stdout)
+        self.assertIn("DELETE repos/team/proj/rulesets/77", self.calls())
+        self.assertNotIn("DELETE user/ssh_signing_keys", self.calls())
+
+    def test_missing_scope_names_the_enterprise_host(self):
+        (self.ghd / "fail").write_text("1")
+        r = self.sign("github")
+        self.assertEqual(r.returncode, 1)
+        self.assertIn("gh auth refresh -h %s -s admin:ssh_signing_key" % self.ENT, r.stdout)
+
+    def test_an_https_remote_is_read_too(self):
+        self.git("remote", "set-url", "origin", "https://%s/team/proj.git" % self.ENT)
+        plan = self.sign("github")
+        self.assertIn("%s/team/proj: add ruleset" % self.ENT, plan.stdout)
 
 
 class Settings(SignCase):

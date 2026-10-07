@@ -1,7 +1,7 @@
 # Golden Thread
 
 > **Reader:** someone who has never heard of Golden Thread
-> **Claims last checked against the code:** 2026-10-06 (gt 0.20.2) — see *The documents, and what belongs in each* in [`CLAUDE.md`](CLAUDE.md).
+> **Claims last checked against the code:** 2026-10-06 (gt 0.20.4) — see *The documents, and what belongs in each* in [`CLAUDE.md`](CLAUDE.md).
 
 A memory system for AI coding sessions, built on plain markdown and git — and,
 unusually, one where the rules that matter most are **mechanically enforced** rather
@@ -15,7 +15,7 @@ it at startup, look things up while working, and write back what they learn.
 Its distinguishing idea is the second problem, the one most memory systems never
 address: **writing a rule down does not mean it gets followed.**
 
-Plugin **v0.20.2**. Ten Core rules currently enforced, five of them *validated* — a
+Plugin **v0.20.4**. Ten Core rules currently enforced, five of them *validated* — a
 hook inspects the finished reply (`Stop`) or the tool call about to run (`PreToolUse`)
 and blocks it if the rule was broken.
 
@@ -57,6 +57,12 @@ costs.
 **What it does not do:** it does not stop a process already running as you. See
 [SECURITY.md](golden-thread-plugin/SECURITY.md) for the threat model.
 
+> **0.20.4: a fingerprint before every push (Touch ID or Windows Hello) and on every commit (macOS).**
+> `push_fingerprint` asks for it before a push, `push_fingerprint_seal_token` seals the push token behind it so `--no-verify`
+> cannot get round it, and `commit_fingerprint` signs every commit with a Secure Enclave key, plus a
+> no-bypass GitHub ruleset that refuses unsigned commits on the server. github.com and GitHub Enterprise.
+> (0.20.3 was a beta and was never released.)
+>
 > **0.20.2: LOTR connection status, reader/writer domain agents, strict tool tiers, and gt sandbox
 > mode in every skill.** See the [release notes](https://github.com/shaven/golden-thread/releases/tag/v0.20.2).
 >

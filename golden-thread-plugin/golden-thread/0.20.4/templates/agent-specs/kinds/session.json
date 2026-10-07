@@ -1,0 +1,33 @@
+{
+  "kind": "session",
+  "spec_version": 1,
+  "summary": "This session's own work, for /gt:gt-work: findings, decisions, open items, files changed.",
+  "trigger_skill": "gt-work",
+  "prompt_delta": ["The material is the write-back notes of one work session, split into segments: each segment is one finding, decision, open item or file changed."],
+  "stages": {
+    "extract": {
+      "prompt_delta": [
+        "Your unit is ONE segment file (the `path` input). Return the finding it records with its source -- a command and what it printed, a file and line, or the user's own statement -- and its verification state. A segment that only narrates what was tried, with no result, yields no finding."
+      ],
+      "output_schema": {
+        "segment_type": {"type": "enum", "values": ["finding", "decision", "open-item", "file-changed", "none"], "description": "What the segment records."}
+      }
+    },
+    "classify": {
+      "prompt_delta": ["For a session: a finding is research; a decision with its why is decisions (an ADR); architecture is design; a fact the next session in this project needs is memory; a platform fact is a knowledge CANDIDATE (promotion is a later, approved step); an open item is a handoff item -- use dest inbox for it and say so in why."]
+    },
+    "reconcile": {
+      "requires_settings": ["skeptic_pass"],
+      "prompt_delta": [
+        "You are also the SKEPTIC for this session: read each finding as a claim that has to earn its place.",
+        "Flag: figures with no stated source or measurement; causal claims stated as fact but only observed once; words like always, never, fixed, proven or verified that the entry does not back up; results generalised beyond what was tested; anything whose verification state (verified, inferred, assumed) is not stated.",
+        "For each flag say which entry, which words, what kind of problem (unverified, overclaimed, unsupported-number, stale, scope), why, and the smallest edit that would make the entry honest. Do not rewrite entries and do not flag style. You advise; the session decides."
+      ],
+      "output_schema": {
+        "flags": {"type": "list", "description": "Objects {entry, quote, kind, why, suggested_fix}; kind is unverified|overclaimed|unsupported-number|stale|scope."},
+        "clean": {"type": "list", "required": false, "description": "Titles of entries with nothing to flag."}
+      },
+      "summary_fields": ["summary", "contradictions", "flags"]
+    }
+  }
+}

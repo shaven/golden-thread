@@ -236,6 +236,26 @@ Turn it on with `gt_unlock.py enroll …` then `gt_unlock.py policy enable`; ver
 `gt_unlock.py verify` or `/gt:gt-doctor` (rows `unlock` and `security`). Step-by-step per
 platform, and what each level does and does not protect: [`SECURITY.md`](SECURITY.md).
 
+## A fingerprint for pushes and commits: off by default (0.20.4)
+
+Three settings, all off, for the repos you name in `push_fingerprint_repos`: `push_fingerprint`
+(Touch ID or Windows Hello before every push), `push_fingerprint_seal_token` (the push token
+sealed behind it, so `--no-verify` cannot skip it) and `commit_fingerprint` (macOS: a Secure
+Enclave key signs every commit). They need gt unlock with one enrolled factor; turning one on
+installs a `pre-push` hook or sets the repo's git signing config, and `off` takes exactly that
+away. What it touches:
+
+* `~/.claude/golden-thread/hooks/gt_push_guard.py` and `gt_sign.py`, copied on every install, run
+  only when a setting is on or you call them.
+* In each named repo: a marked `pre-push` hook (a hook of your own is left alone, and `on` refuses),
+  local `credential.https://<host>.helper` entries with token sealing, and local `gpg.*`,
+  `commit.gpgsign`, `tag.gpgsign`, `user.signingkey` with commit signing. The earlier values are saved
+  and put back by `off`.
+* State: `~/.claude/golden-thread/push-guard.json`, `commit-sign*.json`, `commit-sign.pub`,
+  `commit-sign.allowed_signers`, `bin/gt-sign`.
+
+Setup, proof and back-out, step by step: [`SECURITY.md`](SECURITY.md) §5.5b.
+
 ## Using it with Obsidian (optional)
 
 Nothing requires Obsidian — the vault is plain markdown and git, and Claude Code reads

@@ -107,7 +107,7 @@
 <strong>Claims last checked against the code:</strong> 2026-10-02 (gt 0.19.1) — see <em>The documents, and what belongs in each</em> in <a href="../CLAUDE.md"><code>CLAUDE.md</code></a>.</p>
 </blockquote>
 <p>A guided walkthrough for your first session. Six steps, ~15 minutes.</p>
-<p><strong>Requirements:</strong> Python 3.8+, Claude Code installed. Written against <strong>gt v0.20.2</strong>.</p>
+<p><strong>Requirements:</strong> Python 3.8+, Claude Code installed. Written against <strong>gt v0.20.4</strong>.</p>
 <hr />
 <h2 id="step-1-install">Step 1 — Install</h2>
 <p>Unzip the plugin and run the installer:</p>
@@ -286,6 +286,15 @@ running as you — the assistant's own shell included — can get around it if i
 holds even then, with Touch ID / Hello (L2): every open of a sealed credential needs your finger
 or PIN, and so can each consent-tier operation. <a href="SECURITY.md"><code>SECURITY.md</code></a> says exactly what
 it stops and what it does not.</p>
+<h2 id="optional-a-fingerprint-before-every-push-and-commit">Optional: a fingerprint before every push and commit</h2>
+<p>With gt unlock and one factor enrolled, two switches make a push or a commit need you
+(details, proof and the way back: <a href="SECURITY.md"><code>SECURITY.md</code></a> §5.5b):</p>
+<pre><code class="language-bash">S=~/.claude/golden-thread/hooks/gt_settings.py
+python3 $S set push_fingerprint_repos /absolute/path/to/your/repo
+python3 $S set push_fingerprint on      # Touch ID / Windows Hello before every push
+python3 $S set commit_fingerprint on    # macOS: Touch ID signs every commit
+</code></pre>
+<p>Both are off by default and <code>off</code> undoes each exactly.</p>
 <h2 id="optional-fence-the-assistant-off-the-vault-gt-sandbox-mode">Optional: fence the assistant off the vault (gt sandbox mode)</h2>
 <p>gt sandbox mode ships <strong>off</strong>. Turned on, gt writes Claude Code's own sandbox settings and
 permission rules so the assistant's shell and file tools cannot write the vault or gt's state,

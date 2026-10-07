@@ -42,6 +42,13 @@ elif a[:1] == ["check"]:
 '''
 
 
+FAKE_GH = r'''
+import sys
+open(%(log)r, "a").write(" ".join(sys.argv[1:]) + "\n")   # the arguments only, never a value
+sys.stdout.write("fake-token-not-real")
+'''
+
+
 class PushGuard(Sandbox):
     def setUp(self):
         super().setUp()
@@ -50,9 +57,11 @@ class PushGuard(Sandbox):
         (self.fake / "unlock.py").write_text(FAKE, encoding="utf-8")
         self.env["GT_PUSH_GUARD_UNLOCK"] = str(self.fake / "unlock.py")
         self.env["FAKE_DIR"] = str(self.fake)
-        (self.fake / "gh").write_text("#!/bin/sh\nprintf 'fake-token-not-real'\n")
-        os.chmod(self.fake / "gh", 0o755)
-        self.env["GT_PUSH_GUARD_GH"] = str(self.fake / "gh")
+        # a Python fake, run through python by the guard: Windows cannot exec a #!/bin/sh file
+        # (WinError 193), which is how the 0.20.3 beta's fixture failed on its first Windows run
+        (self.fake / "gh.py").write_text(FAKE_GH % {"log": str(self.fake / "gh.log")},
+                                         encoding="utf-8")
+        self.env["GT_PUSH_GUARD_GH"] = str(self.fake / "gh.py")
         self.uhome = self.tmp / "unlockhome"
         self.env["GT_PUSH_GUARD_UNLOCK_HOME"] = str(self.uhome)
         self.repo = self.tmp / "Repo"
@@ -104,6 +113,29 @@ class PushGuard(Sandbox):
         self.assertEqual(pol["step_up"]["fresh_s"], 0, "a fresh touch for every push")
         self.assertEqual(pol["factors"]["chosen"]["factors"], ["touchid"])
 
+    def test_on_when_unlock_is_already_on_loosens_nothing(self):
+        """0.20.3 beta: the push-only profile set every existing scope to open, so on a machine
+        already using unlock, LOTR consent stopped asking until `off`. A policy already on
+        keeps every scope it has, and its K; only the push scopes become step_up."""
+        user = {"schema": 1, "enabled": True, "factors": {"required": 2},
+                "scopes": {"lotr:*:consent": "step_up", "gt:vault:read": "unlocked"}}
+        (self.fake / "policy.json").write_text(json.dumps(
+            {"user": user, "effective": {"scopes": user["scopes"]}}))
+        self.status(enrolled=True, enabled=True)
+        p = self.guard("on", str(self.repo))
+        self.assertEqual(p.returncode, 0, p.stdout + p.stderr)
+        pol = json.loads(self.sets()[-1].read_text())
+        self.assertEqual(pol["scopes"]["lotr:*:consent"], "step_up")
+        self.assertEqual(pol["scopes"]["gt:vault:read"], "unlocked")
+        self.assertNotIn("lotr:*:write", pol["scopes"], "nothing new is opened")
+        for s in ("gt:publish", "gt:unlock:policy", "gt:unlock:enroll"):
+            self.assertEqual(pol["scopes"][s], "step_up", s)
+        self.assertEqual(pol["factors"]["required"], 2, "the owner's K is never lowered")
+        self.assertEqual(pol["step_up"]["fresh_s"], 0)
+        self.assertIn("already on", p.stdout)
+        self.assertEqual(self.guard("off").returncode, 0)
+        self.assertEqual(json.loads(self.sets()[-1].read_text()), user, "off restores it exactly")
+
     def test_a_repo_with_its_own_pre_push_hook_is_left_alone(self):
         self.hook.parent.mkdir(parents=True, exist_ok=True)
         self.hook.write_text("#!/bin/sh\necho mine\n")
@@ -152,19 +184,35 @@ class PushGuard(Sandbox):
         self.assertEqual(restored["scopes"], {"gt:vault:read": "unlocked"})
 
     def test_check_proves_the_setup(self):
-        self.assertEqual(self.guard("check").returncode, 1, "nothing set up yet")
         self.guard("on", str(self.repo))
         p = self.guard("check")
         self.assertEqual(p.returncode, 0, p.stdout)
         self.assertNotIn("FAIL", p.stdout)
 
+    def test_check_says_off_when_nothing_is_set_up(self):
+        """0.20.3 beta printed three FAIL lines after a deliberate `off`. Off is its own answer
+        (exit 2), never 0, so a script using check as proof cannot read off as proven."""
+        for when in ("before on", "after off"):
+            p = self.guard("check")
+            self.assertEqual(p.returncode, 2, when + ": " + p.stdout)
+            self.assertNotIn("FAIL", p.stdout, when)
+            self.assertIn("push_fingerprint is off", p.stdout, when)
+            if when == "before on":
+                self.guard("on", str(self.repo))
+                self.guard("off")
+
     # -- the sealed push token (part 2) ---------------------------------------------------
-    def helpers(self):
+    def helpers(self, host="github.com"):
         p = subprocess.run(["git", "-C", str(self.repo), "config", "--local", "--get-all",
-                            "credential.https://github.com.helper"], capture_output=True, text=True)
+                            "credential.https://%s.helper" % host], capture_output=True, text=True)
         return p.stdout.splitlines()
 
-    def seal_on(self):
+    def seal_on(self, remote="https://github.com/x/y.git"):
+        """Sealing follows the repo's HTTPS push remotes (0.20.4), so give it one. The fake gh
+        logs its arguments, never a value."""
+        if remote:
+            subprocess.run(["git", "-C", str(self.repo), "remote", "add", "origin", remote],
+                           check=True)
         cfg = self.home / ".claude" / "vault-config.json"
         cfg.parent.mkdir(parents=True, exist_ok=True)
         d = json.loads(cfg.read_text()) if cfg.exists() else {}
@@ -189,6 +237,21 @@ class PushGuard(Sandbox):
         h = self.helpers()
         self.assertEqual(h[0], "", "the list is reset, so gh's global helper is not used here")
         self.assertIn("git-credential", h[1])
+
+    def test_a_gh_that_cannot_run_is_reported_not_a_crash(self):
+        """0.20.4: seal_token raised OSError (WinError 193 on Windows) when gh could not be
+        executed, so `on` died with a traceback half way through."""
+        self.seal_on()
+        bad = self.tmp / "gh-not-runnable"
+        bad.write_text("not a program\n")
+        os.chmod(bad, 0o644)
+        self.env["GT_PUSH_GUARD_GH"] = str(bad)
+        p = self.guard("on", str(self.repo))
+        self.assertEqual(p.returncode, 0, p.stdout + p.stderr)
+        self.assertNotIn("Traceback", p.stderr)
+        self.assertIn("could not run gh", p.stdout)
+        self.assertEqual(self.helpers(), [])
+        self.assertTrue(self.hook.exists(), "the hook still guards")
 
     def test_without_gh_the_hook_still_guards_and_no_helper_is_set(self):
         self.seal_on()
@@ -216,6 +279,47 @@ class PushGuard(Sandbox):
         self.assertEqual(self.helpers(), [])
         self.assertFalse((self.uhome / "credentials.json").exists())
         self.assertIn("seal rm github", (self.fake / "calls.log").read_text())
+
+    # -- any GitHub host, from the repo's own remote (0.20.4) ------------------------------
+    ENT = "github.example.com"
+
+    def test_an_enterprise_remote_is_sealed_for_its_own_host(self):
+        """The 0.20.3 beta was github.com only; a repo pushing to a GitHub Enterprise host got
+        the hook and nothing else."""
+        self.seal_on("https://%s/org/repo.git" % self.ENT)
+        p = self.guard("on", str(self.repo))
+        self.assertEqual(p.returncode, 0, p.stdout + p.stderr)
+        self.assertNotIn("fake-token-not-real", p.stdout + p.stderr)
+        self.assertIn("auth token -h %s" % self.ENT, (self.fake / "gh.log").read_text())
+        self.assertIn("seal put --name gh-%s" % self.ENT, (self.fake / "calls.log").read_text())
+        cred = json.loads((self.uhome / "credentials.json").read_text())
+        self.assertEqual([m["ref"] for m in cred["git"] if m["host"] == self.ENT],
+                         ["sealed:gh-%s" % self.ENT])
+        self.assertEqual([m for m in cred["git"] if m["host"] == "github.com"], [])
+        h = self.helpers(self.ENT)
+        self.assertEqual(h[0], "")
+        self.assertIn("git-credential", h[1])
+        self.assertEqual(self.helpers("github.com"), [], "no helper for a host it does not push to")
+        r = subprocess.run([sys.executable, str(GUARD), "hook", "origin",
+                            "https://%s/org/repo.git" % self.ENT], input=self.PUSH,
+                           capture_output=True, text=True, env=self.env, cwd=str(self.repo))
+        self.assertEqual(r.returncode, 0, r.stderr)
+        self.assertNotIn("check --scope", (self.fake / "calls.log").read_text(),
+                         "the helper asks for the enterprise host too: one fingerprint per push")
+        self.assertEqual(self.guard("off").returncode, 0)
+        self.assertEqual(self.helpers(self.ENT), [])
+        self.assertFalse((self.uhome / "credentials.json").exists())
+        self.assertIn("seal rm gh-%s" % self.ENT, (self.fake / "calls.log").read_text())
+
+    def test_an_ssh_remote_seals_nothing_and_says_the_hook_is_the_guard(self):
+        self.seal_on("git@%s:org/repo.git" % self.ENT)
+        p = self.guard("on", str(self.repo))
+        self.assertEqual(p.returncode, 0, p.stdout + p.stderr)
+        self.assertIn("SSH", p.stdout)
+        self.assertFalse((self.fake / "sealed.len").exists())
+        self.assertFalse((self.fake / "gh.log").exists())
+        self.assertEqual(self.helpers(self.ENT), [])
+        self.assertTrue(self.hook.exists(), "the hook still guards")
 
     # -- the setting --------------------------------------------------------------------
     def test_the_repos_setting_keeps_the_path_case_and_refuses_a_relative_path(self):

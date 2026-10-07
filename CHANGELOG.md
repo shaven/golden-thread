@@ -11,6 +11,36 @@ release's own summary line, kept short rather than reconstructed after the fact.
 
 ---
 
+## gt 0.20.4 — unreleased
+
+The release of the fingerprint work first published as the 0.20.3 beta (below): a fingerprint before
+every push (`push_fingerprint`), the push token sealed behind it (`push_fingerprint_seal_token`), and a
+fingerprint on every commit (`commit_fingerprint`). What changed since the beta:
+
+- **Any GitHub host, not only github.com.** The hosts come from each guarded repo's own remotes. With
+  `push_fingerprint_seal_token on`, a GitHub Enterprise HTTPS remote has its token sealed for its own
+  host (`gh auth token -h <host>`, sealed as `gh-<host>`), with a credential helper for that host only;
+  github.com keeps the beta's `sealed:github`. An SSH remote is named, and the pre-push hook is its
+  guard. `gt_sign.py github` registers the signing key and the no-bypass ruleset on the remote's own
+  host (`gh api --hostname`), and every hint names that host.
+- **A policy that is already on is never loosened.** In the beta, `push_fingerprint on` set every other
+  unlock scope to `open`, so on a machine already using gt unlock, LOTR consent stopped asking until
+  `off`. Now an unlock policy that is already on keeps every scope and its factor count; only push, tag
+  and the unlock policy itself become step-up, and `on` says so.
+- **No fingerprint for a push that cannot happen.** `gt_unlock.py git-credential` asks the door first,
+  without a prompt; a caller that may never have the token (a process from Claude's shell, under
+  `door: mcp_only`) is refused before anyone is asked to touch. The beta asked twice, then refused.
+- **Windows: the push fingerprint, with Windows Hello.** `push_fingerprint` and the sealed token work on
+  Windows (the pre-push hook runs under Git for Windows; covered by the full Windows suite). On the way,
+  five state writes now say `newline="\n"` (they would have written CRLF on Windows), and a `gh` that
+  cannot be executed is reported instead of crashing `on`. `commit_fingerprint` stays macOS only; signing
+  commits with Windows Hello is planned for 0.20.5.
+- **`gt_push_guard.py check` says "off" when nothing is set up**, with its own exit code (2), instead of
+  three FAIL lines. Exit 1 still means "set up but broken", so a script using `check` as proof never
+  reads off as proven.
+- **Docs:** setup, proof and back-out step by step in SECURITY.md §5.5b; what each setting proves in
+  §5.5a; INSTALL, ONBOARDING, MANUAL and the docs overview describe the three settings.
+
 ## gt 0.20.3 — beta (not released; the release is 0.20.4)
 
 **0.20.3 is a beta.** It was published only to a beta drop for one owner machine (2026-10-06), so by
