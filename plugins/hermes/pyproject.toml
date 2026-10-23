@@ -1,0 +1,27 @@
+[build-system]
+requires = ["setuptools>=61.0"]
+
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "golden-thread-hermes"
+version = "0.2.0"
+description = "Hermes memory provider + Observer Hooks guardrails + gt-watch for Golden Thread"
+readme = "README.md"
+requires-python = ">=3.10"
+license = {text = "MIT"}
+authors = [
+    {name = "Emmanuel Pleshe", email = "emmanuel.pleshe@gmail.com"},
+]
+dependencies = [
+    "pyyaml>=6.0",
+]
+
+[project.optional-dependencies]
+dev = ["pytest"]
+
+[project.entry-points."hermes_agent.memory_providers"]
+golden-thread = "golden_thread_hermes.memory.provider:GoldenThreadMemoryProvider"
+
+[project.entry-points."hermes_agent.plugins"]
+golden-thread-guardrails = "golden_thread_hermes.guardrails"
