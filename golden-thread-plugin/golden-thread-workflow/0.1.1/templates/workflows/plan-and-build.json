@@ -1,0 +1,39 @@
+{
+  "schema": 1,
+  "name": "plan-and-build",
+  "title": "Plan a change, then build it with tests",
+  "description": "Writes a phased plan and waits for your yes, then builds one phase at a time, test first.",
+  "personas": [
+    "developer"
+  ],
+  "help_workflow": "plan-and-build",
+  "say": "Plan the retry-logic change, then build it with tests.",
+  "inputs": [
+    {
+      "name": "change",
+      "type": "string",
+      "required": true,
+      "prompt": "What do you want to change or build?"
+    }
+  ],
+  "steps": [
+    {
+      "id": "plan",
+      "kind": "claude",
+      "title": "Write a phased plan",
+      "prompt": "Use /gt:gt-plan to write a phased plan, with a goal and a done condition for each phase, for: {{inputs.change}}"
+    },
+    {
+      "id": "approve_plan",
+      "kind": "you",
+      "title": "Say yes to the plan",
+      "message": "Read the plan. Say done only if it is right: nothing is built before you do."
+    },
+    {
+      "id": "build",
+      "kind": "claude",
+      "title": "Build it one phase at a time, test first",
+      "prompt": "Use /gt:gt-implement to carry out the approved plan for {{inputs.change}}, one phase at a time, writing the failing test first, and stop on any failure."
+    }
+  ]
+}

@@ -1,0 +1,95 @@
+{
+  "schema": 1,
+  "name": "lotr",
+  "plugin": "gt-lotr",
+  "version": "0.5.1",
+  "requires_gt": ">=0.22.0,<0.23.0",
+  "summary": "LOTR, one gateway to rule them all: a fixed four-tool MCP surface in front of any number of downstream connections, with a registry of who talks to whom, as whom, from which machine",
+  "default": "off",
+  "skills": [
+    "gt-lotr",
+    "gt-lotr-research"
+  ],
+  "scripts": [
+    "lotr.py",
+    "lotrd.py",
+    "lotr_mcp.py",
+    "mcp.py",
+    "lotr_agent_call.py"
+  ],
+  "templates": [],
+  "hooks": [],
+  "hookdir_scripts": [],
+  "settings": [
+    {
+      "key": "agent_split",
+      "default": "split",
+      "values": [
+        "split",
+        "combined"
+      ],
+      "summary": "LOTR agents: separate reader and writer agents (split), or one read/write agent per task (combined).",
+      "detail": "split     readers (jira, m365, github, runner) hold find + call_read only; writers hold\n          find + call_write (+ call_consent); a change is composed from your words alone  (default)\ncombined  one agent, gt-lotr:gateway, holds all four gateway tools: fewer hops, cheaper\n\nThe split is what stops text inside a read result (an issue body, an email) from steering a\nwrite, an injection. combined removes that protection, so it only takes effect while the\nlockdown level is insecure; at any other level it is ignored, the effective mode stays split,\nand the reason is stated. Irreversible operations (send mail, merge, delete) still go through\nthe consent step (call_consent, your Touch ID or Windows Hello) in either mode."
+    },
+    {
+      "key": "onboard_direct_tokens",
+      "default": "1500",
+      "values": [
+        "500",
+        "1500",
+        "3000",
+        "6000",
+        "12000"
+      ],
+      "summary": "A generated MCP agent's result up to this many tokens (characters / 4) comes back as it is; a larger one is summarised.",
+      "detail": "The size, in estimated tokens (characters / 4), up to which the call script of an agent made by\n`lotr onboard` returns a result to the conversation whole. A larger result is stored whole in a private\nfile and a summary comes back instead. Lower it to keep more out of the conversation; raise it if the\nsummaries lose what you need. One connection can differ: lotr onboard tune CONNECTION --direct-tokens N."
+    },
+    {
+      "key": "onboard_summarise",
+      "default": "on",
+      "values": [
+        "on",
+        "off"
+      ],
+      "summary": "Summarise large results of a generated MCP agent with a no-tools model (on), or show a short preview instead (off).",
+      "detail": "on   a large result is summarised by a headless model that has no tools, so only the summary reaches\n     the conversation; the full result is kept in a private file\noff  a large result gets a short preview and the file path, with no model call\nIf the summariser cannot run, the preview is used and the reason is printed."
+    },
+    {
+      "key": "onboard_summary_model",
+      "default": "haiku",
+      "values": [
+        "haiku",
+        "sonnet",
+        "opus"
+      ],
+      "summary": "The model that summarises a large result of a generated MCP agent (haiku, the cheapest, by default).",
+      "detail": "The summariser has no tools and sees only the result text. haiku is cheapest and was enough for a\n26,000-character JSON result in the phase 36 check (one sample); try sonnet if a summary loses what you need."
+    }
+  ],
+  "requires_modules": [],
+  "replaces_core": [],
+  "demo": "demo/act.md",
+  "lockdown": {
+    "strict": {
+      "allow": [],
+      "deny": []
+    },
+    "trust-local": {
+      "allow": [
+        "mcp__plugin_gt-lotr_gt-lotr__find",
+        "mcp__plugin_gt-lotr_gt-lotr__call_read"
+      ],
+      "deny": []
+    },
+    "trust-network": {
+      "allow": [],
+      "deny": []
+    },
+    "insecure": {
+      "allow": [
+        "mcp__plugin_gt-lotr_gt-lotr__call_write"
+      ],
+      "deny": []
+    }
+  }
+}

@@ -1,7 +1,7 @@
 # Golden Thread Plugin — Install Guide
 
 > **Reader:** installing for the first time, or verifying a fork
-> **Claims last checked against the code:** 2026-10-04 (0.20.1) — see *The documents, and what belongs in each* in [`CLAUDE.md`](../CLAUDE.md).
+> **Stamped for gt 0.22.0:** the counts and version numbers in this document are checked against the code at every release; the prose is re-read when the document is edited, not at every release.
 
 **Requirements:** Python 3.8+, Claude Code (any version; 2.1.136 or newer uses the plugin hook route, 2.1.290 or newer is needed for the gt pane; below it the pane is neither asked about nor installed).
 
@@ -9,28 +9,44 @@
 
 ## Option A — From the Claude prompt (recommended)
 
-No terminal and no clone. In Claude Code:
+No terminal and no clone beyond updating Claude Code. **First, update Claude Code**, so the install and
+the cost-saving features that need a recent version all work: in a terminal run `claude update`, then
+`claude --version`. It should print **2.1.300 or newer** (gt installs from 2.1.292, but the in-session
+compact and the `auto_compact` busy check need 2.1.300). Then, in Claude Code:
+
+`<github repo>` stands for the GitHub address that holds the gt repository; replace it in every command below. For the public build that is the address of the project's GitHub account; a team that keeps its own mirror uses its mirror's address instead.
 
 ```
-/plugin marketplace add shaven/golden-thread
+/plugin marketplace add <github repo>/golden-thread.git
 /plugin install gt-all@golden-thread-plugin
 ```
 
-`gt-all` is a bundle: Claude Code installs gt and every module it names (wiki, flow, usage,
-visualize, report-card, watch, demo, pane) as dependencies, so there is nothing to pick plugin by
-plugin. `gt@golden-thread-plugin` alone is the minimal install. `lotr` and `farm` are opt-in:
-`/plugin install gt-lotr@golden-thread-plugin`, or choose them in the next step.
+`gt-all` is a bundle: Claude Code installs gt and **every** module as dependencies, so there is nothing
+to pick plugin by plugin: gt-wiki, gt-flow, gt-usage, gt-visualize, gt-report-card, gt-watch, gt-demo,
+gt-pane, gt-lotr, gt-farm, gt-workflow and gt-recall. Installing a module turns none of its behaviour on (LOTR does
+nothing until `lotr init`, farm needs an engine you set up). `gt@golden-thread-plugin` alone is the minimal
+install.
 
 Restart Claude Code. The first session shows `gt: Golden Thread is installed but not set up on this
 machine`; run **`/gt:gt-setup`**. It asks, in the prompt:
 
-1. install everything (recommended), choose modules, or core only;
+1. **Install everything (recommended)**, choose modules, or core only;
 2. the security level and the other install questions (the same words as `install.sh --questions`);
 3. where your vault lives (or none yet);
 
 then shows one review screen and runs the installer for you with those answers. That is the whole
-install; restart once more when it says so. The installer it runs is the one in the marketplace's
+install; restart once more when it says so.
+
+**The context nudge needs a status line.** The context nudge (default 40%) reads the session size from the gt-usage status line, and a default install sets none, so the nudge never speaks. Turn it on with `--statusline yes` (or by answering yes to the installer's status-line question), or later with `python3 ~/.claude/golden-thread/hooks/gt_usage.py --setup-statusline` in a terminal; it never replaces a status line you already have.
+
+The installer it runs is the one in the marketplace's
 checkout, and it leaves the marketplace as Claude Code manages it.
+
+**To leave modules out:** answer "Choose modules" (or "Core only") in the first question, or run
+`/gt:gt-setup` again at any time to add or remove one; from a terminal, `install.sh --without lotr`
+removes a module and keeps it off, and `install.sh --with lotr` adds it back (the choice is remembered).
+
+A short replay walkthrough of this route (a replay of recorded text, not a screen recording; start to finish about two minutes) has its script in [docs/install-video-script.md](docs/install-video-script.md) and its captions in [docs/install-video.srt](docs/install-video.srt).
 
 To test the prompt route before the repository is published, or from a fork, use a path: `/plugin
 marketplace add /path/to/checkout`, the folder holding `.claude-plugin/marketplace.json`.
@@ -43,7 +59,7 @@ The plugin lives in the `golden-thread-plugin/` subdirectory of the
 `golden-thread` repo.
 
 ```bash
-git clone git@github.com:shaven/golden-thread.git
+git clone <github repo>/golden-thread.git
 cd golden-thread/golden-thread-plugin
 bash install.sh --vault ~/GoldenThread
 ```
@@ -125,7 +141,7 @@ bash install.sh
 ## Option D — One-liner (no git required)
 
 ```bash
-curl -fsSL https://github.com/shaven/golden-thread/archive/refs/heads/main.tar.gz | tar -xz -C /tmp \
+curl -fsSL <github repo>/golden-thread/archive/refs/heads/main.tar.gz | tar -xz -C /tmp \
   && bash /tmp/golden-thread-main/golden-thread-plugin/install.sh
 ```
 
@@ -196,8 +212,10 @@ It copies each plugin into Claude Code's plugin cache — gt's looks like this:
 ```
 
 The enforcement hooks are **also** copied outside the cache, to
-`~/.claude/golden-thread/hooks/`, and `~/.claude/settings.json` references them by
-absolute path — so the path survives a project rename, a vault move, or a version bump.
+`~/.claude/golden-thread/hooks/`. On the settings route `~/.claude/settings.json` references them by
+absolute path — so the path survives a project rename, a vault move, or a version bump; on the default
+plugin route `settings.json` holds only `enabledPlugins` and the plugins' `hooks/hooks.json` run the
+commands wired under `~/.claude/golden-thread/wired/` (see *Where the hooks live: two routes* below).
 
 Re-running `install.sh` is safe, and **an upgrade from any older release ends where a fresh
 install of the newest would**, so skipping releases is fine. On each run it:
@@ -220,8 +238,9 @@ install of the newest would**, so skipping releases is fine. On each run it:
 hooks and the first `TASKS.md`. If a vault is already configured when `install.sh`
 runs, it refreshes that vault's tools to the installed templates.
 
-`install.sh` registers the hooks it owns in `~/.claude/settings.json` — gt's, plus each
-module's while it is on — and prints how many, and how many more (the Core-rule enforcement
+`install.sh` registers the hooks it owns — gt's, plus each module's while it is on — in each
+plugin's `hooks/hooks.json` on the default plugin route, or in `~/.claude/settings.json` on the
+older settings route, and prints how many, and how many more (the Core-rule enforcement
 hooks) the vault step wires against the vault. It then verifies them, printing either
 `Verified hook wiring → every hook this installer owns is connected` or a list of what will
 never run. Read that line: **a file being installed and a file being wired are different
@@ -277,7 +296,7 @@ How much Claude may run without asking. Most of the friction in a session is app
 |---|---|---|
 | **strict** | nothing added -- exactly what Claude Code asks today (default) | everything Claude Code asks today |
 | **trust local** | read-only shell (ls, cat, grep, wc, ...) and git (status, log, diff, show, branch); edits in the project; running tests; git add/commit | network, remote hosts, pushes, installs, deletes, anything not listed |
-| **trust network** | trust local, plus ssh/scp/rsync, git push/pull/fetch, curl/wget, npm/pip/brew install, web fetch | any other shell command or edit outside the project |
+| **trust network** | trust local, plus ssh/scp/rsync, git push/pull/fetch, web fetch; curl/wget and npm/pip/brew install while install_guard is on | any other shell command or edit outside the project |
 | **insecure** | trust network, plus any shell command, any edit, web search | LOTR send/merge/delete still ask for consent |
 
 At every level above strict, Claude's Read tool is denied credential files (ssh keys, cloud and gh credentials, Claude Code's login, .env). That guards the Read tool only: from trust local up a shell command can still print a file, so Core rule 3 (no secret's value in the session) remains the line. These levels reduce prompts; they are not a security boundary.
@@ -293,12 +312,12 @@ first. Each answer is a flag, or a key in `--answers FILE` (the JSON the listing
 | 1 | How much may Claude do without asking? | `--lockdown strict\|trust-local\|trust-network\|insecure\|paranoid` | strict |
 | 2 | Fence Claude's shell off the vault and gt's files? | `--sandbox-mode off\|on` | off |
 | 3 | Lock gt's installed files? Not asked: the `paranoid` level answers it; the flag still combines it with a lower level | `--paranoid off\|on` | off |
-| 4 | Quality against token cost | `--token-profile minimum\|calibrated\|maximum` | calibrated |
+| 4 | Quality against token cost | `--token-profile minimum\|standard\|maximum` | standard |
 | 5 | Which model size for gt's skills? | `--model-profile average\|very-high\|inherit` | average |
 | 6 | Your role | `--persona` | none |
 | 7 | Shape drafts and summaries for that role? | `--persona-aligned on\|off` | on |
 | 8 | How long should replies be? | `--reply-length normal\|brief\|terse` | normal |
-| 9 | Compact idle sessions while the cache is warm? | `--expiry-guard auto\|warn-only\|off` | set by the token profile (auto when calibrated) |
+| 9 | Compact idle sessions while the cache is warm? | `--expiry-guard auto\|warn-only\|off` | set by the token profile (auto when standard) |
 | 10 | gt-usage's status line? | `--statusline` | no |
 | 11 | ast-grep for code search? | `--ast-grep` | no |
 | 12 | Add the gt button pane? | `--with pane` / `--without pane` | no (yes for plain-mode roles) |
@@ -546,7 +565,7 @@ Bash command. A `~/bin/python3` that is not gt's is left alone. Claude Code's Po
 does not read `$CLAUDE_ENV_FILE`; there `python` (python.org's name) works as it is.
 
 *Scheduled jobs (0.20.1).* Jobs are labelled `io.goldenthread.gt-<job>` (0.20.1; an install
-moves a job still under the old `com.markethaven.gt-<job>` label). A job is reported installed
+moves a job still under the old vendor-prefixed label). A job is reported installed
 only when the scheduler accepted it: a refused registration puts the files back and says NOT
 INSTALLED (0.20.1). On Linux a job is a systemd user timer, or a tagged crontab line where
 there is no user systemd. On Windows `gt_schedule.py install|check|remove|list|reconcile` use Task
@@ -619,7 +638,7 @@ is gone, run the installed copy: `python3 ~/.claude/golden-thread/hooks/gt_unins
 It removes:
 
 - gt's scheduled jobs — launchd, Task Scheduler, systemd timers or cron lines — under both the
-  current `io.goldenthread.gt-*` and the old `com.markethaven.gt-*` labels;
+  current `io.goldenthread.gt-*` and the old vendor-prefixed labels;
 - the sandbox entries gt added to `settings.json` (through `gt_sandbox.py remove`);
 - the unlock daemon and its home. **Your enrolled factors, recovery codes and sealed secrets are
   destroyed**; a git credential helper pointing at `gt_unlock.py` goes too;

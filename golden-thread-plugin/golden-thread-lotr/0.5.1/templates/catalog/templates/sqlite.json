@@ -1,0 +1,55 @@
+{
+  "schema": 1,
+  "name": "sqlite",
+  "archetype": "stdio-npx",
+  "summary": "Query and edit one local SQLite database file you choose (mcp-sqlite, local stdio)",
+  "kind": "mcp-stdio",
+  "docs": "https://github.com/jparkerweb/mcp-sqlite",
+  "connect": {
+    "command": [
+      "npx",
+      "-y",
+      "mcp-sqlite@1.0.9",
+      "{db}"
+    ],
+    "runtime": "node",
+    "params": {
+      "db": {
+        "prompt": "The SQLite database file this server may read and change",
+        "kind": "path"
+      }
+    },
+    "env": {},
+    "trust": "T1",
+    "identity": "local SQLite file",
+    "description": "SQLite database file (stdio, npx)",
+    "policy": {
+      "consent": [
+        "delete_records",
+        "update_records",
+        "query"
+      ],
+      "read": [
+        "db_info",
+        "list_tables",
+        "get_table_schema",
+        "read_records"
+      ]
+    },
+    "timeouts": {
+      "start_s": 60,
+      "call_s": 120,
+      "idle_s": 600
+    }
+  },
+  "smoke": {
+    "op": "db_info",
+    "args": {}
+  },
+  "notes": [
+    "You are granting read AND write access to the whole database file you give. Use a copy if you only want to look.",
+    "query runs any SQL you (or the model) write, including DROP and DELETE, so it asks first (consent) on every call. delete_records and update_records also ask first: what they change cannot be undone. Use read_records, list_tables and get_table_schema for reading; they need no confirmation.",
+    "Why this server: the MCP project's own SQLite reference server (mcp-server-sqlite) is archived and has a published SQL-injection flaw that will not be fixed. Google's MCP Toolbox for Databases (the server the postgres template uses) also serves SQLite, but it takes the file path only from the SQLITE_DATABASE environment variable, and a template parameter can only fill the command line. mcp-sqlite takes the path as an argument and is maintained, but it is a community project (eQuill Labs), not a vendor's.",
+    "Runs on your machine via npx and needs Node.js; it builds on the sqlite3 native module. The version is pinned; update it deliberately."
+  ]
+}

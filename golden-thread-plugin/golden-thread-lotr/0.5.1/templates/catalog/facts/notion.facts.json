@@ -1,0 +1,106 @@
+{
+  "schema": 1,
+  "template": "notion",
+  "service": "Notion",
+  "archetype": "mcp-oauth",
+  "researched": "2026-10-14",
+  "researcher": "claude sonnet research run 2026-10-14",
+  "facts": [
+    {
+      "id": "f1",
+      "field": "connect.url",
+      "value": "https://mcp.notion.com/mcp",
+      "claim": "Notion's hosted MCP server (streamable HTTP, recommended) is at /mcp",
+      "source": "https://developers.notion.com/docs/get-started-with-mcp",
+      "retrieved": "2026-10-14",
+      "state": "unverified",
+      "evidence": "Streamable HTTP (recommended): https://mcp.notion.com/mcp"
+    },
+    {
+      "id": "f2",
+      "field": "network.hosts",
+      "value": [
+        "mcp.notion.com"
+      ],
+      "claim": "MCP host and OAuth issuer/authorize/token/register endpoints are all on mcp.notion.com",
+      "source": "https://mcp.notion.com/.well-known/oauth-authorization-server",
+      "retrieved": "2026-10-14",
+      "state": "self-verified",
+      "evidence": "Discovery document: issuer https://mcp.notion.com; authorize, token and register on the same host."
+    },
+    {
+      "id": "f3",
+      "field": "connect.scopes",
+      "value": [],
+      "claim": "No scopes are documented; discovery lists only 'default'; template leaves scopes empty so the server decides",
+      "source": "https://mcp.notion.com/.well-known/oauth-authorization-server",
+      "retrieved": "2026-10-14",
+      "state": "self-verified",
+      "evidence": "scopes_supported: default; docs page names no scopes."
+    },
+    {
+      "id": "f4",
+      "claim": "Dynamic client registration is offered, so no OAuth app has to be created first; OAuth is the only documented method",
+      "source": "https://mcp.notion.com/.well-known/oauth-authorization-server",
+      "retrieved": "2026-10-14",
+      "state": "self-verified",
+      "evidence": "registration_endpoint https://mcp.notion.com/register; docs: requires you to complete the OAuth authorization flow."
+    },
+    {
+      "id": "f5",
+      "claim": "notion-get-self returns the connected workspace and user and takes no arguments",
+      "source": "https://developers.notion.com/guides/mcp/mcp-supported-tools",
+      "retrieved": "2026-10-14",
+      "state": "unverified",
+      "evidence": "Call with an empty object (supported-tools page)."
+    },
+    {
+      "id": "f6",
+      "claim": "notion-delete-pages and notion-delete-databases move items to Trash and are marked destructive",
+      "source": "https://developers.notion.com/guides/mcp/mcp-supported-tools",
+      "retrieved": "2026-10-14",
+      "state": "unverified",
+      "evidence": "Move up to 20 pages to Trash; requires user_confirmed."
+    },
+    {
+      "id": "f7",
+      "claim": "@notionhq/notion-mcp-server (stdio, bearer integration token) latest is 2.5.2 and is no longer actively maintained; Notion calls it a last resort",
+      "source": "https://github.com/makenotion/notion-mcp-server",
+      "retrieved": "2026-10-14",
+      "state": "self-verified",
+      "evidence": "README: no longer actively maintained; registry latest 2.5.2 (registry.npmjs.org/@notionhq/notion-mcp-server)."
+    }
+  ],
+  "choices": [
+    {
+      "decision": "mcp-oauth, hosted",
+      "because": "Notion documents browser OAuth only for its hosted server and discovery advertises dynamic registration; the open-source package is unmaintained.",
+      "facts": [
+        "f1",
+        "f4",
+        "f7"
+      ]
+    },
+    {
+      "decision": "scopes left empty",
+      "because": "No scopes documented; discovery shows only 'default'.",
+      "facts": [
+        "f3"
+      ]
+    },
+    {
+      "decision": "smoke op notion-get-self",
+      "because": "Supported-tools page lists it as a no-argument read.",
+      "facts": [
+        "f5"
+      ]
+    }
+  ],
+  "open": [
+    "The /mcp path rests on one vendor page (the discovery document confirms host only).",
+    "The docs state no plan requirement; workspace owners manage client access under Settings > Connections (one page).",
+    "Whether sign-in sends the browser to hosts other than mcp.notion.com (e.g. a notion.so login) is not documented; network.hosts lists only the MCP host and connect may refuse if another is needed.",
+    "Tool names come from the supported-tools page (39 tools); it was not cross-checked against the live tools/list.",
+    "No policy.consent could be set: the mcp-oauth kind rejects connect.policy."
+  ]
+}

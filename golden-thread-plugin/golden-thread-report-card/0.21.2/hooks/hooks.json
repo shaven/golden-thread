@@ -1,0 +1,36 @@
+{
+  "description": "gt module report-card: each entry runs the command gt's installer wired for this machine, when it wired one",
+  "hooks": {
+    "PreCompact": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "f=\"${HOME:-$USERPROFILE}/.claude/golden-thread/wired/PreCompact__gt_report_card.py\"; if [ -f \"$f\" ]; then . \"$f\"; fi"
+          }
+        ]
+      }
+    ],
+    "SessionEnd": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "f=\"${HOME:-$USERPROFILE}/.claude/golden-thread/wired/SessionEnd__gt_report_card.py\"; if [ -f \"$f\" ]; then . \"$f\"; fi",
+            "timeout": 15
+          }
+        ]
+      }
+    ],
+    "SessionStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "f=\"${HOME:-$USERPROFILE}/.claude/golden-thread/wired/SessionStart__gt_report_card.py\"; if [ -f \"$f\" ]; then . \"$f\"; fi"
+          }
+        ]
+      }
+    ]
+  }
+}

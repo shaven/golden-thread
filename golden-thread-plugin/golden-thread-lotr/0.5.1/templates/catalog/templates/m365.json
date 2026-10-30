@@ -1,0 +1,62 @@
+{
+  "schema": 1,
+  "name": "m365",
+  "archetype": "mcp-oauth-preregistered",
+  "summary": "Microsoft 365 through Microsoft's Work IQ MCP server: mail, calendar, files, Teams (Entra sign-in, your own app registration)",
+  "kind": "mcp-oauth",
+  "docs": "https://learn.microsoft.com/en-us/microsoft-365/copilot/extensibility/work-iq/mcp/overview",
+  "connect": {
+    "url": "https://workiq.svc.cloud.microsoft/mcp",
+    "scopes": [
+      "api://workiq.svc.cloud.microsoft/WorkIQAgent.Ask"
+    ],
+    "offline_access": true,
+    "skip_audience_check": true,
+    "send_resource": false,
+    "redirect_host": "localhost",
+    "client_registration": "preregistered",
+    "client_secret_required": false,
+    "app_setup_url": "https://entra.microsoft.com/#view/Microsoft_AAD_RegisteredApps/ApplicationsListBlade",
+    "redirect_port": 8977,
+    "trust": "T1",
+    "identity": "<your Microsoft 365 work account>",
+    "description": "Microsoft 365 (Work IQ hosted MCP, Entra sign-in)",
+    "policy": {
+      "consent": [
+        "do_action",
+        "create_entity",
+        "update_entity",
+        "delete_entity"
+      ],
+      "read": [
+        "fetch",
+        "fetch_blob",
+        "call_function",
+        "retrieve",
+        "search_paths",
+        "get_schema",
+        "list_agents"
+      ]
+    }
+  },
+  "network": {
+    "hosts": [
+      "workiq.svc.cloud.microsoft",
+      "login.microsoftonline.com"
+    ]
+  },
+  "smoke": {
+    "op": "list_agents",
+    "args": {}
+  },
+  "notes": [
+    "Work-system caution: a Microsoft 365 tenant is usually a workplace system. Connect it only in a gateway zone the owner has approved for that tenant.",
+    "Before setup: a tenant administrator must enable Work IQ, and the delegated permission WorkIQAgent.Ask needs admin consent. Licensing and billing are Microsoft's: read the overview page.",
+    "Create the app in Entra (App registrations, New registration): supported account types 'Accounts in any organizational directory' (the server's sign-in authority is /organizations, which a single-tenant app cannot use); platform 'Mobile and desktop applications' with redirect URI http://localhost:8977/callback; allow public client flows; add the API permission WorkIQAgent.Ask from api://workiq.svc.cloud.microsoft. No client secret.",
+    "lotr setup m365 then asks for the app's client id as a reference (store:m365-client-id; put it there with lotr secret put m365-client-id) and runs the sign-in in YOUR terminal.",
+    "Entra issues the token for api://workiq.svc.cloud.microsoft, not for the MCP URL, so the audience check is off and the resource parameter is not sent (Entra v2 refuses it).",
+    "Tiers: the server has generic tools. do_action can send mail, forward and move; create_entity can send a Teams message or an invitation; so do_action and the create / update / delete tools are consent. fetch, call_function (Graph functions only read), retrieve and the schema tools are reads. ask (Microsoft 365 Copilot) stays a write. Tenant policy blocks mutations by default as well.",
+    "Microsoft's per-workload Mail, Calendar and Teams MCP servers are a legacy preview that Microsoft says not to use for new work; this template uses Work IQ.",
+    "This is an alternative to the built-in REST connection (profile graph), which keeps working."
+  ]
+}

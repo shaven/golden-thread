@@ -1,0 +1,24 @@
+{
+  "schema": 1,
+  "slot": "encoding",
+  "name": "defaults",
+  "tier": "A",
+  "spdx": "MIT",
+  "provenance": {
+    "origin": "original",
+    "contributor": "Golden Thread <gt@example.com>",
+    "upstream": null
+  },
+  "dco": "Signed-off-by: Golden Thread <gt@example.com>",
+  "entries": [
+    {"lang": "python", "charset": "utf-8", "eol": "lf", "bom": "never"},
+    {"lang": "javascript", "charset": "utf-8", "eol": "lf", "bom": "never"},
+    {"lang": "typescript", "charset": "utf-8", "eol": "lf", "bom": "never"},
+    {"lang": "go", "charset": "utf-8", "eol": "lf", "bom": "never"},
+    {"lang": "rust", "charset": "utf-8", "eol": "lf", "bom": "never"},
+    {"lang": "shell", "charset": "utf-8", "eol": "lf", "bom": "never"},
+    {"lang": "markdown", "charset": "utf-8", "eol": "lf", "bom": "never"},
+    {"lang": "json", "charset": "utf-8", "eol": "lf", "bom": "never"},
+    {"lang": "yaml", "charset": "utf-8", "eol": "lf", "bom": "never"}
+  ]
+}

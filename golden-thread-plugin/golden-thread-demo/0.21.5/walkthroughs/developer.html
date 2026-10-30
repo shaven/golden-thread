@@ -1,0 +1,43 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>A developer&#x27;s first day</title><style>:root{--bg:#fbfaf7;--fg:#1d1c1a;--mut:#615e57;--card:#fff;--line:#d9d5cc;--acc:#1f5f8b;--accfg:#fff;--code:#f1eee7}
+@media (prefers-color-scheme:dark){:root{--bg:#171614;--fg:#ece9e2;--mut:#aaa59a;--card:#211f1c;--line:#3a3732;--acc:#79b4e0;--accfg:#10202c;--code:#2a2723}}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--fg);font:16px/1.55 system-ui,sans-serif}
+main{max-width:46rem;margin:0 auto;padding:1.5rem 16px 4rem}h1{font-size:1.5rem;margin:.2rem 0}
+.sub{color:var(--mut);margin:0 0 1rem}
+.bar{height:.5rem;background:var(--line);border-radius:.25rem;overflow:hidden;margin:1rem 0 .4rem}
+.bar>i{display:block;height:100%;width:0;background:var(--acc);transition:width .2s}
+.count{color:var(--mut);font-size:.9rem;margin-bottom:1rem}
+.step{display:none;background:var(--card);border:1px solid var(--line);border-radius:.6rem;padding:1rem 1.2rem}
+.step.on{display:block}.step h2{font-size:1.15rem;margin:.1rem 0 .8rem}
+dt{font-weight:600;margin-top:.8rem;color:var(--mut);font-size:.85rem;text-transform:uppercase;letter-spacing:.04em}
+dd{margin:.2rem 0 0}.say{display:flex;gap:.6rem;align-items:flex-start}
+code{background:var(--code);padding:.35rem .55rem;border-radius:.35rem;font:.95rem ui-monospace,monospace;flex:1;overflow-wrap:anywhere}
+button{font:inherit;border:1px solid var(--line);background:var(--card);color:var(--fg);border-radius:.4rem;padding:.45rem .9rem;cursor:pointer}
+button.p{background:var(--acc);color:var(--accfg);border-color:var(--acc)}button:disabled{opacity:.45;cursor:default}
+nav{display:flex;gap:.6rem;margin-top:1rem}nav .sp{flex:1}</style></head><body><main>
+<h1>A developer&#x27;s first day</h1><p class="sub">Someone who writes and ships code and wants the checks to be real. Practice project: demo-pizzabot (a pretend project; nothing here touches your real notes).</p>
+<div class="bar" id="bar" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0"><i id="fill"></i></div><div class="count" id="count"></div>
+<section class="step" aria-label="Step 1"><h2>1. Load the project&#x27;s context</h2><dl><dt>What you are doing</dt><dd>Load the project&#x27;s context</dd><dt>What to type</dt><dd class="say"><code>/gt:gt-open demo-pizzabot</code><button type="button" data-copy="/gt:gt-open demo-pizzabot">Copy</button></dd><dt>What you will see</dt><dd>The project&#x27;s design notes, decisions and open tasks, summarised, with a question about where to start.</dd><dt>Why it matters</dt><dd>The constraints you agreed last week are in front of you before you write a line.</dd></dl></section>
+<section class="step" aria-label="Step 2"><h2>2. Plan before code</h2><dl><dt>What you are doing</dt><dd>Plan before code</dd><dt>What to type</dt><dd class="say"><code>/gt:gt-plan add a retry limit to the /order endpoint</code><button type="button" data-copy="/gt:gt-plan add a retry limit to the /order endpoint">Copy</button></dd><dt>What you will see</dt><dd>A phased plan with a goal and a done condition for each phase, and a wait for your approval.</dd><dt>Why it matters</dt><dd>A plan you can read costs less than a rewrite.</dd></dl></section>
+<section class="step" aria-label="Step 3"><h2>3. Build it test first</h2><dl><dt>What you are doing</dt><dd>Build it test first</dd><dt>What to type</dt><dd class="say"><code>/gt:gt-implement</code><button type="button" data-copy="/gt:gt-implement">Copy</button></dd><dt>What you will see</dt><dd>One phase at a time, a failing test first, then the code; it stops on any failure and names the tests that ran.</dd><dt>Why it matters</dt><dd>You see which tests ran, not a claim that they did.</dd></dl></section>
+<section class="step" aria-label="Step 4"><h2>4. Run every check at once</h2><dl><dt>What you are doing</dt><dd>Run every check at once</dd><dt>What to type</dt><dd class="say"><code>/gt:gt-allin</code><button type="button" data-copy="/gt:gt-allin">Copy</button></dd><dt>What you will see</dt><dd>A table of every check (scan, lint, tests, install health) and how many actually ran.</dd><dt>Why it matters</dt><dd>A check that was skipped is reported as skipped, never as passed.</dd></dl></section>
+<section class="step" aria-label="Step 5"><h2>5. Commit only with evidence</h2><dl><dt>What you are doing</dt><dd>Commit only with evidence</dd><dt>What to type</dt><dd class="say"><code>/gt:gt-allin-commit</code><button type="button" data-copy="/gt:gt-allin-commit">Copy</button></dd><dt>What you will see</dt><dd>A commit made only when a test receipt covers the staged files; it refuses on the default branch and never pushes.</dd><dt>Why it matters</dt><dd>The history holds only changes that were seen to pass.</dd></dl></section>
+<section class="step" aria-label="Step 6"><h2>6. Capture what you learned</h2><dl><dt>What you are doing</dt><dd>Capture what you learned</dd><dt>What to type</dt><dd class="say"><code>/gt:gt-work</code><button type="button" data-copy="/gt:gt-work">Copy</button></dd><dt>What you will see</dt><dd>Findings, decisions and design changes written to the project&#x27;s notes.</dd><dt>Why it matters</dt><dd>The next session, yours or someone else&#x27;s, starts with what you found out.</dd></dl></section>
+<nav><button type="button" id="back">Back</button><span class="sp"></span><button type="button" class="p" id="next">Next</button></nav>
+</main><script>(function(){
+var steps=[].slice.call(document.querySelectorAll('.step')),i=0,bar=document.getElementById('fill'),
+    pb=document.getElementById('bar'),cnt=document.getElementById('count'),b=document.getElementById('back'),
+    n=document.getElementById('next');
+function show(k){i=Math.max(0,Math.min(steps.length-1,k));
+ steps.forEach(function(s,j){s.classList.toggle('on',j===i);});
+ var pct=Math.round((i+1)*100/steps.length);bar.style.width=pct+'%';pb.setAttribute('aria-valuenow',pct);
+ cnt.textContent='Step '+(i+1)+' of '+steps.length;b.disabled=i===0;n.disabled=i===steps.length-1;}
+b.addEventListener('click',function(){show(i-1);});n.addEventListener('click',function(){show(i+1);});
+document.addEventListener('keydown',function(e){if(e.key==='ArrowRight')show(i+1);if(e.key==='ArrowLeft')show(i-1);});
+[].forEach.call(document.querySelectorAll('[data-copy]'),function(btn){
+ btn.addEventListener('click',function(){var t=btn.getAttribute('data-copy');
+  var done=function(){btn.textContent='Copied';setTimeout(function(){btn.textContent='Copy';},1500);};
+  if(navigator.clipboard&&navigator.clipboard.writeText){navigator.clipboard.writeText(t).then(done,function(){});}
+  else{var a=document.createElement('textarea');a.value=t;document.body.appendChild(a);a.select();
+   try{document.execCommand('copy');done();}catch(x){}document.body.removeChild(a);}});});
+show(0);})();</script></body></html>

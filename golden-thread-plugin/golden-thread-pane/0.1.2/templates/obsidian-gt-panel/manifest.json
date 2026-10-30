@@ -1,0 +1,9 @@
+{
+  "id": "gt-panel",
+  "name": "GT Panel",
+  "version": "0.2.0",
+  "minAppVersion": "1.4.0",
+  "description": "Golden Thread buttons in a side panel. A click copies the prompt to your clipboard, or on your choice puts it in Claudian or an open Terminal tab. Nothing is run.",
+  "author": "Golden Thread",
+  "isDesktopOnly": true
+}

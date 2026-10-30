@@ -1,0 +1,36 @@
+{
+  "schema": 1,
+  "name": "twilio",
+  "archetype": "http-rest",
+  "summary": "Twilio messaging: read a message's delivery status; sending an SMS asks first",
+  "kind": "http",
+  "docs": "https://www.twilio.com/docs/messaging/api/message-resource",
+  "connect": {
+    "base_url": "https://api.twilio.com/2010-04-01",
+    "profile": "generic",
+    "auth_scheme": "basic",
+    "auth_user": "<your Account SID or API key SID>",
+    "credential_ref": "store:twilio-auth-token",
+    "trust": "T1",
+    "identity": "<your Twilio account>",
+    "description": "Twilio messaging (basic auth)",
+    "policy": {
+      "consent": [
+        "DELETE *",
+        "POST /Accounts/*/Messages.json",
+        "POST /Accounts/*/Calls.json"
+      ],
+      "write": []
+    }
+  },
+  "network": {
+    "hosts": [
+      "api.twilio.com"
+    ]
+  },
+  "notes": [
+    "auth_user is the Account SID (or an API key SID); the secret behind credential_ref is the Auth Token (or the API key secret). Neither is in this file.",
+    "Read a message: lotr read NAME@zone 'GET /Accounts/ACCOUNT_SID/Messages/MESSAGE_SID.json'. Sending a message (POST .../Messages.json) and placing a call ask first (consent); every DELETE asks first.",
+    "No smoke call is set: every Twilio path carries your Account SID, which a template cannot hold."
+  ]
+}

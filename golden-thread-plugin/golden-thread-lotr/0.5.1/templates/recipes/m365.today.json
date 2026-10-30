@@ -1,0 +1,18 @@
+{
+  "name": "m365.today",
+  "summary": "Today's Outlook calendar: meetings and events between start and end (my agenda, schedule)",
+  "tier": "read",
+  "tags": ["m365", "outlook", "calendar", "today", "agenda", "meetings", "schedule"],
+  "params": {
+    "start": {"description": "window start, ISO 8601, e.g. today's local midnight 2026-10-01T00:00:00-05:00"},
+    "end": {"description": "window end, ISO 8601, e.g. 2026-10-02T00:00:00-05:00"}
+  },
+  "profiles": {
+    "graph": {
+      "steps": [
+        {"op": "list_events", "args": {"startDateTime": "{{start}}", "endDateTime": "{{end}}"}}
+      ]
+    }
+  },
+  "select": "value[].subject,value[].start,value[].end,value[].location.displayName,value[].organizer.emailAddress.name,value[].isAllDay,value[].isCancelled"
+}

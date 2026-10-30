@@ -1,0 +1,40 @@
+{
+  "schema": 1,
+  "name": "tailscale",
+  "archetype": "http-rest",
+  "summary": "Tailscale API v2: read devices, the access policy and auth-key expiry dates (reads); every change asks first",
+  "kind": "http",
+  "docs": "https://tailscale.com/kb/1101/api",
+  "connect": {
+    "base_url": "https://api.tailscale.com/api/v2",
+    "profile": "generic",
+    "auth_scheme": "bearer",
+    "credential_ref": "store:tailscale-api-key",
+    "trust": "T1",
+    "identity": "<your tailnet>",
+    "description": "Tailscale API v2 (access token)",
+    "policy": {
+      "consent": [
+        "DELETE *",
+        "POST *",
+        "PUT *",
+        "PATCH *"
+      ],
+      "write": []
+    }
+  },
+  "network": {
+    "hosts": [
+      "api.tailscale.com"
+    ]
+  },
+  "smoke": {
+    "op": "GET /tailnet/-/devices",
+    "args": {}
+  },
+  "notes": [
+    "The secret is a Tailscale API access token (or an OAuth client's token); an access token expires after the 1 to 90 days chosen when it was made, so this connection stops working on that date.",
+    "Reads: GET /tailnet/-/devices, GET /tailnet/-/acl, GET /tailnet/-/keys (the key list carries each key's expiry). '-' means the tailnet of the token.",
+    "Every POST, PUT, PATCH and DELETE asks first: the API can change the access policy and delete devices."
+  ]
+}

@@ -1,0 +1,32 @@
+{
+ "id": "ledgerlite",
+ "version": 1,
+ "test_command": "python3 -m unittest discover -s tests -t .",
+ "tasks": {
+  "fix": {
+   "plants": [
+    {
+     "file": "ledgerlite/money.py",
+     "old": "    return quantize(to_decimal(amount) * to_decimal(pct) / 100)",
+     "new": "    return (to_decimal(amount) * to_decimal(pct) / 100).quantize(CENT, rounding=ROUND_DOWN)"
+    },
+    {
+     "file": "ledgerlite/invoice.py",
+     "old": "return sum((l.net() for l in self.lines if l.taxable), ZERO)",
+     "new": "return sum((l.gross() for l in self.lines if l.taxable), ZERO)"
+    },
+    {
+     "file": "ledgerlite/aging.py",
+     "old": "and as_of > invoice.due_date",
+     "new": "and as_of >= invoice.due_date"
+    }
+   ],
+   "prompt": "This project (ledgerlite, a small invoicing and payments ledger) has a failing test suite. Read CLAUDE.md first, then run the test command from the project root: python3 -m unittest discover -s tests -t . . Find the root causes in the source under ledgerlite/ (the tests are correct; do NOT edit anything in tests/). Fix the source with minimal, targeted changes, rerun the suite until it is fully green, then explain each root cause you found in a short list: file, what was wrong, why that made tests fail. Several failures may share a cause and some causes are not visible from one test name, so check that you have fixed causes, not symptoms."
+  },
+  "feature": {
+   "prompt": "Add a late-fee policy to the aging report. Read CLAUDE.md first and follow the project conventions. Spec:\n1. New optional config key `late_fee_pct` (a percentage; str, int, float or Decimal). Absent or None means no fee. A value of 0 also means no fee.\n2. `aging.aging_report(ledger, config, as_of)` still returns the same report with the same `rows`, `total` and `bucket_totals`; fees never change them and are never written to the ledger.\n3. The report gains `fees`, a sequence of fee objects, one per overdue invoice (overdue exactly as the existing report defines it, so the due date itself is not overdue), in the same order as `rows`. Each fee object has attributes `number` (invoice number), `amount` (Decimal) and `note` (str). The report also gains `fee_total`, the Decimal sum of fee amounts (Decimal('0.00') when there are none).\n4. The fee for an invoice is late_fee_pct percent of that invoice's unpaid balance as of the report (a partial payment reduces the base), rounded half-up to cents. Fully paid invoices get no fee. Each invoice is charged at most once per report; building the report twice gives identical fees.\n5. The note is exactly: Late fee {pct}% on {base}  where {pct} is str(Decimal(str(value))) of the config value (so \"1.5\" gives 1.5) and {base} is the unpaid balance with two decimals. Example: Late fee 1.5% on 200.00\n6. When the key is absent the existing behaviour must be unchanged.\nAlso: update the relevant module docstring and/or the rules in CLAUDE.md so they stay true, add your OWN tests for the feature to tests/ (a new test file or additions to an existing one), and keep the whole existing suite green (python3 -m unittest discover -s tests -t .). Finish with a brief summary of what you changed and why.",
+   "hidden_test": "hidden/test_feature_hidden.py",
+   "hidden_module": "tests.test_feature_hidden"
+  }
+ }
+}

@@ -1,0 +1,37 @@
+{
+  "schema": 1,
+  "name": "mcp-oauth-preregistered",
+  "archetype": "mcp-oauth-preregistered",
+  "summary": "ARCHETYPE: a hosted MCP server whose sign-in needs an app YOU create first (TODO: service)",
+  "kind": "mcp-oauth",
+  "docs": "https://todo-host.example/docs",
+  "connect": {
+    "url": "https://todo-host.example/mcp",
+    "scopes": [
+      "TODO-scope"
+    ],
+    "offline_access": true,
+    "client_registration": "preregistered",
+    "client_secret_required": true,
+    "app_setup_url": "https://todo-host.example/settings/apps",
+    "redirect_port": 8977,
+    "trust": "T1",
+    "identity": "TODO: your account at the service",
+    "description": "TODO (hosted MCP, own app)"
+  },
+  "network": {
+    "hosts": [
+      "todo-host.example"
+    ]
+  },
+  "smoke": {
+    "op": "TODO: the name of one read-only tool",
+    "args": {}
+  },
+  "notes": [
+    "ARCHETYPE: copy with `lotr template new NAME --archetype mcp-oauth-preregistered`, then replace every TODO.",
+    "Use this when the server does not register clients itself: you create an OAuth app in the service's settings and get a client id (and usually a client secret).",
+    "Register the redirect address http://127.0.0.1:8977/callback (the port is connect.redirect_port).",
+    "lotr setup asks for the client id and secret as REFERENCES (store:NAME-client-id, store:NAME-client-secret); they are never in this file. Set client_secret_required false for a public client."
+  ]
+}

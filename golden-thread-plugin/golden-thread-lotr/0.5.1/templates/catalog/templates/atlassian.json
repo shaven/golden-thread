@@ -1,0 +1,93 @@
+{
+  "schema": 1,
+  "name": "atlassian",
+  "archetype": "mcp-oauth",
+  "summary": "Atlassian Rovo MCP server: Confluence and Jira (plus Bitbucket, Loom), browser sign-in",
+  "kind": "mcp-oauth",
+  "docs": "https://developer.atlassian.com/cloud/rovo-mcp/guides/getting-started/",
+  "connect": {
+    "url": "https://mcp.atlassian.com/v2/mcp",
+    "scopes": [
+      "read:me",
+      "read:jira:agent-interface",
+      "search:jira:agent-interface",
+      "read:confluence:agent-interface",
+      "search:confluence:agent-interface"
+    ],
+    "offline_access": true,
+    "skip_audience_check": false,
+    "send_resource": true,
+    "redirect_host": "127.0.0.1",
+    "trust": "T1",
+    "identity": "<your Atlassian cloud account>",
+    "description": "Atlassian Rovo MCP (Confluence, Jira), OAuth 2.1 sign-in",
+    "policy": {
+      "consent": [
+        "createJiraIssue",
+        "editJiraIssue",
+        "addOrEditJiraIssueWorklog",
+        "createJiraIssueLink",
+        "createJiraIssueRemoteIssueLink",
+        "convertJiraIssueHierarchy",
+        "uploadAttachmentToJiraIssue",
+        "manageJira*",
+        "createJiraBoard",
+        "delete*",
+        "createJiraProject",
+        "updateJiraProject",
+        "updateJiraScreen",
+        "createConfluence*",
+        "updateConfluence*",
+        "setConfluence*",
+        "copyConfluenceContent",
+        "moveConfluenceContent",
+        "archiveConfluenceContent",
+        "unarchiveConfluenceContent",
+        "restoreConfluenceContentVersion",
+        "convertConfluenceContentMode",
+        "addConfluence*",
+        "addLabelsToConfluenceContent",
+        "removeConfluenceContentPermissions",
+        "replaceConfluenceContentPermissions",
+        "enableConfluencePublicLink",
+        "disableConfluencePublicLink",
+        "editConfluence*",
+        "executeWrite",
+        "executeDestructive"
+      ],
+      "write": [
+        "transitionJiraIssue",
+        "addOrEditJiraIssueComment"
+      ],
+      "read": [
+        "atlassianUserInfo",
+        "lookupJiraAccountId",
+        "downloadJiraIssueAttachment",
+        "listJiraIssueAssignableUsers"
+      ]
+    }
+  },
+  "network": {
+    "hosts": [
+      "mcp.atlassian.com",
+      "auth.atlassian.com"
+    ]
+  },
+  "smoke": {
+    "op": "atlassianUserInfo",
+    "args": {}
+  },
+  "notes": [
+    "Work-system caution: Atlassian cloud sites are usually a workplace system. Connect this only in a gateway zone the owner has approved for that site.",
+    "Endpoint: https://mcp.atlassian.com/v2/mcp (v2, generally available 8 September 2026). The v1 endpoint is retired on 1 March 2027: from then v1 clients are served v2 tools. Clients that cached a v1 client id may need to clear it. The older /v1/sse (SSE) URL is not mentioned on any current Atlassian page, so do not use it.",
+    "Sign-in is OAuth 2.1 in the browser with automatic client registration (the authorization server publishes a dynamic registration endpoint). Tokens are per user and tied to one site (cloud id); every action respects that user's existing Jira and Confluence permissions.",
+    "Scopes: the consent screen decides what is granted. This template asks only for read and search on Jira and Confluence plus read:me (the sign-in identity). To create or edit content add write:jira:agent-interface and write:confluence:agent-interface to connect.scopes, then re-consent. delete:jira and manage:jira are admin-gated and disabled by default; they are not requested here.",
+    "Requirements: the docs state no plan or admin-approval requirement for OAuth, but an organization admin controls API token use and enables the delete_jira and manage_jira groups; some tools consume Rovo credits (Confluence write tools about 15 to 30 each). Ask your Atlassian admin if sign-in is refused.",
+    "Headless alternative: an API token (personal token or service account key) can be used instead of the browser sign-in, only if the organization admin has enabled it. That is a different archetype (mcp-http-key) and is not set up by this template.",
+    "Code search (search_code) and Teams tools are OAuth only; Jira Service Management tools are API token only per the docs.",
+    "Attachment and whiteboard tools may also need api.media.atlassian.com and *.frontend.public.atl-paas.net reachable in a restricted environment; they are not listed in network.hosts because the sign-in does not use them.",
+    "Policy: transitioning a Jira issue and adding or editing a comment are ordinary writes; the consent list covers the other tools that create, edit, move, share or delete Jira and Confluence content, plus the generic executeWrite and executeDestructive tools. Other write tools not named here still count as writes.",
+    "The sign-in runs in YOUR terminal: lotr setup atlassian. Nothing about it is stored in this file.",
+    "Read without asking: atlassianUserInfo, lookupJiraAccountId, downloadJiraIssueAttachment and listJiraIssueAssignableUsers are pinned as reads (their names do not start with a read prefix, so the gateway would otherwise class them as writes)."
+  ]
+}

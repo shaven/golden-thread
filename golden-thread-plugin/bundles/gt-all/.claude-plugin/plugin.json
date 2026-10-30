@@ -1,20 +1,23 @@
 {
   "name": "gt-all",
-  "version": "0.21.6",
-  "description": "Golden Thread, everything in one step: installs gt and its modules (demo, flow, pane, report-card, usage, visualize, watch, wiki) as dependencies. Then run /gt:gt-setup. LOTR, farm and workflow are opt-in, not in this bundle.",
+  "version": "0.22.0",
+  "description": "Golden Thread, everything in one step: installs gt and every module (demo, farm, flow, lotr, pane, recall, report-card, usage, visualize, watch, wiki, workflow) as dependencies. Then run /gt:gt-setup. Installing a module turns none of its behaviour on.",
   "author": {
-    "name": "Stacy Haven",
-    "email": "shaven@shavenconsulting.com"
+    "name": "Stacy Haven"
   },
   "dependencies": [
     "gt",
     "gt-demo",
+    "gt-farm",
     "gt-flow",
+    "gt-lotr",
     "gt-pane",
+    "gt-recall",
     "gt-report-card",
     "gt-usage",
     "gt-visualize",
     "gt-watch",
-    "gt-wiki"
+    "gt-wiki",
+    "gt-workflow"
   ]
 }

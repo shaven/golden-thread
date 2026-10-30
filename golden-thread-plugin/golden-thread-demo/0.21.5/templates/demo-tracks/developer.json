@@ -1,0 +1,51 @@
+{
+ "schema": 1,
+ "track": "developer",
+ "title": "A developer's first day",
+ "audience": "Someone who writes and ships code and wants the checks to be real.",
+ "project": "demo-pizzabot",
+ "steps": [
+  {
+   "n": 1,
+   "goal": "Load the project's context",
+   "say": "/gt:gt-open demo-pizzabot",
+   "see": "The project's design notes, decisions and open tasks, summarised, with a question about where to start.",
+   "why": "The constraints you agreed last week are in front of you before you write a line."
+  },
+  {
+   "n": 2,
+   "goal": "Plan before code",
+   "say": "/gt:gt-plan add a retry limit to the /order endpoint",
+   "see": "A phased plan with a goal and a done condition for each phase, and a wait for your approval.",
+   "why": "A plan you can read costs less than a rewrite."
+  },
+  {
+   "n": 3,
+   "goal": "Build it test first",
+   "say": "/gt:gt-implement",
+   "see": "One phase at a time, a failing test first, then the code; it stops on any failure and names the tests that ran.",
+   "why": "You see which tests ran, not a claim that they did."
+  },
+  {
+   "n": 4,
+   "goal": "Run every check at once",
+   "say": "/gt:gt-allin",
+   "see": "A table of every check (scan, lint, tests, install health) and how many actually ran.",
+   "why": "A check that was skipped is reported as skipped, never as passed."
+  },
+  {
+   "n": 5,
+   "goal": "Commit only with evidence",
+   "say": "/gt:gt-allin-commit",
+   "see": "A commit made only when a test receipt covers the staged files; it refuses on the default branch and never pushes.",
+   "why": "The history holds only changes that were seen to pass."
+  },
+  {
+   "n": 6,
+   "goal": "Capture what you learned",
+   "say": "/gt:gt-work",
+   "see": "Findings, decisions and design changes written to the project's notes.",
+   "why": "The next session, yours or someone else's, starts with what you found out."
+  }
+ ]
+}

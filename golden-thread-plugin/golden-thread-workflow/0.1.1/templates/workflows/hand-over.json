@@ -1,0 +1,46 @@
+{
+  "schema": 1,
+  "name": "hand-over",
+  "title": "Hand a person's work over",
+  "description": "Gathers the facts about the project from the notes and writes a handoff the new owner can read, with each line labelled observed or quoted.",
+  "personas": [
+    "leadership"
+  ],
+  "help_workflow": "hand-over",
+  "say": "Sam is leaving; hand over their projects.",
+  "inputs": [
+    {
+      "name": "project",
+      "type": "string",
+      "required": true,
+      "prompt": "Which project is being handed over?"
+    }
+  ],
+  "steps": [
+    {
+      "id": "facts",
+      "kind": "run",
+      "title": "Gather the facts a handoff starts from",
+      "script": "gt_handoff.py",
+      "args": [
+        "--vault",
+        "{{vault}}",
+        "--project",
+        "{{inputs.project}}",
+        "--dry-run"
+      ]
+    },
+    {
+      "id": "narrative",
+      "kind": "claude",
+      "title": "Write the handoff the new owner can read",
+      "prompt": "Write the handoff for the project {{inputs.project}} with /gt:gt-create handoff. Start from these facts: {{steps.facts.output.text}} Label every line as observed or quoted, add what was decided and why, and list the open items."
+    },
+    {
+      "id": "read_it",
+      "kind": "you",
+      "title": "Read the handoff before it is passed on",
+      "message": "Read the handoff Claude wrote. Say done when it is right to hand to the next person."
+    }
+  ]
+}

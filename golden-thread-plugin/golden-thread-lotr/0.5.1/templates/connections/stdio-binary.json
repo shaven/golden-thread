@@ -1,0 +1,36 @@
+{
+  "schema": 1,
+  "name": "stdio-binary",
+  "archetype": "stdio-binary",
+  "summary": "ARCHETYPE: a local MCP server that is a downloaded program (TODO: say which service)",
+  "kind": "mcp-stdio",
+  "docs": "https://todo-host.example/docs",
+  "connect": {
+    "command": [
+      "/TODO/absolute/path/to/server-binary",
+      "stdio"
+    ],
+    "runtime": "binary",
+    "env_refs": {
+      "TODO_API_KEY": "store:TODO-secret-name"
+    },
+    "env": {},
+    "trust": "T1",
+    "identity": "TODO: your account at the service",
+    "description": "TODO (stdio, binary)",
+    "timeouts": {
+      "start_s": 30,
+      "call_s": 120,
+      "idle_s": 600
+    }
+  },
+  "smoke": {
+    "op": "TODO: the name of one read-only tool",
+    "args": {}
+  },
+  "notes": [
+    "ARCHETYPE: copy with `lotr template new NAME --archetype stdio-binary`, then replace every TODO.",
+    "Use an absolute path to the program (or a name on PATH). Download it from the vendor's own releases page and check its checksum or signature yourself; LOTR does not install programs.",
+    "The argument that selects stdio mode differs per program (stdio, --stdio, serve...): read its --help."
+  ]
+}

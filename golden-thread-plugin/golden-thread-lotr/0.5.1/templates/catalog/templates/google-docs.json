@@ -1,0 +1,48 @@
+{
+  "schema": 1,
+  "name": "google-docs",
+  "archetype": "mcp-oauth-preregistered",
+  "summary": "Google's hosted Docs MCP server with your own Google OAuth client (read-only scopes)",
+  "kind": "mcp-oauth",
+  "docs": "https://developers.google.com/workspace/guides/configure-mcp-servers",
+  "connect": {
+    "url": "https://docsmcp.googleapis.com/mcp/v1",
+    "scopes": [
+      "https://www.googleapis.com/auth/drive.readonly",
+      "https://www.googleapis.com/auth/documents.readonly"
+    ],
+    "offline_access": false,
+    "auth_params": {
+      "access_type": "offline",
+      "prompt": "consent"
+    },
+    "client_registration": "preregistered",
+    "client_secret_required": true,
+    "app_setup_url": "https://console.cloud.google.com/auth/clients",
+    "redirect_port": 8977,
+    "redirect_host": "127.0.0.1",
+    "send_resource": true,
+    "skip_audience_check": false,
+    "trust": "T1",
+    "identity": "<your Google account>",
+    "description": "Google Docs (hosted MCP, own OAuth client)",
+    "policy": {
+      "consent": [
+        "*delete*",
+        "*send*"
+      ]
+    }
+  },
+  "network": {
+    "hosts": [
+      "docsmcp.googleapis.com",
+      "accounts.google.com",
+      "oauth2.googleapis.com"
+    ]
+  },
+  "notes": [
+    "Same setup as the google-drive template: a Google Cloud project, the API and its MCP API enabled, an OAuth consent screen, an OAuth client with redirect http://127.0.0.1:8977/callback; lotr setup asks for the client id and secret as references.",
+    "Scopes documents and drive.file (edit and create) are not requested.",
+    "Tool names are not on Google's page, so none is named here: a name is rated by its words (a read word is a read, anything unknown is a write, send and delete ask first)."
+  ]
+}

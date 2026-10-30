@@ -115,9 +115,9 @@
 <h1 id="golden-thread-plugin-documentation">Golden Thread Plugin — Documentation</h1>
 <blockquote>
 <p><strong>Reader:</strong> quick lookup, and the printed PDF
-<strong>Claims last checked against the code:</strong> 2026-10-02 (gt 0.19.1) — see <em>The documents, and what belongs in each</em> in <a href="../CLAUDE.md"><code>CLAUDE.md</code></a>.</p>
+<strong>Stamped for gt 0.22.0:</strong> the counts and version numbers in this document are checked against the code at every release; the prose is re-read when the document is edited, not at every release.</p>
 </blockquote>
-<h2 id="version-gt-0215-gt-wiki-029-gt-usage-0110-gt-visualize-046-gt-lotr-050-gt-pane-011-gt-workflow-010-gt-farm-0211-gt-report-card-0211-gt-demo-0214-gt-watch-gt-flow-0210">Version gt 0.21.5 / gt-wiki 0.2.9 / gt-usage 0.1.10 / gt-visualize 0.4.6 / gt-lotr 0.5.0 / gt-pane 0.1.1 / gt-workflow 0.1.0 / gt-farm 0.21.1 / gt-report-card 0.21.1 / gt-demo 0.21.4 / gt-watch, gt-flow 0.21.0</h2>
+<h2 id="version-gt-0220-gt-wiki-0210-gt-usage-0111-gt-visualize-047-gt-lotr-051-gt-pane-012-gt-workflow-011-gt-farm-0213-gt-report-card-0212-gt-demo-0215-gt-watch-gt-flow-0211-gt-recall-010">Version gt 0.22.0 / gt-wiki 0.2.10 / gt-usage 0.1.11 / gt-visualize 0.4.7 / gt-lotr 0.5.1 / gt-pane 0.1.2 / gt-workflow 0.1.1 / gt-farm 0.21.3 / gt-report-card 0.21.2 / gt-demo 0.21.5 / gt-watch, gt-flow 0.21.1 / gt-recall 0.1.0</h2>
 <hr />
 <p>Golden Thread turns an Obsidian vault into the single source of truth for all AI memory across every project and every session. The tiered rule model introduced in v0.6.0 now carries <strong>ten hook-backed Core rules</strong> enforced at three points in the turn, 0.9.12 added <code>gt-route</code> for the middle of a session, and 0.9.13 makes the session-start component check verify that the hooks are <strong>wired</strong>, not merely installed, 0.11.0 makes <code>log.md</code> and <code>decisions.md</code> generated files so concurrent sessions cannot overwrite one another, 0.12.3 stops a vault tool running against a vault it was never told to touch, 0.12.4 makes parallel execution the default for divisible work in every project, 0.12.5 stops code being committed before its tests have been seen to pass, 0.13.0 makes an upgrade from any older release end where a fresh install would, 0.14.0 splits optional parts into modules you can decline, and 0.15.0 makes six of them — gt-wiki 0.2.1 (an LLM-powered knowledge base with immutable sources and interlinked pages), gt-demo (the guided tour), gt-watch (upstream repos), gt-report-card (the session report card), gt-farm (work packets for an external AI) and the new gt-flow, which draws the vault's event stream as a timeline of knowledge climbing the ladder. 0.16.0 gave contributed <strong>packs</strong> — plain JSON data, reviewed and merged, never third-party code — somewhere to come from and something to read them, shipping <code>gt-scan</code>, <code>gt-optimize</code>, <code>gt-handoff</code>, <code>gt-allin</code> and <code>gt-allin-commit</code>; 0.16.1 added <code>gt-context</code> (the first consumer of the registry's model-reachable tier) and <code>gt-validation</code> (a verification receipt that goes stale when the file it describes changes); and 0.16.2 re-asserts the Core rules after a compaction as well as on every prompt, lets a module hook declare a <code>timeout</code>, and refuses a copyleft licence by its current SPDX spelling; 0.16.3 makes <code>install.sh</code> refuse when MANIFEST.json is tracked but missing rather than regenerating one, and stops <code>gt_tasks.py</code> overwriting TASKS.md in silence. 0.17.2 adds <code>gt_surface.py</code>, a <code>SessionStart</code> hook that finally reads what earlier sessions wrote for the next one — a live MUST DO block from <code>deadlines.md</code>, every handoff not yet handled, a count of urgent tasks waiting on you, pre-compaction state — adds five skills that create, list and handle tasks and handoffs (<code>gt-task</code>, <code>gt-task-list</code>, <code>gt-task-handle</code>, <code>gt-handoff-list</code>, <code>gt-handoff-handle</code>), and keys session claims on a machine id rather than a hostname. 0.17.11 made Core rule 1 queue-first. 0.18.1 makes the skills one verb per action — <code>gt-create</code>, <code>gt-open</code>, <code>gt-list</code>, <code>gt-handle</code> and the new <code>gt-close</code>, each taking the artifact as its argument, with the six old task and handoff names kept as deprecated aliases until 0.21.4 removed them — and adds <code>gt-plan</code> and <code>gt-implement</code> for the coding loop, <code>gt-brief</code> to draft a repo's <code>CLAUDE.md</code> from the vault, and <code>gt-minimize</code> to prune a session before cutting it. 0.20.1 adds <strong>gt unlock</strong>, off by default: agents need your presence (TOTP plus Touch ID or Windows Hello, optionally Entra ID) before they use LOTR connections, credentials, publishing or gt's guards — see the security section below and <code>SECURITY.md</code>. 0.21.0 ships hooks with the plugins (a <code>hooks/hooks.json</code> in gt and four modules, dispatching through <code>~/.claude/golden-thread/wired/</code>, used from Claude Code 2.1.136), makes the install <strong>ask every choice</strong> with the security level first (<code>install.sh --questions</code>, exit 5 when a security answer is missing off-terminal), adds the <code>paranoid</code> group with single-use action tokens, I/O brokers for disk read, network fetch and disk write, a token profile, a models-and-cost page with a calibration schedule, the optional <strong>gt-pane</strong> module, <code>/gt:gt-help</code>, <code>/gt:gt-complete</code> (<strong>breaking:</strong> <code>/gt:gt-close</code> now closes the session), <code>/gt:gt-forget</code>, <code>/gt:gt-grant</code> and <code>/gt:gt-calibrate</code>. 0.21.4 connects an MCP service in a few steps (<code>lotr setup</code>, gt-lotr 0.5.0, with a catalog of sixteen templates released apart from gt in <code>lotr-templates/</code>), lets a persona shape the session (<code>featured_skills</code>, <code>session_focus</code>, <code>lotr_templates</code>), adds a First day walkthrough and a guide per role to <code>/gt:gt-help</code>, <code>install.sh --only NAME</code> for one module, and makes <code>~/GoldenThread</code> the default vault, with a warning for a vault in Documents or on a synced or shared drive.</p>
 <hr />
@@ -259,7 +259,7 @@ the rule says so. It fails open on any parse failure.</p>
 <p>The canonical rule definitions live in <code>Projects/golden-thread/core-rules/</code> inside the vault. Editing a rule file there changes what the hook injects — the rule text is never duplicated into the script.</p>
 <p><strong>The canary:</strong> <code>core_timestamp_every_message.md</code> is designated Core/Validated not because a missing timestamp causes real harm, but because it is trivially observable at the top of every reply. When the timestamp disappears, enforcement has broken.</p>
 <hr />
-<h2 id="gt-skills-37">gt Skills (37)</h2>
+<h2 id="gt-skills-40">gt Skills (40)</h2>
 <h3 id="setup">Setup</h3>
 <table>
 <thead>
@@ -299,6 +299,10 @@ the rule says so. It fails open on any parse failure.</p>
 <tr>
 <td><code>/gt:gt-route</code></td>
 <td>Mid-session. Names what the session has actually become, says where its output belongs, and checks you are in the right project, harness and model. For when a session drifted from what it opened with, or you cannot name what you are doing.</td>
+</tr>
+<tr>
+<td><code>/gt:gt-next</code></td>
+<td>Says the one best next action from the vault, and why, in under five lines. No model call; shaped by your role.</td>
 </tr>
 <tr>
 <td><code>/gt:gt-work</code></td>
@@ -389,6 +393,14 @@ the rule says so. It fails open on any parse failure.</p>
 <tr>
 <td><code>/gt:gt-forget</code></td>
 <td><em>(0.21.0)</em> Retract a wrong fact in every note that states it; <code>gt_forget.py search\|retract</code>; nothing is deleted.</td>
+</tr>
+<tr>
+<td><code>/gt:gt-adopt</code></td>
+<td><em>(0.22.0)</em> Use gt on a non-gt vault: inspect read-only, propose <code>vault.manifest.json</code>, write it only after a yes.</td>
+</tr>
+<tr>
+<td><code>/gt:gt-disposable</code></td>
+<td><em>(0.22.0)</em> Run a blocked command in a throwaway VM or container; <code>gt_disposable.py backends\|plan\|run</code>; nothing is mounted, the guest is destroyed.</td>
 </tr>
 <tr>
 <td><code>/gt:gt-grant</code></td>
@@ -542,6 +554,11 @@ read refuses too, because "could not check" is not "clear".</p>
 <td><code>/gt-farm:gt-farm</code></td>
 <td><code>farm</code> (<code>gt-farm</code>) · <strong>off</strong> fresh, on for upgraders</td>
 <td>Route bulk, mechanical, or second-opinion tasks to an external AI service as a self-contained work packet. All four gates (Stateless, Self-contained, Checkable, Releasable) must pass before a task leaves. Results come back unverified. Was <code>/gt:gt-farm</code>; a machine upgrading from a gt that shipped it keeps it on.</td>
+</tr>
+<tr>
+<td><code>/gt-farm:gt-farm agent farming</code></td>
+<td><code>farm</code> (<code>gt-farm</code>) 0.22.0 · <strong>off</strong> until set up</td>
+<td>A hosted model fixes a code task with tools on a copy of your repo, in an operating-system sandbox; accepted only when your tests pass on a clean copy, and the result is a candidate patch you review, never applied for you. <code>gt_farm_agent_setup.py start\|status\|doctor\|off</code> sets it up (key file only for now), <code>gt_farm_agent.py plan\|run\|farm\|audit\|apply</code> runs it, <code>gt_farm_share.py status\|explain\|pause\|resume</code> shows and controls the share (<code>farm_share</code>, <code>farm_agent_budget_usd_day</code>, both off), and <code>gt_farm_calibrate.py NAME --kind agent-code</code> measures an engine first.</td>
 </tr>
 <tr>
 <td><code>/gt-workflow:gt-workflow</code></td>

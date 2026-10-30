@@ -1,0 +1,34 @@
+{
+  "schema": 1,
+  "name": "mcp-oauth",
+  "archetype": "mcp-oauth",
+  "summary": "ARCHETYPE: a hosted MCP server you sign in to in the browser; LOTR registers itself (TODO: service)",
+  "kind": "mcp-oauth",
+  "docs": "https://todo-host.example/docs",
+  "connect": {
+    "url": "https://todo-host.example/mcp",
+    "scopes": [],
+    "offline_access": true,
+    "skip_audience_check": false,
+    "send_resource": true,
+    "redirect_host": "127.0.0.1",
+    "trust": "T1",
+    "identity": "TODO: your account at the service",
+    "description": "TODO (hosted MCP, sign-in)"
+  },
+  "network": {
+    "hosts": [
+      "todo-host.example"
+    ]
+  },
+  "smoke": {
+    "op": "TODO: the name of one read-only tool",
+    "args": {}
+  },
+  "notes": [
+    "ARCHETYPE: copy with `lotr template new NAME --archetype mcp-oauth`, then replace every TODO.",
+    "Use this when the vendor publishes a hosted MCP URL that opens a sign-in page and the server accepts dynamic client registration (it needs no app created by you).",
+    "network.hosts must list every host the sign-in uses beyond the MCP host if the vendor says so; connect refuses a host the template does not vouch for.",
+    "The sign-in runs in YOUR terminal: lotr setup NAME. Nothing about it is stored in this file."
+  ]
+}

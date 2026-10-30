@@ -1,0 +1,58 @@
+{
+  "schema": 1,
+  "name": "postgres",
+  "archetype": "stdio-npx",
+  "summary": "PostgreSQL through Google's MCP Toolbox for Databases (prebuilt postgres tools, local stdio)",
+  "kind": "mcp-stdio",
+  "docs": "https://github.com/googleapis/mcp-toolbox/blob/v1.14.0/docs/en/integrations/postgres/prebuilt-configs/postgresql.md",
+  "connect": {
+    "command": [
+      "npx",
+      "-y",
+      "@toolbox-sdk/server@1.14.0",
+      "--prebuilt=postgres",
+      "--stdio"
+    ],
+    "runtime": "node",
+    "env_refs": {
+      "POSTGRES_HOST": "store:postgres-host",
+      "POSTGRES_DATABASE": "store:postgres-database",
+      "POSTGRES_USER": "store:postgres-user",
+      "POSTGRES_PASSWORD": "store:postgres-password"
+    },
+    "env": {},
+    "trust": "T1",
+    "identity": "<your PostgreSQL database user>",
+    "description": "PostgreSQL via MCP Toolbox (stdio, npx)",
+    "policy": {
+      "consent": [
+        "execute_sql",
+        "get_query_plan"
+      ],
+      "read": [
+        "database_overview",
+        "long_running_transactions",
+        "replication_stats",
+        "get_column_cardinality"
+      ]
+    },
+    "timeouts": {
+      "start_s": 90,
+      "call_s": 120,
+      "idle_s": 600
+    }
+  },
+  "smoke": {
+    "op": "list_schemas",
+    "args": {}
+  },
+  "notes": [
+    "No connection string is ever written here. Every connection detail (host, database, user, password) is a reference: put each in the store yourself with lotr secret put postgres-host (and postgres-database, postgres-user, postgres-password). The port defaults to 5432; add POSTGRES_PORT to env_refs (or env) for another port, and POSTGRES_QUERY_PARAMS (for example sslmode) the same way.",
+    "Connect as a database user with only the rights you mean to give: the server can do anything that user can.",
+    "execute_sql runs any single SQL statement, including DROP, DELETE and UPDATE, so it asks first (consent) on every call. get_query_plan pastes your text into EXPLAIN without checking it (Toolbox warns it is prone to SQL injection), so it asks first too. The other tools only read catalog and statistics views.",
+    "Google says the prebuilt configs are for trusted developers building things, not for run-time use with untrusted users.",
+    "To load fewer tools, change --prebuilt=postgres to --prebuilt=postgres/data (SQL and schema tools only) or postgres/monitor, postgres/health.",
+    "Runs on your machine via npx (a Go binary in a platform package) and needs Node.js. The version is pinned; update it deliberately.",
+    "The MCP project's own postgres reference server (@modelcontextprotocol/server-postgres) is deprecated on npm and took the connection string, password included, on the command line; it is not used."
+  ]
+}

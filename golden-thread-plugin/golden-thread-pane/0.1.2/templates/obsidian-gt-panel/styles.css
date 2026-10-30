@@ -1,0 +1,5 @@
+.gt-panel-list { display: flex; flex-direction: column; gap: 6px; padding: 8px; }
+.gt-panel-btn { text-align: left; white-space: normal; height: auto; padding: 8px 10px; }
+.gt-panel-note { color: var(--text-muted); font-size: var(--font-ui-smaller); padding: 8px; }
+.gt-panel-allowance { color: var(--text-muted); font-size: var(--font-ui-smaller); padding: 8px 8px 0; }
+.gt-panel-warning { color: var(--text-error); font-size: var(--font-ui-smaller); padding: 8px 8px 0; }

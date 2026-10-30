@@ -1,0 +1,109 @@
+{
+  "schema": 1,
+  "template": "sqlite",
+  "service": "SQLite (mcp-sqlite community server)",
+  "archetype": "stdio-npx",
+  "researched": "2026-10-14",
+  "researcher": "claude opus research run 2026-10-14",
+  "facts": [
+    {
+      "id": "f1",
+      "field": "connect.command",
+      "value": [
+        "npx",
+        "-y",
+        "mcp-sqlite@1.0.9",
+        "{db}"
+      ],
+      "claim": "The server is the npm package mcp-sqlite, started with npx -y and the database path as its only argument; npm latest is 1.0.9 (published 2026-04-04).",
+      "source": "https://github.com/jparkerweb/mcp-sqlite",
+      "retrieved": "2026-10-14",
+      "state": "self-verified",
+      "evidence": "README: args [\"-y\", \"mcp-sqlite\", \"<path-to-your-sqlite-database.db>\"], 'Your database path must be provided as an argument.'; registry dist-tags latest 1.0.9."
+    },
+    {
+      "id": "f2",
+      "field": "connect.runtime",
+      "value": "node",
+      "claim": "The package ships a Node.js bin (mcp-sqlite-server.js) and depends on sqlite3 and @modelcontextprotocol/sdk.",
+      "source": "https://registry.npmjs.org/mcp-sqlite/1.0.9",
+      "retrieved": "2026-10-14",
+      "state": "self-verified",
+      "evidence": "bin mcp-sqlite-server -> mcp-sqlite-server.js; engines node >=14; README launches it with npx."
+    },
+    {
+      "id": "f3",
+      "claim": "Tools: db_info and list_tables (no input), get_table_schema, read_records (read); create_record, update_records, delete_records (change rows); query (any SQL).",
+      "source": "https://github.com/jparkerweb/mcp-sqlite",
+      "retrieved": "2026-10-14",
+      "state": "unverified",
+      "evidence": "README sections: Database Information, CRUD Operations, Custom Queries."
+    },
+    {
+      "id": "f4",
+      "claim": "query executes an arbitrary SQL statement against the connected database.",
+      "source": "https://github.com/jparkerweb/mcp-sqlite",
+      "retrieved": "2026-10-14",
+      "state": "unverified",
+      "evidence": "'Execute a custom SQL query against the connected SQLite database.'"
+    },
+    {
+      "id": "f5",
+      "claim": "The MCP project's SQLite reference server is archived (servers-archived, 'no longer maintained') and its SQL-injection flaw reported by Trend Micro in June 2025 will not be patched.",
+      "source": "https://www.trendmicro.com/en/research/25/f/why-a-classic-mcp-server-vulnerability-can-undermine-your-entire-ai-agent.html",
+      "retrieved": "2026-10-14",
+      "state": "self-verified",
+      "evidence": "Trend Micro: no patch is planned; GitHub API: modelcontextprotocol/servers-archived archived=true, src/sqlite present; The Register 2025-06-25 reports the same."
+    },
+    {
+      "id": "f6",
+      "claim": "Google's MCP Toolbox prebuilt sqlite config reads the database path only from the SQLITE_DATABASE environment variable and offers execute_sql and list_tables.",
+      "source": "https://github.com/googleapis/mcp-toolbox/blob/v1.14.0/docs/en/integrations/sqlite/prebuilt-configs/sqlite.md",
+      "retrieved": "2026-10-14",
+      "state": "unverified",
+      "evidence": "'SQLITE_DATABASE: The path to the SQLite database file'; the prebuilt YAML has database: ${SQLITE_DATABASE} (same repository, so one source)."
+    },
+    {
+      "id": "f7",
+      "claim": "mcp-sqlite is a community project (jparkerweb, eQuill Labs, MIT), not archived, last pushed 2026-04-05; releases 1.0.8 (2026-03-15) and 1.0.9 (2026-04-04).",
+      "source": "https://github.com/jparkerweb/mcp-sqlite",
+      "retrieved": "2026-10-14",
+      "state": "self-verified",
+      "evidence": "GitHub API archived=false pushed_at 2026-04-05; npm time shows 1.0.8 and 1.0.9 dates."
+    }
+  ],
+  "choices": [
+    {
+      "decision": "mcp-sqlite@1.0.9 (stdio-npx) with the file as the {db} parameter",
+      "because": "The reference server is archived with an unfixed SQL injection; Google's Toolbox is maintained but takes the path only from an environment variable, which a template parameter cannot fill; mcp-sqlite is maintained and takes the path on the command line.",
+      "facts": [
+        "f1",
+        "f5",
+        "f6",
+        "f7"
+      ]
+    },
+    {
+      "decision": "consent on query, update_records, delete_records; explicit read for the four look-only tools",
+      "because": "query runs any SQL; update and delete change rows irreversibly; the read tools would otherwise be classed as writes by name.",
+      "facts": [
+        "f3",
+        "f4"
+      ]
+    },
+    {
+      "decision": "smoke op db_info",
+      "because": "read-only and takes no input per the README",
+      "facts": [
+        "f3"
+      ]
+    }
+  ],
+  "open": [
+    "mcp-sqlite is a community server, not a vendor's. The skill prefers official sources; there is no maintained official SQLite MCP server that takes a path argument.",
+    "Switching to Google's MCP Toolbox needs lotr to substitute template params into connect.env (today apply_params fills connect.command only).",
+    "Tool names and their read/write nature come from the README only; not checked against tools/list or the source.",
+    "Whether mcp-sqlite builds its own SQL from table and column names safely was not reviewed; the consent list limits what runs without a person.",
+    "The npm pin rests on the registry; the README shows the command unpinned."
+  ]
+}

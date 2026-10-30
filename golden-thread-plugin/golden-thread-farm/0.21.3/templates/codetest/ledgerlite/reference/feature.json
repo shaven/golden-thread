@@ -1,0 +1,32 @@
+[
+ {
+  "file": "ledgerlite/aging.py",
+  "old": "only while the ledger shows a balance. Bucket edges come from config at report time.\"\"\"",
+  "new": "only while the ledger shows a balance. Bucket edges come from config at report time.\n\nLate fees: when config `late_fee_pct` is set (and positive), each overdue invoice gets one\nfee of that percent of its ledger balance, rounded half-up. Fees are report-only: they are\nnever written to the ledger and never change the rows or totals. Absent/None means none.\"\"\""
+ },
+ {
+  "file": "ledgerlite/aging.py",
+  "old": "from .money import ZERO, fmt\n",
+  "new": "from .money import ZERO, fmt, percent_of, to_decimal\n"
+ },
+ {
+  "file": "ledgerlite/aging.py",
+  "old": "def days_overdue(invoice, as_of):",
+  "new": "@dataclass(frozen=True)\nclass LateFee:\n    number: str\n    amount: Decimal\n    note: str\n\n\ndef days_overdue(invoice, as_of):"
+ },
+ {
+  "file": "ledgerlite/aging.py",
+  "old": "    def __init__(self, as_of, rows, edges):\n        self.as_of = as_of\n        self.rows = list(rows)\n        self.edges = tuple(edges)\n",
+  "new": "    def __init__(self, as_of, rows, edges, fees=()):\n        self.as_of = as_of\n        self.rows = list(rows)\n        self.edges = tuple(edges)\n        self.fees = tuple(fees)\n\n    @property\n    def fee_total(self):\n        return sum((f.amount for f in self.fees), ZERO)\n"
+ },
+ {
+  "file": "ledgerlite/aging.py",
+  "old": "def aging_report(ledger, config, as_of):",
+  "new": "def late_fees(rows, config):\n    raw = config.get(\"late_fee_pct\")\n    if raw is None:\n        return ()\n    pct = to_decimal(raw)\n    if pct <= 0:\n        return ()\n    return tuple(LateFee(r.number, percent_of(r.balance, pct),\n                         f\"Late fee {pct}% on {fmt(r.balance)}\") for r in rows)\n\n\ndef aging_report(ledger, config, as_of):"
+ },
+ {
+  "file": "ledgerlite/aging.py",
+  "old": "    return AgingReport(as_of, rows, edges)",
+  "new": "    return AgingReport(as_of, rows, edges, late_fees(rows, config))"
+ }
+]

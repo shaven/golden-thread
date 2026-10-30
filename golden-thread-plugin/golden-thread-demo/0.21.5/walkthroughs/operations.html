@@ -1,0 +1,43 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>An operations engineer&#x27;s first day</title><style>:root{--bg:#fbfaf7;--fg:#1d1c1a;--mut:#615e57;--card:#fff;--line:#d9d5cc;--acc:#1f5f8b;--accfg:#fff;--code:#f1eee7}
+@media (prefers-color-scheme:dark){:root{--bg:#171614;--fg:#ece9e2;--mut:#aaa59a;--card:#211f1c;--line:#3a3732;--acc:#79b4e0;--accfg:#10202c;--code:#2a2723}}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--fg);font:16px/1.55 system-ui,sans-serif}
+main{max-width:46rem;margin:0 auto;padding:1.5rem 16px 4rem}h1{font-size:1.5rem;margin:.2rem 0}
+.sub{color:var(--mut);margin:0 0 1rem}
+.bar{height:.5rem;background:var(--line);border-radius:.25rem;overflow:hidden;margin:1rem 0 .4rem}
+.bar>i{display:block;height:100%;width:0;background:var(--acc);transition:width .2s}
+.count{color:var(--mut);font-size:.9rem;margin-bottom:1rem}
+.step{display:none;background:var(--card);border:1px solid var(--line);border-radius:.6rem;padding:1rem 1.2rem}
+.step.on{display:block}.step h2{font-size:1.15rem;margin:.1rem 0 .8rem}
+dt{font-weight:600;margin-top:.8rem;color:var(--mut);font-size:.85rem;text-transform:uppercase;letter-spacing:.04em}
+dd{margin:.2rem 0 0}.say{display:flex;gap:.6rem;align-items:flex-start}
+code{background:var(--code);padding:.35rem .55rem;border-radius:.35rem;font:.95rem ui-monospace,monospace;flex:1;overflow-wrap:anywhere}
+button{font:inherit;border:1px solid var(--line);background:var(--card);color:var(--fg);border-radius:.4rem;padding:.45rem .9rem;cursor:pointer}
+button.p{background:var(--acc);color:var(--accfg);border-color:var(--acc)}button:disabled{opacity:.45;cursor:default}
+nav{display:flex;gap:.6rem;margin-top:1rem}nav .sp{flex:1}</style></head><body><main>
+<h1>An operations engineer&#x27;s first day</h1><p class="sub">Someone who runs systems and changes them carefully. Practice project: demo-pizzabot (a pretend project; nothing here touches your real notes).</p>
+<div class="bar" id="bar" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0"><i id="fill"></i></div><div class="count" id="count"></div>
+<section class="step" aria-label="Step 1"><h2>1. Open the runbook&#x27;s project</h2><dl><dt>What you are doing</dt><dd>Open the runbook&#x27;s project</dd><dt>What to type</dt><dd class="say"><code>/gt:gt-open demo-pizzabot</code><button type="button" data-copy="/gt:gt-open demo-pizzabot">Copy</button></dd><dt>What you will see</dt><dd>A summary of the project, its runbook, recent incidents and open tasks.</dd><dt>Why it matters</dt><dd>You start from the written state of the system, not from memory.</dd></dl></section>
+<section class="step" aria-label="Step 2"><h2>2. See what is overdue</h2><dl><dt>What you are doing</dt><dd>See what is overdue</dd><dt>What to type</dt><dd class="say"><code>/gt:gt-list tasks overdue</code><button type="button" data-copy="/gt:gt-list tasks overdue">Copy</button></dd><dt>What you will see</dt><dd>Overdue tasks with how many days late and who is waiting.</dd><dt>Why it matters</dt><dd>Late rotations and renewals show up before they bite.</dd></dl></section>
+<section class="step" aria-label="Step 3"><h2>3. Check a claim before you act</h2><dl><dt>What you are doing</dt><dd>Check a claim before you act</dd><dt>What to type</dt><dd class="say"><code>/gt:gt-validate the certificate on the order service expires on 2026-12-01</code><button type="button" data-copy="/gt:gt-validate the certificate on the order service expires on 2026-12-01">Copy</button></dd><dt>What you will see</dt><dd>A fresh reviewer checks the claim against the rules and the artifact and reports confirmed, refuted or unknown.</dd><dt>Why it matters</dt><dd>A number that matters is verified by something that did not make it up.</dd></dl></section>
+<section class="step" aria-label="Step 4"><h2>4. Write the steps down while they are fresh</h2><dl><dt>What you are doing</dt><dd>Write the steps down while they are fresh</dd><dt>What to type</dt><dd class="say"><code>/gt:gt-work</code><button type="button" data-copy="/gt:gt-work">Copy</button></dd><dt>What you will see</dt><dd>The commands, gotchas and the incident summary go to the runbook and the project&#x27;s findings.</dd><dt>Why it matters</dt><dd>The next on-call person finds the fix instead of rediscovering it.</dd></dl></section>
+<section class="step" aria-label="Step 5"><h2>5. Leave a handoff</h2><dl><dt>What you are doing</dt><dd>Leave a handoff</dd><dt>What to type</dt><dd class="say"><code>/gt:gt-create handoff</code><button type="button" data-copy="/gt:gt-create handoff">Copy</button></dd><dt>What you will see</dt><dd>A handoff note: what is done, what is half-done, and what to verify first.</dd><dt>Why it matters</dt><dd>Whoever picks this up knows what is true and what is only believed.</dd></dl></section>
+<section class="step" aria-label="Step 6"><h2>6. Close the session</h2><dl><dt>What you are doing</dt><dd>Close the session</dd><dt>What to type</dt><dd class="say"><code>/gt:gt-close</code><button type="button" data-copy="/gt:gt-close">Copy</button></dd><dt>What you will see</dt><dd>The notes saved, tasks updated and the session&#x27;s claim on the vault released.</dd><dt>Why it matters</dt><dd>Nothing is left half-written and nobody else is blocked.</dd></dl></section>
+<nav><button type="button" id="back">Back</button><span class="sp"></span><button type="button" class="p" id="next">Next</button></nav>
+</main><script>(function(){
+var steps=[].slice.call(document.querySelectorAll('.step')),i=0,bar=document.getElementById('fill'),
+    pb=document.getElementById('bar'),cnt=document.getElementById('count'),b=document.getElementById('back'),
+    n=document.getElementById('next');
+function show(k){i=Math.max(0,Math.min(steps.length-1,k));
+ steps.forEach(function(s,j){s.classList.toggle('on',j===i);});
+ var pct=Math.round((i+1)*100/steps.length);bar.style.width=pct+'%';pb.setAttribute('aria-valuenow',pct);
+ cnt.textContent='Step '+(i+1)+' of '+steps.length;b.disabled=i===0;n.disabled=i===steps.length-1;}
+b.addEventListener('click',function(){show(i-1);});n.addEventListener('click',function(){show(i+1);});
+document.addEventListener('keydown',function(e){if(e.key==='ArrowRight')show(i+1);if(e.key==='ArrowLeft')show(i-1);});
+[].forEach.call(document.querySelectorAll('[data-copy]'),function(btn){
+ btn.addEventListener('click',function(){var t=btn.getAttribute('data-copy');
+  var done=function(){btn.textContent='Copied';setTimeout(function(){btn.textContent='Copy';},1500);};
+  if(navigator.clipboard&&navigator.clipboard.writeText){navigator.clipboard.writeText(t).then(done,function(){});}
+  else{var a=document.createElement('textarea');a.value=t;document.body.appendChild(a);a.select();
+   try{document.execCommand('copy');done();}catch(x){}document.body.removeChild(a);}});});
+show(0);})();</script></body></html>

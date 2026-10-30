@@ -1,0 +1,37 @@
+{
+  "schema": 1,
+  "name": "notion",
+  "archetype": "mcp-oauth",
+  "summary": "Notion's hosted MCP server (search, read and edit pages and databases) with browser sign-in",
+  "kind": "mcp-oauth",
+  "docs": "https://developers.notion.com/docs/get-started-with-mcp",
+  "connect": {
+    "url": "https://mcp.notion.com/mcp",
+    "scopes": [],
+    "offline_access": true,
+    "skip_audience_check": false,
+    "send_resource": true,
+    "redirect_host": "127.0.0.1",
+    "trust": "T1",
+    "identity": "your Notion account and the workspace you pick at sign-in",
+    "description": "Notion (hosted MCP, sign-in)"
+  },
+  "network": {
+    "hosts": [
+      "mcp.notion.com"
+    ]
+  },
+  "notes": [
+    "Sign in with your Notion account in the browser and choose the workspace: lotr setup notion. The server's discovery document advertises dynamic client registration.",
+    "OAuth is the only documented method for the hosted server; non-interactive authorization is not available yet. scopes is left empty: the discovery document lists only 'default'.",
+    "Access is limited to what your Notion account can see in the chosen workspace. Workspace owners manage MCP client access under Settings > Connections; the docs state no plan requirement.",
+    "Alternative, local: @notionhq/notion-mcp-server (stdio, integration token). Notion says it is no longer actively maintained and calls it a last resort.",
+    "Legacy SSE URL https://mcp.notion.com/sse exists as a fallback; not used here.",
+    "The mcp-oauth kind takes no connect.policy; the gateway classes risky tool names (delete, send) as consent by itself.",
+    "Notion's deleting tools (notion-delete-pages, notion-delete-databases) move items to Trash."
+  ],
+  "smoke": {
+    "op": "notion-get-self",
+    "args": {}
+  }
+}

@@ -1,0 +1,64 @@
+{
+  "schema": 1,
+  "name": "vault-mcp",
+  "archetype": "stdio-binary",
+  "summary": "Give an app that speaks MCP the gt vault: gt's own vault server over stdio, vault writes through the write queue",
+  "kind": "mcp-stdio",
+  "docs": "https://github.com/example-account/golden-thread",
+  "connect": {
+    "command": [
+      "python3",
+      "{scripts_dir}/gt_vault_mcp.py",
+      "--vault",
+      "{vault}"
+    ],
+    "runtime": "python",
+    "params": {
+      "scripts_dir": {
+        "prompt": "The folder holding gt_vault_mcp.py (left out: the newest installed gt is used)",
+        "kind": "path",
+        "resolver": "gt-scripts"
+      },
+      "vault": {
+        "prompt": "Your gt vault folder",
+        "kind": "path"
+      }
+    },
+    "trust": "T1",
+    "identity": "gt vault on this machine",
+    "description": "The gt vault for an MCP app: read and search, and writes by the write queue (stdio)",
+    "policy": {
+      "read": [
+        "vault_list",
+        "vault_read",
+        "vault_search",
+        "disk_read",
+        "disk_list",
+        "path_stat",
+        "net_fetch"
+      ],
+      "write": [
+        "vault_queue_write",
+        "vault_queue_drain",
+        "disk_write"
+      ]
+    },
+    "timeouts": {
+      "start_s": 30,
+      "call_s": 120,
+      "idle_s": 600
+    }
+  },
+  "smoke": {
+    "op": "vault_list",
+    "args": {
+      "path": ""
+    }
+  },
+  "notes": [
+    "This runs gt's own vault server on this machine; it needs no key. Whoever can call it can read the whole vault, so register it only for an app you trust with that.",
+    "Turn the tools on first: `gt_settings.py set vault_mcp on`. With the setting off the server lists no vault tool and the smoke test fails.",
+    "A vault write goes to gt's write queue, never straight to a file; the broker applies, holds or escalates it. vault_queue_write is write-tier: LOTR tiers apply per tool, and the queue itself refuses owner-only files and escalates destructive writes.",
+    "disk_write asks for the owner's presence on every call, and disk_read and net_fetch withhold credential-shaped text."
+  ]
+}

@@ -535,8 +535,12 @@ gt's hooks and state, the plugin files, LOTR — but every other program of your
   can watch what is sealed or opened afterwards (not forge your presence; a release binary's
   Developer ID signature is checked too), and a process of yours could in principle race the
   private copy.</li>
-<li><strong>Edit the audit log</strong> after the fact, and the hooks' settings guard sees only Claude Code's
-  Write/Edit tools, not a shell command writing <code>settings.json</code>.</li>
+<li><strong>Edit the audit log</strong> after the fact, and phrase a shell command around the settings guard.
+  From 0.22.0 the guard also reads Bash commands and denies one that writes <code>settings.json</code>,
+  <code>vault-config.json</code>, gt's hooks or the gateway's state (<code>&gt;</code>, <code>&gt;&gt;</code>, <code>tee</code>, <code>sed -i</code>, <code>cp</code>, <code>mv</code>,
+  inline python that opens a file for writing). It is a pattern guard, not a boundary: quoting,
+  a script that writes on the model's behalf, or an interpreter it does not know gets past it.
+  Sandbox mode is the real control.</li>
 </ul>
 <p>Other honest limits:</p>
 <ul>
@@ -753,6 +757,39 @@ REPO=/absolute/path/to/your/repo
 4. Check: no <code>pre-push</code> in the repo, <code>git -C "$REPO" config --local --get-regexp '^(gpg|commit\.gpgsign|tag\.gpgsign|user\.signingkey|credential)'</code>
    back to what it was, and <code>python3 $H/gt_push_guard.py check</code> saying it is off (exit 2).
 5. Optional: <code>python3 $H/gt_unlock.py unenroll touchid</code>.</p>
+<h3 id="55c-owner_gate_presence-a-touch-in-place-of-a-terminal-for-accept-gt-0220">5.5c <code>owner_gate_presence</code>: a touch in place of a terminal for <code>accept</code> (gt 0.22.0)</h3>
+<p><code>gt_broker.py accept</code> applies a held write (a <code>#conflict</code>) only after a person reviewed it at a terminal. The setting <code>owner_gate_presence</code> (<code>off</code> by default; a security setting, so turning it on needs a person) lets one <strong>Touch ID</strong> approval stand in for that terminal, for <code>accept</code> and nothing else. gt unlock must be on. The unlock authority composes the dialog itself from the two texts it is sent (target, conflict, version, line count, a hash prefix, and the changed lines with their line numbers and one line of context; a whitespace-only line, an identical removed/added pair and a moved line are flagged), so nothing the agent writes is shown, and the write is bound to both hashes and to the target that was shown.</p>
+<p>What it adds, and what it does not:</p>
+<ul>
+<li><strong>It proves a touch, not that the change was read.</strong> A person who is merely present can approve with a touch while an agent drives the command. The agent also chooses which small change to ask about. The dialog is kept small so a person can read it in seconds, and nothing more is claimed.</li>
+<li><strong>Limits the authority enforces:</strong> at most 4 changed lines of 44 columns; no hidden character (controls, bidi and zero-width marks, tags, variation selectors, blank letters such as U+3164 or U+2800, any non-ASCII space, a combining mark with no visible base) and no tab (it counts as one column but renders as up to eight) in a changed line; no right-to-left letter (bidi class R or AL, such as Hebrew or Arabic, which can reorder the words around it) anywhere in the dialog; a hidden character in the requester's name or script basename is refused the same way; no changed line that ends in a flag-shaped suffix (<code>[ws only]</code>, <code>[same text]</code>, <code>[moved]</code>, any case), so a change cannot label itself cosmetic; no credential-shaped text (scanned by the client and again by the authority); 3 dialogs per 10 minutes and a <strong>daily cap</strong> kept in a small file in the unlock home (it survives a daemon restart; a count file that exists but cannot be read refuses rather than resetting, and a running authority keeps the larger of its own count and the file's); and the whole prompt inside the 500 characters the macOS helper accepts (one table of bounds in <code>gt_accept_preview.py</code>, pinned by a test). A helper-side rejection means no dialog was shown, so it takes no slot and sets no cooldown. Lookalike letters (a Cyrillic "a") are ordinary letters and still pass.</li>
+<li><strong>Terminal only, always:</strong> <code>global-memory/</code>, any <code>design.md</code>, a <code>core-rules/</code>, <code>Sources/</code>, <code>spool/</code>, <code>sessions/</code> or <code>tools/</code> folder at any depth and in any case (the vault disk folds case), and any target gt's review-target rule marks (by identity, links included). <code>apply</code> checks the target again under the drain lock before a presence-approved write. The change falls through to the hand-off command, unchanged. The write queue's own protected paths (<code>Sources/</code>, <code>core-rules/</code>, gt's spool, sessions and tools, <code>log.md</code>, <code>TASKS.md</code>, <code>decisions.md</code>, and a manifest's additions) are likewise compared component by component through the review-target folding (case, Unicode form, trailing dots and spaces, 8.3 short names) and again on the path the vault resolves them to since 0.22.0, so <code>sources/x.md</code>, <code>Sources./x.md</code> and a link <code>Srclink -&gt; Sources</code> are refused as <code>Sources/x.md</code> is (section 5.5d).</li>
+<li><strong>Windows falls through.</strong> Windows Hello takes no text from the caller, so the person would approve a change they never saw. On a machine whose only platform factor is Hello the authority answers <code>no_platform_factor</code> and <code>accept</code> falls back to the terminal, until a gt-owned dialog shows the text first.</li>
+<li><strong>Not in sandbox mode.</strong> The check runs before any prompt: with gt sandbox mode on, the shell cannot write the vault, so a presence approval could not be applied and the plain message says to accept at a terminal.</li>
+<li><strong>Friction, not a wall, inside the asking process.</strong> The approval is checked in the process that runs <code>accept</code>, so a script that calls <code>gt_accept.apply()</code> itself needs none. That is the existing friction-only limit of <code>accept</code>, not a new one.</li>
+<li><strong>UNVERIFIED:</strong> how the real Touch ID sheet renders up to 500 characters (wrapping, truncation, line breaks) has not been checked on hardware. It needs the owner's live look before <code>owner_gate_presence</code> is recommended.</li>
+</ul>
+<h3 id="55c-2-relax-stop-being-asked-for-a-fresh-factor-gt-0220">5.5c-2 <code>relax</code>: stop being asked for a fresh factor (gt 0.22.0)</h3>
+<p>Some scopes ask for a fresh Touch ID, Windows Hello or code on <strong>every</strong> request: the disk, network and write brokers and the gates you turned on (<code>git-push</code>, <code>outbound-push</code>, <code>git-commit</code>, <code>publish</code>, <code>mcp-write</code>, <code>vault-destructive</code>). Used all day, that is a prompt per action. <code>relax</code> is the way to ask for fewer, after you have proved you are the one asking.</p>
+<ul>
+<li><strong>Two forms.</strong> <code>gt_unlock.py relax session</code> relaxes ONE session: it needs a person at a terminal, one fresh factor and a typed <code>relax</code>, sets a flag on that session's grants, and the flag ends with the grant (lock, idle, TTL, session end, revoke); nothing is stored. The factor prompt names the session it relaxes (its root pid and program). That factor is not a step-up: it opens no fresh-confirmation window on any other scope. <code>gt_unlock.py relax standing on</code> (or <code>gt_settings.py set unlock_relax on</code>) does the same as a standing choice, written to the signed policy.</li>
+<li><strong>A standing relax written while unlock was off counts as new.</strong> With unlock off, <code>relax standing on</code> only writes the file, with no factor. When unlock is turned on, the authority treats that <code>standing: true</code> as being turned on now: an agent cannot carry it in (the call is refused unless it comes from a person at a terminal), and the factor prompt for turning unlock on says it also turns the standing relax on. <code>policy enable</code> prints the same note first. Only a standing relax the authority already enforced under an approved policy is left alone.</li>
+<li><strong>It says what it turns off before it asks.</strong> The text, shown every time, says the checks exist to keep AI agents from doing what they should not and to catch anything nefarious that arrives through an MCP call or injected text (a page or file steering the agent to push code, fetch a URL or write a file); that the agent can then do those actions without asking you again; that credentials, keys and <code>.env</code> files are still never served; and that you can turn the checks back on at any time without a factor. Anything but the word <code>relax</code> cancels and changes nothing. A caller with no terminal cannot confirm and is refused.</li>
+<li><strong>Turning it back on needs nothing.</strong> <code>gt_unlock.py relax off</code> (or <code>relax standing off</code>, or <code>set unlock_relax off</code>) tightens, so it asks for no factor and no confirmation. It writes a marker beside the policy because, while a platform factor is enrolled, any edit of <code>policy.json</code> itself needs a signed approval; the marker only ever switches standing relax off, and a later policy change does not bring it back. Only an explicit <code>relax standing on</code> does. The marker is unsigned, so the authority latches it: once it has seen the marker, deleting the file does not turn standing relax back on. The authority writes it back and records <code>relax</code> <code>marker_vanished</code> in the audit log. The marker is written as a fresh regular file and never through a link planted at its path. The latch lasts for the daemon's lifetime: a marker deleted while the daemon is not running is not detected.</li>
+<li><strong>The relaxable scopes are an exact list</strong> (<code>RELAXABLE_SCOPES</code> in <code>gt_unlock_policy.py</code>): <code>gt:io:read</code>, <code>gt:io:fetch</code>, <code>gt:io:write</code>, <code>gt:git-push</code> (and <code>gt:git-push:&lt;project&gt;</code>), <code>gt:git-commit</code>, <code>gt:publish</code>, <code>lotr:&lt;connection&gt;:write</code>, <code>gt:vault:destructive</code>. Never relaxed, whatever you choose: policy edits, enrolment, gt's hooks and security settings, action tokens, hub enrolment, accepting a <code>#conflict</code> version, the secret gate, LOTR consent and disconnect, and gt's own code writes.</li>
+<li><strong>What it does not change.</strong> A grant is still required: relax lowers "fresh factor each time" to "unlocked", not "unlocked" to "open". An administrator's floor still wins: a scope the floor holds at step-up or deny is never relaxed, and the admin file can set <code>relax.allow: false</code> to forbid it. An admin file that does not set <code>relax.allow</code> forbids relax too, which covers every admin file written before 0.22.0: its floor was written before relax existed, and the built-in step-up defaults (such as <code>gt:io:*</code>) are not part of it. To allow relax under an admin floor, the administrator sets <code>"relax": {"allow": true}</code>. Credentials, keys and <code>.env</code> files are not presence gates: the brokers refuse them with or without relax.</li>
+<li><strong>The honest caveat.</strong> Something already running as you can ride an unlocked session; relax widens what it can do in a session you have unlocked, because those actions no longer ask. Choose it for work you are watching. The typed word proves a terminal is open and someone is typing; the fresh factor is what proves it is you.</li>
+</ul>
+<h3 id="55d-vaultmanifestjson-threat-model-gt-0220">5.5d <code>vault.manifest.json</code>: threat model (gt 0.22.0)</h3>
+<p>A vault may carry <code>vault.manifest.json</code> at its root, saying where gt keeps its queue, broker and tools folders and which extra paths the write queue must refuse. <code>gt_vault_manifest.py</code> is its one reader. The rule: a manifest can only ADD protection; it never lowers the built-in floor, and a manifest the reader will not accept is ignored whole (one stderr line, the built-in layout applies).</p>
+<ul>
+<li><strong>Who can write it.</strong> It is not a <code>.md</code>, so the write queue never writes it. A session's Write/Edit to it, or into the vault's gt tools folder (the default <code>Projects/golden-thread/tools/</code> and any folder the manifest moves it to), asks first (<code>protected_paths</code>); a Bash command writing either is denied. The Bash check is a pattern reader, not a boundary: sandbox mode is the real control.</li>
+<li><strong>What a hostile manifest can still do.</strong> It can add protections that refuse the owner's own notes (<code>protected.prefixes: ["Knowledge/"]</code>). That fails visibly: each refused write names the protection. It cannot make the broker run its code: the broker and <code>accept</code> run the vault's <code>gt_session.py</code> and <code>gt_task.py</code> only when their bytes match a copy some gt release shipped (<code>templates/shipped-hashes.json</code>, so an older installed copy still runs) and nothing beside them (a standard-library name, a link, a gt tool name with other bytes) can stand in for a module they import; bytecode is read from a private folder, never the <code>__pycache__</code> beside them. Otherwise gt's own copy runs, with one warning line; a planted tool in a relocated <code>tools_dir</code> is never executed.</li>
+<li><strong>Folders it may name.</strong> <code>queue_dir</code>, <code>broker_dir</code> and <code>tools_dir</code> must sit inside the vault, outside dot-folders, and outside <code>Sources/</code>, <code>core-rules/</code>, <code>global-memory/</code>, gt's <code>sessions/</code> and <code>spool/</code> (the built-in value excepted), by their spelling and by the path they resolve to, so a link <code>Knowledge/cr -&gt; ../core-rules</code> is refused. No component may be named like <code>design.md</code>, <code>log.md</code>, <code>TASKS.md</code> or <code>decisions.md</code>. The three may not overlap, and a folder that already holds anything gt did not put there (a note, a sub-folder of the owner's) is refused, because the queue treats every <code>*.json</code> in its folder as a request.</li>
+<li><strong>Spelling and links.</strong> The queue compares every protected path component by component through <code>gt_review_target.fold</code> (Unicode NFKC, casefold, trailing dots and spaces, 8.3 short names), then checks the resolved path the same way, so a case, NFD, trailing-dot or symlink spelling of a protected folder is refused.</li>
+<li><strong>Reading it safely.</strong> The file is opened only as a regular file, non-blocking, without following a link (<code>O_NOFOLLOW</code> where the OS has it, else lstat) and up to 256 KB; a FIFO, device, link or larger file is ignored whole. <code>detect</code> skips non-regular notes and never reads a link that leaves the vault. A key the reader rejects is shown with control characters escaped.</li>
+<li><strong>Honest limit.</strong> The vault's own tools copy of <code>gt_review_target.py</code> loads the reader only from beside itself, and it is not installed there, so manifest <code>layers</code> reach the write broker but not the vault's <code>gt_closeout</code> review check. <code>gt_doctor.py</code> shows this as <code>manifest-layers</code> WARN with the fix.</li>
+</ul>
 <h3 id="56-what-gt-unlock-cannot-lock">5.6 What gt unlock cannot lock</h3>
 <ul>
 <li>Applications that never ask gt: a browser, an editor, any program reading its own config.</li>
@@ -875,7 +912,7 @@ python $u verify
 </tr>
 <tr>
 <td><strong>trust network</strong></td>
-<td>trust local, plus ssh/scp/rsync, git push/pull/fetch, curl/wget, npm/pip/brew install, web fetch</td>
+<td>trust local, plus ssh/scp/rsync, git push/pull/fetch, web fetch; curl/wget and npm/pip/brew install while install_guard is on</td>
 <td>any other shell command or edit outside the project</td>
 </tr>
 <tr>
@@ -1145,6 +1182,49 @@ itself.</p>
 </tr>
 </tbody>
 </table>
+<h3 id="83a-what-gt-promises-on-native-windows-0220">8.3a What gt promises on native Windows (0.22.0)</h3>
+<p>Said once, so nothing else in this document is read as promising more:</p>
+<ul>
+<li><strong>No sandbox boundary.</strong> Claude Code has no OS sandbox on native Windows, so gt sandbox mode is
+  permission rules only there (the table above). A script the assistant runs can open any file your
+  account can. The route to a real boundary is <strong>WSL2</strong>: run Claude Code and gt inside it, where
+  <code>gt_sandbox.py</code> has a <code>wsl2</code> mode and bubblewrap enforces the lists as on Linux.</li>
+<li><strong>Identity is the user account, not the program.</strong> gt unlock and LOTR identify a caller by the
+  Windows user SID and the process chain. Any process running as you is "you"; there is no
+  per-application separation as on macOS (audit token) or Linux (<code>SO_PEERCRED</code> plus start time).
+  What stops an agent is the presence factor (Windows Hello, or a typed code), not who the caller is.</li>
+<li><strong>Supported with the stated limits.</strong> Native Windows runs gt unlock and LOTR, with the limits on this
+  list; <strong>WSL2 is recommended when you want a boundary</strong>. The sandbox there gives friction, not a
+  boundary (the table above), and Windows is not described as sandboxed anywhere else.
+  <code>gt_sandbox_launch</code> has an AppContainer and Job Object backend, but it runs gt's own helper
+  children (the island scan), not the assistant's shell, so it is not a Claude sandbox.</li>
+<li><strong>The Windows Hello seal has a same-user limit, accepted.</strong> The sealed store is bound to a Hello key
+  and to DPAPI, but any process running as you can ask Windows to sign gt's fixed seal message (the
+  salt is in the enrolment record you can read) after one Hello prompt that carries no gt text. The
+  seal is not bound to the authority and does not stop a same-user process that gets that approval.
+  That is the same-user identity model above; the presence factor still gates the authority, and
+  gt_accept never uses Hello for a text prompt for this reason.</li>
+<li><strong>The unlock home and the LOTR home are owner-only by ACL, and the doctor reads it back.</strong> File modes
+  mean nothing on Windows, so gt sets an icacls ACL (inheritance removed, your account alone) when it
+  creates each home, and <code>/gt:gt-doctor</code> checks it: an open ACL on the unlock home (it holds the TOTP
+  seed) is a FAIL (<code>unlock-home-acl</code>), on the LOTR home a WARN (<code>lotr-home-acl</code>).</li>
+<li><strong>A terminal is a real shell above the process.</strong> On Windows <code>explorer.exe</code> and <code>conhost.exe</code> alone
+  do not make a chain a person's terminal, and a chain that crosses Windows sessions does not either; a
+  process that names <code>explorer.exe</code> as its parent on purpose is classed as not interactive.</li>
+<li><strong>A failed lock probe revokes grants, a UAC prompt included.</strong> Presence needs an input desktop that
+  was seen at least once and is unlocked. When it cannot be opened after that (a locked screen, a UAC
+  prompt on the secure desktop, a screen saver) the session counts as locked and grants are revoked.
+  Over SSH or from a service no desktop is ever seen, so presence is always "no".</li>
+<li><strong><code>mcp_http_trust_loopback</code> on a shared host.</strong> With it on, any local account can reach <code>127.0.0.1</code>
+  and name a client with no secret. On a Windows host with more than one user session (a remote-desktop
+  server, a shared PC) <code>lotr status</code> and the daemon's start-up line warn; it is a warning, not a refusal.</li>
+<li><strong>Git for Windows is a prerequisite.</strong> gt's hooks and installer are shell scripts; Claude Code on
+  Windows already needs <a href="https://git-scm.com/download/win">Git for Windows</a>, and <code>install.cmd</code>
+  finds its Git Bash. Without it nothing here runs.</li>
+<li><strong>Tests and runs.</strong> The full Windows suite is split across machines and a manual check of the real
+  console (phase 103 of the 0.22.0 build) stands in for the terminal checks a pseudo-terminal does
+  elsewhere; a Windows run is never reported as a macOS result.</li>
+</ul>
 <p>Verified on macOS (2026-10-03) with the sandbox runtime Claude Code builds on
 (<code>@anthropic-ai/sandbox-runtime</code> 0.0.78), using the lists gt generates and the working directory
 inside the vault: a write to the vault and a read of a vault page were both refused with
@@ -1212,6 +1292,39 @@ in its own process, which the sandbox does not wrap.</p>
 <p>Check it any time: <code>gt_sandbox.py status</code>, <code>gt_sandbox.py check</code> (drift), <code>gt_unlock.py verify</code>
 (rows <code>sandbox-*</code>; run it from inside Claude Code and the <code>sandbox-live</code> row tries a real write
 to the vault and expects the OS to refuse it), <code>/gt:gt-doctor</code> (row <code>sandbox</code>).</p>
+<h3 id="86-what-the-guards-stop-and-what-a-determined-shell-can-still-do-gt-0220-validation">8.6 What the guards stop, and what a determined shell can still do (gt 0.22.0 validation)</h3>
+<p>An independent validation of 0.22.0 (25 October 2026, a clean macOS VM, reproduced by a second agent)
+found that at the shipped defaults the guards stop mistakes, not a determined shell. What changed, and
+what is still true:</p>
+<ul>
+<li><strong>Loosening a guard now needs a person.</strong> With gt unlock off, <code>gt_settings.py set</code> for a guard key
+  (<code>protected_paths</code>, <code>test_gate</code>, <code>lockdown</code> and the rest of the security list) asks for a typed
+  confirmation at a real terminal when the change loosens it; a shell with no terminal is refused. A
+  Write or Edit to <code>~/.claude/vault-config.json</code> now asks, like <code>settings.json</code>. Still true: the
+  confirmation proves a terminal is open, not that the person is you; only gt unlock's enrolled
+  factors prove that.</li>
+<li><strong>Grants ask for a code.</strong> <code>gt_grant.py add</code> with unlock off now shows a code on the terminal and
+  wants it typed back, so a bare <code>script -q /dev/null ...</code> wrapper fails. A program that drives a
+  pseudo-terminal and reads the code can still pass. With unlock on, the enrolled factors decide.</li>
+<li><strong>Paranoid fails closed.</strong> With paranoid on, deleting <code>integrity.json</code> is now a refusal at every
+  guard hook (the sealed marker <code>paranoid-sealed.json</code> says it was on), not a silent pass.</li>
+<li><strong>The commit gate is a discipline, not a boundary.</strong> It now sees a commit inside <code>bash -c "..."</code>.
+  It does not see a name built in a variable, a <code>.gt-no-test-gate</code> file made in an earlier call, or a
+  receipt the model records itself for a script that fails.</li>
+<li><strong>Read-only commands that write.</strong> <code>git diff</code>, <code>git log</code> and <code>git show</code> with <code>--output=</code> and
+  <code>rg</code>/<code>grep</code> with <code>--pre</code> are denied under the trust-local level; the commands stay allowed.</li>
+<li><strong>Secret shapes are one list.</strong> The Stop validator, the scanner and the LOTR shaper now catch
+  Anthropic, OpenAI, Stripe, npm, JWT, URL-password and JSON <code>"password": "..."</code> forms. The validator
+  still reads only the assistant's own text, not tool results.</li>
+<li><strong>Case variants of a vault page</strong> are now treated as the page on a case-insensitive disk. Writes
+  made by a script (<code>perl -pi</code>, Python <code>open</code>, a redirect through a variable) are still outside the
+  write guard, as 8.4 says.</li>
+<li><strong>LOTR.</strong> The consent mode is read once when the daemon starts; a later edit of <code>gateway.json</code> is
+  ignored (a process that can write it and restart the daemon as you can still turn it off). Read or
+  write is still decided from the tool's name unless the connection declares its read-only tools.
+  The template catalog is hash-pinned and signed: the pinned key verifies <code>catalog.json</code> before any
+  template file is used (section 9.2).</li>
+</ul>
 <h2 id="9-mcp-servers-outside-lotr">9. MCP servers outside LOTR</h2>
 <p>gt unlock, LOTR's tiers and consent, and gt sandbox mode cover <strong>only</strong> what passes through LOTR
 (<code>gt-lotr</code>) and the vault server (<code>gt-vault</code>). Every MCP server Claude Code connects to
@@ -1420,18 +1533,109 @@ tool, not against a hostile process with your access.</p>
   the bundled <code>catalog.json</code>, and a fetched catalog replaces it only with a higher <code>catalog_version</code>.
   The bundle carries the same trust as the module it ships in.</li>
 <li><strong>The catalog (<code>lotr template update</code>) is fetched over HTTPS</strong> (system trust store) from
-  <code>raw.githubusercontent.com/shaven/golden-thread/&lt;ref&gt;/lotr-templates</code> or a URL you name. Every template's
+  <code>raw.githubusercontent.com/&lt;account&gt;/golden-thread/&lt;ref&gt;/lotr-templates</code> (the repository address a published build carries; none is set in a source tree) or a URL you name. Every template's
   sha256 must match <code>catalog.json</code>, and each must pass <code>lotr template check</code> and have a valid fact sheet
   that agrees with it, or it is skipped (never half-installed). <strong>Honest limit:</strong> the hashes come from the
-  same place as the files and nothing is signed, so they catch damage and a file edited without its
-  catalog entry, not a publisher or repository that was itself compromised. An older catalog version is
+  same place as the files, so on their own they catch damage and a file edited without its catalog entry,
+  not a publisher or repository that was itself compromised. <strong>Signature (gt 0.22.0, phases 112 and 123):</strong>
+  <code>catalog.json.sig</code> is an <code>ssh-keygen -Y sign</code> signature, made by the owner's dedicated ed25519 key, over
+  <code>catalog.json</code>. The public key is pinned in the module (<code>templates/catalog/catalog-signing.pub</code>) and ships
+  with its signature (<code>catalog.json.sig</code>), so signing is enforced: every fetched and bundled catalog must
+  verify against the pinned key before any template file is used, or it is refused (<code>catalog_unsigned</code> when
+  the signature is missing, <code>catalog_bad_signature</code> when the catalog was edited after it was signed); a
+  template with a matching hash and no valid signature is refused. <code>lotr catalog check</code> and <code>lotr status</code>
+  report "signed: verified against the pinned key" (catalog version 3 in this release). The same key signs release tags over the
+  MANIFEST hash (<code>dev/check_release_tag.py</code>). A stdio command (including <code>npx</code> and <code>uvx</code>) is started
+  only after a yes that showed the exact command and the connection name; the approval is a hash of the
+  connection id and the argv, so a changed command asks again (<code>lotr add-stdio</code> and <code>lotr setup</code>
+  record it; the daemon refuses an unapproved command: the engine passes its home to every stdio connection. Stdio connections already registered when the gateway first starts on this release are trusted and recorded once (<code>approvals_migrated: N</code> in the audit log and <code>lotr status</code>); a connection added to the registry afterwards is refused until a person approves it. With gt unlock off, <code>--yes</code> alone does not approve: it needs the typed code at your terminal, as do <code>connect</code>, <code>login</code> and <code>disconnect</code>). An older catalog version is
   refused (replay) unless <code>--force</code>; <code>--ref</code> lets you pin a commit you have read. A template changed by an
   update affects only connections you set up afterwards.</li>
+<li><strong>Owner steps to sign or re-sign the catalog</strong> (the key is already pinned; run these after any change to
+  <code>catalog.json</code>, or to rotate the key; the private key never enters a Claude session and none of this
+  prints or stores key material):
+  1. Generate a dedicated key used for nothing else: <code>ssh-keygen -t ed25519 -C "gt signing" -f
+     ~/gt-signing</code> (give it a passphrase).
+  2. Move the private file <code>~/gt-signing</code> into your secrets store and delete the loose copy; bring it
+     back to disk only for the signing commands below.
+  3. Copy the one-line public file <code>~/gt-signing.pub</code> to
+     <code>golden-thread-lotr/0.5.1/templates/catalog/catalog-signing.pub</code> (or the newest gt-lotr folder).
+  4. Sign the catalog: <code>python3 dev/lotr_catalog.py sign --key ~/gt-signing</code>. It writes
+     <code>lotr-templates/catalog.json.sig</code>, refreshes the module's bundled copy and checks the result
+     against the pinned key.
+  5. Run <code>python3 dev/lotr_catalog.py check</code> (it now demands a valid signature) and commit the <code>.pub</code>
+     and both <code>.sig</code> files. After any later <code>build</code>, run <code>sign</code> again.
+  6. For each release: <code>python3 dev/check_release_tag.py message &gt; /tmp/msg</code>, then <code>git -c
+     gpg.format=ssh -c user.signingkey=~/gt-signing tag -s vX.Y.Z -F /tmp/msg</code>, push the tag, and
+     <code>python3 dev/check_release_tag.py check</code> must print "signed".</li>
 <li><strong>Fact sheets are claims, not proof.</strong> <code>self-verified</code> means a second source agreed; only
   <code>independently-verified</code> means a second agent re-derived it, and none of catalog 1 is. The sheet's <code>open</code>
   list is what was not confirmed.</li>
 <li><strong>The <code>sse-bridge</code> archetype</strong> runs <code>mcp-remote</code>, a third-party bridge that does its own OAuth sign-in
   and keeps its token in <code>~/.mcp-auth</code>, outside LOTR's store: LOTR cannot seal, rotate or revoke it.</li>
+</ul>
+<h4 id="921-rolling-the-signing-key-without-a-release-gt-lotr-051-gt-0220">9.2.1 Rolling the signing key without a release (gt-lotr 0.5.1, gt 0.22.0)</h4>
+<p>One pinned key is one point of failure: lose it, or want to change it, and every install would need a
+new gt release. A <strong>rollover</strong> changes the trusted key on a machine with two small files, no release
+and no network. The pin file may now hold several keys (one <code>ssh-ed25519</code> line each, <code>#</code> comments
+allowed; a one-line file works exactly as before), and a catalog or release-tag signature is valid when
+it verifies against ANY trusted key.</p>
+<ul>
+<li><strong>The message.</strong> A rollover is a JSON file signed by a key that is trusted now
+  (<code>ssh-keygen -Y sign</code>, namespace <code>gt-key-rollover@golden-thread</code>, different from the catalog's, so a
+  catalog or tag signature can never pass as a rollover). Fields: <code>version</code> 1; <code>serial</code> (1, then
+  strictly higher); <code>prev_serial</code> (the serial the machine must already hold, 0 first); <code>issued</code> and
+  <code>expires</code> (UTC, <code>expires</code> after <code>issued</code> and at most 90 days later, <code>issued</code> at most a day ahead of the
+  machine's clock); <code>add</code> (public keys, ed25519 only); <code>revoke</code> (fingerprints <code>SHA256:...</code>, optional).
+  Unknown fields are refused. Format and rules: <code>lotrlib/keyring.py</code>.</li>
+<li><strong>Applying it.</strong> <code>lotr catalog rollover apply FILE.json FILE.sig</code> checks the signature against the
+  trusted set, that the serial is higher than the stored one and follows <code>prev_serial</code> exactly (messages
+  apply in order, so a revocation cannot be skipped), that it has not expired, that every added key is
+  ed25519, and that at least one trusted key remains. Only then it appends the message and its
+  signature to <code>catalog-keys.json</code> in the LOTR home (atomic write, mode 600) and prints fingerprints
+  only. A signature made with a revoked key stops verifying at once; a replayed message fails by serial;
+  a message signed by a key that is not trusted is refused. <code>lotr template update</code> does not fetch
+  rollover messages: the owner hands the pair to each machine.</li>
+<li><strong>How tampering is caught.</strong> The file stores the chain of signed messages, never a key list. On every
+  load gt replays the chain from the shipped pin and demands that each message verifies against the keys
+  trusted at its turn. A key added by editing the file has no message, so the file is refused and
+  <strong>everything fails closed</strong> (the catalog and its templates are not used) until the file is deleted
+  (the shipped pin is then trusted alone) or the owner's messages are applied again.</li>
+<li><strong>Which home.</strong> The chain lives in one home's <code>catalog-keys.json</code>, and every check of the bundled
+  catalog (<code>lotr catalog check</code>, <code>lotr template</code> and <code>lotr setup</code>, the daemon's template matching) uses
+  the home that command or daemon already resolved (<code>--home</code>, else <code>LOTR_HOME</code>, else the zone's
+  home). A rollover applied in one zone's home is therefore NOT seen by another home: apply the pair in
+  each home you use. Every home trusts the shipped pin without it.</li>
+<li><strong>What it trusts, and the limits.</strong> It trusts the keys already pinned. An attacker who holds the
+  CURRENT private key can roll trust to a key of their own: the old key's compromise is the old key's
+  compromise, and a rollover does not make it worse or better. A rollover cannot recover a lost key
+  with no spare: with every trusted private key gone the only way out is a gt release with a new pin,
+  and a machine holding a chain that no longer verifies against that pin fails closed until
+  <code>catalog-keys.json</code> is deleted. The file is not tamper-proof against someone who can write the user's
+  home: they can delete it or restore an older copy (the keys come back to the shipped pin or an
+  earlier chain state; nothing outside the chain can be added). A revoked key in the shipped pin is
+  revoked only on machines that applied the revoking message; a release that drops it from the pin
+  removes it everywhere.</li>
+<li><strong>Recommended practice: generate a SECOND, spare key now.</strong> Keep its private half in the secrets
+  store, separate from the primary, and put its public line in the pin file next to the primary's
+  (a second line in <code>catalog-signing.pub</code>), or add it with a rollover. Then losing the primary is not
+  fatal: sign a rollover with the spare, and the spare becomes the signing key.</li>
+<li><strong>Owner steps</strong> (<code>dev/lotr_rollover.py</code>; it never reads or prints a private key):
+  1. Generate the new key: <code>ssh-keygen -t ed25519 -C "gt signing 2" -f ~/gt-signing-2</code>.
+  2. Write the message: <code>python3 dev/lotr_rollover.py message --add ~/gt-signing-2.pub --out
+     rollover-1.json</code> (the next serial comes from <code>~/.config/gt-lotr/rollover-owner.json</code>, or <code>--serial</code>;
+     <code>--expires DAYS</code> defaults to 30).
+  3. Sign it with the OLD key: <code>python3 dev/lotr_rollover.py sign --key ~/gt-signing rollover-1.json</code>
+     (it refuses a key that is not trusted now). <code>check rollover-1.json rollover-1.json.sig</code> verifies it.
+  4. Give <code>rollover-1.json</code> and <code>rollover-1.json.sig</code> to each machine:
+     <code>lotr catalog rollover apply rollover-1.json rollover-1.json.sig</code>.
+  5. From then on sign catalogs and tags with the NEW key (<code>dev/lotr_catalog.py sign --key
+     ~/gt-signing-2</code>; the tag step above with <code>user.signingkey=~/gt-signing-2</code>). <code>dev/lotr_catalog.py</code>
+     and <code>dev/check_release_tag.py check --keys-file PATH/catalog-keys.json</code> check against the
+     pin plus the rollover state.
+  6. After a period, revoke the old key: <code>message --revoke SHA256:...</code> (<code>ssh-keygen -l -f
+     ~/gt-signing.pub</code> prints it), sign with the NEW key, apply on each machine. The next release can
+     drop the old line from the pin and carry the new one.</li>
 </ul>
 <h3 id="93-the-hubs-mcp-front-door-gt-lotr-050">9.3 The hub's MCP front door (gt-lotr 0.5.0)</h3>
 <p><code>listen.mcp_http</code> (default false) adds <code>POST /mcp</code> to the hub's HTTP port. It adds no process, port or
@@ -1441,7 +1645,41 @@ a request with neither credential header, from a loopback address, with a loopba
 and no proxy header, name an enrolled client as <code>?cid=</code>. What it does NOT stop: another program of any
 user on the hub machine acting as that client (so enrol it at the lowest tier it needs); a reverse proxy
 on the same machine that rewrites <code>Host</code> and strips its own headers. Secrets are never read from a URL.
+Turning <code>mcp_http_trust_loopback</code> on is never silent: <code>lotrd</code> writes a WARNING line at start-up and
+<code>lotr status</code> carries the same note, naming what it widens. Two exposures that sit beside it: a stdio
+connection's <code>env_refs</code> secret is placed in the child process's environment, readable by any process of
+the same user (<code>ps eww</code>); and a local reference (<code>file:</code>, or <code>keychain:</code> at L1) is readable by any process
+of the same user, as it always was, so only <code>sealed:</code> references need your presence per open.
 Not done: an Origin allow-list for a connector that is a browser page, remote consent.</p>
+<h3 id="93a-presence-gated-writes-for-hub-clients-gt-lotr-051-gt-0220">9.3a Presence-gated writes for hub clients (gt-lotr 0.5.1, gt 0.22.0)</h3>
+<p>By default an unattended hub client may read on an OAuth connection and never write or consent. With <code>"presence": {"gate_writes": true}</code> in <code>gateway.json</code> (off by default; <code>timeout_s</code> 60 to 28800, default 1800; <code>gate_reads</code> also gates reads), a hub client's write or consent call goes ahead only while <strong>gt unlock shows an open session of yours</strong> (a live, unexpired grant, the screen not locked, used within <code>timeout_s</code>). Otherwise the call returns <code>presence_required</code> and says to run <code>gt_unlock.py unlock</code> in your terminal; nothing is queued and no dialog appears on your screen.</p>
+<p>What it does and does not do:</p>
+<ul>
+<li><strong>Only the authority answers.</strong> The hub client cannot assert presence: an argument or header saying so is ignored. The authority answers only gt-lotr's own daemon, never prompts, returns no grant id, does not extend any idle timer, and logs every ask. Unlock off, the authority absent or unreachable, or any odd answer means "not present".</li>
+<li><strong>Only <code>--l1</code> sign-ins.</strong> The refresh token must sit in a mode-600 file the daemon can rewrite. A sealed sign-in stays refused for hub clients even while you are here; reconnect it with <code>--l1</code> to use the gate.</li>
+<li><strong>Everything else still applies:</strong> the client's tier ceiling, the policy lists, the single-use action token, the consent step (a consent call still raises its dialog or platform confirmation on top of presence) and the audit check. Audit lines for these calls carry <code>grant: presence:&lt;idle seconds&gt;</code>.</li>
+<li><strong>Windows:</strong> a session counts as present only if the machine has shown a desktop to the authority. Over SSH or from a service the screen is never reported locked, so presence there is "not present".</li>
+<li><strong>It does not stop</strong> the local app's own native connectors, and it proves a session is open, not that the person at the keyboard asked for this call.</li>
+</ul>
+<h3 id="93a1-what-the-consent-dialog-does-not-stop-gt-lotr-051-gt-0220">9.3a.1 What the consent dialog does not stop (gt-lotr 0.5.1, gt 0.22.0)</h3>
+<p>When <code>local.confirm</code> is <code>auto</code> (the default on macOS) or <code>dialog</code>, a consent-tier operation raises an ordinary macOS dialog from the gateway's daemon, with Deny as the default button and a 60-second give-up that counts as Deny. Read that for what it is: <strong>a click, not a proof that a person was there.</strong></p>
+<ul>
+<li><strong>A screen-control or accessibility agent can click Allow.</strong> The dialog is a plain window. Any program with the Accessibility or screen-control permission (an assistant that drives the mouse, a script talking to System Events) presses the button exactly as you would. The Deny default and the timeout only stop an unattended dialog; they do not stop something that answers it.</li>
+<li><strong>Being at the machine proves nothing here.</strong> gt's presence signal (an open <code>gt_unlock.py</code> session, section 9.3a) shows that you unlocked, not that you pressed this button. A screen-control agent works while you are sitting there, so presence does not close this gap, and gt does not claim it does.</li>
+<li><strong>A look-alike dialog is possible.</strong> A process of yours can show its own window with the same words; read who is asking and what, and distrust a dialog you did not just trigger.</li>
+<li><strong>What does stop it:</strong> <code>local.confirm</code> set to <code>biometric</code> (with <code>consent_requires_factor: platform</code>). The approval is a Touch ID or Windows Hello signature over the operation, raised by the unlock authority; a screen-control agent cannot touch the sensor, and this mode never falls back to the dialog. Without that factor on the machine it refuses outright.</li>
+<li><strong>Not offered:</strong> a check that a click came from a real mouse. gt cannot tell a synthesized click from a physical one without a real screen to test it on, and an untested check would claim more than it proves.</li>
+</ul>
+<h3 id="93b-logging-and-telemetry-gt-0220">9.3b Logging and telemetry (gt 0.22.0)</h3>
+<p><strong>Logging.</strong> gt keeps one local log of its own, <code>~/.claude/golden-thread/logs/gt.log.jsonl</code> (mode 600). Every record has a fixed shape: a time, a component, a level, an event name, whole-number counts and an error code. A path, a URL, a host, an address, a credential or a sentence has no field to sit in: anything shaped like one is replaced by <code>&lt;redacted-field&gt;</code> and never written. The check is for shape, not meaning: text that merely looks like an identifier is accepted whatever it says, so look at an export before you hand it over. <code>log_level</code> is <code>off</code>, <code>error</code> (default), <code>info</code> or <code>debug</code>. <code>python3 gt_log.py export --redact</code> re-checks every line before you hand a copy to anyone. The audit files gt already keeps (unlock, LOTR, gateway, write queue, savings ledger) keep their own formats; <code>gt_log.py status</code> and the doctor's <code>logs</code> row list them all.</p>
+<p><strong>Telemetry is off by default and sends nothing.</strong> <code>telemetry local</code> keeps counters on this machine and writes one payload a day to <code>~/.claude/golden-thread/telemetry/local.jsonl</code>, so you can read what a sending mode would send: <code>python3 gt_telemetry.py preview</code>. The payload is a closed list: gt version, platform, which modules are on, counts of features used, counts of checks passed or failed, counts of error codes and a random install id you can reset. There is no sending code, no destination and no account, and <code>share</code> is refused until a destination exists and you have chosen it.</p>
+<h3 id="93c-yes-consent-windows-app-clients-and-static-headers-gt-lotr-051-gt-0220">9.3c <code>--yes</code>, consent windows, app clients and static headers (gt-lotr 0.5.1, gt 0.22.0)</h3>
+<ul>
+<li><strong><code>--yes</code> is not a person.</strong> Any process can pass a flag, so <code>add-stdio --yes</code>, <code>setup --yes</code>, <code>setup-all --yes</code> and every <code>trust-ca</code> command first pass a person gate: gt unlock's step-up when unlock is on (the same gate as <code>enroll</code> and <code>revoke</code>), a code typed back at your own terminal when it is off. <code>--yes</code> only skips the y/N that follows. A scratch LOTR home is exempt from the typed code, and the typed code can be beaten by a program that drives a pseudo-terminal (the documented limit of that gate).</li>
+<li><strong>Consent windows (<code>lotr grant open CONNECTION --for 30m [--op OP]</code>, <code>list</code>, <code>revoke ID</code>).</strong> A window stands in for the per-call consent dialog on one connection (or one consent-tier operation) for 1 minute to 8 hours, so it softens the consent gate on purpose. Only your own terminal opens or revokes one (plus the typed code with gt unlock off); opening and revoking are audited; the store is mode 600 and a store that cannot be read honours nothing. The gateway honours a window <strong>only for a local caller and only while gt unlock is off</strong>: a hub client never benefits, and with unlock on its factors decide every consent call. With unlock off, <code>open</code> says that the terminal check stops a model's shell but not a program that opens its own terminal window, so the window is only as strong as that.</li>
+<li><strong><code>lotr app-connect APP</code>.</strong> Gives a local MCP app the vault through the hub: the app is enrolled as a hub client that reaches the vault connection only (more only with <code>--allow</code>; tier <code>write</code> by default, <code>--max-tier</code> lowers it), and its secret goes to a mode-600 file whose path is printed; the secret itself is never printed. It needs your own terminal (and the typed code with unlock off). <code>--rotate</code> revokes the old secret; <code>app-disconnect</code> revokes the client and deletes the file. Anything that can read that file can act as the app, within its tier.</li>
+<li><strong>Static headers (<code>lotr add-mcp --header NAME=VALUE</code>).</strong> They are stored in the registry as plain text and sent on every call, so they are for non-secret values only. A header LOTR sets itself (auth, content type, session), a secret reference or a value that looks like a secret is refused, and the refusal never quotes the value. <code>lotr status</code> shows names only. A key belongs in <code>--auth-header</code> with <code>--auth-ref</code>.</li>
+</ul>
 <h3 id="94-lotr-pull-reading-what-claude-code-already-has-gt-lotr-050">9.4 <code>lotr pull</code>, reading what Claude Code already has (gt-lotr 0.5.0)</h3>
 <p><code>lotr pull</code> reads files that can hold keys: Claude Code's configuration (header and <code>env</code> values, a URL
 with a query) and the token files its clients keep. It is built so that no value from any of them is kept,
@@ -1477,6 +1715,75 @@ when it restarts. The audit log records the operation and a short hash of the re
 reference, and an error line now carries <code>detail</code> (the downstream's own message, 400 characters, withheld
 entirely if it looks like a credential), so the log can echo a service's words; it is still mode 600 in a
 private folder and still holds no arguments.</p>
+<h3 id="96-a-model-behind-the-gateway-rate-limits-timeouts-limits-truncation-blast-radius-gt-lotr-051-gt-0220">9.6 A model behind the gateway: rate limits, timeouts, limits, truncation, blast radius (gt-lotr 0.5.1, gt 0.22.0)</h3>
+<p>Routing a model request over LOTR (a model server, a hosted API, an MCP tool that answers a chat) adds five
+controls. None changes anything until it is used, and none logs a secret or a request body: the audit log
+still holds only the argument hash.</p>
+<ul>
+<li><strong>Upstream rate limits.</strong> A provider's 429 (and 5xx, 408, 504) comes back as a structured error
+  (<code>upstream_rate_limited</code>, <code>upstream_error</code>, <code>upstream_timeout</code>) with the upstream status and, when the
+  provider sent a usable <code>Retry-After</code>, <code>retry_after_s</code> (clamped to an hour; junk ignored). The gateway does
+  not sleep or retry, and a busy provider is not counted as a down connection. The limit: for an MCP tool
+  there is no standard header, so a rate limit is recognised only from the tool's own error text against a
+  short phrase list; that is best effort, can miss a tool that words it differently, and never gives a wait.</li>
+<li><strong>Per-call timeout.</strong> <code>connect.timeouts.call_s</code> and a per-call <code>timeout_s</code> let a slow model answer. Both
+  are held to a gateway ceiling (<code>limits.max_call_timeout_s</code>, 300 by default, 3600 at most) that a caller
+  cannot raise, so a call cannot hold the connection open indefinitely. The gateway serves
+  calls side by side: no lock is held for the wait on a provider, so a long call delays no other call (a stdio server still answers one request at a time).</li>
+<li><strong>Local limits.</strong> A connection may declare <code>limits: {max_calls_per_min, max_concurrent}</code>; a call over
+  either is refused as <code>rate_limited_locally</code> before anything is sent. They are off unless declared, are per
+  connection, and bound the gateway's own traffic to a provider (cost, a provider's quota), not who may
+  call. They are not per client.</li>
+<li><strong>Truncation is visible.</strong> A reply the gateway cut carries <code>truncated</code> and <code>original_chars</code>, so a model
+  cannot mistake a clipped answer for a whole one. A caller may raise the cap for one call up to
+  <code>limits.max_result_chars_ceiling</code> (200000 by default); the credential scan still runs on what is returned.</li>
+<li><strong>Model-op blast radius.</strong> A model that can call tools, write files or reach other systems makes "a chat
+  request" more than a read. <code>llm: {tools: none|read|write}</code> lets the owner declare that on the connection;
+  every op on it is then at least that tier, so the right tool, consent and client ceilings apply. The limit:
+  it is the owner's declaration, not something the gateway can observe; a wrong <code>none</code> understates the risk.</li>
+</ul>
+<h3 id="97-trust_ca-an-endpoint-whose-certificate-your-own-private-ca-issued-gt-lotr-051-gt-0220">9.7 <code>trust_ca</code>: an endpoint whose certificate your own private CA issued (gt-lotr 0.5.1, gt 0.22.0)</h3>
+<p>LOTR refuses plain http to anything but this machine, and checks an https endpoint against the system
+trust store. A controller or model node on your network usually carries a certificate from a CA you run
+yourself, which the system store does not know. <code>lotr trust-ca add NAME --from FILE</code> copies that CA's
+<strong>public</strong> certificate into <code>&lt;lotr home&gt;/ca/NAME.pem</code> (folder 700, file 600), and a connection added with
+<code>--trust-ca NAME</code> records the file's sha256.</p>
+<ul>
+<li><strong>What it does.</strong> For that one connection the CA file is the only trust anchor: the system store is not
+  consulted. The certificate must verify to it, be in date, and name the host or IP in <code>base_url</code> (SAN),
+  over TLS 1.2 or newer. There is no setting, option or environment variable that turns verification off.
+  A failure is the structured error <code>tls_untrusted</code> (or <code>tls_error</code>) with a short message and a hint, and
+  counts toward the connection's <code>error</code> state like any upstream failure. A renewed leaf certificate from
+  the same CA needs no change in LOTR and no release.</li>
+<li><strong>The file is pinned.</strong> If <code>NAME.pem</code> changes or goes missing the connection refuses (<code>tls_ca_changed</code>,
+  <code>tls_ca_missing</code>) and names <code>lotr trust-ca approve CONNECTION</code>. A PEM holding a private key is refused and
+  never stored or printed; a certificate that is not a CA (basicConstraints CA false) is refused. <code>add</code>,
+  <code>remove</code> and <code>approve</code> need a person: the typed-code gate when gt unlock is off (the same as
+  <code>add-stdio --yes</code>), gt unlock's step-up when it is on (the same as <code>enroll</code>); <code>--yes</code> only skips the y/N
+  after it. <code>approve</code> pins the hash of the exact bytes it showed, and refuses if the file changed while the
+  question was open; the TLS context is built from the bytes whose hash was checked, not re-read by path.
+  Text taken from a certificate (subject, issuer, names) is shown with control characters escaped.</li>
+<li><strong>Redirects and probes.</strong> A redirect is never followed from https to plain http, and plain http is never
+  followed off this machine (<code>redirect_refused</code>); a redirect to another host, port or scheme drops the
+  credential headers. This holds for every http connection, not only <code>trust_ca</code> ones. <code>lotr status --check</code>
+  follows no redirect at all: a 3xx from the health path counts as down.</li>
+<li><strong>What it does not do.</strong> Anyone who steals the CA's private key can mint a certificate that this
+  connection will accept for its host; LOTR has no revocation list and does not check one. A CA without
+  nameConstraints can vouch for any host, so <code>add</code> warns, but does not refuse. Recommended practice: a
+  private CA with name constraints (only your own names or subnet) and short leaf lifetimes, so a renewal
+  is routine and a stolen leaf is short-lived. <code>lotr status</code> shows the CA's name, sha256 prefix and days
+  left, and the leaf's once a call has seen it, and warns within 14 days of either expiring (no network
+  call is made for that). Plain http to a non-loopback address stays refused, with or without a CA.</li>
+<li><strong>Limits.</strong> <code>trust_ca</code> covers <code>add-http</code> and <code>add-mcp</code> connections. <code>lotr connect</code> (OAuth sign-in) refuses
+  the flag: its sign-in traffic uses its own TLS code that knows no private CA. A process running as the
+  same user can rewrite the pinned hash in <code>registry.json</code> and the CA file directly (the protected-path
+  guard matches Bash commands by pattern, so it is not a boundary against such a process); a custom
+  <code>LOTR_HOME</code> outside <code>~/.config/gt-lotr</code> is exempt from the typed-code gate; and the typed code can be
+  beaten by a program that drives a pseudo-terminal (the documented limit of that gate). On Python 3.13 and
+  newer a CA without a subjectKeyIdentifier, or a leaf without an authorityKeyIdentifier, is refused (strict
+  X.509 checks): <code>add</code> warns when the CA has none; reissue it with <code>-addext subjectKeyIdentifier=hash</code>
+  (OpenSSL 3 adds both by default).</li>
+</ul>
 <h2 id="10-gt-0210-installed-code-integrity-action-tokens-io-brokers-the-testing-profile">10. gt 0.21.0: installed-code integrity, action tokens, I/O brokers, the testing profile</h2>
 <p>Four additions, each a setting with a plain reading of what it protects and what it costs. None
 changes behaviour when it is off. None is a defence against something already running as you that can
@@ -1584,13 +1891,24 @@ silently, and <code>--accept-defaults</code> is the explicit opt-out.</p>
 <p>gt ships one Claude Code mod of its own, <code>hooks/guard_mod.js</code>, loaded through <code>hooks.json</code>'s <code>modules</code>
 (Claude Code 2.1.267 and newer). It runs inside each interactive session and reaches only: <code>HOME</code> and the cache-lifetime
 variable <code>CLAUDE_CODE_PROMPT_CACHE_TTL</code>, files under <code>~/.claude/golden-thread/expiry-guard/</code>, one read of
-<code>~/.claude/vault-config.json</code>, the session's own context size and <code>/compact</code>, the prompt box (to put
+<code>~/.claude/vault-config.json</code>, the session's own context size and <code>/compact</code>, <code>/clear</code> through Claude Code's
+command API (only for a cut with <code>cut_kind clear</code>, 0.22.0, after the handoff is saved), the prompt box (to put
 <code>/compact</code> there in <code>ask</code> mode) and one notice line. No shell, network, process or model call of its own.
 It acts on a plan the guard's Stop or idle hook wrote for that session, or, if neither hook ever did, on a
 plan it makes itself from the same settings at its last poll; either way only when <code>expiry_guard</code> is <code>auto</code>
-and <code>open_sessions</code> is <code>compact</code> or <code>ask</code>. The handoffs it and the guard save
+and <code>open_sessions</code> is <code>compact</code>, <code>ask</code> or <code>clear</code> (<code>clear</code> saves a handoff, writes one pickup file named in the plan,
+and runs <code>/clear</code>; nothing else). The handoffs it and the guard save
 hold what the transcript held, so the folder is owner-only (0700), as Claude Code keeps its own
 transcripts. <code>open_sessions fork</code> or <code>notify</code>, or <code>expiry_guard off</code>, and the mod does nothing.</p>
+<h3 id="106a-explicit_model_policy-downgrade-changes-a-spawns-model-gt-0220">10.6a <code>explicit_model_policy downgrade</code> changes a spawn's model (gt 0.22.0)</h3>
+<p>The spawn hook (<code>gt_agent_model.py</code>) already fills in the model of an Agent spawn that names none. With
+<code>explicit_model_policy downgrade</code> it can also CHANGE a model the spawn named: only from Opus to a cheaper tier,
+only when the keyword table (<code>model.classes.pack.json</code>) puts the spawn's class below Opus AND an advice row
+(<code>model.advice.pack.json</code>) for that class passes the evidence gate (30 judged runs, Opus needed in at most 10
+percent). A security-class spawn is never changed (it is warned to use Opus if it names a cheaper model), nor is a
+model the prompt itself names. The classifier reads the spawn's description and prompt in memory; only the class
+name is used, and no prompt text is logged or stored. The default is <code>leave</code> and the shipped advice table is
+empty, so out of the box this changes no spawn; <code>warn</code> never changes one. Any error leaves the spawn as it was.</p>
 <h3 id="107-private-files-on-windows-0214">10.7 Private files on Windows (0.21.4)</h3>
 <p>Pasted text held by <code>paste_intake</code>, long command output kept by <code>spill_threshold_lines</code> and workflow run
 folders are written by <code>gt_private.py</code>. On macOS and Linux the folder is <code>0700</code> and the file <code>0600</code> before
@@ -1607,7 +1925,24 @@ open ACL exposes less than it used to. Not covered: a process running as you, an
 <h3 id="108-credentials-do-not-reach-the-vault-a-paste-file-or-a-spill-file-0214">10.8 Credentials do not reach the vault, a paste file or a spill file (0.21.4)</h3>
 <p>Three places used to write text before anyone had looked at it for credentials. Each now scans with the
 same detectors (<code>gt_secrets</code>) first and replaces every credential-shaped line with
-<code>[gt: line N withheld — looked like a credential (rule)]</code>; the count is reported, the value never.</p>
+<code>[gt: line N withheld — looked like a credential (rule)]</code>; the count is reported, the value never. A private key is
+withheld whole: every line from its <code>BEGIN ... PRIVATE KEY</code> header through its <code>END</code> line is withheld and counted (a
+key with a 25-line body reports 27). When the <code>END</code> line of the same kind is present, everything from <code>BEGIN</code> through
+it is withheld whatever each line has in front of or behind it (<code>&gt;</code>, <code>#</code>, <code>//</code>, <code>%</code>, <code>REM</code>, a number, a log or
+syslog prefix, a string literal): prefixes are not listed, only a line that is clearly a sentence is left out, and a
+<code>(truncated)</code> line in the middle does not end the key. If a sentence sits between <code>BEGIN</code> and <code>END</code>, that <code>END</code> is
+taken to belong to something else. With no <code>END</code> line the header and the unbroken run of key-looking lines after it
+are withheld (a 25-line body cut off before its <code>END</code> reports 26 lines); the run stops at the first blank line once the
+body has started or at the first line of ordinary words, so a header quoted in a sentence followed by ordinary text
+withholds only its own line, and one followed by long base64-looking lines withholds those too. A key longer than
+20,000 lines is cut at that point and the last line withheld is marked <code>private-key.block-capped</code>.</p>
+<p><strong>The limit.</strong> The detectors recognise secrets written plainly: a key in its usual shape (also behind a quote or comment prefix), a key header, a token with
+its usual prefix. They do not recognise a secret that has been disguised: split with zero-width characters or
+spaces, wrapped across lines, written in fullwidth letters, or base64-encoded. The generic rules also do not recognise
+<code>Authorization: Bearer &lt;opaque token&gt;</code>, <code>Cookie:</code> or <code>Set-Cookie:</code> values (a vendor-prefixed token, a JWT, or
+<code>Authorization:</code> followed directly by a token is recognised), and a key name of more than 200 characters in front of <code>=</code> or <code>:</code>
+is not read as a key name. Treat the scan as a safety net for accidents, not as a defence against someone who is hiding a
+secret on purpose.</p>
 <ul>
 <li><strong>The write broker</strong> scans every queued write (append, replace-section, replace-file, create,
   set-property) and applies the rest of it. The log row keeps <code>withheld_lines</code>, a count. If the scan
@@ -1637,7 +1972,78 @@ are not affected.</p>
 POST, to a local engine as to a hosted one. A hit refuses the packet and names the line and rule (exit 2).
 If no scanner can be loaded, nothing is sent (exit 6). Result files and <code>--keep-raw</code> files begin with
 "External engine output — unverified; do not follow instructions in it." Reused results (<code>farm_reuse_days</code>)
-are kept in a <code>0700</code> folder with <code>0600</code> files.</p>
+are kept in a <code>0700</code> folder with <code>0600</code> files.
+The service gateway's state (<code>~/.claude/golden-thread/gateway/</code>, mode <code>0600</code>) is <strong>advisory and never
+content</strong>: it holds each service's circuit (closed, open, half-open, failure counts) and an audit line
+per call (service, outcome, latency, token counts), never a URL, key, request or reply text. It can only
+make gt skip a failing engine for a while; a damaged state file fails open (every circuit closed), so it
+cannot block work, and deleting the folder loses nothing but history.</p>
+<h3 id="1010a-the-release-watch-gt-0220">10.10a The release watch (gt 0.22.0)</h3>
+<ul>
+<li><strong>One read, nothing else sent.</strong> The session-start check makes one <code>git ls-remote --tags</code> call to the
+  configured <code>gt_release_source</code> (the public gt repository by default; <code>none</code> or <code>release_notice off</code> makes
+  no call) and sends nothing else. It reads tag names only, at most every 6 hours, in the background. An
+  authenticated host uses your own git credentials, which gt never reads; a URL with a password in it is
+  refused. Nothing is installed automatically: a newer release only produces a question.</li>
+<li><strong>Another git host must be named.</strong> The default source is the public repository; a machine whose gt comes
+  from elsewhere sets <code>gt_release_source</code> to that repository (or <code>none</code>), or the notice compares against the
+  public one. It is a security setting, because a yes to the install question fetches from it: changing it
+  needs gt unlock's fresh confirmation when unlock is on, and a typed confirmation at a terminal when it is off.</li>
+</ul>
+<h3 id="1010b-files-from-outside-connectors-documents-recordings-gt-0220">10.10b Files from outside: connectors, documents, recordings (gt 0.22.0)</h3>
+<p>Everything these bring in is untrusted data, stored, scanned and labelled, never followed.</p>
+<ul>
+<li><strong><code>gt_connect.py pull</code></strong> reaches LOTR only through its own enrolled hub client, read tier only (<code>call_read</code>),
+  <code>GET</code> operations only; the service credential stays inside LOTR. A connector row must be in the personal zone
+  (a <code>work</code> or zone-less row, or one whose zone disagrees with its connection, is refused). A listing larger
+  than the row's limit stops before any item is fetched. Items land in <code>Sources/</code> by exclusive create, never
+  overwriting; a text item is scanned before it is written and held if flagged (reported by location, never
+  text); a changed item is stored new with <code>supersedes:</code> naming the old one. Nothing is ingested or promoted by
+  the pull. The payload shapes have not been proved against a live gateway.</li>
+<li><strong>Binary ingest (<code>gt_ingest_binary.py</code>, <code>gt_ingest.py --binary</code>)</strong> refuses before storing anything: over
+  25 MB, over 200 pages, a stream that inflates past its cap or at an absurd ratio, an encrypted PDF, a link,
+  a name with control characters or a path, and any type that is not a PDF or an image. Extracted text goes
+  through the intake scan in its own process before it is written; nothing from the document is printed or put
+  in an error. OCR runs only if <code>tesseract</code> is already installed; gt installs nothing.</li>
+<li><strong>Transcripts (<code>gt_transcribe.py</code>)</strong> use your own <code>whisper-cli</code> and model file; gt downloads nothing, and the
+  transcript is scanned before it is written like the text above.</li>
+</ul>
+<h3 id="1010c-obsidian-prerequisites-by-pinned-hash-gt_prereqspy-gt-0220">10.10c Obsidian prerequisites by pinned hash (<code>gt_prereqs.py</code>, gt 0.22.0)</h3>
+<ul>
+<li><strong>Nothing runs without a yes.</strong> <code>install</code> prints the exact command and runs it only with <code>--yes</code> or a typed
+  yes at a terminal; gt itself runs only a package manager (brew, winget) as an argv list, with no shell and no
+  sudo. A step that needs an administrator, pipes a download into a shell, opens a system dialog or is a sign-in
+  is printed for you to run, never run.</li>
+<li><strong>Plugins are pinned.</strong> <code>plugin terminal|realclaudian</code> downloads each file from its pinned https URL and writes
+  the plugin only when every file's sha256 matches, all or nothing; a plugin with no shipped pin is refused and
+  never fetched unchecked. A pin proves the bytes are the ones gt was tried against, not that they are safe.</li>
+<li><strong>The sign-in check</strong> only tests for the presence of Claude Code's account entry in <code>~/.claude.json</code>; it never
+  returns or prints what it read.</li>
+</ul>
+<h3 id="1010d-the-add-on-scan-what-it-covers-and-what-it-does-not-gt-0220">10.10d The add-on scan: what it covers and what it does not (gt 0.22.0)</h3>
+<p>At session start gt looks at the skills, plugins and <code>CLAUDE.md</code> that are new or changed since the last scan. The
+look runs on the island (no network, no writes), reports a finding once with the rule, file and line (never the
+matched text), and labels the source <code>local</code>, <code>trusted source</code> or <code>community</code>. It reads and reports; it never
+edits, moves or disables anything.</p>
+<p>A plugin is treated as gt's own, and skipped, only when all of these hold: its name is one gt ships, its marketplace
+is <code>golden-thread-plugin</code>, its install folder (symlinks resolved) is inside that marketplace's folder in gt's plugin
+cache, and its files match its own <code>MANIFEST.json</code> (every listed file present with the listed size and SHA-256, no
+unlisted file in the manifest folders; <code>agents/</code> is checked by file name only, because the installer rewrites those
+files). A plugin that claims a gt name and fails any of these is scanned and labelled "claims a gt name,
+unverified".</p>
+<p>What this does not cover, stated plainly:</p>
+<ul>
+<li>The manifest sits in the same folder as the files. Someone who can write the plugin cache can rewrite both, so
+  the check catches a stray edit, a plugin merged into gt's folder or a half-finished update, not a deliberate
+  forgery.</li>
+<li>Inside an own plugin the manifest check does not see the body of <code>agents/*.md</code>, <code>skills/</code>, <code>commands/</code>, <code>help/</code>,
+  <code>plugin.json</code>, <code>.mcp.json</code> or dot files. <code>plugin.json</code> can declare hooks.</li>
+<li>A FIFO, a device, a symlink (never followed), a file over 512 KB, a file it cannot open and every file past the
+  first 300 are counted and reported as "not scanned"; the plugin is never stamped clean, and <code>gt-doctor</code> lists it
+  as partly scanned.</li>
+<li>Hidden-character and instruction-shaped text is what the scan looks for. It does not judge whether a skill is a
+  good idea: reading it is still your review.</li>
+</ul>
 <h3 id="1011-gt-workflow-what-only-a-person-can-do-gt-workflow-010">10.11 gt-workflow: what only a person can do (gt-workflow 0.1.0)</h3>
 <ul>
 <li><strong>Presence gates.</strong> <code>approve</code>, <code>schedule</code>, <code>--confirm</code> of a shell step or a write, and an <code>edit</code> that

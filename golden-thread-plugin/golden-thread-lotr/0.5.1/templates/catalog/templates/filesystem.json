@@ -1,0 +1,49 @@
+{
+  "schema": 1,
+  "name": "filesystem",
+  "archetype": "stdio-npx",
+  "summary": "Read, search and edit files under one folder you choose (official MCP reference server, local stdio)",
+  "kind": "mcp-stdio",
+  "docs": "https://github.com/modelcontextprotocol/servers/blob/main/src/filesystem/README.md",
+  "connect": {
+    "command": [
+      "npx",
+      "-y",
+      "@modelcontextprotocol/server-filesystem@1.0.0",
+      "{dir}"
+    ],
+    "runtime": "node",
+    "params": {
+      "dir": {
+        "prompt": "The one folder this server may read and write",
+        "kind": "path"
+      }
+    },
+    "trust": "T1",
+    "identity": "local filesystem",
+    "description": "Local filesystem access limited to one folder (stdio, npx)",
+    "policy": {
+      "consent": [
+        "write_file",
+        "edit_file",
+        "create_directory",
+        "move_file"
+      ]
+    },
+    "timeouts": {
+      "start_s": 60,
+      "call_s": 120,
+      "idle_s": 600
+    }
+  },
+  "smoke": {
+    "op": "list_allowed_directories",
+    "args": {}
+  },
+  "notes": [
+    "You are granting access to EVERYTHING under the folder you give: every file and subfolder can be read, overwritten, edited and moved. Choose the narrowest folder that does the job.",
+    "write_file overwrites existing files and move_file removes its source; these and the other changing tools are set to ask first (consent).",
+    "The server also supports MCP roots; when a client supplies roots they replace the folder given here.",
+    "Runs on your machine via npx and needs Node.js. The version is pinned; update it deliberately."
+  ]
+}

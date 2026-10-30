@@ -1,0 +1,66 @@
+{
+ "files": {
+  "scripts/gt_demo.sh": {
+   "bytes": 61829,
+   "sha256": "463a878cf1a06ad46a77abbe1c9e86c0b2dbb6dbfff81dd82305e1a46df8f43b"
+  },
+  "scripts/gt_demo_track.py": {
+   "bytes": 11706,
+   "sha256": "de6f877d0510ef6a6a7557a18213e117e101b80807dd1d34aa38e0ca3fd6f37a"
+  },
+  "templates/demo-pizzabot/project/README.md": {
+   "bytes": 1610,
+   "sha256": "38315d0a46752a44943eba0618d22fda73bbb5835b433f187c7cfe17312fb9a2"
+  },
+  "templates/demo-pizzabot/project/decisions.md": {
+   "bytes": 1170,
+   "sha256": "1c1c539d2defee16fa23ecf4cf9872e9a01bab084efd910ea41aeb27ee009a96"
+  },
+  "templates/demo-pizzabot/project/idea.md": {
+   "bytes": 1301,
+   "sha256": "343098945c7339117d9c630a86fe949085e7bfb566bd8939628092f3e260ba66"
+  },
+  "templates/demo-pizzabot/project/memory/MEMORY.md": {
+   "bytes": 202,
+   "sha256": "3f9861a6dd8221af66c6bf4adf5c5db4ab69e68e5473b1be2a459e32db34e841"
+  },
+  "templates/demo-pizzabot/project/memory/project-context.md": {
+   "bytes": 615,
+   "sha256": "09f5584ef7504ffce68ca0172bb75f9acd87f3155e2f870470956022432b6d99"
+  },
+  "templates/demo-pizzabot/project/research.md": {
+   "bytes": 2097,
+   "sha256": "5213c7b316e1199e4557343605f5b4ab4a05338fe112371b7417f817cdfbe4c1"
+  },
+  "templates/demo-pizzabot/project/source.md": {
+   "bytes": 862,
+   "sha256": "a9fd33ba86bc9182219a246dc482a63e865ffcef0833efe99117caca08ed9ab0"
+  },
+  "templates/demo-pizzabot/sources/2024-01-01 Conversation - PizzaBot Architecture.md": {
+   "bytes": 2105,
+   "sha256": "65d0f2293033c1318e783150c0f3afa382bb1e88c06636c92cbdf1aa648c930b"
+  },
+  "templates/demo-pizzabot/tour.md": {
+   "bytes": 12889,
+   "sha256": "7b35968a0301f0450da89627b63ee343901dd37cd6c11886d1f398d8bb377cd1"
+  },
+  "templates/demo-tracks/developer.json": {
+   "bytes": 1874,
+   "sha256": "5b0ade4e78aff56d2217e16e345040773ee5e529cc107e2cc4dd6fa1a4d37830"
+  },
+  "templates/demo-tracks/executive.json": {
+   "bytes": 1936,
+   "sha256": "5d7d3b0ddd19b8f83ddf9ee27c96b31fb6edbbe203f4e5e5744927338562defb"
+  },
+  "templates/demo-tracks/operations.json": {
+   "bytes": 1831,
+   "sha256": "6f182c6dabca1eb747aaed7148e6dfb0bc30349138f125e9f3c4aa7d929dad48"
+  },
+  "templates/demo-tracks/pm.json": {
+   "bytes": 2586,
+   "sha256": "d41621b39cd19366a317cd4121964fb6a82632b1b6375d8919747458753c85a7"
+  }
+ },
+ "generated": "2026-10-29T06:55:15",
+ "version": "0.21.5"
+}

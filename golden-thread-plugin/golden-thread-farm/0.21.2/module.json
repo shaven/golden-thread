@@ -1,0 +1,109 @@
+{
+  "schema": 1,
+  "name": "farm",
+  "plugin": "gt-farm",
+  "version": "0.21.2",
+  "requires_gt": ">=0.22.0,<0.23.0",
+  "summary": "Work packets: hand gated, self-contained tasks to an external AI service -- or to an engine on your own hardware, cheapest rung first, climbing only when a check fails -- and ingest the answers as unverified",
+  "default": "off",
+  "skills": [
+    "gt-farm"
+  ],
+  "scripts": [
+    "gt_farm_calibrate.py",
+    "gt_farm_calibration.py",
+    "gt_farm_codetest.py",
+    "gt_farm_engine.py",
+    "gt_farm_ladder.py",
+    "gt_farm_pipeline.py",
+    "gt_farm_probes.py",
+    "gt_farm_review.py",
+    "gt_farm_send.py"
+  ],
+  "templates": [
+    "codetest",
+    "farm-ladder.tsv"
+  ],
+  "hooks": [],
+  "hookdir_scripts": [],
+  "settings": [
+    {
+      "key": "farm_ladder",
+      "default": "off",
+      "values": [
+        "off",
+        "on"
+      ],
+      "summary": "Ladder mode for farmed packets: try a local engine first, climb to a bigger one, then a hosted one (public material only), then Claude, only when a check fails.",
+      "detail": "off  `gt_farm_send.py ladder` refuses to run (send, relay and ledger are unaffected)  (default)\non   `ladder PACKET --class C` starts at the task class's rung from farm-ladder.tsv, runs the\n     class's check on the reply, escalates on failure and stops with \"escalate to Claude\"\n     (exit 5) at the top; every attempt is a savings-ledger line\n\nThe table of task classes ships in the module (templates/farm-ladder.tsv, also built into\ngt_farm_ladder.py) and is overridden per vault by <vault>/farm-ladder.tsv. Hosted rung 3 is\nreached only for a class marked public (or --public) and a packet that clears the Releasable\ngate after the scrub. GT_FARM_LADDER=off|on in the environment overrides this setting."
+    },
+    {
+      "key": "farm_audit_rate",
+      "default": "0.2",
+      "values": [
+        "0",
+        "0.1",
+        "0.2",
+        "0.3",
+        "0.5",
+        "1"
+      ],
+      "summary": "Share of accepted ladder results marked for a blind Claude audit (a class's own audit_rate in farm-ladder.tsv wins).",
+      "detail": "0    never sample: the audit loop is off and a class's start rung never moves\n0.2  one accepted result in five is marked `audit: pending` in the savings ledger  (default)\n1    every accepted result is marked\n\nA Claude subagent grades a marked result blind; `gt_farm_send.py audit-result KEY pass|fail`\nrecords it. Two failed audits in a class raise its start rung by one, five clean audits in a\nrow lower it by one. GT_FARM_AUDIT_RATE in the environment overrides this setting."
+    },
+    {
+      "key": "pipeline_engine",
+      "default": "off",
+      "values": [
+        "off",
+        "on"
+      ],
+      "summary": "Run gt ingest stages (extract, classify, draft) on a big local engine with the v4 packaging instead of in Claude.",
+      "detail": "off  every stage runs in Claude  (default)\non   `gt_farm_send.py pipeline` may run a stage whose class starts at rung 2 or lower on a\n     `local: yes` engine: the unit's material inline and unsplit, one exemplar, the output\n     fields spelled out, the schema bound, one self-audit, validate and retry once; an answer\n     still not valid is reported (exit 3) and the stage runs in Claude\n\nAn engine that is not local is refused: stage material is vault content. Needs a service-table\nrow with `local: yes` (rung 2). GT_PIPELINE_ENGINE=off|on in the environment overrides this setting."
+    },
+    {
+      "key": "farm_min_chars",
+      "default": "2000",
+      "values": [
+        "0",
+        "1000",
+        "2000",
+        "4000",
+        "8000"
+      ],
+      "summary": "Break-even size for an automatic send: a packet smaller than this many characters is not worth the Claude tokens the send itself costs, so it stays in Claude.",
+      "detail": "0     never skip: every automatic send goes\n2000  an automatic send (ladder, pipeline, `send --auto` as gt-intake and workflow farm steps use it)\n      of a smaller packet is skipped with \"not worth sending: N chars < break-even M\" (exit 5)  (default)\n\nA `send --service X` typed by the user is never skipped. The default comes from the farm ledger on\nthe owner's machine: Claude's fixed cost of a send (~220 tokens) plus the packet scaffold the engine\nreads (~120) is ~340 tokens, ~1,360 characters, with a 1.5x margin. GT_FARM_MIN_CHARS=N in the\nenvironment, or --min-chars N for one run, overrides this setting."
+    },
+    {
+      "key": "farm_reuse_days",
+      "default": "7",
+      "values": [
+        "0",
+        "1",
+        "7",
+        "30"
+      ],
+      "summary": "How long a passing farmed result is reused instead of sending the same packet to the same engine and model again.",
+      "detail": "0   never reuse: every send goes to the engine\n7   a passing result under 7 days old is filed again without a send, reported as \"reused\" and\n    marked `reused: true` in the savings ledger  (default)\n\nThe key is sha256(packet + engine + model). `--fresh` forces a new send. Stored results live in\n~/.claude/golden-thread/farm/cache (folder 0700, files 0600). GT_FARM_REUSE_DAYS=N overrides."
+    },
+    {
+      "key": "farm_heartbeat_s",
+      "default": "30",
+      "values": [
+        "0",
+        "15",
+        "30",
+        "60",
+        "120"
+      ],
+      "summary": "How often a long send says it is still waiting, in seconds. 0 turns the waiting line off.",
+      "detail": "0    no waiting line (the start and finish line of each packet are still printed)\n30   every 30 seconds a \"waiting\" line names each engine still working, for how long, and how many\n     packets are left  (default)\n\nThe lines go to stderr; `--json` output on stdout is unchanged. A send can run up to 15 minutes\n(`send`, `ladder`) or an hour (`pipeline`). GT_FARM_HEARTBEAT_S=N in the environment overrides this setting."
+    }
+  ],
+  "requires_modules": [],
+  "replaces_core": [
+    "skills/gt-farm"
+  ],
+  "lockdown": {},
+  "demo": "demo/act.md"
+}

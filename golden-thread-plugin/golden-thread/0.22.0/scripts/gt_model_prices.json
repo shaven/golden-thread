@@ -1,0 +1,111 @@
+{
+  "note": "USD per million INPUT tokens, list price, read by gt_optimize_session.py to price prompt-cache writes found in Claude Code transcripts. The sections `prices`, `cache_read`, `windows`, `long_prompt` and `ladder` below are the pre-0.22.0 substring tables, kept only for the readers that have not moved (gt_expiry_guard.py, gt_compact.py, gt_cut_advisor.py); the ONE table every other script reads is `models` (see models_note), matched by exact id, alias, then explicit prefix rules. This file RECOGNISES model ids that already appear in transcripts; it never selects a model (that is packs/core/model.intents.pack.json). It is the one other file tests/test_gt_model.py lets carry model ids.",
+  "default": 3.0,
+  "prices": [
+    ["claude-3-opus", 15.0], ["claude-opus-4-0", 15.0], ["claude-opus-4-1", 15.0],
+    ["claude-opus-4-20", 15.0],
+    ["claude-fable", 10.0], ["claude-mythos", 10.0],
+    ["claude-opus-5-5", 4.0], ["claude-opus-5", 5.0], ["claude-opus-4", 5.0],
+    ["opus", 4.0],
+    ["claude-3-haiku", 0.25], ["claude-3-5-haiku", 0.8], ["claude-haiku-5-5", 0.1], ["claude-haiku-4", 1.0],
+    ["haiku", 0.1],
+    ["claude-sonnet-5-5", 2.0], ["claude-sonnet-5", 2.0], ["claude-sonnet-4", 3.0], ["claude-3-5-sonnet", 3.0],
+    ["claude-3-7-sonnet", 3.0],
+    ["sonnet", 2.0]
+  ],
+  "cache_read_note": "Cache-read price as a multiple of the model's input price, [needle, multiple, verified], matched by substring in order, first match wins. verified = the date the multiple was read from the provider's pricing page (platform.claude.com/docs/en/about-claude/pricing, read 2026-10-24); a row with no verified date is refused by the reader. A model with no row here reads at 0.1 (every older model and Sonnet 5). The family rows in prices are the CURRENT family (a bare alias resolves to the newest model); older ids have their own rows above them.",
+  "cache_read": [
+    ["claude-fable", 0.025, "2026-10-24"], ["claude-opus-5-5", 0.05, "2026-10-24"],
+    ["claude-sonnet-5-5", 0.05, "2026-10-24"]
+  ],
+  "long_prompt_note": "A model whose input price rises when ONE request's prompt passes a size: [needle, over_tokens, multiple, verified], matched by substring like prices. Haiku 5.5 costs 5x (0.50 in, and every cache price with it) once a prompt passes 100K tokens; verified = read from platform.claude.com/docs/en/about-claude/pricing on 2026-10-24 (self-verified). Applied only where one request's prompt size is known (gt_optimize_session.py reads it per turn); gt_savings.py's ledger events are totals, so there a long Haiku prompt is priced at the base tier and is under-stated (unverified). A row with no verified date is refused by the reader.",
+  "long_prompt": [
+    ["claude-haiku-5-5", 100000, 5.0, "2026-10-24"]
+  ],
+  "engines_note": "Hosted farm engines (not Claude), USD per million tokens, standard paid tier, text: {provider, model, in_per_mtok, out_per_mtok, verified}, keyed by PROVIDER + MODEL (a provider is a field of the service-table row, never read out of a name; a row with no provider shows no verified date); the LONGEST model id contained in an engine's model wins (gt_savings.py engine_row). A new provider is a new row, not code. verified = the date the price was read from the provider's page (https://ai.google.dev/gemini-api/docs/pricing, page dated 2026-10-22, read 2026-10-25 through a summarising fetch, so self-verified, not read from the raw page). A row with no verified date is refused by the reader. Left out on purpose: models whose price changes on a dated schedule (Gemini 3.x Flash, 4 Argon) and every You.com plan (no source read: unverified). prompts_over_200k notes a Pro model's higher long-prompt rate, which this table does not apply.",
+  "engines": [
+    {"provider": "google", "model": "gemini-2.5-flash-lite", "in_per_mtok": 0.10, "out_per_mtok": 0.40, "verified": "2026-10-25"},
+    {"provider": "google", "model": "gemini-2.5-flash", "in_per_mtok": 0.30, "out_per_mtok": 2.50, "verified": "2026-10-25"},
+    {"provider": "google", "model": "gemini-2.5-pro", "in_per_mtok": 1.25, "out_per_mtok": 10.00, "verified": "2026-10-25", "prompts_over_200k": {"in_per_mtok": 2.50, "out_per_mtok": 15.00}},
+    {"provider": "google", "model": "gemini-3.1-flash-lite", "in_per_mtok": 0.25, "out_per_mtok": 1.50, "verified": "2026-10-25"},
+    {"provider": "google", "model": "gemini-3.1-pro-preview", "in_per_mtok": 2.00, "out_per_mtok": 12.00, "verified": "2026-10-25", "prompts_over_200k": {"in_per_mtok": 4.00, "out_per_mtok": 18.00}}
+  ],
+  "windows_note": "Context window in tokens, [needle, window, verified], matched by substring in this order like prices (first match wins). verified true = read from the model catalog inside Claude Code 2.1.296 (self-verified from the binary, 2026-10-13, not from API docs). verified false = a conservative guess for a family spelling not in that catalog; the expiry guard's cold-compaction ladder uses it as is. The ladder lists the cheaper models to try first, smallest first; the session's own main model is always the last step.",
+  "windows": [
+    ["claude-haiku-5-5", 1000000, true], ["claude-sonnet-5-5", 1000000, true], ["claude-sonnet-5", 1000000, true],
+    ["claude-opus-5-5", 1000000, true], ["claude-opus-5", 1000000, true], ["claude-opus-4-8", 1000000, true],
+    ["claude-opus-4-7", 1000000, true], ["claude-opus-4-6", 200000, true], ["claude-opus-4-5", 200000, true],
+    ["claude-opus-4-1", 200000, true], ["claude-opus-4-0", 200000, true], ["claude-opus-4-20", 200000, false],
+    ["claude-sonnet-4-6", 200000, true], ["claude-sonnet-4-5", 200000, true],
+    ["claude-haiku-4-5", 200000, true], ["claude-3-5-haiku", 200000, true], ["claude-3-5-sonnet", 200000, true],
+    ["claude-fable", 1000000, true], ["claude-mythos", 1000000, true],
+    ["haiku", 200000, false], ["sonnet", 200000, false], ["opus", 200000, false]
+  ],
+  "default_window": 200000,
+  "ladder": ["claude-haiku-5-5", "claude-sonnet-5-5"],
+  "models_note": "The ONE model record table (0.22.0). A row is keyed by (provider, id) and carries provider, id, aliases, tier (free vocabulary: fast, balanced, deep today; a new tier is a new word here), in_per_mtok, out_per_mtok (null = not recorded: the ledger's flat output weight applies), cache_read (multiple of in_per_mtok, null = the flat 0.1), window ({tokens, verified}), efforts (list the model accepts; [] = none; absent = gt does not know), long_prompt ({over_tokens, multiple, verified} or null), verified (date the row was read from the provider's page; null = carried from the pre-0.22.0 tables, which kept no date), known (true on every row; an id that matches no row is known: false) and optional auto_clear_priors (the measured priors for gt_auto_clear.py: a model with none is skipped as 'not measured'). Numbers are exactly the pre-0.22.0 `prices`, `cache_read`, `windows` and `long_prompt` rows, one row per needle; tests/test_model_records.py pins that every id priced before is priced the same. MATCHING (gt_model_records.py): normalise (lower case, drop a trailing [..] context suffix, drop one of the provider's route_prefixes), then 1) an EXACT id or declared alias, 2) the provider's prefix_rules in order, first match wins (a rule is [prefix, row id]; keep a specific prefix before a general one; a test fails when a rule is shadowed), never a substring. A bare family word (opus, sonnet, haiku) is its own exact row so its numbers stay what they were. The legacy sections above (prices, cache_read, windows, long_prompt, ladder) are still read by gt_expiry_guard.py, gt_compact.py and gt_cut_advisor.py; a test pins that they agree with these rows.",
+  "tier_defaults_note": "The default model (an exact id or alias in models) a tier resolves to, cheapest first: the order is the calibration tier table, and the last tier is the default judge.",
+  "tier_defaults": {"fast": "haiku", "balanced": "sonnet", "deep": "opus"},
+  "providers": {
+    "anthropic": {
+      "route_prefixes": ["anthropic/", "global.anthropic.", "us.anthropic.", "eu.anthropic.", "apac.anthropic.", "au.anthropic.", "jp.anthropic.", "anthropic."],
+      "prefix_rules": [
+        ["claude-sonnet-5-5", "claude-sonnet-5-5"],
+        ["claude-3-5-sonnet", "claude-3-5-sonnet"],
+        ["claude-3-7-sonnet", "claude-3-7-sonnet"],
+        ["claude-sonnet-4-6", "claude-sonnet-4-6"],
+        ["claude-sonnet-4-5", "claude-sonnet-4-5"],
+        ["claude-opus-4-20", "claude-opus-4-20"],
+        ["claude-3-5-haiku", "claude-3-5-haiku"],
+        ["claude-haiku-5-5", "claude-haiku-5-5"],
+        ["claude-haiku-4-5", "claude-haiku-4-5"],
+        ["claude-opus-4-0", "claude-opus-4-0"],
+        ["claude-opus-4-1", "claude-opus-4-1"],
+        ["claude-opus-5-5", "claude-opus-5-5"],
+        ["claude-sonnet-5", "claude-sonnet-5"],
+        ["claude-sonnet-4", "claude-sonnet-4"],
+        ["claude-opus-4-8", "claude-opus-4-8"],
+        ["claude-opus-4-7", "claude-opus-4-7"],
+        ["claude-opus-4-6", "claude-opus-4-6"],
+        ["claude-opus-4-5", "claude-opus-4-5"],
+        ["claude-3-haiku", "claude-3-haiku"],
+        ["claude-haiku-4", "claude-haiku-4"],
+        ["claude-3-opus", "claude-3-opus"],
+        ["claude-mythos", "claude-mythos"],
+        ["claude-opus-5", "claude-opus-5"],
+        ["claude-opus-4", "claude-opus-4"],
+        ["claude-fable", "claude-fable"]
+      ]
+    }
+  },
+  "models": [
+    {"provider": "anthropic", "id": "claude-3-opus", "aliases": [], "tier": "deep", "in_per_mtok": 15.0, "out_per_mtok": null, "cache_read": null, "window": {"tokens": 200000, "verified": false}, "efforts": ["low", "medium", "high", "xhigh", "max"], "long_prompt": null, "verified": null, "known": true},
+    {"provider": "anthropic", "id": "claude-opus-4-0", "aliases": [], "tier": "deep", "in_per_mtok": 15.0, "out_per_mtok": null, "cache_read": null, "window": {"tokens": 200000, "verified": true}, "efforts": ["low", "medium", "high", "xhigh", "max"], "long_prompt": null, "verified": null, "known": true},
+    {"provider": "anthropic", "id": "claude-opus-4-1", "aliases": [], "tier": "deep", "in_per_mtok": 15.0, "out_per_mtok": null, "cache_read": null, "window": {"tokens": 200000, "verified": true}, "efforts": ["low", "medium", "high", "xhigh", "max"], "long_prompt": null, "verified": null, "known": true},
+    {"provider": "anthropic", "id": "claude-opus-4-20", "aliases": [], "tier": "deep", "in_per_mtok": 15.0, "out_per_mtok": null, "cache_read": null, "window": {"tokens": 200000, "verified": false}, "efforts": ["low", "medium", "high", "xhigh", "max"], "long_prompt": null, "verified": null, "known": true},
+    {"provider": "anthropic", "id": "claude-fable", "aliases": [], "tier": null, "in_per_mtok": 10.0, "out_per_mtok": null, "cache_read": 0.025, "window": {"tokens": 1000000, "verified": true}, "long_prompt": null, "verified": "2026-10-24", "known": true},
+    {"provider": "anthropic", "id": "claude-mythos", "aliases": [], "tier": null, "in_per_mtok": 10.0, "out_per_mtok": null, "cache_read": null, "window": {"tokens": 1000000, "verified": true}, "long_prompt": null, "verified": null, "known": true},
+    {"provider": "anthropic", "id": "claude-opus-5-5", "aliases": [], "tier": "deep", "in_per_mtok": 4.0, "out_per_mtok": null, "cache_read": 0.05, "window": {"tokens": 1000000, "verified": true}, "efforts": ["low", "medium", "high", "xhigh", "max"], "long_prompt": null, "verified": "2026-10-24", "known": true},
+    {"provider": "anthropic", "id": "claude-opus-5", "aliases": [], "tier": "deep", "in_per_mtok": 5.0, "out_per_mtok": null, "cache_read": null, "window": {"tokens": 1000000, "verified": true}, "efforts": ["low", "medium", "high", "xhigh", "max"], "long_prompt": null, "verified": null, "known": true},
+    {"provider": "anthropic", "id": "claude-opus-4", "aliases": [], "tier": "deep", "in_per_mtok": 5.0, "out_per_mtok": null, "cache_read": null, "window": {"tokens": 200000, "verified": false}, "efforts": ["low", "medium", "high", "xhigh", "max"], "long_prompt": null, "verified": null, "known": true},
+    {"provider": "anthropic", "id": "opus", "aliases": [], "tier": "deep", "in_per_mtok": 4.0, "out_per_mtok": null, "cache_read": null, "window": {"tokens": 200000, "verified": false}, "efforts": ["low", "medium", "high", "xhigh", "max"], "long_prompt": null, "verified": null, "known": true},
+    {"provider": "anthropic", "id": "claude-3-haiku", "aliases": [], "tier": "fast", "in_per_mtok": 0.25, "out_per_mtok": null, "cache_read": null, "window": {"tokens": 200000, "verified": false}, "efforts": [], "long_prompt": null, "verified": null, "known": true},
+    {"provider": "anthropic", "id": "claude-3-5-haiku", "aliases": [], "tier": "fast", "in_per_mtok": 0.8, "out_per_mtok": null, "cache_read": null, "window": {"tokens": 200000, "verified": true}, "efforts": [], "long_prompt": null, "verified": null, "known": true},
+    {"provider": "anthropic", "id": "claude-haiku-5-5", "aliases": [], "tier": "fast", "in_per_mtok": 0.1, "out_per_mtok": null, "cache_read": null, "window": {"tokens": 1000000, "verified": true}, "efforts": [], "long_prompt": {"over_tokens": 100000, "multiple": 5.0, "verified": "2026-10-24"}, "verified": "2026-10-24", "known": true},
+    {"provider": "anthropic", "id": "claude-haiku-4", "aliases": [], "tier": "fast", "in_per_mtok": 1.0, "out_per_mtok": null, "cache_read": null, "window": {"tokens": 200000, "verified": false}, "efforts": [], "long_prompt": null, "verified": null, "known": true},
+    {"provider": "anthropic", "id": "haiku", "aliases": [], "tier": "fast", "in_per_mtok": 0.1, "out_per_mtok": null, "cache_read": null, "window": {"tokens": 200000, "verified": false}, "efforts": [], "long_prompt": null, "verified": null, "known": true},
+    {"provider": "anthropic", "id": "claude-sonnet-5-5", "aliases": [], "tier": "balanced", "in_per_mtok": 2.0, "out_per_mtok": null, "cache_read": 0.05, "window": {"tokens": 1000000, "verified": true}, "efforts": ["low", "medium", "high", "xhigh", "max"], "long_prompt": null, "verified": "2026-10-24", "known": true, "auto_clear_priors": {"ac": 0.05112505002776099, "bc": 1.4366186328143674e-07, "c0": 33050.857142857145, "al": 0.0849020746604602, "r_fix": 0.23, "p_fix": 0.0, "W": 0.07, "ub": 1.1242128417761441e-07}},
+    {"provider": "anthropic", "id": "claude-sonnet-5", "aliases": [], "tier": "balanced", "in_per_mtok": 2.0, "out_per_mtok": null, "cache_read": null, "window": {"tokens": 1000000, "verified": true}, "efforts": ["low", "medium", "high", "xhigh", "max"], "long_prompt": null, "verified": null, "known": true},
+    {"provider": "anthropic", "id": "claude-sonnet-4", "aliases": [], "tier": "balanced", "in_per_mtok": 3.0, "out_per_mtok": null, "cache_read": null, "window": {"tokens": 200000, "verified": false}, "efforts": ["low", "medium", "high", "xhigh", "max"], "long_prompt": null, "verified": null, "known": true},
+    {"provider": "anthropic", "id": "claude-3-5-sonnet", "aliases": [], "tier": "balanced", "in_per_mtok": 3.0, "out_per_mtok": null, "cache_read": null, "window": {"tokens": 200000, "verified": true}, "efforts": ["low", "medium", "high", "xhigh", "max"], "long_prompt": null, "verified": null, "known": true},
+    {"provider": "anthropic", "id": "claude-3-7-sonnet", "aliases": [], "tier": "balanced", "in_per_mtok": 3.0, "out_per_mtok": null, "cache_read": null, "window": {"tokens": 200000, "verified": false}, "efforts": ["low", "medium", "high", "xhigh", "max"], "long_prompt": null, "verified": null, "known": true},
+    {"provider": "anthropic", "id": "sonnet", "aliases": [], "tier": "balanced", "in_per_mtok": 2.0, "out_per_mtok": null, "cache_read": null, "window": {"tokens": 200000, "verified": false}, "efforts": ["low", "medium", "high", "xhigh", "max"], "long_prompt": null, "verified": null, "known": true},
+    {"provider": "anthropic", "id": "claude-opus-4-8", "aliases": [], "tier": "deep", "in_per_mtok": 5.0, "out_per_mtok": null, "cache_read": null, "window": {"tokens": 1000000, "verified": true}, "efforts": ["low", "medium", "high", "xhigh", "max"], "long_prompt": null, "verified": null, "known": true},
+    {"provider": "anthropic", "id": "claude-opus-4-7", "aliases": [], "tier": "deep", "in_per_mtok": 5.0, "out_per_mtok": null, "cache_read": null, "window": {"tokens": 1000000, "verified": true}, "efforts": ["low", "medium", "high", "xhigh", "max"], "long_prompt": null, "verified": null, "known": true},
+    {"provider": "anthropic", "id": "claude-opus-4-6", "aliases": [], "tier": "deep", "in_per_mtok": 5.0, "out_per_mtok": null, "cache_read": null, "window": {"tokens": 200000, "verified": true}, "efforts": ["low", "medium", "high", "xhigh", "max"], "long_prompt": null, "verified": null, "known": true},
+    {"provider": "anthropic", "id": "claude-opus-4-5", "aliases": [], "tier": "deep", "in_per_mtok": 5.0, "out_per_mtok": null, "cache_read": null, "window": {"tokens": 200000, "verified": true}, "efforts": ["low", "medium", "high", "xhigh", "max"], "long_prompt": null, "verified": null, "known": true},
+    {"provider": "anthropic", "id": "claude-sonnet-4-6", "aliases": [], "tier": "balanced", "in_per_mtok": 3.0, "out_per_mtok": null, "cache_read": null, "window": {"tokens": 200000, "verified": true}, "efforts": ["low", "medium", "high", "xhigh", "max"], "long_prompt": null, "verified": null, "known": true},
+    {"provider": "anthropic", "id": "claude-sonnet-4-5", "aliases": [], "tier": "balanced", "in_per_mtok": 3.0, "out_per_mtok": null, "cache_read": null, "window": {"tokens": 200000, "verified": true}, "efforts": ["low", "medium", "high", "xhigh", "max"], "long_prompt": null, "verified": null, "known": true},
+    {"provider": "anthropic", "id": "claude-haiku-4-5", "aliases": [], "tier": "fast", "in_per_mtok": 1.0, "out_per_mtok": null, "cache_read": null, "window": {"tokens": 200000, "verified": true}, "efforts": [], "long_prompt": null, "verified": null, "known": true}
+  ]
+}

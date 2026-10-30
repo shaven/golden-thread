@@ -1,0 +1,39 @@
+{
+  "schema": 1,
+  "name": "scan-repo",
+  "title": "Scan a repository before review",
+  "description": "Runs the checks that apply to this code, and reports which checks ran, not only what they found.",
+  "personas": [
+    "developer"
+  ],
+  "help_workflow": "scan-repo",
+  "say": "Scan this repo before I send it for review.",
+  "inputs": [
+    {
+      "name": "path",
+      "type": "string",
+      "required": true,
+      "prompt": "Which folder should be scanned?"
+    }
+  ],
+  "steps": [
+    {
+      "id": "scan",
+      "kind": "run",
+      "title": "Scan the folder",
+      "script": "gt_scan.py",
+      "args": [
+        "{{inputs.path}}",
+        "--vault",
+        "{{vault}}"
+      ],
+      "ok_exit": [
+        0,
+        1
+      ],
+      "note_exit": {
+        "1": "there are findings to read"
+      }
+    }
+  ]
+}

@@ -1,0 +1,82 @@
+{
+  "schema": 1,
+  "template": "unifi",
+  "service": "UniFi Site Manager API",
+  "archetype": "http-rest",
+  "researched": "2026-10-25",
+  "researcher": "claude, from memory of the vendor docs; the docs site is script-rendered and its text did not load (phase 88c)",
+  "facts": [
+    {
+      "id": "f1",
+      "field": "connect.base_url",
+      "value": "https://api.ui.com",
+      "claim": "The Site Manager API is served from https://api.ui.com.",
+      "source": "https://developer.ui.com/site-manager-api/gettingstarted",
+      "retrieved": "2026-10-25",
+      "state": "unverified",
+      "evidence": "The fetched page held only its title; this is from memory."
+    },
+    {
+      "id": "f2",
+      "field": "connect.auth_header",
+      "value": "X-API-Key",
+      "claim": "A request carries the API key in the X-API-Key header.",
+      "source": "https://developer.ui.com/site-manager-api/gettingstarted",
+      "retrieved": "2026-10-25",
+      "state": "unverified",
+      "evidence": "From memory; the page text did not load."
+    },
+    {
+      "id": "f2b",
+      "field": "connect.auth_scheme",
+      "value": "header",
+      "claim": "The key is sent as a request header, not as a bearer token.",
+      "source": "https://developer.ui.com/site-manager-api/gettingstarted",
+      "retrieved": "2026-10-25",
+      "state": "unverified",
+      "evidence": "From memory; the page text did not load."
+    },
+    {
+      "id": "f3",
+      "field": "network.hosts",
+      "value": [
+        "api.ui.com"
+      ],
+      "claim": "Only api.ui.com is called.",
+      "source": "https://developer.ui.com/site-manager-api/gettingstarted",
+      "retrieved": "2026-10-25",
+      "state": "unverified",
+      "evidence": "Host from memory."
+    },
+    {
+      "id": "f4",
+      "claim": "Reads: GET /v1/hosts, /v1/sites and /v1/devices list consoles, sites and devices.",
+      "source": "https://developer.ui.com/site-manager-api/gettingstarted",
+      "retrieved": "2026-10-25",
+      "state": "unverified",
+      "evidence": "From memory of the API reference; not on the fetched page."
+    },
+    {
+      "id": "f5",
+      "claim": "The key is created in the owner's UniFi account (unifi.ui.com, API section).",
+      "source": "https://developer.ui.com/site-manager-api/gettingstarted",
+      "retrieved": "2026-10-25",
+      "state": "unverified",
+      "evidence": "From memory; the page text did not load."
+    }
+  ],
+  "choices": [
+    {
+      "decision": "all writes are consent",
+      "because": "read-mostly is the point (fleet and device state); a change to a console should never be silent",
+      "facts": [
+        "f4"
+      ]
+    }
+  ],
+  "open": [
+    "Nothing here is confirmed from the vendor's docs; read the reference before a live check.",
+    "PRIVATE CONTROLLER: not reached by this template. A local UniFi controller (private address, its own paths under /proxy/network/integration/v1/..., a different key) is the unifi-controller template, over https with the owner's private CA (gt-lotr 0.5.1 trust_ca).",
+    "Rate limits of the hosted API are not recorded."
+  ]
+}

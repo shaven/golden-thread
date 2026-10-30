@@ -1,0 +1,167 @@
+{
+  "schema": 1,
+  "name": "jira-add-to-sprint",
+  "title": "Add an issue to a sprint",
+  "description": "Read an issue, stop if it is already closed, add it to the sprint you name, and tell its owner. The add is a write that waits for you until you approve it; the note is a send and always waits.",
+  "personas": [
+    "project-manager",
+    "product-manager",
+    "developer"
+  ],
+  "say": "Add PROJ-123 to Sprint 42.",
+  "notes": [
+    "The connection and op names in a LOTR step are examples. Run `lotr find` (or ask Claude to) and edit them to match your own gateway before you approve a write."
+  ],
+  "inputs": [
+    {
+      "name": "issue",
+      "type": "issue-key",
+      "required": true,
+      "prompt": "Which issue? (like PROJ-123)"
+    },
+    {
+      "name": "sprint",
+      "type": "string",
+      "required": true,
+      "prompt": "Which sprint? (its name)"
+    }
+  ],
+  "steps": [
+    {
+      "id": "get_issue",
+      "kind": "lotr",
+      "title": "Read the issue",
+      "tier": "read",
+      "connection": "atlassian@personal",
+      "op": "getJiraIssue",
+      "args": {
+        "issueIdOrKey": "{{inputs.issue}}",
+        "fields": [
+          "summary",
+          "status",
+          "assignee"
+        ]
+      }
+    },
+    {
+      "id": "extract",
+      "kind": "farm",
+      "title": "Pull out the status, owner and summary",
+      "task": "Read the issue and extract its status, its owner and a one-sentence summary.",
+      "input": "{{steps.get_issue.output}}",
+      "schema": {
+        "type": "object",
+        "properties": {
+          "status": {
+            "type": "string"
+          },
+          "owner": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "summary": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "status",
+          "summary"
+        ]
+      }
+    },
+    {
+      "id": "closed_notice",
+      "kind": "you",
+      "title": "It is already closed",
+      "message": "{{inputs.issue}} is already closed, so nothing was added to {{inputs.sprint}}.",
+      "when": {
+        "equals": [
+          "{{steps.get_issue.output.fields.status.name}}",
+          "Done"
+        ]
+      }
+    },
+    {
+      "id": "add_to_sprint",
+      "kind": "lotr",
+      "title": "Add it to the sprint",
+      "tier": "write",
+      "connection": "atlassian@personal",
+      "op": "addIssueToSprint",
+      "args": {
+        "issueIdOrKey": "{{inputs.issue}}",
+        "sprint": "{{inputs.sprint}}"
+      },
+      "when": {
+        "not": {
+          "equals": [
+            "{{steps.get_issue.output.fields.status.name}}",
+            "Done"
+          ]
+        }
+      }
+    },
+    {
+      "id": "draft_note",
+      "kind": "farm",
+      "class": "draft",
+      "title": "Draft the note to the owner",
+      "task": "Write a short note (two sentences) telling the owner that the issue was added to the sprint named in the input.",
+      "input": {
+        "issue": "{{inputs.issue}}",
+        "sprint": "{{inputs.sprint}}",
+        "summary": "{{steps.extract.output.summary}}"
+      },
+      "schema": {
+        "type": "object",
+        "properties": {
+          "message": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "message"
+        ]
+      },
+      "when": {
+        "not": {
+          "equals": [
+            "{{steps.get_issue.output.fields.status.name}}",
+            "Done"
+          ]
+        }
+      }
+    },
+    {
+      "id": "notify",
+      "kind": "lotr",
+      "title": "Tell the owner",
+      "tier": "consent",
+      "connection": "m365@personal",
+      "op": "do_action",
+      "args": {
+        "action": "send mail",
+        "to": "{{steps.get_issue.output.fields.assignee}}",
+        "subject": "{{inputs.issue}} is in {{inputs.sprint}}",
+        "body": "{{steps.draft_note.output.message}}"
+      },
+      "when": {
+        "all": [
+          {
+            "not": {
+              "equals": [
+                "{{steps.get_issue.output.fields.status.name}}",
+                "Done"
+              ]
+            }
+          },
+          {
+            "exists": "{{steps.get_issue.output.fields.assignee}}"
+          }
+        ]
+      }
+    }
+  ]
+}

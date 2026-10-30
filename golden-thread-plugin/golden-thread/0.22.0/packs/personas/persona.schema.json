@@ -1,0 +1,136 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "gt persona pack",
+  "description": "Data only. gt_persona.py validate_pack is the authority; this file documents the same rules. A persona shapes what gt offers, never what it enforces: any key named lockdown, sandbox_mode, unlock, test_gate or protected_paths, at any depth, refuses the pack.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema", "name", "title", "scaffold"],
+  "properties": {
+    "schema": {"const": 1},
+    "name": {"type": "string", "pattern": "^[a-z][a-z0-9-]{0,39}$", "description": "Must equal the file name without .json."},
+    "title": {"type": "string", "maxLength": 80},
+    "description": {"type": "string", "maxLength": 400},
+    "audience": {"type": "string", "minLength": 1, "maxLength": 300, "pattern": "^[^\\n\\r]+$", "description": "Who this persona writes for and how, in one line (item #45). gt passes it, as an Audience block, to the agents that WRITE for the user (draft, briefs, summaries, wrap-ups) when persona_aligned is on; never to fact-finding agents. Presentation only."},
+    "lotr_templates": {
+      "type": "array",
+      "maxItems": 8,
+      "uniqueItems": true,
+      "items": {"type": "string", "pattern": "^[a-z][a-z0-9-]{0,39}$"},
+      "description": "LOTR catalog templates (lotr-templates/catalog.json) gt-lotr suggests to this persona in `lotr setup` with no template and `lotr template list` (0.21.4). A suggestion only: nothing is connected or installed."
+    },
+    "featured_skills": {
+      "type": "array",
+      "minItems": 5,
+      "maxItems": 8,
+      "uniqueItems": true,
+      "items": {"type": "string", "pattern": "^/gt:gt-[a-z0-9-]{1,40}$"},
+      "description": "5 to 8 gt commands this persona uses most (0.21.4). gt_hints prefers them when it picks next-step choices; `gt_persona.py featured` lists them. Each must have a skill in skills/ (checked by `gt_persona.py check` and the tests)."
+    },
+    "session_focus": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 7,
+      "uniqueItems": true,
+      "items": {"enum": ["must_do", "handoffs", "tasks", "write_queue", "sandbox", "pickup", "state"]},
+      "description": "SessionStart surface sections (gt_surface.py) to show first, in this order (0.21.4). An order only: every other section follows in its usual order and none is hidden."
+    },
+    "close_focus": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 14,
+      "uniqueItems": true,
+      "items": {"enum": ["findings", "decisions", "design", "runbook", "memory", "tasks", "handoffs", "promotions", "code", "deadlines", "incidents", "migrations", "config", "topology"]},
+      "description": "What /gt:gt-close puts first for this role, in this order (0.21.4): `gt_persona.py close-plan` prints it and the gt-close skill reads it. Order and emphasis only: every gt-work step still runs, and the capture items (findings, decisions, design, runbook, memory, tasks, handoffs, promotions) not named here follow in gt-work's usual order. code, deadlines, incidents, migrations, config and topology are kinds of finding to look for first; each lands where gt-work already writes."
+    },
+    "close_summary": {
+      "enum": ["standard", "brief-first"],
+      "description": "How the gt-close wrap-up opens (0.21.4). brief-first: at most five plain lines (what moved, what was decided, what is blocked), then all the detail below. standard, or no key: as always. Several personas: the first that sets it wins."
+    },
+    "extends": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 3,
+      "uniqueItems": true,
+      "items": {"type": "string", "pattern": "^[a-z][a-z0-9-]{0,39}$"},
+      "description": "Packs this one inherits from (0.22.0): their emphasis fields, scaffold, farm tasks and flags follow this pack's own, in the order listed, each name once. A cycle or an unknown parent is a `gt_persona.py check` problem; at run time a stale parent is skipped, never an error."
+    },
+    "plain_mode": {
+      "type": "boolean",
+      "description": "True: replies lead with what happened and the next step, jargon is glossed once and paths are shown only on request (0.22.0). The first pack in the expanded order that sets it decides, so a child can turn an inherited true off."
+    },
+    "handoff": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["commands", "track"],
+      "properties": {
+        "commands": {"type": "array", "minItems": 3, "maxItems": 3, "items": {"type": "string", "pattern": "^/gt:gt-[a-z0-9-]{1,40}$"}},
+        "track": {"type": "string", "pattern": "^[a-z][a-z0-9-]{0,39}$"}
+      },
+      "description": "What the installer's summary says after an install with this persona (0.22.0, phase 95e): the three core commands and the gt-demo track whose tour and walk-through to try."
+    },
+    "farm_tasks": {
+      "type": "array",
+      "minItems": 3,
+      "maxItems": 6,
+      "description": "The routine, low-judgement work this role can hand to a local engine (0.21.4): each a task id, one of gt-farm's task classes, a title, one line on what it does and one line on when Claude takes over. Shown in /gt:gt-settings models, the role guide and the gt-farm skill. A suggestion only: it sends nothing and enforces nothing (ADR-18); an engine is used for a class only once it has a calibration that says it can take it.",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["id", "class", "title", "does", "escalate"],
+        "properties": {
+          "id": {"type": "string", "pattern": "^[a-z][a-z0-9-]{0,39}$"},
+          "class": {"enum": ["log-triage", "quote-extract", "extract", "classify", "draft", "generalize", "review", "summarise"]},
+          "title": {"type": "string", "minLength": 1, "maxLength": 60},
+          "does": {"type": "string", "minLength": 1, "maxLength": 170},
+          "escalate": {"type": "string", "minLength": 1, "maxLength": 220}
+        }
+      }
+    },
+    "pane": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 12,
+      "description": "The gt button pane's defaults for this persona (item #41): a label (22 characters at most) and the plain-words prompt the button sends. One line each.",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["label", "prompt"],
+        "properties": {
+          "label": {"type": "string", "minLength": 1, "maxLength": 22},
+          "prompt": {"type": "string", "minLength": 1, "maxLength": 500}
+        }
+      }
+    },
+    "scaffold": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "files": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["path", "content"],
+            "properties": {
+              "path": {"type": "string", "description": "Relative .md path inside the project; never a standard project file, never '..'."},
+              "content": {"type": "string", "description": "{TITLE} is replaced by the project title."}
+            }
+          }
+        },
+        "sections": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["file", "heading", "body"],
+            "properties": {
+              "file": {"enum": ["README.md", "idea.md", "source.md", "research.md", "decisions.md", "design.md", "runbook.md"]},
+              "heading": {"type": "string"},
+              "body": {"type": "string"}
+            }
+          }
+        }
+      }
+    }
+  }
+}

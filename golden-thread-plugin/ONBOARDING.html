@@ -104,10 +104,10 @@
 </style></head><body><h1 id="golden-thread-getting-started">Golden Thread — Getting Started</h1>
 <blockquote>
 <p><strong>Reader:</strong> the first thirty minutes — the happy path only
-<strong>Claims last checked against the code:</strong> 2026-10-02 (gt 0.19.1) — see <em>The documents, and what belongs in each</em> in <a href="../CLAUDE.md"><code>CLAUDE.md</code></a>.</p>
+<strong>Stamped for gt 0.22.0:</strong> the counts and version numbers in this document are checked against the code at every release; the prose is re-read when the document is edited, not at every release.</p>
 </blockquote>
-<p>A guided walkthrough for your first session. Six steps, ~15 minutes.</p>
-<p><strong>Requirements:</strong> Python 3.8+, Claude Code installed. Written against <strong>gt v0.21.5</strong>. The installer now asks its questions in order, security first (<code>bash install.sh --questions</code> lists them); answer them at the prompt or by flag. The last question can open the Getting started guide (<code>/gt:gt-help</code>).</p>
+<p>A guided walkthrough for your first session. Six steps, ~15 minutes (estimate; not yet timed on a clean machine).</p>
+<p><strong>Requirements:</strong> Python 3.8+, Claude Code installed. Written against <strong>gt v0.22.0</strong>. The installer now asks its questions in order, security first (<code>bash install.sh --questions</code> lists them); answer them at the prompt or by flag. The last question can open the Getting started guide (<code>/gt:gt-help</code>).</p>
 <hr />
 <h2 id="step-1-install">Step 1 — Install</h2>
 <p>Unzip the plugin and run the installer:</p>
@@ -144,6 +144,7 @@ leaves the vault and every other module alone, and proves that module installed.
 <p>New to gt? <code>/gt:gt-help</code> opens a First day walkthrough and a guide for each role. If you
 picked a role (a persona), gt offers that role's commands first; it never changes what gt
 enforces.</p>
+<p><strong>Context nudge needs a status line.</strong> The context nudge (default 40%) reads the session size from the gt-usage status line, and a default install sets none, so the nudge never speaks. To turn the status line on, answer yes to the installer's status-line question (<code>bash install.sh --statusline yes</code>) or run <code>python3 ~/.claude/golden-thread/hooks/gt_usage.py --setup-statusline</code> in a terminal; it never replaces a status line you already have.</p>
 <hr />
 <h2 id="step-2-initialize-your-vault">Step 2 — Initialize your vault</h2>
 <p>Open any Claude Code session and run:</p>
@@ -152,7 +153,7 @@ enforces.</p>
 <p>Claude will ask for:
 1. A vault path — an Obsidian vault folder is ideal, but any folder works
 2. Your domain/team name — e.g. "Platform Engineering" or "My Team"</p>
-<p>The script creates the folder structure, writes <code>~/.claude/vault-config.json</code> (the pointer every other skill reads), and <strong>installs Core-rule enforcement hooks</strong> into <code>~/.claude/settings.json</code>. Safe to re-run on a machine you've already set up.</p>
+<p>The script creates the folder structure, writes <code>~/.claude/vault-config.json</code> (the pointer every other skill reads), and <strong>installs the Core-rule enforcement hooks</strong>. On the default plugin route (Claude Code 2.1.136 or newer) <code>settings.json</code> holds only <code>enabledPlugins</code>, and the hooks come from each plugin's <code>hooks/hooks.json</code>, which run the commands wired under <code>~/.claude/golden-thread/wired/</code>; only the older settings route (<code>--hook-mode settings</code>) writes hook entries into <code>settings.json</code>. Safe to re-run on a machine you've already set up.</p>
 <blockquote>
 <p><strong>If you already have an Obsidian vault</strong>, just give <code>gt-init</code> that path. It will only add what's missing — your existing notes are untouched.</p>
 </blockquote>
@@ -331,7 +332,7 @@ connects and tests it. <code>/gt:gt-help</code> has the details on its Security 
 <p>The wiki uses immutable sources — every ingested document is stored verbatim and never modified. Knowledge pages are synthesized summaries that link to the originals. When a source changes upstream, refresh adds a new source that supersedes the old one; for sources in a local git repo the change is detected by <code>git diff</code>, not by eye.</p>
 <hr />
 <h2 id="key-concepts-in-one-paragraph">Key concepts in one paragraph</h2>
-<p>The vault is organized by <strong>how widely a fact applies</strong>. Session findings go in <code>memory/</code>. Settled discoveries go in <code>research.md</code>. Choices that shaped the architecture go in <code>decisions.md</code>. Facts true across multiple projects go in <code>Knowledge/</code>. Facts needed in every session everywhere go in <code>global-memory/</code>. Above all of these sits the <strong>Core-rule tier</strong>: rules enforced via hooks wired into <code>~/.claude/settings.json</code>, not merely stored as files. <code>gt-init</code> installs these hooks automatically. Promote a fact when a second project proves it general — not before. When unsure, file it narrow; promotion is cheap, demotion isn't. One more principle: <strong>claims should be verified by re-deriving them, not by reviewing the reasoning that produced them</strong> — a reviewer who sees your reasoning inherits your blind spot. Use <code>/gt:gt-validate</code> before recording any finding that matters.</p>
+<p>The vault is organized by <strong>how widely a fact applies</strong>. Session findings go in <code>memory/</code>. Settled discoveries go in <code>research.md</code>. Choices that shaped the architecture go in <code>decisions.md</code>. Facts true across multiple projects go in <code>Knowledge/</code>. Facts needed in every session everywhere go in <code>global-memory/</code>. Above all of these sits the <strong>Core-rule tier</strong>: rules enforced via hooks (from the plugins' <code>hooks/hooks.json</code> on the default route, or <code>~/.claude/settings.json</code> on the older settings route), not merely stored as files. <code>gt-init</code> installs these hooks automatically. Promote a fact when a second project proves it general — not before. When unsure, file it narrow; promotion is cheap, demotion isn't. One more principle: <strong>claims should be verified by re-deriving them, not by reviewing the reasoning that produced them</strong> — a reviewer who sees your reasoning inherits your blind spot. Use <code>/gt:gt-validate</code> before recording any finding that matters.</p>
 <hr />
 <h2 id="troubleshooting">Troubleshooting</h2>
 <p><strong>Skills not showing up</strong> — restart Claude Code after install.</p>

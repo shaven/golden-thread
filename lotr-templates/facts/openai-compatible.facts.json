@@ -1,0 +1,87 @@
+{
+  "schema": 1,
+  "template": "openai-compatible",
+  "service": "OpenAI-compatible hosted LLM (OpenRouter first)",
+  "archetype": "http-rest",
+  "researched": "2026-10-27",
+  "researcher": "claude, from the owner's 2026-10-26 live test and the OpenRouter API reference",
+  "facts": [
+    {
+      "id": "f1",
+      "field": "connect.base_url",
+      "value": "https://openrouter.ai/api",
+      "claim": "OpenRouter's API is OpenAI-compatible: chat completions at https://openrouter.ai/api/v1/chat/completions, so the base URL without /v1 plus the template's /v1 paths reaches it.",
+      "source": "https://openrouter.ai/docs/api-reference/overview",
+      "retrieved": "2026-10-27",
+      "state": "self-verified",
+      "evidence": "2026-10-26 live check by the owner's session: a plain service-table row with base https://openrouter.ai/api/v1 returned 200 with a conforming reply (handoff 2026-10-26, section 5)."
+    },
+    {
+      "id": "f2",
+      "field": "connect.auth_scheme",
+      "value": "bearer",
+      "claim": "The key is sent as Authorization: Bearer KEY.",
+      "source": "https://openrouter.ai/docs/api-reference/authentication",
+      "retrieved": "2026-10-27",
+      "state": "self-verified",
+      "evidence": "The same live check sent the key as a bearer header and the model list returned 200."
+    },
+    {
+      "id": "f3",
+      "field": "network.hosts",
+      "value": [
+        "openrouter.ai"
+      ],
+      "claim": "The default host is openrouter.ai; another OpenAI-compatible host replaces it when you pass --base-url.",
+      "source": "https://openrouter.ai/docs/api-reference/overview",
+      "retrieved": "2026-10-27",
+      "state": "self-verified",
+      "evidence": "Base URL host in f1."
+    },
+    {
+      "id": "f4",
+      "claim": "GET /v1/models lists the models and is used here as a keyless health probe (the gateway's probe sends no credential).",
+      "source": "https://openrouter.ai/docs/api-reference/list-available-models",
+      "retrieved": "2026-10-27",
+      "state": "unverified",
+      "evidence": "The 2026-10-26 live check listed 466 models with the key; whether the list answers without a key was NOT tested here, so a host that requires a key for it will show an error in status while calls still work."
+    },
+    {
+      "id": "f5",
+      "claim": "OpenRouter answers 402 when credits run out, 429 when rate limited, and may route to a provider that returns 5xx.",
+      "source": "https://openrouter.ai/docs/api-reference/errors",
+      "retrieved": "2026-10-27",
+      "state": "unverified",
+      "evidence": "Read from the error reference; none of the three was provoked against the live service."
+    }
+  ],
+  "choices": [
+    {
+      "decision": "one generic template, no fixed provider",
+      "because": "works for OpenRouter, Together or any host that follows the OpenAI layout; the farm row names the provider",
+      "facts": [
+        "f1",
+        "f3"
+      ]
+    },
+    {
+      "decision": "bearer key by store: reference, locality remote, llm.tools none",
+      "because": "the key never sits in the registry; a remote engine must not be treated as local; a model that cannot act may receive farm packets",
+      "facts": [
+        "f2"
+      ]
+    },
+    {
+      "decision": "health check GET /v1/models (keyless)",
+      "because": "the gateway's health probe never sends a credential; it shows the host answers, a wrong key shows on the first call",
+      "facts": [
+        "f4"
+      ]
+    }
+  ],
+  "open": [
+    "Model ids (for example deepseek/deepseek-v4.1-flash, google/gemma-4-26b-a4b-it) are examples from the 2026-10-26 test, not facts: ids change or vanish, and the owner picks the model in the farm row.",
+    "Prices and the host's privacy, retention and training settings are the owner's to read and set on the host's account; none is stated here.",
+    "The 402, 429 and 5xx behaviour of a live provider has not been provoked; the mapping is tested against a loopback fake."
+  ]
+}

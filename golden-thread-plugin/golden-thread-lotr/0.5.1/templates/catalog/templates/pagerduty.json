@@ -1,0 +1,54 @@
+{
+  "schema": 1,
+  "name": "pagerduty",
+  "archetype": "mcp-oauth-preregistered",
+  "summary": "PagerDuty's hosted MCP server (incidents, services, schedules, on-call) with your own OAuth app",
+  "kind": "mcp-oauth",
+  "docs": "https://support.pagerduty.com/main/docs/pagerduty-mcp-server",
+  "connect": {
+    "url": "https://mcp.pagerduty.com/mcp",
+    "scopes": [
+      "read"
+    ],
+    "offline_access": false,
+    "client_registration": "preregistered",
+    "client_secret_required": true,
+    "app_setup_url": "https://support.pagerduty.com/main/docs/scoped-oauth-apps",
+    "redirect_port": 8977,
+    "redirect_host": "localhost",
+    "send_resource": true,
+    "skip_audience_check": false,
+    "trust": "T1",
+    "identity": "<your PagerDuty user>",
+    "description": "PagerDuty (hosted MCP, own app)",
+    "policy": {
+      "consent": [
+        "manage_incidents",
+        "manage_teams",
+        "manage_alert_grouping",
+        "manage_status_pages"
+      ],
+      "write": [
+        "manage_*"
+      ],
+      "read": [
+        "browse_*"
+      ]
+    }
+  },
+  "network": {
+    "hosts": [
+      "mcp.pagerduty.com",
+      "app.pagerduty.com"
+    ]
+  },
+  "notes": [
+    "Create an OAuth app in PagerDuty first (Integrations, App Registration; Scoped OAuth needs an account admin). PagerDuty does not register clients itself. Register the redirect URL http://localhost:8977/callback.",
+    "Scopes: this template asks only for read, so the manage_* tools will be refused by PagerDuty. Add write to connect.scopes (and to the app) when you want changes. The hosted server cannot filter tools; the app's scopes are the limit.",
+    "Asks first (consent): manage_incidents (creating or changing an incident pages people), manage_teams and manage_alert_grouping (both include delete), manage_status_pages (posts publicly). manage_services, manage_schedules and manage_event_orchestrations are ordinary writes.",
+    "EU accounts: change connect.url to https://mcp.eu.pagerduty.com/mcp and the hosts accordingly (the EU OAuth hosts were not researched).",
+    "Needs a PagerDuty account with Advanced Permissions.",
+    "Headless alternative: a User API key, which PagerDuty wants as 'Authorization: Token token=KEY'. That is the mcp-http-key archetype with connect.auth_scheme \"prefix\", connect.auth_prefix \"Token token=\" and credential_ref store:pagerduty-api-key (same url and mcp.pagerduty.com host); this template stays OAuth.",
+    "The browse_* tools take an action argument, so no smoke op is set."
+  ]
+}

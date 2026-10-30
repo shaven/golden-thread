@@ -1,0 +1,8 @@
+{
+  "name": "gt-wiki",
+  "version": "0.2.10",
+  "description": "Golden Thread Wiki: LLM-powered knowledge base with immutable sources, interlinked pages, and a maintenance loop. Ingest, query, lint, and refresh a structured wiki vault.",
+  "author": {
+    "name": "Stacy Haven"
+  }
+}

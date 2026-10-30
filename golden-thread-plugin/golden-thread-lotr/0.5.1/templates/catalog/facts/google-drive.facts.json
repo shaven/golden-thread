@@ -1,0 +1,125 @@
+{
+  "schema": 1,
+  "template": "google-drive",
+  "service": "Google Drive",
+  "archetype": "mcp-oauth-preregistered",
+  "researched": "2026-10-14",
+  "researcher": "claude opus research run 2026-10-14",
+  "facts": [
+    {
+      "id": "f1",
+      "field": "connect.url",
+      "value": "https://drivemcp.googleapis.com/mcp/v1",
+      "claim": "Google's Drive MCP server is https://drivemcp.googleapis.com/mcp/v1 (streamable HTTP, OAuth 2.0).",
+      "source": "https://developers.google.com/workspace/drive/api/reference/mcp",
+      "retrieved": "2026-10-14",
+      "state": "self-verified",
+      "evidence": "Reference page and setup guide give the endpoint; the protected-resource document at /.well-known/oauth-protected-resource/mcp/v1 names the same resource."
+    },
+    {
+      "id": "f2",
+      "field": "connect.client_registration",
+      "value": "preregistered",
+      "claim": "Setup uses a manually created OAuth client (id and secret); no dynamic client registration is offered.",
+      "source": "https://developers.google.com/workspace/drive/api/guides/configure-mcp-server",
+      "retrieved": "2026-10-14",
+      "state": "self-verified",
+      "evidence": "Guide: 'Create an OAuth client' and add it to the MCP client; accounts.google.com metadata has no registration_endpoint."
+    },
+    {
+      "id": "f3",
+      "field": "connect.scopes",
+      "value": [
+        "https://www.googleapis.com/auth/drive.readonly",
+        "https://www.googleapis.com/auth/drive.file"
+      ],
+      "claim": "Google's guide lists the scopes drive.readonly and drive.file; the protected-resource document also offers the full drive scope.",
+      "source": "https://developers.google.com/workspace/drive/api/guides/configure-mcp-server",
+      "retrieved": "2026-10-14",
+      "state": "self-verified",
+      "evidence": "Guide scopes list; protected-resource scopes_supported [drive, drive.readonly, drive.file]."
+    },
+    {
+      "id": "f4",
+      "field": "network.hosts",
+      "value": [
+        "drivemcp.googleapis.com",
+        "accounts.google.com",
+        "oauth2.googleapis.com"
+      ],
+      "claim": "The authorization server is accounts.google.com (authorize) with the token endpoint at oauth2.googleapis.com; lotr discovery resolves them.",
+      "source": "https://accounts.google.com/.well-known/openid-configuration",
+      "retrieved": "2026-10-14",
+      "state": "self-verified",
+      "evidence": "authorization_endpoint accounts.google.com/o/oauth2/v2/auth, token_endpoint oauth2.googleapis.com/token; lotrlib.oauth.discover (GET only) resolved issuer https://accounts.google.com and both hosts."
+    },
+    {
+      "id": "f5",
+      "claim": "Tools: copy_file, create_file, download_file_content, get_file_metadata, get_file_permissions, list_recent_files, read_file_content, search_files.",
+      "source": "https://developers.google.com/workspace/drive/api/reference/mcp",
+      "retrieved": "2026-10-14",
+      "state": "self-verified",
+      "evidence": "Both the reference page and the setup guide list the same eight tools (same site; read/write split inferred from names)."
+    },
+    {
+      "id": "f6",
+      "claim": "Prerequisites: Google Workspace Developer Preview Program membership, a Google Cloud project, the Drive API and Drive MCP API enabled, an OAuth consent screen.",
+      "source": "https://developers.google.com/workspace/drive/api/guides/configure-mcp-server",
+      "retrieved": "2026-10-14",
+      "state": "unverified",
+      "evidence": "Prerequisites and steps on the guide (last updated 2026-10-09)."
+    },
+    {
+      "id": "f7",
+      "claim": "Google issues a refresh token when the authorization request carries access_type=offline (prompt=consent makes it re-issue one on a repeat sign-in); offline_access is not a Google scope.",
+      "source": "https://developers.google.com/identity/protocols/oauth2/web-server",
+      "retrieved": "2026-10-14",
+      "state": "self-verified",
+      "evidence": "Guide: set access_type to offline to get a refresh token; prompt=consent to re-prompt. accounts.google.com metadata scopes_supported has no offline_access.",
+      "field": "connect.auth_params",
+      "value": {
+        "access_type": "offline",
+        "prompt": "consent"
+      }
+    }
+  ],
+  "choices": [
+    {
+      "decision": "mcp-oauth-preregistered against Google's hosted Drive MCP",
+      "because": "Official hosted MCP that publishes RFC 9728 metadata but needs your own OAuth client.",
+      "facts": [
+        "f1",
+        "f2",
+        "f4"
+      ]
+    },
+    {
+      "decision": "scopes drive.readonly + drive.file",
+      "because": "The scopes Google's guide lists; the full drive scope is not needed.",
+      "facts": [
+        "f3"
+      ]
+    },
+    {
+      "decision": "offline_access false, auth_params access_type=offline and prompt=consent",
+      "because": "Google gives refresh tokens through access_type=offline, not the offline_access scope (which lotr would add to the scope list).",
+      "facts": [
+        "f7"
+      ]
+    },
+    {
+      "decision": "explicit read for read_file_content and download_file_content; create_file and copy_file write",
+      "because": "Names do not start with get_/list_/search, so they would otherwise be classed as writes.",
+      "facts": [
+        "f5"
+      ]
+    }
+  ],
+  "open": [
+    "auth_params access_type=offline + prompt=consent have not been tried against a live Google sign-in; that Google then returns a refresh token rests on Google's OAuth guide.",
+    "Whether Google's authorization endpoint accepts the RFC 8707 resource parameter was not tested; if it refuses, set send_resource false.",
+    "Google's guide shows a Web application client with hosted redirect URIs; its web-server guide exempts localhost and loopback-IP redirect URIs from the https rule, but a client registered with http://127.0.0.1:8977/callback has not been tried.",
+    "Arguments of list_recent_files (smoke op) are not stated; assumed optional.",
+    "Read/write tiers for the eight tools are inferred from names; Google publishes no annotations on the reference page."
+  ]
+}

@@ -1,0 +1,41 @@
+{
+  "schema": 1,
+  "name": "unifi",
+  "archetype": "http-rest",
+  "summary": "UniFi Site Manager API (hosted): read hosts, sites and devices; any change asks first",
+  "kind": "http",
+  "docs": "https://developer.ui.com/site-manager-api/gettingstarted",
+  "connect": {
+    "base_url": "https://api.ui.com",
+    "profile": "generic",
+    "auth_scheme": "header",
+    "auth_header": "X-API-Key",
+    "credential_ref": "store:unifi-api-key",
+    "trust": "T1",
+    "identity": "<your UniFi account>",
+    "description": "UniFi Site Manager API (API key)",
+    "policy": {
+      "consent": [
+        "DELETE *",
+        "POST *",
+        "PUT *",
+        "PATCH *"
+      ],
+      "write": []
+    }
+  },
+  "network": {
+    "hosts": [
+      "api.ui.com"
+    ]
+  },
+  "smoke": {
+    "op": "GET /v1/hosts",
+    "args": {}
+  },
+  "notes": [
+    "This is UniFi's hosted Site Manager API over HTTPS: it reaches your consoles through your UI account, not your LAN, so a controller on a private address with a self-signed certificate is NOT reached by this template: use the unifi-controller template for that.",
+    "The secret is an API key made in your UniFi account (unifi.ui.com, API section); it is sent in the X-API-Key header. It is a reference to the store, never in this file.",
+    "Reads: GET /v1/hosts, GET /v1/sites, GET /v1/devices. Every POST, PUT, PATCH and DELETE asks first."
+  ]
+}

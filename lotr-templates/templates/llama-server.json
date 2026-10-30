@@ -1,0 +1,44 @@
+{
+  "schema": 1,
+  "name": "llama-server",
+  "archetype": "http-rest",
+  "summary": "A llama.cpp server on this machine (or reached through an SSH tunnel), no key: chat completions and a health check",
+  "kind": "http",
+  "docs": "https://github.com/ggml-org/llama.cpp/blob/master/tools/server/README.md",
+  "connect": {
+    "base_url": "http://127.0.0.1:8080",
+    "profile": "generic",
+    "auth_scheme": "none",
+    "trust": "T1",
+    "identity": "local llama-server",
+    "description": "A llama.cpp server on this machine, no key (http, loopback)",
+    "health": "GET /health",
+    "locality": "local",
+    "policy": {
+      "read": [
+        "GET /health",
+        "GET /v1/models",
+        "GET /props"
+      ],
+      "write": [
+        "POST /v1/chat/completions"
+      ]
+    }
+  },
+  "network": {
+    "hosts": [
+      "127.0.0.1"
+    ]
+  },
+  "smoke": {
+    "op": "GET /health",
+    "args": {}
+  },
+  "notes": [
+    "Pass your own port: lotr add-http NAME@zone --from-template llama-server --base-url http://127.0.0.1:PORT. llama-server's own default is 9931; gt's farm engines use 8080, which is this template's default.",
+    "A server on another machine: LOTR refuses plain http to anything but this machine, so reach it through an SSH tunnel to loopback: ssh -N -L 8080:127.0.0.1:8080 user@host (keep it running, or use autossh or a launchd job), then register http://127.0.0.1:8080.",
+    "Nothing here is authenticated: llama-server has no key unless it was started with --api-key. Keep it on a trusted network and never put a secret in a prompt sent to it.",
+    "lotr status --check asks GET /health: ok means the model is loaded; a 503 means it is still loading.",
+    "Whether a packet fits the engine's usable context is the farm's decision (gt-farm keeps its own calibration), not this template's."
+  ]
+}

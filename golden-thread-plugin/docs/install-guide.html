@@ -1,0 +1,549 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Golden Thread Install Guide</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Newsreader:opsz,wght@6..72,500;6..72,600&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+/* Layout: step rail on the left; a drawn "screen" that plays each step, with the synced instructions beside it. */
+:root{
+  --bg:#F6F7FB; --surface:#FFFFFF; --ink:#1B1F3B; --muted:#5A6170; --line:#DCE0EA;
+  --gold:#B8862A; --gold-soft:#F3E6C6; --navy:#2E3560; --ok:#3F7A57; --warn:#9A4B2E;
+  --term-bg:#151933; --term-fg:#E8EAF4; --term-dim:#8E95B8; --term-accent:#E8C46A;
+  --win-bar:#EEF0F6;
+  --display:"Newsreader", Cambria, Georgia, serif;
+  --body:"IBM Plex Sans", "Segoe UI", system-ui, sans-serif;
+  --mono:"IBM Plex Mono", ui-monospace, Menlo, Consolas, monospace;
+}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){
+  --bg:#12152A; --surface:#1B1F3B; --ink:#ECEEF6; --muted:#A7ADC6; --line:#2F3560;
+  --gold:#E2B85C; --gold-soft:#3A3420; --navy:#C9D0F0; --ok:#7CC198; --warn:#E59A7A;
+  --term-bg:#0B0E1F; --term-fg:#E8EAF4; --term-dim:#8E95B8; --term-accent:#E8C46A; --win-bar:#262B4F; color-scheme:dark}}
+:root[data-theme="dark"]{
+  --bg:#12152A; --surface:#1B1F3B; --ink:#ECEEF6; --muted:#A7ADC6; --line:#2F3560;
+  --gold:#E2B85C; --gold-soft:#3A3420; --navy:#C9D0F0; --ok:#7CC198; --warn:#E59A7A;
+  --term-bg:#0B0E1F; --term-fg:#E8EAF4; --term-dim:#8E95B8; --term-accent:#E8C46A; --win-bar:#262B4F; color-scheme:dark}
+
+*{box-sizing:border-box}
+body{background:var(--bg);color:var(--ink);font:15px/1.55 var(--body);
+  padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));padding-block:20px 48px}
+.wrap{max-width:1180px;margin:0 auto;display:grid;gap:20px}
+header.top{display:flex;flex-wrap:wrap;align-items:end;justify-content:space-between;gap:16px}
+h1{font:600 clamp(28px,4vw,40px)/1.1 var(--display);margin:0;text-wrap:balance}
+.lede{color:var(--muted);margin:6px 0 0;max-width:62ch}
+.os{display:inline-flex;border:1px solid var(--line);border-radius:999px;padding:3px;background:var(--surface)}
+.os button{border:0;background:none;color:var(--ink);font:500 14px var(--body);padding:8px 16px;border-radius:999px;cursor:pointer}
+.os button[aria-pressed="true"]{background:var(--ink);color:var(--surface)}
+.draft{border:1px dashed var(--gold);background:var(--gold-soft);border-radius:10px;padding:10px 14px;font-size:14px}
+.draft b{color:var(--ink)}
+.main{display:grid;grid-template-columns:250px minmax(0,1fr);gap:20px;align-items:start}
+@media (max-width:860px){.main{grid-template-columns:minmax(0,1fr)}}
+/* step rail */
+.rail{background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:10px;position:sticky;top:max(12px,env(safe-area-inset-top,0px))}
+@media (max-width:860px){.rail{position:static}}
+.rail ol{list-style:none;margin:0;padding:0;display:grid;gap:2px}
+.rail button{width:100%;display:grid;grid-template-columns:26px 1fr;gap:10px;align-items:center;text-align:left;border:0;background:none;color:var(--ink);font:14px/1.3 var(--body);padding:8px;border-radius:9px;cursor:pointer}
+.rail button:hover{background:var(--bg)}
+.rail button[aria-current="step"]{background:var(--gold-soft)}
+.dot{width:26px;height:26px;border-radius:50%;display:grid;place-items:center;font:600 12px var(--mono);border:1.5px solid var(--line);color:var(--muted);background:var(--surface)}
+[aria-current="step"] .dot{border-color:var(--gold);color:var(--ink)}
+.done .dot{background:var(--ok);border-color:var(--ok);color:#fff}
+.skip .dot{background:var(--line);color:var(--muted)}
+.railnote{font-size:12px;color:var(--muted);padding:8px 8px 2px}
+/* step body */
+.step{display:grid;gap:16px;min-width:0}
+.stephead h2{font:600 26px/1.2 var(--display);margin:0}
+.stephead p{margin:4px 0 0;color:var(--muted);max-width:68ch}
+.eyebrow{font:500 12px var(--mono);letter-spacing:.06em;text-transform:uppercase;color:var(--gold)}
+.player{display:grid;grid-template-columns:minmax(0,1.15fr) minmax(0,1fr);gap:16px;align-items:start}
+@media (max-width:1040px){.player{grid-template-columns:minmax(0,1fr)}}
+/* stage */
+.stage{background:var(--surface);border:1px solid var(--line);border-radius:14px;overflow:hidden;min-width:0}
+.screen{aspect-ratio:16/10.5;max-width:100%;position:relative;background:var(--term-bg);overflow:hidden}
+.chrome{display:flex;align-items:center;gap:6px;padding:8px 12px;background:#20254A;color:var(--term-dim);font:12px var(--body)}
+.chrome i{width:10px;height:10px;border-radius:50%;background:#3A4070;display:inline-block}
+.chrome span{margin-left:8px}
+.term{font:13px/1.6 var(--mono);color:var(--term-fg);padding:12px 14px;white-space:pre-wrap;word-break:break-word;height:calc(100% - 32px);overflow:hidden;display:flex;flex-direction:column;justify-content:flex-end}
+.term.tui{justify-content:flex-start;font-size:12px;line-height:1.45}
+.term .p{color:var(--term-accent)}
+.term .dim{color:var(--term-dim)}
+.term .ok{color:#8FD4A8}
+.term .err{color:#F0A08A}
+.term .acc{color:var(--term-accent)}
+.term .note{color:var(--term-dim);font-style:italic;border:1px dashed var(--term-dim);border-radius:6px;padding:4px 8px;margin:4px 0}
+.badge{position:absolute;top:8px;right:10px;z-index:2;font:500 11px var(--body);padding:3px 8px;border-radius:999px;background:#2F3560;color:#C9D0F0}
+.badge.real{background:#24543A;color:#CFF0DA}
+.badge.text{background:#2E4A66;color:#D3E6F7}
+.badge.nc{background:#6B4A12;color:#FBE7BF}
+.caret{display:inline-block;width:7px;height:15px;background:var(--term-fg);vertical-align:-2px;animation:blink 1s steps(1) infinite}
+@keyframes blink{50%{opacity:0}}
+.desk{position:absolute;inset:0;background:linear-gradient(160deg,#3B4478,#1B1F3B);display:grid;place-items:center;padding:18px}
+.win{width:min(92%,460px);background:#FFFFFF;color:#1B1F3B;border-radius:10px;box-shadow:0 10px 30px rgba(0,0,0,.35);overflow:hidden;font:13px/1.45 var(--body)}
+.win .bar{background:#EEF0F6;padding:7px 12px;font-weight:600;font-size:12px;color:#5A6170;display:flex;gap:6px;align-items:center}
+.win .bar i{width:9px;height:9px;border-radius:50%;background:#C9CDDA;display:inline-block}
+.win .bar span{margin-left:6px}
+.win .content{padding:14px 16px;display:grid;gap:8px}
+.win .url{font:12px var(--mono);background:#F1F3F8;border-radius:6px;padding:5px 8px;color:#3E6B8A}
+.win h4{margin:0;font:600 16px var(--display)}
+.win .chk{display:flex;gap:8px;align-items:center}
+.win .box{width:15px;height:15px;border:1.5px solid #7A819C;border-radius:3px;display:grid;place-items:center;font-size:11px;line-height:1}
+.win .box.on{background:#2E3560;border-color:#2E3560;color:#fff}
+.win .chk.hl{background:#FFF3D1;border-radius:6px;padding:3px 5px;margin:-3px -5px}
+.win .btns{display:flex;justify-content:flex-end;gap:8px;margin-top:4px}
+.win .btn{border:1px solid #C9CDDA;border-radius:6px;padding:5px 12px;font-weight:500;background:#fff}
+.win .btn.primary{background:#2E3560;color:#fff;border-color:#2E3560}
+.win .btn.press{animation:press .5s ease 1.1s both}
+@keyframes press{0%{box-shadow:0 0 0 0 rgba(232,196,106,.9)}60%{box-shadow:0 0 0 8px rgba(232,196,106,0);transform:scale(.96)}100%{transform:scale(1)}}
+.win .list{display:grid;gap:4px}
+.win .list div{padding:4px 8px;border-radius:6px}
+.win .list .sel{background:#E3E8F7;font-weight:600}
+.controls{display:flex;flex-wrap:wrap;gap:8px;align-items:center;padding:10px 12px;border-top:1px solid var(--line)}
+.controls button{font:500 13px var(--body);border:1px solid var(--line);background:var(--surface);color:var(--ink);border-radius:8px;padding:7px 12px;cursor:pointer}
+.controls button.primary{background:var(--ink);color:var(--surface);border-color:var(--ink)}
+.controls .prog{flex:1;min-width:80px;height:4px;background:var(--line);border-radius:4px;overflow:hidden}
+.controls .prog i{display:block;height:100%;width:0;background:var(--gold);transition:width .3s}
+.illus{font-size:12px;color:var(--muted);padding:0 12px 10px}
+/* guide */
+.guide{background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:14px;display:grid;gap:10px;min-width:0}
+.check{border:1px solid var(--line);border-radius:10px;padding:10px 12px;display:grid;gap:8px;background:var(--bg)}
+.check b{font-size:13px}
+.lines{list-style:none;margin:0;padding:0;display:grid;gap:6px;counter-reset:n}
+.lines li{counter-increment:n;display:grid;grid-template-columns:26px minmax(0,1fr);gap:8px;padding:8px;border-radius:10px;cursor:pointer;transition:background .25s}
+.lines li::before{content:counter(n);width:24px;height:24px;border-radius:50%;display:grid;place-items:center;font:600 12px var(--mono);background:var(--bg);color:var(--muted);border:1px solid var(--line)}
+.lines li.on{background:var(--gold-soft)}
+.lines li.on::before{background:var(--gold);color:#1B1F3B;border-color:var(--gold)}
+.cmd{display:flex;gap:8px;align-items:stretch;margin-top:6px;min-width:0}
+.cmd code{flex:1;min-width:0;overflow-x:auto;white-space:pre;font:13px/1.5 var(--mono);background:var(--term-bg);color:var(--term-fg);border-radius:8px;padding:7px 10px}
+.cmd button{font:500 12px var(--body);border:1px solid var(--line);background:var(--surface);color:var(--ink);border-radius:8px;padding:0 10px;cursor:pointer}
+.where{font:500 11px var(--mono);color:var(--muted);text-transform:uppercase;letter-spacing:.05em}
+.stepnav{display:flex;flex-wrap:wrap;gap:8px;justify-content:space-between;align-items:center}
+.stepnav button{font:500 14px var(--body);border-radius:10px;padding:10px 16px;cursor:pointer;border:1px solid var(--line);background:var(--surface);color:var(--ink)}
+.stepnav .go{background:var(--gold);border-color:var(--gold);color:#1B1F3B}
+.tip{font-size:13px;color:var(--muted);border-left:0;margin:0}
+.tip strong{color:var(--ink)}
+button:focus-visible,li:focus-visible{outline:2px solid var(--gold);outline-offset:2px}
+@media (prefers-reduced-motion: reduce){.caret{animation:none}.win .btn.press{animation:none;outline:2px solid var(--term-accent)}}
+</style>
+
+<div class="wrap">
+  <header class="top">
+    <div>
+      <div class="eyebrow">Golden Thread · setup</div>
+      <h1>Install Golden Thread</h1>
+      <p class="lede">From a bare computer to your first session, about 30 minutes. Each step plays a short animation of what you'll see, and the instructions beside it light up as it goes. Steps you have already done can be skipped.</p>
+    </div>
+    <div class="os" role="group" aria-label="Your computer">
+      <button id="os-mac" data-os="mac" aria-pressed="true">Mac</button>
+      <button id="os-win" data-os="win" aria-pressed="false">Windows</button>
+    </div>
+  </header>
+  <div class="draft">Each screen carries a badge. <b>Real output</b> is text captured from an actual Mac (macOS 26.6) or Windows 11 machine on 16 October 2026; your version numbers will be the same or newer. <b>Real text</b> means the words are the program's own but the layout is drawn. <b>Drawing</b> is a simplified window.</div>
+  <div class="main">
+    <nav class="rail" aria-label="Steps"><ol id="rail"></ol><div class="railnote" id="railnote"></div></nav>
+    <section class="step" id="step" aria-live="polite"></section>
+  </div>
+</div>
+
+<script>
+const T = (kind, o={}) => Object.assign({kind}, o);
+// Each step: per-OS guide lines (what the reader does) and beats (what the screen shows).
+// Every beat carries g: the guide line it illustrates, which is what keeps the two in sync.
+const STEPS = [
+ { id:"before", title:"Before you start",
+   why:"Three things to have ready. Nothing to install yet.",
+   mac:{ guide:[
+     {t:"A paid Claude plan: Pro, Max, Team or Enterprise. The free plan does not include Claude Code."},
+     {t:"A Mac running macOS 13 (Ventura) or newer, with an internet connection."},
+     {t:"About 30 minutes. You can stop after any step and come back; this page remembers where you were."}],
+     beats:[ T("win",{g:0,app:"claude.ai",title:"Settings › Billing",url:"claude.ai/settings/billing",h:"Your plan",body:["Pro, Max, Team or Enterprise"],btn:"Done"}),
+             T("win",{g:1,app:"About This Mac",title:"About This Mac",h:"macOS 13 or newer",body:["Apple menu  ›  About This Mac"],btn:"OK"}) ] },
+   win:{ guide:[
+     {t:"A paid Claude plan: Pro, Max, Team or Enterprise. The free plan does not include Claude Code."},
+     {t:"A PC running Windows 10 (version 1809) or Windows 11, with an internet connection."},
+     {t:"About 30 minutes. You can stop after any step and come back; this page remembers where you were."}],
+     beats:[ T("win",{g:0,app:"claude.ai",title:"Settings › Billing",url:"claude.ai/settings/billing",h:"Your plan",body:["Pro, Max, Team or Enterprise"],btn:"Done"}),
+             T("win",{g:1,app:"Settings",title:"System › About",h:"Windows 10 (1809) or Windows 11",body:["Settings  ›  System  ›  About"],btn:"OK"}) ] } },
+
+ { id:"terminal", title:"Open the terminal",
+   why:"The terminal is a window where you type a command and press Enter. You will use it for a few steps, then barely again.",
+   mac:{ guide:[
+     {t:"Press ⌘ Command and Space together to open Spotlight."},
+     {t:"Type Terminal and press Return."},
+     {t:"A window opens with a line ending in %. That is the prompt: type commands after it and press Return."}],
+     beats:[ T("win",{g:0,app:"Spotlight",title:"Spotlight Search",list:["Terminal"],sel:0,btn:"Open"}),
+             T("term",{g:1,os:"mac"}), T("term",{g:2,os:"mac"}) ] },
+   win:{ guide:[
+     {t:"Click Start (or press the Windows key)."},
+     {t:"Type PowerShell and click Windows PowerShell."},
+     {t:"A window opens with a line like PS C:\\Users\\you>. That is the prompt: type commands after it and press Enter."}],
+     beats:[ T("win",{g:0,app:"Start",title:"Search",list:["Windows PowerShell"],sel:0,btn:"Open"}),
+             T("term",{g:1,os:"win"}), T("term",{g:2,os:"win"}) ] } },
+
+ { id:"git", title:"Install git",
+   why:"Git downloads Golden Thread from GitHub. It has to be in place before anything else.",
+   check:{mac:"git --version", win:"git --version", ok:"a line starting git version"},
+   mac:{ guide:[
+     {t:"Check whether you already have it:", cmd:"git --version"},
+     {t:"If it prints a version number, skip to the next step."},
+     {t:"If a box asks to install the command line developer tools, click Install and wait until it says the software was installed."},
+     {t:"Run the check again. It should now print a version.", cmd:"git --version"}],
+     beats:[ T("term",{g:0,os:"mac"}), T("type",{g:0,s:"git --version"}),
+             T("out",{g:0,s:"xcode-select: note: No developer tools were found, requesting install.\nIf developer tools are located at a non-default location on disk, use `sudo xcode-select --switch path/to/Xcode.app` to specify the Xcode that you wish to use for command line developer tools, and cancel the installation dialog.\nSee `man xcode-select` for more details.",c:"err",src:"real"}),
+             T("win",{g:2,app:"Install",title:"",h:"The “git” command requires the command line developer tools. Would you like to install the tools now?",body:["Choose Install to download and install the command line developer tools now."],btn:"Install",alt:"Cancel",src:"real-text"}),
+             T("term",{g:3,os:"mac"}), T("type",{g:3,s:"git --version"}), T("out",{g:3,s:"git version 2.54.0 (Apple Git-157)",c:"ok",src:"real"}) ] },
+   win:{ guide:[
+     {t:"Check whether you already have it:", cmd:"git --version"},
+     {t:"If it prints a version number, skip to the next step. If it says the term 'git' is not recognized, carry on."},
+     {t:"In your browser, open git-scm.com/downloads/win and download the 64-bit Git for Windows installer.", link:"https://git-scm.com/downloads/win"},
+     {t:"Run the installer and click Next on every page. The choices it starts with are the right ones. Click Finish at the end."},
+     {t:"Close PowerShell, open a new one, and check again.", cmd:"git --version"}],
+     beats:[ T("term",{g:0,os:"win"}), T("type",{g:0,s:"git --version"}),
+             T("out",{g:1,s:"git : The term 'git' is not recognized as the name of a cmdlet, function, script file, or\noperable program. Check the spelling of the name, or if a path was included, verify that the path\nis correct and try again.\nAt line:1 char:1\n+ git --version\n+ ~~~\n    + CategoryInfo          : ObjectNotFound: (git:String) [], CommandNotFoundException\n    + FullyQualifiedErrorId : CommandNotFoundException",c:"err",src:"real"}),
+             T("win",{g:2,app:"Browser",title:"Git for Windows",url:"git-scm.com/downloads/win",h:"Download for Windows",body:["64-bit Git for Windows Setup"],btn:"Download"}),
+             T("win",{g:3,app:"Git Setup",title:"Git Setup",h:"Keep the default choices",body:["Click Next on each page."],btn:"Next"}),
+             T("win",{g:3,app:"Git Setup",title:"Git Setup",h:"Completing the Git Setup Wizard",body:[""],btn:"Finish"}),
+             T("term",{g:4,os:"win"}), T("type",{g:4,s:"git --version"}), T("out",{g:4,s:"git version 2.56.0.windows.1",c:"ok",src:"real"}) ] } },
+
+ { id:"python", title:"Install Python",
+   why:"Golden Thread's tools are written in Python and need version 3.12 or newer.",
+   check:{mac:"python3 --version", win:"python --version", ok:"Python 3.12 or higher"},
+   mac:{ guide:[
+     {t:"Check your version:", cmd:"python3 --version"},
+     {t:"If it says 3.12 or higher, skip to the next step. The Python 3.9.6 that comes with the developer tools is too old."},
+     {t:"Go to python.org/downloads and click the Download Python 3 button for macOS.", link:"https://www.python.org/downloads/"},
+     {t:"Open the downloaded file and click Continue, then Install. Enter your Mac password if asked."},
+     {t:"Close Terminal, open it again, and check. It should say 3.12 or higher.", cmd:"python3 --version"}],
+     beats:[ T("term",{g:0,os:"mac"}), T("type",{g:0,s:"python3 --version"}), T("out",{g:1,s:"Python 3.9.6",c:"err",src:"real"}),
+             T("win",{g:2,app:"Browser",title:"python.org",url:"python.org/downloads",h:"Download the latest version for macOS",body:[""],btn:"Download Python 3"}),
+             T("win",{g:3,app:"Installer",title:"Install Python",h:"Continue, then Install",body:[""],btn:"Continue"}),
+             T("term",{g:4,os:"mac"}), T("type",{g:4,s:"python3 --version"}), T("out",{g:4,s:"Python 3.15.0",c:"ok",src:"real"}) ] },
+   win:{ guide:[
+     {t:"Check your version:", cmd:"python --version"},
+     {t:"If it says 3.12 or higher, skip to the next step. If it says Python was not found, carry on."},
+     {t:"Go to python.org/downloads and click the Download Python 3 button for Windows.", link:"https://www.python.org/downloads/"},
+     {t:"Run the installer. On the first screen, tick Add python.exe to PATH. This matters. Then click Install Now."},
+     {t:"Close PowerShell, open a new one, and check.", cmd:"python --version"}],
+     beats:[ T("term",{g:0,os:"win"}), T("type",{g:0,s:"python --version"}), T("out",{g:1,s:"Python was not found; run without arguments to install from the Microsoft Store, or disable this shortcut from Settings > Apps > Advanced app settings > App execution aliases.",c:"err",src:"real"}),
+             T("win",{g:2,app:"Browser",title:"python.org",url:"python.org/downloads",h:"Download the latest version for Windows",body:[""],btn:"Download Python 3"}),
+             T("win",{g:3,app:"Python Setup",title:"Python Setup",h:"Install Python",checks:[["Add python.exe to PATH",1,true]],btn:"Install Now"}),
+             T("term",{g:4,os:"win"}), T("type",{g:4,s:"python --version"}), T("out",{g:4,s:"Python 3.12.10",c:"ok",src:"real"}) ] } },
+
+ { id:"claude", title:"Install Claude Code",
+   why:"Claude Code is the assistant Golden Thread works inside. Golden Thread wants version 2.1.300 or newer, and its installer offers to update an older one.",
+   mac:{ guide:[
+     {t:"Check whether you already have it:", cmd:"claude --version"},
+     {t:"If it prints 2.1.300 or higher, skip to the next step. If it prints an older version, run claude update. If claude is not found, paste this and press Return:", cmd:"curl -fsSL https://claude.ai/install.sh | bash"},
+     {t:"Wait until it says Installation complete. If its Setup notes say ~/.local/bin is not in your PATH, run the line it gives you:", cmd:"echo 'export PATH=\"$HOME/.local/bin:$PATH\"' >> ~/.zshrc && source ~/.zshrc"},
+     {t:"Check again. It should print a version.", cmd:"claude --version"}],
+     beats:[ T("term",{g:0,os:"mac"}), T("type",{g:0,s:"claude --version"}), T("out",{g:0,s:"zsh: command not found: claude",c:"err",src:"real"}),
+             T("type",{g:1,s:"curl -fsSL https://claude.ai/install.sh | bash"}),
+             T("out",{g:2,s:"Setting up Claude Code...\n\nChecking installation status...\nInstalling Claude Code native build latest...\nSetting up launcher and shell integration...\n⚠ Setup notes:\n  ● Native installation exists but ~/.local/bin is not in your PATH. Run:\n\n    echo 'export PATH=\"$HOME/.local/bin:$PATH\"' >> ~/.zshrc && source ~/.zshrc\n\n✔ Claude Code successfully installed!\n\n  Version: 2.1.301\n\n  Location: ~/.local/bin/claude\n\n✅ Installation complete!",c:"",src:"real"}),
+             T("type",{g:2,s:"echo 'export PATH=\"$HOME/.local/bin:$PATH\"' >> ~/.zshrc && source ~/.zshrc"}),
+             T("type",{g:3,s:"claude --version"}), T("out",{g:3,s:"2.1.301 (Claude Code)",c:"ok",src:"real"}) ] },
+   win:{ guide:[
+     {t:"Check whether you already have it:", cmd:"claude --version"},
+     {t:"If it prints 2.1.300 or higher, skip to the next step. If it prints an older version, run claude update. If claude is not recognized, paste this into PowerShell and press Enter:", cmd:"irm https://claude.ai/install.ps1 | iex"},
+     {t:"Wait until it says Installation complete. If its Setup notes say .local\\bin is not in your PATH, press Start, type environment, and open Edit environment variables for your account."},
+     {t:"Under User variables, select Path, click Edit, click New, and paste the folder it named (C:\\Users\\you\\.local\\bin). Click OK on each window."},
+     {t:"Close PowerShell, open a new one, and check.", cmd:"claude --version"}],
+     beats:[ T("term",{g:0,os:"win"}), T("type",{g:0,s:"claude --version"}),
+             T("out",{g:0,s:"claude : The term 'claude' is not recognized as the name of a cmdlet, function, script file, or\noperable program. Check the spelling of the name, or if a path was included, verify that the path\nis correct and try again.",c:"err",src:"real"}),
+             T("type",{g:1,s:"irm https://claude.ai/install.ps1 | iex"}),
+             T("out",{g:2,s:"Setting up Claude Code...\n\nChecking installation status...\nInstalling Claude Code native build latest...\nSetting up launcher and shell integration...\n‼ Setup notes:\n  ● Native installation exists but C:\\Users\\you\\.local\\bin is not in your PATH. Add it by opening: System Properties → Environment Variables → Edit User PATH → New → Add the path above. Then restart your terminal.\n\n√ Claude Code successfully installed!\n\n  Version: 2.1.301\n\n  Location: C:\\Users\\you\\.local\\bin\\claude.exe",c:"",src:"real"}),
+             T("win",{g:2,app:"Start",title:"Search",list:["Edit environment variables for your account"],sel:0,btn:"Open"}),
+             T("win",{g:3,app:"Environment Variables",title:"Edit environment variable",list:["C:\\Users\\you\\AppData\\Local\\Microsoft\\WindowsApps","C:\\Users\\you\\.local\\bin"],sel:1,btn:"OK"}),
+             T("term",{g:4,os:"win"}), T("type",{g:4,s:"claude --version"}), T("out",{g:4,s:"2.1.301 (Claude Code)",c:"ok",src:"real"}) ] } },
+
+ { id:"gt", title:"Add Golden Thread",
+   why:"Golden Thread installs as a Claude Code plugin. Two commands in the same terminal fetch it from GitHub. In the first one, <github repo> stands for the GitHub address your team uses for the gt repository; replace it with that address.",
+   both:{ guide:[
+     {t:"Add the Golden Thread catalogue:", cmd:"claude plugin marketplace add <github repo>/golden-thread.git"},
+     {t:"Wait for Successfully added marketplace."},
+     {t:"Install the full set:", cmd:"claude plugin install gt-all@golden-thread-plugin"},
+     {t:"Wait for Successfully installed plugin. It lists the modules that came with it."}],
+     beats:[ T("term",{g:0}), T("type",{g:0,s:"claude plugin marketplace add <github repo>/golden-thread.git"}),
+             T("out",{g:1,s:"Adding marketplace…SSH not configured, cloning via HTTPS: https://github.com/your-account/golden-thread.git\nRefreshing marketplace cache (timeout: 120s)…\nCloning repository (timeout: 120s): https://github.com/your-account/golden-thread.git\nClone complete, validating marketplace…\nCleaning up old marketplace cache…\n✔ Successfully added marketplace: golden-thread-plugin (declared in user settings)",c:"",src:"real"}),
+             T("type",{g:2,s:"claude plugin install gt-all@golden-thread-plugin"}),
+             T("out",{g:3,s:"Installing plugin \"gt-all@golden-thread-plugin\"...✔ Successfully installed plugin: gt-all@golden-thread-plugin (scope: user) (+ 9 dependencies: gt, gt-demo, gt-flow, gt-pane, gt-report-card, …)",c:"ok",src:"real"}) ] } },
+
+ { id:"signin", title:"Start Claude and sign in",
+   why:"Claude Code uses your Claude account. You sign in once, and it asks a few first-time questions.",
+   both:{ guide:[
+     {t:"Start Claude Code:", cmd:"claude"},
+     {t:"Pick a text style with the arrow keys, or just press Enter to keep Dark mode."},
+     {t:"Select login method: keep 1, Claude account with subscription, and press Enter."},
+     {t:"Your browser opens. Sign in to Claude and approve Claude Code."},
+     {t:"Back in the terminal it says Login successful. Press Enter."},
+     {t:"Read the two Security notes and press Enter."},
+     {t:"It asks whether you trust the folder you started in. Choose Yes, I trust this folder and press Enter."},
+     {t:"You are ready when you see a box with a > prompt. That is where you talk to Claude."}],
+     beats:[ T("term",{g:0}), T("type",{g:0,s:"claude"}),
+             T("tui",{g:1,s:"Welcome to Claude Code v2.1.301\n\n Let's get started.\n\n Choose the text style that looks best with your terminal\n To change this later, run /theme\n\n     Auto (match terminal)\n ❯ ✔ Dark mode\n     Light mode\n     Dark mode (colorblind-friendly)\n     Light mode (colorblind-friendly)\n     Dark mode (ANSI colors only)\n     Light mode (ANSI colors only)",c:"acc",src:"real"}),
+             T("tui",{g:2,s:"Welcome to Claude Code v2.1.301\n\n Claude Code can be used with your Claude subscription or billed based on API usage through your Console account.\n\n Select login method:\n\n ❯ 1. Claude account with subscription · Pro, Max, Team, or Enterprise\n   2. Anthropic Console account · API usage billing\n   3. 3rd-party platform · Amazon Bedrock, Microsoft Foundry, Google Vertex AI",c:"acc",src:"real"}),
+             T("win",{g:3,app:"Browser",title:"Claude",url:"claude.ai",h:"Sign in and approve Claude Code",body:[""],btn:"Approve",src:"drawn"}),
+             T("tui",{g:4,s:"Welcome to Claude Code v2.1.301\n\n Logged in as you@example.com\n Login successful. Press Enter to continue…",c:"ok",src:"real"}),
+             T("tui",{g:5,s:"Welcome to Claude Code v2.1.301\n\n Security notes:\n\n 1. Claude can make mistakes.\n    You're responsible for Claude's actions and should always review them, especially when running code.\n\n 2. Due to prompt injection risks, only use it with code you trust\n    Learn more: https://code.claude.com/docs/en/security\n\n Press Enter to continue…",c:"",src:"real"}),
+             T("tui",{g:6,s:" Accessing workspace:\n\n /Users/you\n\n Quick safety check: Is this a project you created or one you trust? (Like your own code, a well-known open source project, or work from your team). If not, take a moment to review what's in this folder first.\n\n Claude Code'll be able to read, edit, and execute files here.\n\n Security guide\n\n   No, exit\n ❯ Yes, I trust this folder\n\n Enter to confirm · Esc to cancel",c:"acc",src:"real"}),
+             T("claude",{g:7}) ] } },
+
+ { id:"setup", title:"Finish the setup",
+   why:"Claude asks about a dozen questions and finishes the install. Each one marks a recommended answer.",
+   both:{ guide:[
+     {t:"At Claude's > prompt, type (or type /gt:gt-setup):", cmd:"finish setting up gt", where:"Type into Claude"},
+     {t:"Which Golden Thread modules do you want? Pick Install everything (recommended). It includes gt-wiki, gt-flow, gt-usage, gt-visualize, gt-report-card, gt-watch, gt-demo, gt-pane, gt-lotr, gt-farm and gt-workflow; none of them does anything until you use it. To leave some out, pick Choose modules, or run /gt:gt-setup again later; from a terminal, bash install.sh --without NAME."},
+     {t:"Security level: Claude asks how much it may do without asking you. trust local is the recommended choice."},
+     {t:"The rest (sandbox, tokens, model size, reply length and so on): if you're not sure, take the recommended answer each time."},
+     {t:"Where your vault lives: keep the suggested folder, GoldenThread in your home folder (~/GoldenThread on a Mac, C:\\Users\\you\\GoldenThread on Windows). Your notes go there."},
+     {t:"Check the summary and choose Install. When it finishes, type /exit and start claude again so Golden Thread loads.", cmd:"claude"}],
+     beats:[ T("claude",{g:0}), T("type",{g:0,s:"finish setting up gt"}),
+             T("out",{g:1,s:"Which Golden Thread modules do you want?\n❯ Install everything (recommended)\n  Choose modules\n  Core only",c:"acc",src:"real-text"}),
+             T("out",{g:2,s:"Claude Code asks before it runs most commands or edits your files. This choice sets how much it may do WITHOUT asking.\n  strict · trust local (recommended) · trust network · insecure · paranoid",c:"acc",src:"real-text"}),
+             T("out",{g:3,s:"Sandbox mode … off (recommended) · on",c:"acc",src:"real-text"}),
+             T("out",{g:4,s:"Where should your vault live?\n❯ ~/GoldenThread (recommended)\n  A vault I already have",c:"acc",src:"real-text"}),
+             T("type",{g:5,s:"/exit"}), T("term",{g:5}), T("type",{g:5,s:"claude"}) ] } },
+
+ { id:"lotr", title:"Included: LOTR",
+   why:"LOTR is one gateway in front of GitHub, Jira, Microsoft 365 and other services, so Claude can reach them without you pasting credentials into a session. Install everything puts it on your machine (gt-lotr) and it does nothing until you add a connection. If you chose Core only or left it out, the first line below adds it. To leave it out, run bash install.sh --without lotr in a terminal, or pick Choose modules in /gt:gt-setup.",
+   check:{mac:"claude plugin list", win:"claude plugin list", ok:"gt-lotr in the list"},
+   both:{ guide:[
+     {t:"Already installed with Install everything. If gt-lotr is missing from the list, add it in a terminal (not inside Claude):", cmd:"claude plugin install gt-lotr@golden-thread-plugin"},
+     {t:"Wait for Successfully installed plugin. Then start claude again so it loads.", cmd:"claude"},
+     {t:"At Claude's > prompt, ask for the gateway setup. It shows what LOTR can reach and walks you through adding a connection:", cmd:"/gt-lotr:gt-lotr", where:"Type into Claude"},
+     {t:"Add one connection at a time (GitHub, Jira, Microsoft 365). Sending, merging and deleting always ask you first."}],
+     beats:[ T("term",{g:0}), T("type",{g:0,s:"claude plugin install gt-lotr@golden-thread-plugin"}),
+             T("out",{g:1,s:"Installing plugin \"gt-lotr@golden-thread-plugin\"...✔ Successfully installed plugin: gt-lotr@golden-thread-plugin (scope: user)",c:"ok",src:"nc"}),
+             T("type",{g:1,s:"claude"}), T("claude",{g:2}), T("type",{g:2,s:"/gt-lotr:gt-lotr"}),
+             T("out",{g:3,s:"LOTR gateway: no connections yet.\nAdd one? GitHub · Jira · Microsoft 365 · other",c:"acc",src:"nc"}) ] } },
+
+ { id:"farm", title:"Included: farm",
+   why:"Farm hands bulk or mechanical work to another AI service, or to an engine on your own hardware, as a self-contained work packet. Install everything puts it on your machine (gt-farm); it sends nothing until you set up an engine or ask for a packet. If it is missing, the first line below adds it. To leave it out, run bash install.sh --without farm, or pick Choose modules in /gt:gt-setup.",
+   check:{mac:"claude plugin list", win:"claude plugin list", ok:"gt-farm in the list"},
+   both:{ guide:[
+     {t:"Already installed with Install everything. If gt-farm is missing from the list, add it in a terminal (not inside Claude):", cmd:"claude plugin install gt-farm@golden-thread-plugin"},
+     {t:"Wait for Successfully installed plugin. Then start claude again so it loads.", cmd:"claude"},
+     {t:"At Claude's > prompt, say what you want to hand off, or ask what can be farmed out:", cmd:"what can I farm out", where:"Type into Claude"},
+     {t:"Claude writes a work packet with a strict return contract. You send it to the other service, and the result comes back for Claude to check."}],
+     beats:[ T("term",{g:0}), T("type",{g:0,s:"claude plugin install gt-farm@golden-thread-plugin"}),
+             T("out",{g:1,s:"Installing plugin \"gt-farm@golden-thread-plugin\"...✔ Successfully installed plugin: gt-farm@golden-thread-plugin (scope: user)",c:"ok",src:"nc"}),
+             T("type",{g:1,s:"claude"}), T("claude",{g:2}), T("type",{g:2,s:"what can I farm out"}),
+             T("out",{g:3,s:"I can write a self-contained work packet for any bulk or mechanical task, with a strict return contract.",c:"acc",src:"nc"}) ] } },
+
+ { id:"workflow", title:"Included: workflow",
+   why:"Workflows you own: save a chain of steps, run it by name, and schedule the unattended ones. Install everything puts it on your machine (gt-workflow); it runs nothing until you save a workflow. To leave it out, run bash install.sh --without workflow, or pick Choose modules in /gt:gt-setup.",
+   check:{mac:"claude plugin list", win:"claude plugin list", ok:"gt-workflow in the list"},
+   both:{ guide:[
+     {t:"Already installed with Install everything. If gt-workflow is missing from the list, add it in a terminal (not inside Claude):", cmd:"claude plugin install gt-workflow@golden-thread-plugin"},
+     {t:"Wait for Successfully installed plugin. Then start claude again so it loads.", cmd:"claude"},
+     {t:"At Claude's > prompt, ask what workflows you have, or describe a chain you repeat:", cmd:"/gt-workflow", where:"Type into Claude"}],
+     beats:[ T("term",{g:0}), T("type",{g:0,s:"claude plugin install gt-workflow@golden-thread-plugin"}),
+             T("out",{g:1,s:"Installing plugin \"gt-workflow@golden-thread-plugin\"...✔ Successfully installed plugin: gt-workflow@golden-thread-plugin (scope: user)",c:"ok",src:"nc"}),
+             T("type",{g:1,s:"claude"}), T("claude",{g:2}), T("type",{g:2,s:"/gt-workflow"}) ] } },
+
+ { id:"obsidian", title:"Install Obsidian",
+   why:"Obsidian is a free notes app. It shows your Golden Thread vault as ordinary, readable notes.",
+   mac:{ guide:[
+     {t:"Go to obsidian.md and click Download for macOS.", link:"https://obsidian.md/download"},
+     {t:"Open the downloaded file and drag Obsidian into Applications."},
+     {t:"Open Obsidian and choose Open folder as vault."},
+     {t:"Go to your home folder, pick GoldenThread, and click Open."}],
+     beats:[ T("win",{g:0,app:"Browser",title:"Obsidian",url:"obsidian.md/download",h:"Download Obsidian",body:["macOS"],btn:"Download"}),
+             T("win",{g:1,app:"Finder",title:"Obsidian",h:"Drag to install",body:["Obsidian  →  Applications"],btn:"Done"}),
+             T("win",{g:2,app:"Obsidian",title:"Obsidian",h:"Open a vault",list:["Create new vault","Open folder as vault"],sel:1,btn:"Open"}),
+             T("win",{g:3,app:"Obsidian",title:"Home folder (you)",list:["GoldenThread"],sel:0,btn:"Open"}) ] },
+   win:{ guide:[
+     {t:"Go to obsidian.md and click Download for Windows.", link:"https://obsidian.md/download"},
+     {t:"Run the installer. It installs and opens Obsidian."},
+     {t:"Choose Open folder as vault."},
+     {t:"Go to your user folder (C:\\Users\\you), pick GoldenThread, and click Select Folder."}],
+     beats:[ T("win",{g:0,app:"Browser",title:"Obsidian",url:"obsidian.md/download",h:"Download Obsidian",body:["Windows"],btn:"Download"}),
+             T("win",{g:1,app:"Obsidian Setup",title:"Obsidian Setup",h:"Installing",body:[""],btn:"Finish"}),
+             T("win",{g:2,app:"Obsidian",title:"Obsidian",h:"Open a vault",list:["Create new vault","Open folder as vault"],sel:1,btn:"Open"}),
+             T("win",{g:3,app:"Obsidian",title:"C:\\Users\\you",list:["GoldenThread"],sel:0,btn:"Select Folder"}) ] } },
+
+ { id:"obsterm", title:"Add a terminal to Obsidian",
+   why:"With a terminal inside Obsidian, you can talk to Claude and read your notes in the same window.",
+   mac:{ guide:[
+     {t:"In Obsidian, open Settings (the gear, bottom left) and go to Community plugins."},
+     {t:"Turn on community plugins, then click Browse."},
+     {t:"Search for Terminal (by polyipseity). Click Install, then Enable."},
+     {t:"So it stops asking which terminal to open every time: in Settings, open Terminal and set Default profile to the integrated one for Mac (darwinIntegratedDefault, which runs zsh)."},
+     {t:"Open the command palette (⌘P), type Terminal, and pick Terminal: Open root directory in terminal: Default. It opens in your vault folder with the profile you just set. Then start Claude:", cmd:"claude"}],
+     beats:[ T("win",{g:0,app:"Obsidian",title:"Settings",list:["Core plugins","Community plugins"],sel:1,btn:"Open"}),
+             T("win",{g:1,app:"Obsidian",title:"Community plugins",h:"Turn on community plugins",body:[""],btn:"Turn on"}),
+             T("win",{g:2,app:"Obsidian",title:"Community plugins › Browse",url:"Search: Terminal",h:"Terminal",body:["By polyipseity · Integrate consoles, shells, and terminals."],btn:"Install",src:"real-text"}),
+             T("win",{g:3,app:"Obsidian",title:"Settings › Terminal",h:"Default profile",list:["darwinIntegratedDefault","darwinExternalDefault","developerConsole"],sel:0,btn:"Done",src:"real-text"}),
+             T("win",{g:4,app:"Obsidian",title:"Command palette",list:["Terminal: Open root directory in terminal: Default","Terminal: Open root directory in terminal: Integrated","Terminal: Open current directory in terminal: Default"],sel:0,btn:"Enter",src:"real-text"}),
+             T("term",{g:4}), T("type",{g:4,s:"claude"}) ] },
+   win:{ guide:[
+     {t:"In Obsidian, open Settings (the gear, bottom left) and go to Community plugins."},
+     {t:"Turn on community plugins, then click Browse."},
+     {t:"Search for Terminal (by polyipseity). Click Install, then Enable."},
+     {t:"So it stops asking which terminal to open every time: in Settings, open Terminal and set Default profile to the integrated one for Windows (win32IntegratedDefault). On Windows that profile starts the old Command Prompt, so switch it to PowerShell, the same window the rest of this guide uses: next to Profiles click Edit, click Edit on win32IntegratedDefault, and replace its Executable with:", cmd:"C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe"},
+     {t:"Open the command palette (Ctrl+P), type Terminal, and pick Terminal: Open root directory in terminal: Default. It opens in your vault folder with the profile you just set. Then start Claude:", cmd:"claude"}],
+     beats:[ T("win",{g:0,app:"Obsidian",title:"Settings",list:["Core plugins","Community plugins"],sel:1,btn:"Open"}),
+             T("win",{g:1,app:"Obsidian",title:"Community plugins",h:"Turn on community plugins",body:[""],btn:"Turn on"}),
+             T("win",{g:2,app:"Obsidian",title:"Community plugins › Browse",url:"Search: Terminal",h:"Terminal",body:["By polyipseity · Integrate consoles, shells, and terminals."],btn:"Install",src:"real-text"}),
+             T("win",{g:3,app:"Obsidian",title:"Settings › Terminal",h:"Default profile",list:["win32IntegratedDefault","win32ExternalDefault","developerConsole"],sel:0,btn:"Done",src:"real-text"}),
+             T("win",{g:3,app:"Obsidian",title:"Settings › Terminal › Profiles › Edit",h:"win32IntegratedDefault",body:["Executable","C:\\Windows\\System32\\cmd.exe  →  C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe"],btn:"Close",src:"real-text"}),
+             T("win",{g:4,app:"Obsidian",title:"Command palette",list:["Terminal: Open root directory in terminal: Default","Terminal: Open root directory in terminal: Integrated","Terminal: Open current directory in terminal: Default"],sel:0,btn:"Enter",src:"real-text"}),
+             T("term",{g:4,os:"win"}), T("type",{g:4,s:"claude"}) ] } },
+
+ { id:"claudian", title:"Optional: Claude inside Obsidian",
+   why:"If you'd rather not use a terminal at all, the Claudian plugin puts Claude Code in an Obsidian side panel. It's optional; the terminal from the last step works too.",
+   both:{ guide:[
+     {t:"In Obsidian, open Settings › Community plugins › Browse."},
+     {t:"Search for Claudian. Several look-alikes share the name; pick the one by Yishen Tu (millions of downloads). Click Install, then Enable. Or open its page and click Add to Obsidian:", cmd:"community.obsidian.md/plugins/realclaudian", where:"Paste into your browser"},
+     {t:"Open the Claudian panel and talk to Claude there, in the same plain words. Your vault is its working folder."}],
+     beats:[ T("win",{g:0,app:"Obsidian",title:"Community plugins › Browse",url:"Search: Claudian",h:"Claudian",body:["By Yishen Tu · Embeds Claude Code/Codex and other local Agents as AI collaborators in your vault."],btn:"Install",src:"real-text"}),
+             T("win",{g:1,app:"Obsidian",title:"Claudian",h:"Enable",body:["Desktop only (Mac, Windows, Linux)."],btn:"Enable",src:"drawn"}),
+             T("win",{g:2,app:"Obsidian",title:"Claudian panel",h:"Ask Claude",body:["open garden plan"],btn:"Send",src:"drawn"}) ] } },
+
+ { id:"first", title:"Your first session",
+   why:"You're set up. From here on you talk to Claude in everyday words.",
+   both:{ guide:[
+     {t:"Ask for a guided look around (from gt 0.21.4 you can also press the Open Help control below Update Actions in the gt pane):", cmd:"show me around gt", where:"Type into Claude"},
+     {t:"Start your first project. Name it whatever you're working on:", cmd:"create a project called garden plan", where:"Type into Claude"},
+     {t:"While you work, say write that down whenever something is worth keeping."},
+     {t:"When you're done, say I'm done for now. Next time, say open garden plan and it picks up where you stopped."}],
+     beats:[ T("claude",{g:0}), T("type",{g:0,s:"show me around gt"}), T("out",{g:0,s:"I opened the gt help index in your browser. Click \"Show me around\" there for the guided tour.",c:"acc",src:"real-text"}),
+             T("type",{g:1,s:"create a project called garden plan"}),
+             T("type",{g:2,s:"write that down"}),
+             T("type",{g:3,s:"I'm done for now"}) ] } },
+];
+
+
+// ---------- state ----------
+const store = { get(k,d){ try{ const v=localStorage.getItem("gtguide:"+k); return v==null?d:JSON.parse(v);}catch(e){return d;} },
+                set(k,v){ try{ localStorage.setItem("gtguide:"+k, JSON.stringify(v)); }catch(e){} } };
+let os = store.get("os", /Win/i.test(navigator.userAgent) ? "win" : "mac");
+let cur = Math.min(store.get("cur",0), STEPS.length-1);
+let marks = store.get("marks",{}); // id -> "done" | "skip"
+let beatIx = 0, playing = false, timer = null;
+const reduce = matchMedia("(prefers-reduced-motion: reduce)").matches;
+
+const esc = s => String(s).replace(/[&<>"]/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+const part = st => st.both || st[os];
+const prompt = o => (o||os) === "win" ? "PS C:\\Users\\you> " : "you@Mac ~ % ";
+
+// Snapshot after each beat, so any point can be shown instantly.
+function snapshots(beats){
+  let s = {mode:"blank"}; const out = [];
+  for(const b of beats){
+    s = JSON.parse(JSON.stringify(s));
+    if(b.kind==="term") s = {mode:"term", title: os==="win"?"Windows PowerShell":"Terminal", p: prompt(b.os), lines:[]};
+    else if(b.kind==="claude") s = {mode:"term", title:"Claude Code", p:"> ", claude:true, lines:[{s:"✻ Claude Code   ·   type a request below", c:"acc"}]};
+    else if(b.kind==="type"){ if(s.mode!=="term") s = {mode:"term", title:"Terminal", p:prompt(), lines:[]}; s.lines.push({p:s.p, s:b.s, typed:true}); }
+    else if(b.kind==="out"){ if(s.mode!=="term") s = {mode:"term", title:"Terminal", p:prompt(), lines:[]}; s.lines.push({s:b.s, c:b.c}); }
+    else if(b.kind==="tui") s = {mode:"term", title:"Claude Code", p:"", tui:true, lines:[{s:b.s, c:b.c}]};
+    else if(b.kind==="note"){ s.lines.push({s:b.s, c:"note"}); }
+    else if(b.kind==="win") s = {mode:"win", w:b};
+    s.src = b.kind==="win" ? (b.src||"drawn") : (b.kind==="out"||b.kind==="tui") ? (b.src||"real") : b.kind==="note" ? "nc" : b.kind==="claude" ? "drawn" : b.kind==="type" ? (s.src||"") : "";
+    out.push(s);
+  }
+  return out;
+}
+function dur(b){ return reduce ? 1600 : b.kind==="type" ? 700 + 45*b.s.length : b.kind==="win" ? 2600 : b.kind==="out" ? 1300 : 700; }
+
+const BADGE = {real:["real","Real output"], "real-text":["text","Real text, drawn layout"], drawn:["","Drawing"], nc:["nc","Not captured yet"]};
+function badge(s){ const b = BADGE[s.src]; return b ? `<span class="badge ${b[0]}">${b[1]}</span>` : ""; }
+function renderScreen(s, animate){
+  const el = document.getElementById("screen");
+  if(s.mode==="win"){
+    const w = s.w;
+    let h = `<div class="desk"><div class="win" role="img" aria-label="${esc(w.app)} window"><div class="bar"><i></i><i></i><i></i><span>${esc(w.title||w.app)}</span></div><div class="content">`;
+    if(w.url) h += `<div class="url">${esc(w.url)}</div>`;
+    if(w.h) h += `<h4>${esc(w.h)}</h4>`;
+    (w.body||[]).forEach(t => h += `<div>${esc(t)}</div>`);
+    if(w.list) h += `<div class="list">${w.list.map((t,i)=>`<div class="${i===w.sel?"sel":""}">${esc(t)}</div>`).join("")}</div>`;
+    (w.checks||[]).forEach(c => h += `<div class="chk ${c[2]?"hl":""}"><span class="box ${c[1]?"on":""}">${c[1]?"✓":""}</span>${esc(c[0])}</div>`);
+    h += `<div class="btns">${w.alt?`<span class="btn">${esc(w.alt)}</span>`:""}<span class="btn primary ${animate?"press":""}">${esc(w.btn)}</span></div></div></div></div>`;
+    el.innerHTML = badge(s) + h; return;
+  }
+  if(s.mode==="term"){
+    let h = `<div class="chrome"><i></i><i></i><i></i><span>${esc(s.title)}</span></div><div class="term${s.tui?" tui":""}" id="term">`;
+    s.lines.forEach((l,i) => {
+      const last = i===s.lines.length-1;
+      if(l.typed) h += `<div><span class="p">${esc(l.p)}</span><span class="${last&&animate?"typing":""}" data-s="${esc(l.s)}">${last&&animate?"":esc(l.s)}</span></div>`;
+      else h += `<div class="${l.c||""}">${esc(l.s)}</div>`;
+    });
+    const lastTyped = s.lines.length && s.lines[s.lines.length-1].typed && animate;
+    if(!lastTyped && !s.tui) h += `<div><span class="p">${esc(s.p)}</span><span class="caret"></span></div>`;
+    h += `</div>`; el.innerHTML = badge(s) + h;
+    const t = el.querySelector(".typing");
+    if(t){ const full = t.dataset.s; let n = 0; t.insertAdjacentHTML("afterend",'<span class="caret"></span>');
+      const tick = () => { if(t.isConnected && n < full.length){ t.textContent = full.slice(0, ++n); setTimeout(tick, 40);} }; setTimeout(tick, 250); }
+    return;
+  }
+  el.innerHTML = `<div class="desk"></div>`;
+}
+
+function show(k, animate){
+  const p = part(STEPS[cur]); const snaps = snapshots(p.beats);
+  beatIx = Math.max(0, Math.min(k, p.beats.length-1));
+  renderScreen(snaps[beatIx], animate && !reduce);
+  const g = p.beats[beatIx].g;
+  document.querySelectorAll(".lines li").forEach((li,i) => li.classList.toggle("on", i===g));
+  document.getElementById("prog").style.width = ((beatIx+1)/p.beats.length*100)+"%";
+}
+function play(){
+  const p = part(STEPS[cur]); playing = true; setPlayLabel();
+  const step = () => { if(!playing) return;
+    show(beatIx, true);
+    timer = setTimeout(() => { if(beatIx < p.beats.length-1){ beatIx++; step(); } else { playing=false; setPlayLabel(); } }, dur(p.beats[beatIx])); };
+  if(beatIx >= p.beats.length-1) beatIx = 0;
+  step();
+}
+function stop(){ playing=false; clearTimeout(timer); setPlayLabel(); }
+function setPlayLabel(){ const b=document.getElementById("play"); if(b) b.textContent = playing ? "Pause" : (beatIx>0 ? "Play" : "Play"); }
+
+function renderRail(){
+  document.getElementById("rail").innerHTML = STEPS.map((s,i) => {
+    const m = marks[s.id]; const cls = m==="done"?"done":m==="skip"?"skip":"";
+    return `<li class="${cls}"><button data-i="${i}" ${i===cur?'aria-current="step"':""}><span class="dot">${m==="done"?"✓":m==="skip"?"–":i+1}</span><span>${esc(s.title)}</span></button></li>`;
+  }).join("");
+  const n = Object.keys(marks).length;
+  document.getElementById("railnote").textContent = `${n} of ${STEPS.length} steps done or skipped`;
+}
+function renderStep(){
+  stop();
+  const s = STEPS[cur], p = part(s);
+  let h = `<div class="stephead"><div class="eyebrow">Step ${cur+1} of ${STEPS.length} · ${os==="win"?"Windows":"Mac"}</div><h2>${esc(s.title)}</h2><p>${esc(s.why)}</p></div>
+  <div class="player"><div class="stage"><div class="screen" id="screen"></div>
+    <div class="controls"><button class="primary" id="play">Play</button><button id="back" aria-label="Previous moment">‹</button><button id="fwd" aria-label="Next moment">›</button><div class="prog" aria-hidden="true"><i id="prog"></i></div></div>
+    <div class="illus">The badge says whether a screen is real output or a drawing. Click any instruction to jump to it.</div></div>
+  <div class="guide">`;
+  if(s.check) h += `<div class="check"><b>Already have this?</b><div>Run <code>${esc(s.check[os])}</code>. If you see ${esc(s.check.ok)}, skip this step.</div><div><button class="skipbtn" id="have">✓ I already have this</button></div></div>`;
+  h += `<ol class="lines">${p.guide.map((l,i) => `<li tabindex="0" data-g="${i}"><div>${esc(l.t)}${l.link?` <a href="${esc(l.link)}" target="_blank" rel="noopener">Open ↗</a>`:""}${l.cmd?`<div class="cmd"><code>${esc(l.cmd)}</code><button data-copy="${esc(l.cmd)}">Copy</button></div>${l.where?`<div class="where">${esc(l.where)}</div>`:""}`:""}</div></li>`).join("")}</ol>
+  </div></div>
+  <div class="stepnav"><button id="prev" ${cur===0?"disabled":""}>← Previous step</button><button class="go" id="next">${cur===STEPS.length-1?"Finish ✓":"Done, next step →"}</button></div>`;
+  document.getElementById("step").innerHTML = h;
+  show(0, false);
+  document.getElementById("play").onclick = () => playing ? stop() : play();
+  document.getElementById("back").onclick = () => { stop(); show(beatIx-1, false); };
+  document.getElementById("fwd").onclick = () => { stop(); show(beatIx+1, true); };
+  document.getElementById("prev").onclick = () => go(cur-1);
+  document.getElementById("next").onclick = () => { marks[s.id]="done"; store.set("marks",marks); go(Math.min(cur+1, STEPS.length-1)); renderRail(); };
+  const have = document.getElementById("have"); if(have) have.onclick = () => { marks[s.id]="skip"; store.set("marks",marks); go(cur+1); };
+  document.querySelectorAll(".lines li").forEach(li => {
+    const jump = () => { stop(); const g=+li.dataset.g; const k=p.beats.findIndex(b=>b.g===g); if(k>=0) show(k,true); };
+    li.addEventListener("click", e => { if(!e.target.closest("button,a")) jump(); });
+    li.addEventListener("keydown", e => { if(e.key==="Enter"||e.key===" "){ e.preventDefault(); jump(); } });
+  });
+  document.querySelectorAll("[data-copy]").forEach(b => b.onclick = async () => {
+    const text = b.dataset.copy;
+    try{ await navigator.clipboard.writeText(text); b.textContent="Copied"; }
+    catch(e){ const r=document.createRange(); r.selectNodeContents(b.previousElementSibling); const sel=getSelection(); sel.removeAllRanges(); sel.addRange(r); b.textContent="Selected"; }
+    setTimeout(()=>b.textContent="Copy",1500);
+  });
+}
+function go(i){ cur = Math.max(0, Math.min(i, STEPS.length-1)); store.set("cur",cur); renderRail(); renderStep(); }
+function setOS(o){ os=o; store.set("os",o); document.querySelectorAll(".os button").forEach(b=>b.setAttribute("aria-pressed", String(b.dataset.os===o))); renderStep(); }
+
+document.getElementById("rail").addEventListener("click", e => { const b=e.target.closest("button[data-i]"); if(b) go(+b.dataset.i); });
+document.querySelectorAll(".os button").forEach(b => b.onclick = () => setOS(b.dataset.os));
+document.querySelectorAll(".os button").forEach(b=>b.setAttribute("aria-pressed", String(b.dataset.os===os)));
+renderRail(); renderStep();
+</script>

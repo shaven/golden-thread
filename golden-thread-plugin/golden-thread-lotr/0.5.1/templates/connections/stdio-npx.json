@@ -1,0 +1,38 @@
+{
+  "schema": 1,
+  "name": "stdio-npx",
+  "archetype": "stdio-npx",
+  "summary": "ARCHETYPE: a local MCP server started with npx (TODO: say which service)",
+  "kind": "mcp-stdio",
+  "docs": "https://todo-host.example/docs",
+  "connect": {
+    "command": [
+      "npx",
+      "-y",
+      "TODO-npm-package@TODO-version"
+    ],
+    "runtime": "node",
+    "env_refs": {
+      "TODO_API_KEY": "store:TODO-secret-name"
+    },
+    "env": {},
+    "trust": "T1",
+    "identity": "TODO: your account at the service",
+    "description": "TODO (stdio, npx)",
+    "timeouts": {
+      "start_s": 60,
+      "call_s": 120,
+      "idle_s": 600
+    }
+  },
+  "smoke": {
+    "op": "TODO: the name of one read-only tool",
+    "args": {}
+  },
+  "notes": [
+    "ARCHETYPE: copy with `lotr template new NAME --archetype stdio-npx`, then replace every TODO.",
+    "Pin the package version (name@1.2.3): `npx -y name` alone runs whatever is newest, every time.",
+    "Remove env_refs if the server needs no secret; add `env` entries for plain settings (region, URL).",
+    "Each env_refs entry is VARIABLE: reference. The secret is put there by you, never in this file."
+  ]
+}

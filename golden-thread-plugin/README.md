@@ -1,7 +1,7 @@
 # Golden Thread Plugin
 
 > **Reader:** someone who has installed it and wants the reference
-> **Claims last checked against the code:** 2026-10-02 (gt 0.19.1) — see *The documents, and what belongs in each* in [`CLAUDE.md`](../CLAUDE.md).
+> **Stamped for gt 0.22.0:** the counts and version numbers in this document are checked against the code at every release; the prose is re-read when the document is edited, not at every release.
 
 A Claude Code plugin that turns an Obsidian vault into the single source of truth for all AI memory across every project and every session.
 
@@ -25,7 +25,7 @@ Facts move up the hierarchy as they prove themselves general. They never move ba
 
 ---
 
-## Thirty-Seven Skills (plus modules)
+## Forty Skills (plus modules)
 
 ### Setup
 
@@ -41,6 +41,7 @@ Facts move up the hierarchy as they prove themselves general. They never move ba
 |---|---|
 | `/gt:gt-open` | Load a project at the start of a session. Reads all project docs in order (idea → research → decisions → design → spec → runbook → memory), then summarizes the project state and asks where to pick up. Names that project's waiting handoffs without reading them. Since 0.18.1: leads with a generated catch-up brief after `brief_absence_days` away (`--brief` / `--no-brief`, `gt_catchup.py`), reads `research-digest.md` when it is current, says which repo a repo-scoped command will hit, and opens one handoff or task (`handoff [id]`, `task <id>`). |
 | `/gt:gt-route` | Mid-session check: what has this session actually become, where does its output belong, and is it happening in the right project, harness and model? Serves the middle of a session, where `gt-open` cannot see yet and `gt-work` sees too late. Cheap and repeatable — not a gate. |
+| `/gt:gt-next` | Says the one best next action from the vault, and why, in under five lines. No model call; shaped by your role. |
 | `/gt:gt-work` | Write back session findings at the end of a session. Appends to `research.md`, adds ADRs to `decisions.md`, refines `design.md`, creates `spec.md` when design is complete, and flags content for PROTOCOL.md. Offers a handoff for what did not reach a file — which the next session is now shown at start. Since 0.18.1 it asks about ADR supersession and expiry and memory entities, regenerates `research-digest.md` (`gt_digest.py`), flags contradicting memory notes (`gt_memory_check.py`) and promotion candidates (`gt_promote_detect.py`), and ends with a *Learn* step for reusable patterns. |
 | `/gt:gt-ingest` | Bulk-import an existing project's memory files, CLAUDE.md rules, and notes into the vault. External sources are stored immutably in `Sources/` before being synthesized into Knowledge pages. Since 0.18.1 an interrupted ingest resumes from any session (`gt_checkpoint.py`). Since 0.18.1 it runs as a staged pipeline (`gt_ingest_pipeline.py`): per-unit extract in parallel, reconcile against gt, drafts through the broker. |
 | `/gt:gt-review` | Empty the inbox. Reads `<vault>/INBOX.md` first — the capture point any session drops a line into — and then Obsidian daily notes, but only if the vault is configured for them. Routes each captured item into a tracked project. |
@@ -58,7 +59,7 @@ Facts move up the hierarchy as they prove themselves general. They never move ba
 | Command | What it does |
 |---|---|
 | `/gt:gt-digest` | Have a big file, a held-back paste or an image read by the cheapest reader and get back only the answer (`gt_intake.py plan`): an engine on this machine (gt-farm, a loopback `base_url` or a row marked `lan_ok: yes`, secret-scanned first), else an Explore subagent when the file is larger than a subagent costs to start (`gt_break_even.py`), else read inline. With `paste_intake` on, a very large message is saved and held back before it reaches Claude, and this is the next step. |
-| `/gt:gt-minimize` | Prune a heavy session before cutting it: measure its billed context and how long its prompt cache stays warm (`gt_minimize.py`), keep the few things worth keeping (to `Knowledge/` or `INBOX.md`), drop the rest, and say "/compact or /clear now". Writes no in-flight note — anything mid-flight goes to `/gt:gt-create handoff`. |
+| `/gt:gt-minimize` | Prune a heavy session before cutting it: measure its billed context and how long its prompt cache stays warm (`gt_minimize.py`), keep the few things worth keeping (to `Knowledge/` or `INBOX.md`), drop the rest, and say "/compact or /clear now". Writes no in-flight note — anything mid-flight goes to `/gt:gt-create handoff`. `/gt:gt-minimize compact` does the whole cut in one step: findings and a handoff as `cut_handoff` says (`facts`, `handoff` or `none`), then a compact or a clear as `cut_kind` says; `/gt:gt-minimize clear` forces a clear *(0.22.0)*. |
 
 ### Tasks and Handoffs
 
@@ -75,6 +76,8 @@ nothing is deleted.
 | `/gt:gt-close` | *(0.21.0)* Close **this session**, the opposite of `/gt:gt-open`: write back what the session learned (gt-work) and release its claim on the vault. |
 | `/gt:gt-calibrate` | *(0.21.0)* Run the model calibration pass now: stage runs re-run one tier down, one tier up, one effort higher and one effort lower, a zero-context judge scores them, and each agent stage gets keep, move-down, move-up, raise-effort or lower-effort with the command to apply it. Alias for `/gt:gt-optimize --only calibration`; `plan --estimate` prices a pass first. |
 | `/gt:gt-forget` | *(0.21.0)* Retract a wrong fact everywhere the vault states it: every note that states it is listed, you choose, each chosen note gets a retraction marker (reason, date, the note that holds the right fact) through the write queue. Nothing is deleted. |
+| `/gt:gt-adopt` | *(0.22.0)* Use gt on a vault gt did not create: inspect it read-only, propose the smallest `vault.manifest.json` (it can only add protection), show it, and write it only after your yes. |
+| `/gt:gt-disposable` | *(0.22.0)* Run work a gate refuses on this machine in a throwaway VM or container (tart, docker, podman, or bwrap on Linux) instead of loosening the gate: the tree is copied in, nothing is mounted, and the guest is destroyed afterwards. |
 | `/gt:gt-grant` | *(0.21.0)* Let one command through for a while without lowering your lockdown level: once, for N minutes or hours, or forever; lists live grants and revokes one. |
 | `/gt:gt-help` | *(0.21.0)* An offline page that plays any gt command's real output in a simulated terminal, with what it does, how it works and what to try next; a Getting started tab and a Workflows tab for your role. |
 
@@ -107,12 +110,12 @@ nothing is deleted.
 | `/gt:gt-validation` | Record what a validation established, and what it could not determine, stamped with the file's content hash so the definition expires when the file changes. |
 | `/gt:gt-lint` | Audit the vault for structural problems: broken wikilinks, orphaned pages, missing index entries, unlisted memory files, Knowledge pages citing superseded sources, stale pages, and Core rules that are stored but not enforced. Since 0.18.1 four checks file questions to the review queue: `adr-expires`, `bundled-concept`, `decision-candidate`, `memory-entity-orphan` — and `release-pipeline` checks each project's `release_pipeline:` flag. Applies fixes with your approval. |
 | `/gt:gt-runbook-lint` | Scan all project `runbook.md` files for content that has drifted into multiple runbooks. Classifies duplicated content by type and routes it to the right shared layer (PROTOCOL.md, Knowledge page, or repo CLAUDE.md) via `gt-promote`. |
-| `/gt:gt-settings` | View and change what Golden Thread does automatically. Thirty-eight settings ship with gt — `component_updates`, `version_check`, `orphan_check`, `push_check`, `surface`, `daily_comms_content`, `daily_finalize`, `release_announce`, `agent_specialization`, `skeptic_pass`, `handoff_surface`, `task_surface`, `test_gate`, `parallel_work`, `parallel_max`, `protected_paths`, and new in 0.18.1 `brief_absence_days`, `foreign_checkout_guard`, `decision_signals`, `knowledge_access_log`, `optimize_session_days`, `optimize_avoidable_pct`, `memory_contradiction_check`, `promotion_candidates`, `promotion_overlap`, `review_stamp`, `sync_check`, `reminder_days`, `reminder_macos`, `reminder_relay`, `reminder_email`, `commit_checks`, `addon_fixes`, `addon_fix_size_limit`, `execution_metrics`, `scoped_receipts`, `test_tmpdir`, `runners` — plus every setting an installed module adds (`report_card`, `closeout_check`, `usage_meter`, `usage_alert`, `visualize_publish`, `visualize_publish_visibility`, `watch`). Every automatic behaviour can be switched off. |
+| `/gt:gt-settings` | View and change what Golden Thread does automatically. 227 settings ship with gt (`gt_settings.py show` lists the common ones, `show --all` every one) — among them `component_updates`, `version_check`, `orphan_check`, `push_check`, `surface`, `daily_comms_content`, `daily_finalize`, `release_announce`, `agent_specialization`, `skeptic_pass`, `handoff_surface`, `task_surface`, `test_gate`, `parallel_work`, `parallel_max`, `protected_paths`, and, from 0.18.1, `brief_absence_days`, `foreign_checkout_guard`, `decision_signals`, `knowledge_access_log`, `optimize_session_days`, `optimize_avoidable_pct`, `memory_contradiction_check`, `promotion_candidates`, `promotion_overlap`, `review_stamp`, `sync_check`, `reminder_days`, `reminder_macos`, `reminder_relay`, `reminder_email`, `commit_checks`, `addon_fixes`, `addon_fix_size_limit`, `execution_metrics`, `scoped_receipts`, `test_tmpdir`, `runners` — plus every setting an installed module adds (`report_card`, `closeout_check`, `usage_meter`, `usage_alert`, `visualize_publish`, `visualize_publish_visibility`, `watch`). Every automatic behaviour can be switched off. |
 
 ### Modules
 
 Optional parts of Golden Thread, each a separate plugin in the same marketplace, installed
-by `install.sh` while it is on. There are nine; `lotr` joined in 0.17.11.
+by `install.sh` while it is on. There are twelve; `lotr` joined in 0.17.11 and `recall` in 0.22.0.
 
 | Module (plugin) | Default | Command | What it does |
 |---|---|---|---|
@@ -121,11 +124,14 @@ by `install.sh` while it is on. There are nine; `lotr` joined in 0.17.11.
 | `watch` (`gt-watch`) | on | `/gt-watch:gt-watch` | Watch any git repo you depend on. A cron fetch classifies each change by rules, and the next session opens with a **P0** when a watched repo ships a security fix (CVE/GHSA ids, security releases, advisories). Reporting stays off until the `watch` setting is `report`. Was `/gt:gt-watch`. |
 | `report-card` (`gt-report-card`) | on | none | The session report card at `/compact` and session end, shown at the next session start, and the project close-out question. Settings `report_card`, `closeout_check`. |
 | `farm` (`gt-farm`) | off (kept on when upgrading from a gt that had it) | `/gt-farm:gt-farm` | Route bulk, mechanical, or second-opinion tasks to an external AI service as a self-contained work packet. All four gates (Stateless, Self-contained, Checkable, Releasable) must pass before a task leaves. Results come back unverified. Every packet is scanned for credentials before it is sent; an automatic send under `farm_min_chars` (2000) is skipped as not worth sending, and an identical send is reused for `farm_reuse_days` (7). Was `/gt:gt-farm`. |
+| `farm`, agent farming (0.22.0) | off until set up | `/gt-farm:gt-farm agent farming` | A hosted model fixes a code task with tools on a copy of your repo, in an operating-system sandbox. It is accepted only when your tests pass on a clean copy, and what comes back is a candidate patch you review; nothing is applied for you. A share of eligible tasks (`farm_share`, off by default), a daily dollar limit (`farm_agent_budget_usd_day`) and an off switch bound it. Sandbox runs on Linux and Windows are not done yet. |
 | `flow` (`gt-flow`) | on | `/gt-flow:gt-flow` | Render the vault's event stream as one offline HTML page: a lane per project, an arrow each time knowledge climbed a level. Add `--redact` before sharing it. |
 | `visualize` (`gt-visualize`) | on | `/gt-visualize:gt-visualize` | Explain a codebase as a scroll-driven 3D walkthrough of how its parts work together, or render it as a 3D code city — one offline HTML page (three.js inlined): directories are districts, files are buildings, height is lines, colour is language or git churn. `--redact` before sharing. |
 | `workflow` (`gt-workflow`) | off | `/gt-workflow:gt-workflow` | Workflows you own (0.1.0): save a chain of steps as a workflow, or pipeline, and run it by name. Steps run a gt tool, call a connected service through LOTR, send routine work to a local engine, or stop and wait for you or Claude. A write runs on its own only after you approve that exact step, at your own terminal (a keyed approval, and a write fed by an earlier step asks every run); a send, merge or delete always waits for you. Step outputs are saved with credentials masked and pruned after 7 days. Fifteen starters, including the 13 workflows on the help page. |
 | `lotr` (`gt-lotr`) | off | `/gt-lotr:gt-lotr` | LOTR, also called gt MCP: one gateway to rule them all. A fixed four-tool MCP surface (`find`, `call_read`, `call_write`, `call_consent`) in front of any number of downstream connections (GitHub, Jira, Microsoft Graph, other REST APIs), with a registry of who talks to whom, as whom, from which machine. The gateway, not the assistant, sets each operation's tier; consent operations are confirmed in a dialog the daemon raises. Credentials are references (keychain, store, file), never values. Since lotr 0.4.0 (gt 0.20.2) it ships eight agents, split so that no one agent holds private data, untrusted text and a way to act: four readers — `gt-lotr:jira`, `gt-lotr:m365`, `gt-lotr:github`, `gt-lotr:runner`, given `find` and `call_read` only — that do bulk and multi-call gateway work in their own context over the session's own connection (no new seat) and hand back a short answer with IDs and `next_cursor`, and four writers — `gt-lotr:jira-writer`, `gt-lotr:m365-writer`, `gt-lotr:github-writer`, `gt-lotr:writer`, given no read tool and told not to read — that perform one exact change the main session composed from your own words; a single small read stays direct. The split is a guard, not a security boundary: the main session can call the same tools and the gateway enforces neither side (a writer's `call_write` also accepts read-tier ops). Turn on with `./install.sh --with lotr`. |
 | `lotr` (`gt-lotr`) | off | `/gt-lotr:gt-lotr-research` | The LOTR research run (0.5.0): turn a service name into a template and a sourced fact sheet from the vendor's own documentation, picking one of nine archetypes (`lotr template guide` has the decision table). The execution run is `lotr setup NAME`: runtime check, credential by reference, add, smoke test. Templates for named services are released separately from gt, in the repository's `lotr-templates/` catalog (`lotr template update`). |
+| `pane` (`gt-pane`) | asked at install | `/gt-pane:gt-pane` | The gt button pane (Claude Code mods, 2.1.287 or later): twelve plain-words buttons in a side pane; press one and it sends its prompt as if you had typed it. The list is yours to reorder, rename, add to and remove from. |
+| `recall` (`gt-recall`) | off | `/gt-recall:gt-recall` | Rank the vault's pages for a question by BM25 over page name, headings and the index line above body text, in the standard library, read-only; each hit says which method found it. |
 | `usage` (`gt-usage`) | on | `/gt-usage:gt-usage` | Where this account stands against its Claude plan allowance — the 5-hour, weekly and monthly-spend windows. Records a reading a minute and says nothing until one is worth acting on; `usage_alert always` keeps it on screen. |
 
 #### What flow shows
@@ -160,7 +166,7 @@ See [INSTALL.md](INSTALL.md) for step-by-step instructions, including how to ins
 
 ```bash
 bash install.sh --vault <vault>     # gt plus every module that is on; then restart Claude Code
-bash install.sh --list-modules      # the eleven modules, each one's state and why
+bash install.sh --list-modules      # the twelve modules, each one's state and why
 bash install.sh --without demo      # leave one out; remembered
 ```
 
@@ -173,8 +179,8 @@ guard — and gt never pushes. See the [MANUAL](MANUAL.md#default-release-gates-
 
 ![Default release gates: tests seen to pass, gt-allin, gt-allin-commit and the commit guard, then your own push](docs/release-process.svg)
 
-A full install writes **sixteen hook registrations across fourteen scripts** into
-`~/.claude/settings.json`, from one declaration (`HOOK_REGISTRATIONS` in `gt_components.py`)
+A full install declares **sixteen hook registrations across fourteen scripts** (written into
+`~/.claude/settings.json` on the older settings route; on the default plugin route `settings.json` holds only `enabledPlugins` and each plugin's `hooks/hooks.json` carries them), from one declaration (`HOOK_REGISTRATIONS` in `gt_components.py`)
 that the installer registers from and the drift check compares against — so they cannot
 disagree about what "wired" means. `install.sh` owns ten of them: the five `SessionStart`
 reporters (`gt_components.py`, `gt_workers.py`, `gt_version_check.py`, `gt_push_check.py`
@@ -394,7 +400,7 @@ How much Claude may run without asking: strict (the default), trust local, trust
 |---|---|---|
 | **strict** | nothing added -- exactly what Claude Code asks today (default) | everything Claude Code asks today |
 | **trust local** | read-only shell (ls, cat, grep, wc, ...) and git (status, log, diff, show, branch); edits in the project; running tests; git add/commit | network, remote hosts, pushes, installs, deletes, anything not listed |
-| **trust network** | trust local, plus ssh/scp/rsync, git push/pull/fetch, curl/wget, npm/pip/brew install, web fetch | any other shell command or edit outside the project |
+| **trust network** | trust local, plus ssh/scp/rsync, git push/pull/fetch, web fetch; curl/wget and npm/pip/brew install while install_guard is on | any other shell command or edit outside the project |
 | **insecure** | trust network, plus any shell command, any edit, web search | LOTR send/merge/delete still ask for consent |
 
 At every level above strict, Claude's Read tool is denied credential files (ssh keys, cloud and gh credentials, Claude Code's login, .env). That guards the Read tool only: from trust local up a shell command can still print a file, so Core rule 3 (no secret's value in the session) remains the line. These levels reduce prompts; they are not a security boundary.
@@ -482,7 +488,7 @@ Python scripts can also be run directly from the command line. One variable, so 
 bump does not strand eight copied paths — from the release tree, or from the install:
 
 ```bash
-GT=golden-thread/0.17.11/scripts
+GT=golden-thread/0.22.0/scripts
 # installed instead:  GT=$(ls -d ~/.claude/plugins/cache/golden-thread-plugin/gt/*/scripts | sort -V | tail -1)
 
 # Create a new vault
@@ -656,6 +662,17 @@ git; Bases can replace Dataview tables if you prefer.
 Full detail, including which plugins are installed but off and the core plugins to leave off,
 is in [OBSIDIAN-WORKFLOW.md](OBSIDIAN-WORKFLOW.md#plugins). One caution: never run Obsidian Sync and another sync engine (Dropbox, OneDrive) on the same vault folder.
 
+### Obsidian and a terminal, side by side
+
+The comfortable way to use gt is two windows: Obsidian showing the vault (what gt wrote, as pages and tasks) and a terminal running Claude Code (where you ask). Neither needs the other; this just puts them next to each other.
+
+1. **Install Obsidian** from [obsidian.md](https://obsidian.md) (Mac: drag it to Applications; Windows: run the installer).
+2. **Open the vault.** In Obsidian choose "Open folder as vault" and pick the vault folder `/gt:gt-init` printed (default `~/GoldenThread`, on Windows `%USERPROFILE%\GoldenThread`). `/gt:gt-init` also offers to open it for you through an `obsidian://` link.
+3. **Install a terminal.** Mac: Terminal is already there (or iTerm2). Windows: Windows Terminal from the Microsoft Store, with Git for Windows installed.
+4. **Run Claude Code** in the terminal (`claude`), then `/gt:gt-doctor`. Put the two windows side by side.
+
+Optional, third-party and not supported by gt: a terminal plugin inside Obsidian (for example "Terminal" from the community plugins) puts step 4's terminal in an Obsidian pane. Install it from Settings, Community plugins; gt does not depend on it.
+
 ## Requirements
 
 - Python 3.8+
@@ -689,6 +706,10 @@ Two scripts in `golden-thread-wiki` come directly from Jonathan's work:
 ## Version History
 
 Newest first. Each entry is the note that used to sit at the top of this file.
+
+### 0.22.0
+
+**0.22.0: gt checks more of what it writes, reads and installs before trusting it, and the savings report has measured rows.** An install guard scans what a command is about to install (`install_guard`), add-on writes to skills, plugins and MCP config always prompt (`addon_writes`), new or changed skills, plugins and CLAUDE.md files are scanned once (`addon_scan`), MCP tool descriptions are pinned (`mcp_pin`), unused skills of your own are listed (`gt_skill_report.py`), and past sessions can be searched on request (`session_search`, off by default). Several checks run on an island with no network and no disk writes. The install guide gains optional LOTR and farm steps. Opt-in agent farming lets a hosted model fix code on a copy of your repo and hand back a patch to review. Its breaking changes (among them a person gate on LOTR's `--yes`, no https-to-http redirects, the vault manifest rules, only two release folders kept per module, and the public repository as the default `gt_release_source`) are listed in the CHANGELOG.
 
 ### 0.21.5
 

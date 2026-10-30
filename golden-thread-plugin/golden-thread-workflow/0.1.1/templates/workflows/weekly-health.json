@@ -1,0 +1,65 @@
+{
+  "schema": 1,
+  "name": "weekly-health",
+  "title": "Run the weekly health check",
+  "description": "Checks the install, audits the notes for broken links and stale pages, and checks the runbooks for drift.",
+  "personas": [
+    "operations"
+  ],
+  "help_workflow": "weekly-health",
+  "say": "Run the weekly health check.",
+  "steps": [
+    {
+      "id": "doctor",
+      "kind": "run",
+      "title": "Check the install and its hooks",
+      "script": "gt_doctor.py",
+      "args": [
+        "--vault",
+        "{{vault}}"
+      ],
+      "ok_exit": [
+        0,
+        1
+      ],
+      "note_exit": {
+        "1": "something needs attention"
+      }
+    },
+    {
+      "id": "lint",
+      "kind": "run",
+      "title": "Audit the notes for broken links and stale pages",
+      "script": "gt_lint.py",
+      "args": [
+        "--vault",
+        "{{vault}}"
+      ],
+      "ok_exit": [
+        0,
+        1
+      ],
+      "note_exit": {
+        "1": "there are findings to read"
+      }
+    },
+    {
+      "id": "runbooks",
+      "kind": "run",
+      "title": "Check the runbooks for drift",
+      "script": "gt_lint.py",
+      "args": [
+        "--vault",
+        "{{vault}}",
+        "--runbooks"
+      ],
+      "ok_exit": [
+        0,
+        1
+      ],
+      "note_exit": {
+        "1": "there are findings to read"
+      }
+    }
+  ]
+}

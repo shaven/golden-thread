@@ -1,0 +1,40 @@
+{
+  "schema": 1,
+  "name": "sse-bridge",
+  "archetype": "sse-bridge",
+  "summary": "ARCHETYPE: a legacy HTTP+SSE MCP server reached through the mcp-remote bridge (TODO: service)",
+  "kind": "mcp-stdio",
+  "docs": "https://todo-host.example/docs",
+  "connect": {
+    "command": [
+      "npx",
+      "-y",
+      "mcp-remote@TODO-version",
+      "https://todo-host.example/sse",
+      "--transport",
+      "sse-only"
+    ],
+    "runtime": "node",
+    "bridge": "sse",
+    "env_refs": {},
+    "env": {},
+    "trust": "T1",
+    "identity": "TODO: your account at the service",
+    "description": "TODO (legacy SSE via mcp-remote)",
+    "timeouts": {
+      "start_s": 90,
+      "call_s": 120,
+      "idle_s": 600
+    }
+  },
+  "smoke": {
+    "op": "TODO: the name of one read-only tool",
+    "args": {}
+  },
+  "notes": [
+    "ARCHETYPE: copy with `lotr template new NAME --archetype sse-bridge`, then replace every TODO.",
+    "BRIDGE WARNING: the bridge (mcp-remote, a third-party npm package) does the sign-in itself and keeps its tokens in ~/.mcp-auth, OUTSIDE LOTR's secrets store (L1: any process of your user can read them). LOTR cannot seal, rotate or revoke them. Use this only when the server offers no streamable HTTP endpoint.",
+    "Pin the mcp-remote version. A static header (API key) goes in a header file the bridge reads (--header-file), never in the command line, where any local user can see it.",
+    "VERIFIED against mcp-remote's README on 2026-10-14 (self-verified): usage `npx mcp-remote <url>`, `--transport sse-only` selects the legacy transport, tokens in ~/.mcp-auth (override MCP_REMOTE_CONFIG_DIR). Source: https://github.com/geelen/mcp-remote"
+  ]
+}

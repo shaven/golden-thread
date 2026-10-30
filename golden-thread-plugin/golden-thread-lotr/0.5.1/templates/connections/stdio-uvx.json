@@ -1,0 +1,36 @@
+{
+  "schema": 1,
+  "name": "stdio-uvx",
+  "archetype": "stdio-uvx",
+  "summary": "ARCHETYPE: a local MCP server started with uvx (TODO: say which service)",
+  "kind": "mcp-stdio",
+  "docs": "https://todo-host.example/docs",
+  "connect": {
+    "command": [
+      "uvx",
+      "TODO-pypi-package==TODO-version"
+    ],
+    "runtime": "uv",
+    "env_refs": {
+      "TODO_API_KEY": "store:TODO-secret-name"
+    },
+    "env": {},
+    "trust": "T1",
+    "identity": "TODO: your account at the service",
+    "description": "TODO (stdio, uvx)",
+    "timeouts": {
+      "start_s": 60,
+      "call_s": 120,
+      "idle_s": 600
+    }
+  },
+  "smoke": {
+    "op": "TODO: the name of one read-only tool",
+    "args": {}
+  },
+  "notes": [
+    "ARCHETYPE: copy with `lotr template new NAME --archetype stdio-uvx`, then replace every TODO.",
+    "Pin the package version (name==1.2.3): `uvx name` alone runs whatever is newest.",
+    "Remove env_refs if the server needs no secret."
+  ]
+}

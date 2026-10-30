@@ -1,0 +1,43 @@
+{
+  "schema": 1,
+  "name": "unifi-controller",
+  "archetype": "http-rest",
+  "summary": "UniFi Network on your own controller (private address, your own CA): read sites, devices and clients; any change asks first",
+  "kind": "http",
+  "docs": "https://developer.ui.com/network-api/gettingstarted",
+  "connect": {
+    "base_url": "https://unifi-controller.invalid/proxy/network/integration",
+    "profile": "generic",
+    "auth_scheme": "header",
+    "auth_header": "X-API-KEY",
+    "credential_ref": "store:unifi-controller-api-key",
+    "trust": "T1",
+    "identity": "<your UniFi controller>",
+    "description": "UniFi Network on your own controller (API key, your private CA)",
+    "policy": {
+      "consent": [
+        "DELETE *",
+        "POST *",
+        "PUT *",
+        "PATCH *"
+      ],
+      "write": []
+    }
+  },
+  "network": {
+    "hosts": [
+      "unifi-controller.invalid"
+    ]
+  },
+  "smoke": {
+    "op": "GET /v1/sites",
+    "args": {}
+  },
+  "notes": [
+    "This is the UniFi Network integration API served by your own console or controller on your network, not UniFi's hosted Site Manager API (that is the unifi template). The base URL here is a placeholder that never resolves: always pass your controller's own address, https only.",
+    "Its certificate must come from YOUR private CA, which LOTR trusts for this connection alone: first lotr trust-ca add NAME --from CA.pem (the CA certificate, public half only; a file holding a private key is refused), then lotr add-http NAME@zone --from-template unifi-controller --base-url https://ADDRESS/proxy/network/integration --trust-ca NAME. The certificate the controller presents must name ADDRESS (host name or IP) in its subjectAltName.",
+    "A console's factory self-signed certificate is not a CA and trust-ca add refuses it: issue the controller a certificate from your own CA and install it on the console first. Plain http to a private address stays refused, with or without a CA.",
+    "The secret is an API key made in the UniFi Network application on that controller (its integrations settings); it is sent in the X-API-KEY header and is a different key from a unifi.ui.com one. It is a reference to the store, never in this file.",
+    "Reads: GET /v1/info, GET /v1/sites, GET /v1/sites/SITE/devices, GET /v1/sites/SITE/clients. Every POST, PUT, PATCH and DELETE (restarting a device, power-cycling a port, authorizing a guest, vouchers) asks first."
+  ]
+}

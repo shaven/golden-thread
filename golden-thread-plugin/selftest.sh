@@ -53,6 +53,8 @@ fi
 python3 "$VAULT/Projects/golden-thread/tools/gt_tasks.py" --vault "$VAULT" >/dev/null 2>&1 && ok "gt_tasks.py regenerates TASKS.md" || bad "gt_tasks.py failed"
 grep -q '^## Inbox' "$VAULT/TASKS.md" && grep -q '^## Review' "$VAULT/TASKS.md" && ok "TASKS.md carries Inbox and Review sections" || bad "TASKS.md lacks Inbox/Review"
 python3 "$VAULT/Projects/golden-thread/tools/gt_closeout.py" --vault "$VAULT" candidates >/dev/null 2>&1 && ok "gt_closeout.py runs" || bad "gt_closeout.py failed"
+# gt_session needs a session id; outside Claude Code there is none (0.22.0, validation F13)
+export CLAUDE_SESSION_ID="${CLAUDE_SESSION_ID:-selftest-$$}"
 python3 "$VAULT/Projects/golden-thread/tools/gt_session.py" register --task selftest >/dev/null 2>&1 && python3 "$VAULT/Projects/golden-thread/tools/gt_session.py" release >/dev/null 2>&1 && ok "gt_session.py register/release" || bad "gt_session.py failed"
 python3 - "$VAULT/Projects/golden-thread/tools/safe_write.py" "$TMP" <<'PY' && ok "safe_write.py appends in place" || bad "safe_write.py append"
 import importlib.util, os, sys

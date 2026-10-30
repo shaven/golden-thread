@@ -1,0 +1,54 @@
+{
+  "schema": 1,
+  "name": "openai-compatible",
+  "archetype": "http-rest",
+  "summary": "A hosted OpenAI-compatible LLM (OpenRouter by default; Together or any host that follows the OpenAI layout), reached over https with your API key: chat completions and a model list",
+  "kind": "http",
+  "docs": "https://openrouter.ai/docs/api-reference/overview",
+  "connect": {
+    "base_url": "https://openrouter.ai/api",
+    "profile": "generic",
+    "auth_scheme": "bearer",
+    "credential_ref": "store:llm-api-key",
+    "trust": "T1",
+    "identity": "<your account on the LLM host>",
+    "description": "A hosted OpenAI-compatible LLM over https (bearer key)",
+    "health": "GET /v1/models",
+    "locality": "remote",
+    "timeouts": {
+      "call_s": 120
+    },
+    "llm": {
+      "tools": "none"
+    },
+    "limits": {
+      "max_calls_per_min": 60,
+      "max_concurrent": 4
+    },
+    "policy": {
+      "read": [
+        "GET /v1/models"
+      ],
+      "write": [
+        "POST /v1/chat/completions"
+      ]
+    }
+  },
+  "network": {
+    "hosts": [
+      "openrouter.ai"
+    ]
+  },
+  "smoke": {
+    "op": "GET /v1/models",
+    "args": {}
+  },
+  "notes": [
+    "Put your key in the store yourself, in your own terminal (never in Claude): lotr secret put llm-api-key. Register with: lotr add-http NAME@zone --from-template openai-compatible [--token-ref store:YOUR-NAME].",
+    "Another host: pass its base URL without the /v1 part, for example --base-url https://api.together.xyz. The operations are POST /v1/chat/completions and GET /v1/models on every host that follows the OpenAI layout; a host with a different prefix (Groq serves under /openai) is not covered by this template.",
+    "The farm names the host in its service-table row: set the row's provider column (for example openrouter). This template names no provider on purpose, so one template serves every host; the farm lets the row name it only when the connection does not.",
+    "Whatever you send leaves this machine. The farm's own gate keeps private packets off a remote engine, but the host's retention and training policy is an account setting on the host (for OpenRouter: the privacy settings and a per-key credit limit), not something gt controls. Check them before you send anything that is not public.",
+    "The model cannot act: llm.tools is none, so the farm may send to it. Do not put a tool-calling agent behind this connection without raising that value.",
+    "A provider's answers come back as structured codes: 429 is upstream_rate_limited (with its Retry-After), 402 (out of credit) is upstream_payment_required, 5xx is upstream_error, a bad key stays http_401. lotr status --check sends GET /v1/models WITHOUT your key (the probe never carries a credential), so it shows that the host answers, not that the key works: a wrong key shows on the first call as http_401. If your host requires a key even for the model list, status will show an error while calls still work."
+  ]
+}

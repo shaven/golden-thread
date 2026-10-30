@@ -1,0 +1,44 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>A product or project manager&#x27;s first day</title><style>:root{--bg:#fbfaf7;--fg:#1d1c1a;--mut:#615e57;--card:#fff;--line:#d9d5cc;--acc:#1f5f8b;--accfg:#fff;--code:#f1eee7}
+@media (prefers-color-scheme:dark){:root{--bg:#171614;--fg:#ece9e2;--mut:#aaa59a;--card:#211f1c;--line:#3a3732;--acc:#79b4e0;--accfg:#10202c;--code:#2a2723}}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--fg);font:16px/1.55 system-ui,sans-serif}
+main{max-width:46rem;margin:0 auto;padding:1.5rem 16px 4rem}h1{font-size:1.5rem;margin:.2rem 0}
+.sub{color:var(--mut);margin:0 0 1rem}
+.bar{height:.5rem;background:var(--line);border-radius:.25rem;overflow:hidden;margin:1rem 0 .4rem}
+.bar>i{display:block;height:100%;width:0;background:var(--acc);transition:width .2s}
+.count{color:var(--mut);font-size:.9rem;margin-bottom:1rem}
+.step{display:none;background:var(--card);border:1px solid var(--line);border-radius:.6rem;padding:1rem 1.2rem}
+.step.on{display:block}.step h2{font-size:1.15rem;margin:.1rem 0 .8rem}
+dt{font-weight:600;margin-top:.8rem;color:var(--mut);font-size:.85rem;text-transform:uppercase;letter-spacing:.04em}
+dd{margin:.2rem 0 0}.say{display:flex;gap:.6rem;align-items:flex-start}
+code{background:var(--code);padding:.35rem .55rem;border-radius:.35rem;font:.95rem ui-monospace,monospace;flex:1;overflow-wrap:anywhere}
+button{font:inherit;border:1px solid var(--line);background:var(--card);color:var(--fg);border-radius:.4rem;padding:.45rem .9rem;cursor:pointer}
+button.p{background:var(--acc);color:var(--accfg);border-color:var(--acc)}button:disabled{opacity:.45;cursor:default}
+nav{display:flex;gap:.6rem;margin-top:1rem}nav .sp{flex:1}</style></head><body><main>
+<h1>A product or project manager&#x27;s first day</h1><p class="sub">Someone who plans, tracks and reports rather than writes code. Plain words throughout. Practice project: demo-pizzabot (a pretend project; nothing here touches your real notes).</p>
+<div class="bar" id="bar" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0"><i id="fill"></i></div><div class="count" id="count"></div>
+<section class="step" aria-label="Step 1"><h2>1. Pick the project up where it was left</h2><dl><dt>What you are doing</dt><dd>Pick the project up where it was left</dd><dt>What to type</dt><dd class="say"><code>/gt:gt-open demo-pizzabot</code><button type="button" data-copy="/gt:gt-open demo-pizzabot">Copy</button></dd><dt>What you will see</dt><dd>A short summary of PizzaBot 3000: what it is, what was decided, what is open, and a question about where to start.</dd><dt>Why it matters</dt><dd>You never re-read old notes to find your place; the summary is built from the project&#x27;s own files.</dd></dl></section>
+<section class="step" aria-label="Step 2"><h2>2. Ask what to do first</h2><dl><dt>What you are doing</dt><dd>Ask what to do first</dd><dt>What to type</dt><dd class="say"><code>/gt:gt-next</code><button type="button" data-copy="/gt:gt-next">Copy</button></dd><dt>What you will see</dt><dd>Up to three lines: the one task to do now, why it is the one, and a command to try after it.</dd><dt>Why it matters</dt><dd>When everything feels urgent, one clear next step beats a list.</dd></dl></section>
+<section class="step" aria-label="Step 3"><h2>3. See what is waiting on you</h2><dl><dt>What you are doing</dt><dd>See what is waiting on you</dd><dt>What to type</dt><dd class="say"><code>/gt:gt-list tasks mine</code><button type="button" data-copy="/gt:gt-list tasks mine">Copy</button></dd><dt>What you will see</dt><dd>Your open tasks, most urgent first, with due dates and anything waiting on someone.</dd><dt>Why it matters</dt><dd>Overdue and waiting items are the ones that slip; this shows them without opening a spreadsheet.</dd></dl></section>
+<section class="step" aria-label="Step 4"><h2>4. Add a task in one sentence</h2><dl><dt>What you are doing</dt><dd>Add a task in one sentence</dd><dt>What to type</dt><dd class="say"><code>/gt:gt-create task Send the stakeholder update by Friday</code><button type="button" data-copy="/gt:gt-create task Send the stakeholder update by Friday">Copy</button></dd><dt>What you will see</dt><dd>One new line under the project&#x27;s Tasks, with the date understood from your words.</dd><dt>Why it matters</dt><dd>A task written now is a task not forgotten at 5 pm.</dd></dl></section>
+<section class="step" aria-label="Step 5"><h2>5. Write a decision down</h2><dl><dt>What you are doing</dt><dd>Write a decision down</dd><dt>What to type</dt><dd class="say"><code>Write down a decision: we cap the negotiation at three rounds, because longer rounds lost customers</code><button type="button" data-copy="Write down a decision: we cap the negotiation at three rounds, because longer rounds lost customers">Copy</button></dd><dt>What you will see</dt><dd>A short decision record: what was decided, why, and what was rejected, filed in the project.</dd><dt>Why it matters</dt><dd>In three months nobody remembers why; the record does.</dd></dl></section>
+<section class="step" aria-label="Step 6"><h2>6. Find what the notes say</h2><dl><dt>What you are doing</dt><dd>Find what the notes say</dd><dt>What to type</dt><dd class="say"><code>/gt:gt-query what did we decide about negotiation rounds</code><button type="button" data-copy="/gt:gt-query what did we decide about negotiation rounds">Copy</button></dd><dt>What you will see</dt><dd>The answer in a sentence or two, with the note it came from.</dd><dt>Why it matters</dt><dd>Your notes answer questions so you do not have to ask a colleague twice.</dd></dl></section>
+<section class="step" aria-label="Step 7"><h2>7. Close the day</h2><dl><dt>What you are doing</dt><dd>Close the day</dd><dt>What to type</dt><dd class="say"><code>/gt:gt-close</code><button type="button" data-copy="/gt:gt-close">Copy</button></dd><dt>What you will see</dt><dd>A plain brief of what moved, what was decided and what is blocked, then the notes saved and a handoff if anything is unfinished.</dd><dt>Why it matters</dt><dd>Tomorrow&#x27;s session starts from what you learned today, not from a blank page.</dd></dl></section>
+<nav><button type="button" id="back">Back</button><span class="sp"></span><button type="button" class="p" id="next">Next</button></nav>
+</main><script>(function(){
+var steps=[].slice.call(document.querySelectorAll('.step')),i=0,bar=document.getElementById('fill'),
+    pb=document.getElementById('bar'),cnt=document.getElementById('count'),b=document.getElementById('back'),
+    n=document.getElementById('next');
+function show(k){i=Math.max(0,Math.min(steps.length-1,k));
+ steps.forEach(function(s,j){s.classList.toggle('on',j===i);});
+ var pct=Math.round((i+1)*100/steps.length);bar.style.width=pct+'%';pb.setAttribute('aria-valuenow',pct);
+ cnt.textContent='Step '+(i+1)+' of '+steps.length;b.disabled=i===0;n.disabled=i===steps.length-1;}
+b.addEventListener('click',function(){show(i-1);});n.addEventListener('click',function(){show(i+1);});
+document.addEventListener('keydown',function(e){if(e.key==='ArrowRight')show(i+1);if(e.key==='ArrowLeft')show(i-1);});
+[].forEach.call(document.querySelectorAll('[data-copy]'),function(btn){
+ btn.addEventListener('click',function(){var t=btn.getAttribute('data-copy');
+  var done=function(){btn.textContent='Copied';setTimeout(function(){btn.textContent='Copy';},1500);};
+  if(navigator.clipboard&&navigator.clipboard.writeText){navigator.clipboard.writeText(t).then(done,function(){});}
+  else{var a=document.createElement('textarea');a.value=t;document.body.appendChild(a);a.select();
+   try{document.execCommand('copy');done();}catch(x){}document.body.removeChild(a);}});});
+show(0);})();</script></body></html>

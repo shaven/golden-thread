@@ -1,0 +1,29 @@
+{
+  "schema": 1,
+  "name": "recall",
+  "plugin": "gt-recall",
+  "version": "0.1.0",
+  "requires_gt": ">=0.22.0,<0.23.0",
+  "summary": "Vault recall: rank pages for a question by BM25 with headings above body, read-only, no index and no network",
+  "default": "off",
+  "skills": [
+    "gt-recall"
+  ],
+  "scripts": [
+    "gt_recall.py"
+  ],
+  "templates": [],
+  "hooks": [],
+  "hookdir_scripts": [],
+  "settings": [],
+  "requires_modules": [],
+  "replaces_core": [],
+  "lockdown": {
+    "trust-local": {
+      "allow": [
+        "Bash(python3 {scripts}/gt_recall.py *)"
+      ],
+      "deny": []
+    }
+  }
+}

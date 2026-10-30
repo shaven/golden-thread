@@ -1,0 +1,27 @@
+{
+  "schema": 1,
+  "name": "example",
+  "summary": "Example: an MCP server behind OAuth - copy this and fill in your own host",
+  "kind": "mcp-oauth",
+  "connect": {
+    "url": "https://your-mcp-host.example/mcp",
+    "scopes": ["mcp"],
+    "offline_access": true,
+    "skip_audience_check": false,
+    "send_resource": true,
+    "redirect_host": "127.0.0.1",
+    "trust": "T1",
+    "identity": "<your account, e.g. you@example.com>",
+    "description": "An MCP server of your choice, signed in with your account"
+  },
+  "network": { "hosts": ["your-mcp-host.example"] },
+  "notes": [
+    "This is a GENERIC example template. Copy it to a new file under ~/.config/gt-lotr/<zone>/connections/",
+    "and replace the host, scopes, and flags for your server.",
+    "This template carries NO secrets: the OAuth client_id and the refresh-token ref are minted",
+    "per user at connect time.",
+    "Set skip_audience_check:true only if your server stamps the token aud as the issuer rather than",
+    "the resource (connect then fails with oauth_audience_mismatch without it).",
+    "Run `lotr connect <name> --from-template example` in YOUR OWN terminal, not inside Claude Code."
+  ]
+}

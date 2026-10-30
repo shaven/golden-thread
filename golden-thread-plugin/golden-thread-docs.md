@@ -1,9 +1,9 @@
 # Golden Thread Plugin — Documentation
 
 > **Reader:** quick lookup, and the printed PDF
-> **Claims last checked against the code:** 2026-10-02 (gt 0.19.1) — see *The documents, and what belongs in each* in [`CLAUDE.md`](../CLAUDE.md).
+> **Stamped for gt 0.22.0:** the counts and version numbers in this document are checked against the code at every release; the prose is re-read when the document is edited, not at every release.
 
-## Version gt 0.21.5 / gt-wiki 0.2.9 / gt-usage 0.1.10 / gt-visualize 0.4.6 / gt-lotr 0.5.0 / gt-pane 0.1.1 / gt-workflow 0.1.0 / gt-farm 0.21.1 / gt-report-card 0.21.1 / gt-demo 0.21.4 / gt-watch, gt-flow 0.21.0
+## Version gt 0.22.0 / gt-wiki 0.2.10 / gt-usage 0.1.11 / gt-visualize 0.4.7 / gt-lotr 0.5.1 / gt-pane 0.1.2 / gt-workflow 0.1.1 / gt-farm 0.21.3 / gt-report-card 0.21.2 / gt-demo 0.21.5 / gt-watch, gt-flow 0.21.1 / gt-recall 0.1.0
 
 ---
 
@@ -101,7 +101,7 @@ The canonical rule definitions live in `Projects/golden-thread/core-rules/` insi
 
 ---
 
-## gt Skills (37)
+## gt Skills (40)
 
 ### Setup
 
@@ -117,6 +117,7 @@ The canonical rule definitions live in `Projects/golden-thread/core-rules/` insi
 |---|---|
 | `/gt:gt-open` | Load a project at session start. Reads the core project docs in order — `source.md` first, so you know which host serves which role before touching code, then idea → research → decisions → design — and *indexes* the memory files rather than loading them. Names the project's waiting handoffs (`gt_surface.py handoffs --project`) without reading them. Since 0.18.1: a catch-up brief after `brief_absence_days` away (`gt_catchup.py`; `--brief`, `--no-brief`), `research-digest.md` in place of research headings when current (`gt_digest.py check`), a line on which repo a repo-scoped command will hit, and `handoff [id]` / `task <id>` to open one of those read-only. |
 | `/gt:gt-route` | Mid-session. Names what the session has actually become, says where its output belongs, and checks you are in the right project, harness and model. For when a session drifted from what it opened with, or you cannot name what you are doing. |
+| `/gt:gt-next` | Says the one best next action from the vault, and why, in under five lines. No model call; shaped by your role. |
 | `/gt:gt-work` | Write back session findings. Appends to `research.md`, adds ADRs to `decisions.md`, refines `design.md`, creates `spec.md` when design is complete, and flags content for PROTOCOL.md. Offers a handoff for what did not reach a file; each task it raises names the handoff's filename. Since 0.18.1: asks about ADR `--supersedes` / `--expires-when` and memory `entities:`; regenerates `research-digest.md` (`gt_digest.py write`); runs `gt_memory_check.py` (contradictions) and `gt_promote_detect.py` (promotion candidates); a *Learn* step offers reusable patterns; the skeptic pass needs only `skeptic_pass`. |
 | `/gt:gt-ingest` | Bulk-import an existing project's memory files, CLAUDE.md rules, and notes into the vault. External sources are stored immutably in `Sources/` before being synthesized into Knowledge pages. Resumable from any session since 0.18.1 (`--resume CK`, `--done CK --index N`). |
 | `/gt:gt-review` | Empty the inbox: sweep `INBOX.md` — plus Obsidian daily notes if you keep them — for captured-but-unfiled thoughts and route each one into a tracked project. |
@@ -144,6 +145,8 @@ The canonical rule definitions live in `Projects/golden-thread/core-rules/` insi
 | `/gt:gt-close` | *(0.21.0)* Close this session, the opposite of `/gt:gt-open`: write back what it learned and release its claim. |
 | `/gt:gt-calibrate` | *(0.21.0)* Run the model calibration pass now (alias for `gt-optimize --only calibration`); `gt_model_calibrate.py plan --estimate` prices it first. |
 | `/gt:gt-forget` | *(0.21.0)* Retract a wrong fact in every note that states it; `gt_forget.py search\|retract`; nothing is deleted. |
+| `/gt:gt-adopt` | *(0.22.0)* Use gt on a non-gt vault: inspect read-only, propose `vault.manifest.json`, write it only after a yes. |
+| `/gt:gt-disposable` | *(0.22.0)* Run a blocked command in a throwaway VM or container; `gt_disposable.py backends\|plan\|run`; nothing is mounted, the guest is destroyed. |
 | `/gt:gt-grant` | *(0.21.0)* Let one command through for a while without lowering the lockdown level. |
 | `/gt:gt-help` | *(0.21.0)* An offline page that plays a command's real output in a simulated terminal. |
 
@@ -200,6 +203,7 @@ Optional parts, each a separate plugin in the `golden-thread-plugin` marketplace
 | `/gt-watch:gt-watch` | `watch` (`gt-watch`) · on | Watch any git repo. `add <url>` writes a watch note; a cron fetch (`gt_watch.py fetch`) classifies every change by rules — P0 for security advisories, CVE/GHSA ids or security releases; review for new releases, major bumps, changes under `watch_paths`; routine otherwise — and a SessionStart hook reports unacknowledged changes, P0 first. `show` explains a change, `ack` marks it seen. Setting `watch`, default `off`. `--without watch` also removes its crontab line. Was `/gt:gt-watch`. |
 | *(no command)* | `report-card` (`gt-report-card`) · on | The session report card at `/compact` and session end — saved as a notice and shown at the next session start, because output at those events is never displayed — and the project close-out question. Settings `report_card`, `closeout_check`. |
 | `/gt-farm:gt-farm` | `farm` (`gt-farm`) · **off** fresh, on for upgraders | Route bulk, mechanical, or second-opinion tasks to an external AI service as a self-contained work packet. All four gates (Stateless, Self-contained, Checkable, Releasable) must pass before a task leaves. Results come back unverified. Was `/gt:gt-farm`; a machine upgrading from a gt that shipped it keeps it on. |
+| `/gt-farm:gt-farm agent farming` | `farm` (`gt-farm`) 0.22.0 · **off** until set up | A hosted model fixes a code task with tools on a copy of your repo, in an operating-system sandbox; accepted only when your tests pass on a clean copy, and the result is a candidate patch you review, never applied for you. `gt_farm_agent_setup.py start\|status\|doctor\|off` sets it up (key file only for now), `gt_farm_agent.py plan\|run\|farm\|audit\|apply` runs it, `gt_farm_share.py status\|explain\|pause\|resume` shows and controls the share (`farm_share`, `farm_agent_budget_usd_day`, both off), and `gt_farm_calibrate.py NAME --kind agent-code` measures an engine first. |
 | `/gt-workflow:gt-workflow` | `workflow` (`gt-workflow`) 0.1.0 · **off** | New in 0.21.4. Workflows you own: a saved chain of steps (a pipeline is the same thing) run by name, `/gt-workflow NAME [values]`. Steps: `run` (a gt tool from an allow-list), `lotr` (read on its own; write only after you approve that exact step; consent never), `farm` (a local engine, handed to Claude when unsure), `claude`, `agent`, `you`. Inputs are typed and checked first; `when:` branches; outputs pass by name. `new --from-description` previews a draft and saves only on `--save`; `schedule` installs a `workflow-NAME` job for the ones that need nobody. 15 starters. |
 | `/gt-flow:gt-flow` | `flow` (`gt-flow`) · on | New in 0.15.0. Renders `events.jsonl` as one offline HTML file: a lane per project, time left to right, an arrow each time an item climbed a level. `--redact` hashes every name before the page is shared; task events are hidden until `--tasks` or a click; `--project`, `--since`. Never writes the vault. |
 | `/gt-visualize:gt-visualize` | `visualize` (`gt-visualize`) 0.4.1 · on | New in gt-visualize 0.4.0. Two modes, each one offline HTML file with three.js inlined. **explain**: a scroll-driven walkthrough of how a codebase's parts work together — scenes highlight parts and animate the flows between them, from a story Claude writes out of the code and the vault (`--check` validates it). **render**, the code city: directories are districts, files are buildings — height by lines, footprint by size, colour by language (gt's filetype definitions) or by git churn over `--since` days. Orbit, hover, click to focus, search. `--redact` hashes every name before sharing; an `--out` inside the vault is refused. |

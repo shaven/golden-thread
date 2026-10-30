@@ -1,0 +1,18 @@
+{
+  "modules": [
+    "./register.js"
+  ],
+  "description": "gt module pane: each entry runs the command gt's installer wired for this machine, when it wired one",
+  "hooks": {
+    "SessionStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "f=\"${HOME:-$USERPROFILE}/.claude/golden-thread/wired/SessionStart__gt_pane.py\"; if [ -f \"$f\" ]; then . \"$f\"; fi"
+          }
+        ]
+      }
+    ]
+  }
+}

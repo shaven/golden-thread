@@ -1,0 +1,97 @@
+{
+ "schema": 1,
+ "template": "m365",
+ "service": "Microsoft 365 (Work IQ MCP server)",
+ "archetype": "mcp-oauth-preregistered",
+ "researched": "2026-10-14",
+ "researcher": "claude opus built-in connector review 2026-10-14",
+ "facts": [
+  {
+   "id": "f1",
+   "claim": "The Work IQ MCP endpoint is https://workiq.svc.cloud.microsoft/mcp",
+   "source": "https://learn.microsoft.com/en-us/microsoft-365/copilot/extensibility/work-iq/mcp/quickstart/github-copilot-cli",
+   "retrieved": "2026-10-14",
+   "state": "self-verified",
+   "evidence": "\"the remote Work IQ MCP server endpoint, https://workiq.svc.cloud.microsoft/mcp\"; its protected-resource document names that resource.",
+   "field": "connect.url",
+   "value": "https://workiq.svc.cloud.microsoft/mcp"
+  },
+  {
+   "id": "f2",
+   "claim": "Sign-in is Microsoft Entra ID with authority login.microsoftonline.com/organizations/v2.0 and no dynamic client registration",
+   "source": "https://workiq.svc.cloud.microsoft/.well-known/oauth-protected-resource/mcp",
+   "retrieved": "2026-10-14",
+   "state": "unverified",
+   "evidence": "authorization_servers https://login.microsoftonline.com/organizations/v2.0; its openid-configuration has no registration_endpoint and a templated issuer.",
+   "field": "connect.client_registration",
+   "value": "preregistered"
+  },
+  {
+   "id": "f3",
+   "claim": "The delegated permission is WorkIQAgent.Ask on api://workiq.svc.cloud.microsoft and needs admin consent; an admin must enable Work IQ first",
+   "source": "https://learn.microsoft.com/en-us/microsoft-365/copilot/extensibility/work-iq/permissions",
+   "retrieved": "2026-10-14",
+   "state": "self-verified",
+   "evidence": "\"use the OAuth scope value api://workiq.svc.cloud.microsoft/WorkIQAgent.Ask\"; AdminConsentRequired Yes; \"An organization administrator must enable Work IQ\".",
+   "field": "connect.scopes",
+   "value": [
+    "api://workiq.svc.cloud.microsoft/WorkIQAgent.Ask"
+   ]
+  },
+  {
+   "id": "f4",
+   "claim": "Tools: fetch, fetch_blob, create_entity, update_entity, delete_entity, do_action (sends mail, moves), call_function, ask, retrieve, list_agents, get_schema, search_paths; list_agents takes no parameters",
+   "source": "https://learn.microsoft.com/en-us/microsoft-365/copilot/extensibility/work-iq/mcp/tool-reference",
+   "retrieved": "2026-10-14",
+   "state": "self-verified",
+   "evidence": "Tool reference: do_action \"Runs a side-effect action such as sending mail\"; list_agents \"This tool takes no parameters\".",
+   "field": "smoke.op",
+   "value": "list_agents"
+  },
+  {
+   "id": "f5",
+   "claim": "Tenant policy blocks mutation operations by default",
+   "source": "https://learn.microsoft.com/en-us/microsoft-365/copilot/extensibility/work-iq/mcp/tool-reference",
+   "retrieved": "2026-10-14",
+   "state": "self-verified",
+   "evidence": "\"A separate tenant policy layer evaluates each tool request and blocks mutation operations by default.\""
+  },
+  {
+   "id": "f6",
+   "claim": "The per-workload Mail, Calendar, Teams MCP servers are legacy, for backward compatibility only",
+   "source": "https://learn.microsoft.com/en-us/microsoft-agent-365/tooling-servers-overview",
+   "retrieved": "2026-10-14",
+   "state": "self-verified",
+   "evidence": "\"only intended for backward compatibility purposes and shouldn't be used in production environments or new projects\"."
+  },
+  {
+   "id": "f7",
+   "claim": "A multitenant app registration is needed because the authority is /organizations; a public client with a localhost redirect works with LOTR's pre-registered Entra flow",
+   "source": "https://workiq.svc.cloud.microsoft/.well-known/oauth-protected-resource/mcp",
+   "retrieved": "2026-10-14",
+   "state": "unverified",
+   "evidence": "Inferred from the /organizations authority (Entra refuses a single-tenant app there, AADSTS50194); not stated on a Work IQ page. Not tried against a real tenant."
+  },
+  {
+   "id": "f8",
+   "claim": "Licensing and billing: Microsoft says the Work IQ API (and its MCP server) is generally available; whether a Microsoft 365 Copilot licence or consumption billing applies was not settled from the pages read",
+   "source": "https://learn.microsoft.com/en-us/microsoft-agent-365/tooling-servers-overview",
+   "retrieved": "2026-10-14",
+   "state": "unverified",
+   "evidence": "\"Work IQ MCP is generally available as part of the Work IQ API.\" Third-party reports disagree on licensing."
+  },
+  {
+   "id": "f9",
+   "claim": "Sign-in uses login.microsoftonline.com (authorize and token endpoints) beside the MCP host",
+   "source": "https://login.microsoftonline.com/organizations/v2.0/.well-known/openid-configuration",
+   "retrieved": "2026-10-14",
+   "state": "self-verified",
+   "evidence": "authorization_endpoint and token_endpoint are on login.microsoftonline.com/organizations/oauth2/v2.0/.",
+   "field": "network.hosts",
+   "value": [
+    "workiq.svc.cloud.microsoft",
+    "login.microsoftonline.com"
+   ]
+  }
+ ]
+}

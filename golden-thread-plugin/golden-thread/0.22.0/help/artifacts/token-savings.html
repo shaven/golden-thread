@@ -1,0 +1,688 @@
+<!DOCTYPE html><html lang='en'><head><meta charset='utf-8'><meta name='viewport' content='width=device-width, initial-scale=1'><title>Spending Fewer Tokens — Golden Thread</title><style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
+    font-size: 13.5px;
+    line-height: 1.65;
+    color: #1a1a1a;
+    background: #fff;
+  }
+
+  /* ── Cover ── */
+  .cover {
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: flex-start;
+    padding: 72px 80px;
+    background: #0f1117;
+    color: #fff;
+    page-break-after: always;
+  }
+  .cover .kicker {
+    font-size: 11px; font-weight: 600; letter-spacing: .15em;
+    text-transform: uppercase; color: #7c8cff; margin-bottom: 28px;
+  }
+  .cover h1 { font-size: 46px; font-weight: 700; line-height: 1.1; max-width: 600px; margin-bottom: 20px; }
+  .cover .subtitle { font-size: 18px; color: #9ba0b4; max-width: 500px; margin-bottom: 56px; line-height: 1.5; }
+  .cover .meta { font-size: 12px; color: #555d7a; border-top: 1px solid #1e2236; padding-top: 20px; width: 100%; }
+
+  /* ── Page body ── */
+  .page { max-width: 760px; margin: 0 auto; padding: 64px 64px 80px; }
+  .toc-page { page-break-after: always; }
+
+  /* ── TOC ── */
+  .toc h2 { font-size: 11px; font-weight: 600; letter-spacing: .12em; text-transform: uppercase; color: #7c8cff; margin-bottom: 28px; }
+  .toc ol { list-style: none; counter-reset: toc; }
+  .toc > ol > li { counter-increment: toc; border-bottom: 1px solid #f0f0f0; padding: 10px 0; }
+  .toc > ol > li::before { content: counter(toc, decimal-leading-zero); font-size: 11px; font-weight: 600; color: #9ba0b4; margin-right: 14px; font-variant-numeric: tabular-nums; }
+  .toc > ol > li > a { font-size: 14px; font-weight: 600; color: #1a1a1a; text-decoration: none; }
+  .toc-sub { list-style: none; padding-left: 30px; margin-top: 4px; }
+  .toc-sub li { font-size: 12.5px; color: #555; padding: 2px 0; }
+  .toc-sub li::before { content: "—  "; color: #ccc; }
+
+  /* ── Typography ── */
+  h1.section-title { font-size: 28px; font-weight: 700; color: #0f1117; margin-bottom: 8px; padding-top: 8px; }
+  .section-rule { border: none; border-top: 2px solid #7c8cff; width: 48px; margin-bottom: 28px; }
+  h2 { font-size: 17px; font-weight: 700; color: #0f1117; margin-top: 36px; margin-bottom: 10px; }
+  h3 { font-size: 13.5px; font-weight: 700; color: #0f1117; margin-top: 24px; margin-bottom: 6px; text-transform: uppercase; letter-spacing: .06em; }
+  p { margin-bottom: 14px; }
+  ul, ol { padding-left: 22px; margin-bottom: 14px; }
+  li { margin-bottom: 5px; }
+  strong { font-weight: 600; }
+  em { font-style: italic; }
+
+  /* ── Code ── */
+  code { font-family: "SF Mono","Fira Mono","Menlo",monospace; font-size: 12px; background: #f4f5f8; border-radius: 3px; padding: 1px 5px; }
+  pre { background: #0f1117; color: #c8d3f5; border-radius: 6px; padding: 18px 20px; overflow-x: auto; margin: 16px 0 20px; font-size: 12px; line-height: 1.6; }
+  pre code { background: none; padding: 0; color: inherit; font-size: inherit; }
+  .comment { color: #5c6370; }
+  .kw { color: #c792ea; }
+  .str { color: #c3e88d; }
+  .cmd { color: #82aaff; }
+
+  /* ── Tables ── */
+  table { width: 100%; border-collapse: collapse; margin: 16px 0 20px; font-size: 13px; }
+  th { background: #f4f5f8; text-align: left; padding: 8px 12px; font-weight: 600; font-size: 11.5px; text-transform: uppercase; letter-spacing: .06em; color: #555; border-bottom: 2px solid #e0e2ea; }
+  td { padding: 8px 12px; border-bottom: 1px solid #f0f0f4; vertical-align: top; }
+  tr:last-child td { border-bottom: none; }
+  td code { font-size: 11.5px; }
+
+  /* ── Callouts ── */
+  .callout { border-left: 3px solid #7c8cff; background: #f7f8ff; padding: 12px 16px; border-radius: 0 6px 6px 0; margin: 16px 0 20px; font-size: 13px; }
+  .callout.warning { border-color: #f5a623; background: #fffdf4; }
+  .callout.tip { border-color: #3ecf8e; background: #f4fdf9; }
+  .callout.danger { border-color: #e5534b; background: #fff5f5; }
+  .callout-label { font-size: 10.5px; font-weight: 700; text-transform: uppercase; letter-spacing: .1em; color: #7c8cff; margin-bottom: 4px; }
+  .callout.warning .callout-label { color: #f5a623; }
+  .callout.tip .callout-label { color: #3ecf8e; }
+  .callout.danger .callout-label { color: #e5534b; }
+
+  /* ── Skill badges ── */
+  .skill { display: inline-block; font-family: "SF Mono","Fira Mono","Menlo",monospace; font-size: 11.5px; font-weight: 600; background: #0f1117; color: #7c8cff; border-radius: 4px; padding: 2px 7px; white-space: nowrap; }
+
+  /* ── Diagram ── */
+  .diagram { background: #0f1117; color: #c8d3f5; border-radius: 6px; padding: 20px 24px; font-family: "SF Mono","Fira Mono","Menlo",monospace; font-size: 12px; line-height: 1.7; margin: 16px 0 20px; }
+  .diagram .dim { color: #5c6370; }
+  .diagram .hi { color: #82aaff; }
+
+  /* ── Print ── */
+  .page-break { page-break-after: always; }
+  h1.section-title { page-break-before: always; }
+  h1.section-title.no-break { page-break-before: avoid; }
+  @media print {
+    body { font-size: 12.5px; }
+    .cover { min-height: auto; padding: 56px 64px; }
+    pre, table { page-break-inside: avoid; }
+    h2 { page-break-after: avoid; }
+  }
+
+  body{max-width:52rem;margin:0 auto;padding:2.2rem 2rem;}
+  h1,h2,h3{break-after:avoid;} table{break-inside:avoid;}
+  td code{white-space:nowrap;} pre{white-space:pre;}
+  @media (max-width:40rem){body{padding:1rem;} table{display:block;overflow-x:auto;}}
+</style></head><body>
+<h1 id="spending-fewer-tokens">Spending Fewer Tokens</h1>
+<p><strong>Every way to make Claude Code and Golden Thread use less of your allowance: what to turn on,
+how, what you will notice when it is on, and what you give up.</strong></p>
+<p><em>A Golden Thread guide, written against gt 0.22.0 (figures not re-measured for 0.22.0 are marked 0.21.4). Figures are labelled: </em><em>measured</em><em> (a run or a
+recorded event produced it, on the author's machine), </em><em>estimated</em><em> (worked out from a
+measurement), or </em><em>not measured</em><em>. None has been reproduced by anyone else yet.</em></p>
+<hr />
+<h2 id="your-sessions-burn-allowance-fast-do-these-in-this-order">Your sessions burn allowance fast? Do these, in this order</h2>
+<ol>
+<li><strong>Close or compact long sessions early.</strong> This is the biggest lever by far. Leave
+   <code>context_nudge</code> at 40 so gt tells you when a session has grown, and leave
+   <code>auto_compact</code> on its default (<code>warn</code>: gt says once when a session passes 150,000 tokens and never
+   compacts by itself), or opt in with <code>auto_compact auto</code> (gt saves your work and compacts by itself at
+   150,000 tokens; <code>auto_compact 50</code> cuts earlier). Two more settings shape each cut: <code>cut_handoff</code>
+   (<code>facts</code>, the default, saves findings and a handoff with its key facts; <code>handoff</code> a handoff only;
+   <code>none</code> a plain cut) and <code>cut_kind</code> (<code>compact</code>, the default, or <code>clear</code>: a fresh session that starts
+   from the handoff).
+   When you finish a piece of work, say "I'm done for now" (<code>/gt:gt-close</code>) and start a fresh
+   session.</li>
+<li><strong>Let gt trim sessions you walk away from.</strong> Set <code>expiry_guard auto</code> (the <code>standard</code> and
+   <code>minimum</code> token profiles do this for you).</li>
+<li><strong>Shrink what every session starts with.</strong> Keep <code>startup_output compact</code> (the 0.21.4
+   default), disable the gt plugins you do not use, and keep your CLAUDE.md files and memory
+   index short.</li>
+<li><strong>Keep big text out of the conversation.</strong> Turn on <code>spill_threshold_lines 200</code> and
+   <code>paste_intake ask</code>, and use <code>/gt:gt-digest</code> for a big file or log.</li>
+<li><strong>Pick a token profile.</strong> <code>standard</code> is the default set; <code>minimum</code> spends least.</li>
+<li><strong>If you run a model on your own computer,</strong> let it answer questions about your notes
+   (<code>vault_answers local-first</code>) and take routine work (<code>farm_first</code>).</li>
+<li><strong>For long working sessions,</strong> consider <code>rules_injection compact</code>.</li>
+<li><strong>After a week, check what each mechanism actually saved</strong> with
+   <code>/gt-usage:gt-usage-savings</code>. Keep what pays, turn off what does not.</li>
+</ol>
+<p>To change any setting, type <code>/gt:gt-settings &lt;name&gt; &lt;value&gt;</code> in Claude, or just say it ("set
+auto_compact to 50"). <code>/gt:gt-settings</code> on its own shows them all with their current values.</p>
+<h2 id="where-your-tokens-actually-go">Where your tokens actually go</h2>
+<p>Every time Claude replies, Claude Code sends it the <strong>whole conversation again</strong>: every message,
+every file Claude read, every command output. A prompt cache makes the repeats cheaper, but
+they are still paid for, on every turn, until the conversation is cut.</p>
+<p>On a real multi-agent build, gt measured where the cost went (<strong>measured</strong>, 2026-10-15):</p>
+<table>
+<thead>
+<tr>
+<th>Part</th>
+<th>Share of the cost</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Re-reading the conversation from the cache</td>
+<td>73–74%</td>
+</tr>
+<tr>
+<td>Writing new text into the cache</td>
+<td>24–26%</td>
+</tr>
+<tr>
+<td>Claude's written output</td>
+<td>0.3–1.5%</td>
+</tr>
+<tr>
+<td>Claude's thinking (part of the output)</td>
+<td>0.1–0.9%</td>
+</tr>
+</tbody>
+</table>
+<p>So <strong>cost is roughly the number of turns times the size of the conversation.</strong> A long session
+costs more per message the longer it runs. Everything in this guide does one of four things:
+fewer turns per session, a smaller conversation on each turn, less big text pasted or printed into
+it, or handing the work to something cheaper.</p>
+<p>What barely matters: how long Claude's replies are, and its effort level. Cutting out all of
+Claude's thinking would save about 1% (<strong>estimated</strong>). Those settings change speed and how much
+you read, not your allowance.</p>
+<h2 id="1-keep-sessions-short">1. Keep sessions short</h2>
+<p><em>In the Setting column, type <code>/gt:gt-settings</code> followed by what is shown, for example
+<code>/gt:gt-settings auto_compact 50</code>, or just say it.</em></p>
+<table>
+<thead>
+<tr>
+<th>Lever</th>
+<th>What you will notice</th>
+<th>What it saves</th>
+<th>Setting</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Context nudge</td>
+<td>At 40% of the context window, one line says the session is large and suggests closing it and starting fresh; again at 55, 70 and 85%. Claude mentions it once, at a break. Nothing is blocked.</td>
+<td>Nothing by itself; the saving is what you do next. <strong>Not measured.</strong></td>
+<td><code>context_nudge 40</code> (default), <code>30</code> earlier, <code>off</code></td>
+</tr>
+<tr>
+<td>Auto-compact</td>
+<td>Default <code>warn</code>: when a turn ends with the session past 150,000 tokens, one line says it is large and names <code>/gt:gt-minimize compact</code>; nothing is compacted and your prompt box is left alone. Opted in: when a turn ends with the session past the size you chose, Claude first saves new findings to your notes and writes a handoff, then the session is compacted in place and "Read the handoff at …" appears in your prompt box. Press Enter to carry on.</td>
+<td>Everything removed is not re-read on any later turn. <strong>Not measured</strong> on a live session.</td>
+<td><code>warn</code> (default: a notice at 150,000 tokens, held to 75% of the model's window when known); opt in with <code>auto</code> (a cut at that size), <code>auto_compact 50</code> (a percent, 30–90) or a token count such as <code>150k</code>; <code>off</code> (neither)</td>
+</tr>
+<tr>
+<td>Close and start fresh</td>
+<td>Say "I'm done for now" (<code>/gt:gt-close</code>): gt saves what the session learned and releases the project. The next session starts small and reads the notes, not the old conversation.</td>
+<td>A fresh session starts near 40K tokens (<strong>measured</strong> on the author's machine) instead of carrying hundreds of thousands.</td>
+<td>Any time</td>
+</tr>
+<tr>
+<td>Compact with a handoff</td>
+<td><code>/gt:gt-minimize compact</code> does the auto-compact steps once, now. Plain <code>/compact</code> also works but does not save to your notes first.</td>
+<td>As auto-compact.</td>
+<td>Any time</td>
+</tr>
+<tr>
+<td>What a cut carries, and what kind</td>
+<td>Every cut gt makes (opted-in auto-compact, <code>/gt:gt-minimize compact</code>) follows two settings. <code>cut_handoff</code>: <code>facts</code> saves new findings to your notes and writes a handoff with its key facts (as before); <code>handoff</code> writes the handoff only; <code>none</code> is a plain cut with nothing carried over. <code>cut_kind</code>: <code>compact</code> shrinks the session in place; <code>clear</code> ends it and puts "Read the handoff at …" in the fresh session's prompt box (if gt cannot clear by itself it asks you to type <code>/clear</code> and fills the box after). <code>clear</code> with <code>none</code> is refused.</td>
+<td>In the owner's cut-savings tests a clear with a handoff and its facts saved the most in the most sets (<strong>self-verified</strong> on the owner's test sets; <strong>not measured</strong> live through gt). The clear itself has run only against a fake Claude Code in gt's tests.</td>
+<td><code>cut_handoff facts</code> (default), <code>handoff</code>, <code>none</code>; <code>cut_kind compact</code> (default), <code>clear</code></td>
+</tr>
+<tr>
+<td>Idle-session guard</td>
+<td><code>warn-only</code>: a desktop notice when a big idle session is about to go cold. <code>auto</code>: gt also saves, hands off and compacts the idle session before its cache lapses, so you come back to a small session.</td>
+<td>On the author's six days: about 8.5M token-equivalents kept, 70% of what cold resumes would have cost (<strong>estimated</strong>). Helps people who step away; does little if you are at the keyboard all day.</td>
+<td><code>expiry_guard auto</code>, <code>warn-only</code> (default), <code>off</code></td>
+</tr>
+</tbody>
+</table>
+<p><strong>What you give up.</strong> A compacted session is a summary of the old one, not every word. gt saves
+findings and a handoff first so nothing you would want is lost, but the exact wording of an early
+message is gone from the conversation.</p>
+<p>The context nudge reads the session size from gt's status line (the gt-usage module); a default
+install sets no status line, so without it the nudge never speaks (add it with
+<code>python3 ~/.claude/golden-thread/hooks/gt_usage.py --setup-statusline</code>, or re-run the installer with
+<code>--statusline yes</code>). Auto-compact does not need the status line: it reads the session size from Claude
+Code itself, and runs only in terminal Claude Code.</p>
+<h2 id="2-shrink-what-every-turn-carries">2. Shrink what every turn carries</h2>
+<p>Some text rides along on every single turn: gt's start-up report, its rules, your CLAUDE.md
+files, the memory index, and the list of every installed skill and agent. Each token of it is
+re-read on every turn.</p>
+<p><strong>The author's own trim (measured, single runs, 2026-10-15):</strong> turning on the token-diet settings
+below and shortening the memory index and the vault's CLAUDE.md took the first turn of a session
+from <strong>41,756 to 39,031 tokens</strong>, and cut what each later turn adds from <strong>about 1,351 to about
+813 tokens</strong>.</p>
+<p><em>In the Setting column, type <code>/gt:gt-settings</code> followed by what is shown, for example
+<code>/gt:gt-settings auto_compact 50</code>, or just say it.</em></p>
+<table>
+<thead>
+<tr>
+<th>Lever</th>
+<th>What you will notice</th>
+<th>What it saves</th>
+<th>Setting</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Short start-up report (new in 0.21.4)</td>
+<td>When everything is healthy, the session-start checks share one line, e.g. "gt 0.21.4 current · components clean · workers clean". A check spells itself out only when something needs you. <code>/gt:gt-doctor</code> still prints the full report.</td>
+<td>3,701 → 1,486 characters on a test fixture (<strong>measured</strong>), about 550 tokens per session (<strong>estimated</strong>).</td>
+<td><code>startup_output compact</code> (default), <code>full</code></td>
+</tr>
+<tr>
+<td>Rules sent once</td>
+<td><strong>No visible change.</strong> gt sends its rules to Claude in full at the start, after a compaction and every 20 messages; in between, one line says they are unchanged. In 0.21.4 that line also restates the timestamp rule. The checks that catch a broken rule still run every turn.</td>
+<td>A full-mode injection is about 436 tokens per prompt (1,743 bytes / 4, <strong>estimated</strong>); compact saves about 340 tokens per message after the first on a fresh vault (<strong>estimated</strong>; measured by an independent agent on a clean macOS 26.6.2 VM, 25 Oct 2026); in compact mode gt falls back to the full text when it finds no transcript. In a 90-run test on 2026-10-15, 0.969× the cost of full per correct result (<strong>measured</strong>).</td>
+<td><code>rules_injection compact</code>; <code>full</code> (default)</td>
+</tr>
+<tr>
+<td>Short CLAUDE.md files</td>
+<td>New projects get a short CLAUDE.md stub (2,296 → 377 bytes, <strong>measured</strong>). When the project settles, <code>/gt:gt-brief</code> drafts the full one for you to review.</td>
+<td>The difference, on every turn, for as long as the project is open.</td>
+<td>Automatic for new projects in 0.21.4</td>
+</tr>
+<tr>
+<td>Trim your own CLAUDE.md and memory</td>
+<td>Nothing changes in how Claude works, as long as instructions stay and history goes. <code>/gt:gt-optimize</code> lists duplicated facts, dead index rows and memory over budget, and can move them out with a pointer left behind.</td>
+<td>The author cut the memory index from 11,600 to 6,302 characters and the vault CLAUDE.md from 6,702 to 2,668 (<strong>measured</strong>).</td>
+<td>Run <code>/gt:gt-optimize</code>, then edit</td>
+</tr>
+<tr>
+<td>Disable plugins you do not use</td>
+<td>That plugin's commands, agents and tools disappear from Claude until you enable it again (from the next session).</td>
+<td>See the table below.</td>
+<td>A terminal command; see <a href="#what-each-gt-plugin-adds-to-every-session">below</a></td>
+</tr>
+<tr>
+<td>Smaller skill list (0.21.4)</td>
+<td>The old alias commands are gone: use <code>/gt:gt-create task</code>, <code>/gt:gt-handle task</code>, <code>/gt:gt-list tasks</code>, and the same with <code>handoff</code>. Skill and agent descriptions are shorter.</td>
+<td>Smaller on every turn; figures in the CHANGELOG.</td>
+<td>Automatic</td>
+</tr>
+</tbody>
+</table>
+<p><strong>Why the timestamp line matters.</strong> In the 90-run test of rules sent once (2026-10-15), Claude
+started its replies with a timestamp 84% of the time against 93% with the rules sent in full
+(<strong>measured</strong>). The rest held: tests before commits, no leaked keys. That is why 0.21.4 repeats
+the timestamp rule in the one-liner. Whether that closes the gap is <strong>not measured</strong> yet.</p>
+<p><strong>Keep the rules on.</strong> A separate 90-run test (2026-10-11) compared rules on with rules off: with
+them off, a correct result cost <strong>1.26×</strong> as much, because Claude committed with failing tests
+and had to redo work; and a live key was pasted into the reply in 7 of 15 runs, against 0 of 15
+with the rules on (<strong>measured</strong>). In one sentence: a correct result cost 1.26× as much with the rules off (90-run A/B benchmark on Opus, Sonnet and Haiku, 2026-10-11; every failed run re-prompted until correct; weighted by a real model mix). The rules pay for themselves; sending them once is the cheaper
+way to keep them.</p>
+<h3 id="what-each-gt-plugin-adds-to-every-session">What each gt plugin adds to every session</h3>
+<p>Claude Code can tell you itself: <code>claude plugin details &lt;name&gt;@golden-thread-plugin</code> prints a
+plugin's "always-on" cost. On 25 Oct 2026 an independent agent on a clean macOS 26.6.2 VM read gt 0.22.0's core at about
+3,080 tokens and all 12 plugins together at about 5,470 (Claude Code's own report; MCP tool schemas are
+not counted). The other rows below are the 0.21.4 figures, not re-measured for 0.22.0
+(<strong>estimated</strong> by Claude Code):</p>
+<table>
+<thead>
+<tr>
+<th>Plugin</th>
+<th>Always-on</th>
+<th>Disable it if</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>gt (core)</td>
+<td>~3,080 (0.22.0, measured by an independent agent, 25 Oct 2026)</td>
+<td>never: this is Golden Thread</td>
+</tr>
+<tr>
+<td>gt-lotr</td>
+<td>~2,000, plus its tools</td>
+<td>you do not reach Jira, mail, GitHub or other systems through gt</td>
+</tr>
+<tr>
+<td>gt-visualize</td>
+<td>~1,100</td>
+<td>you do not make 3D explainers or code cities</td>
+</tr>
+<tr>
+<td>gt-wiki</td>
+<td>~700</td>
+<td>you do not keep a wiki</td>
+</tr>
+<tr>
+<td>gt-pane</td>
+<td>~290</td>
+<td>you do not use the button pane</td>
+</tr>
+<tr>
+<td>gt-workflow</td>
+<td>~290</td>
+<td>you do not run saved workflows</td>
+</tr>
+<tr>
+<td>gt-usage</td>
+<td>~280</td>
+<td>(keep it: the context nudge needs its status line)</td>
+</tr>
+<tr>
+<td>gt-farm</td>
+<td>~240</td>
+<td>you have no local engines</td>
+</tr>
+<tr>
+<td>gt-demo</td>
+<td>~200</td>
+<td>you do not give demos</td>
+</tr>
+<tr>
+<td>gt-flow, gt-watch</td>
+<td>~190 each</td>
+<td>you do not use them</td>
+</tr>
+</tbody>
+</table>
+<p>To turn one off, and back on, in a terminal (it takes effect from the next session; inside
+Claude Code, <code>/plugin</code> does the same):</p>
+<pre><code class="language-bash">claude plugin disable gt-lotr@golden-thread-plugin
+claude plugin enable gt-lotr@golden-thread-plugin
+</code></pre>
+<p><code>claude plugin details</code> does not count a plugin's MCP tools. On the 0.22.0 check above, gt-lotr's tool list came to <strong>about 2,130 tokens</strong> (<strong>estimated</strong>;
+measured by an independent agent on a clean macOS 26.6.2 VM, 25 Oct 2026). On the author's machine in
+0.21.4, gt-visualize plus gt-demo came to <strong>about 900</strong> (<strong>estimated</strong>, not re-measured).</p>
+<h3 id="settings-that-add-a-line-to-every-turn">Settings that add a line to every turn</h3>
+<p>Some settings are free. Others add one line of text to every turn, and some spend whole agents.</p>
+<table>
+<thead>
+<tr>
+<th>Costs nothing (shown only to you)</th>
+<th>Adds a line per turn</th>
+<th>Spends agents</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>prompt_hints</code>: a "Tip:" line naming the command for what you typed</td>
+<td><code>vault_hints</code>: up to three matching note titles</td>
+<td><code>skeptic_pass</code>: an agent checks findings at each write-back</td>
+</tr>
+<tr>
+<td><code>next_step_hints</code>: a "Next:" line after a reply</td>
+<td><code>hints_as_choices</code>: next steps offered as a question after a gt command</td>
+<td><code>model_calibration report</code>: re-runs agent work on other models, within a budget</td>
+</tr>
+<tr>
+<td></td>
+<td><code>reply_length brief</code> or <code>terse</code>: one line, but shorter replies</td>
+<td></td>
+</tr>
+<tr>
+<td></td>
+<td><code>allowance_note</code>: one line, only once you pass the threshold</td>
+<td></td>
+</tr>
+</tbody>
+</table>
+<p>Turn any of them off with <code>/gt:gt-settings &lt;name&gt; off</code>. The per-turn lines are small (one line
+each); the agents are the bigger cost and also the ones that catch mistakes.</p>
+<h2 id="3-keep-big-text-out-of-the-conversation">3. Keep big text out of the conversation</h2>
+<p>A 12,000-token paste costs about 15,000 token-equivalents when it arrives and about 1,200 more on
+every turn after it (<strong>estimated</strong>, from the cache prices). Big text is cheapest when it never
+enters.</p>
+<p><em>In the Setting column, type <code>/gt:gt-settings</code> followed by what is shown, for example
+<code>/gt:gt-settings auto_compact 50</code>, or just say it.</em></p>
+<table>
+<thead>
+<tr>
+<th>Lever</th>
+<th>What you will notice</th>
+<th>What it saves</th>
+<th>Setting</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Long output kept out</td>
+<td>When a command prints more than the line count you set, Claude sees only the first and last lines, any lines that look like errors, and where the full output was saved. It reads the file if it needs more. A failing command is not touched.</td>
+<td>The rest of the output, on every later turn. <strong>Not measured</strong> live.</td>
+<td><code>spill_threshold_lines 200</code>; <code>off</code> (default)</td>
+</tr>
+<tr>
+<td>Big pastes held back</td>
+<td>A message longer than the limit is saved to a private file and not sent. One line gives the saved path and suggests <code>/gt:gt-digest &lt;file&gt; &lt;what you want&gt;</code>. Send the same message again within 3 minutes and it goes through unchanged; with no prompt history (Claudian, another SDK app) paste it again or type <code>read &lt;file&gt;</code>. A headless run (<code>claude -p</code>) is never held. A pasted image is not caught. The limit is <code>paste_intake_chars</code>, 20,000 characters by default, when a local engine is set up; with no local engine it is raised to the break-even size, 72,000 characters (18,000 tokens at 4 characters a token) unless <code>break_even</code> is off or you set <code>break_even_tokens</code>.</td>
+<td>The whole paste. <strong>Not measured</strong> end to end.</td>
+<td><code>paste_intake ask</code> (or <code>auto</code>); <code>off</code> (default)</td>
+</tr>
+<tr>
+<td>Digest a file</td>
+<td><code>/gt:gt-digest &lt;file&gt; &lt;question&gt;</code>: a cheaper reader (your local engine, else a small helper agent, else Claude itself when the file is small) reads it and you get only the answer.</td>
+<td>The file stays out of the conversation. <strong>Not measured.</strong></td>
+<td>Any time</td>
+</tr>
+<tr>
+<td>Size rule for helpers</td>
+<td>gt suggests a helper agent only when the reading is big enough to pay for it. You see shorter advice for small files.</td>
+<td>A helper opens with about 18,000 tokens of its own before reading anything (<strong>measured</strong>, 27 runs), so a small read is cheaper inline.</td>
+<td><code>break_even on</code> (default), <code>off</code></td>
+</tr>
+</tbody>
+</table>
+<p><strong>What you give up.</strong> With output kept out, Claude may need one extra step to read the saved file.
+Add <code># gt:no-spill</code> to a command to keep its output whole.</p>
+<h2 id="4-hand-work-to-something-cheaper">4. Hand work to something cheaper</h2>
+<p><em>In the Setting column, type <code>/gt:gt-settings</code> followed by what is shown, for example
+<code>/gt:gt-settings auto_compact 50</code>, or just say it.</em></p>
+<table>
+<thead>
+<tr>
+<th>Lever</th>
+<th>What you will notice</th>
+<th>What it saves</th>
+<th>Setting</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Notes answered locally</td>
+<td>When you ask what your notes say, the answer comes from the model on your own computer: a few sentences with the exact quoted lines and where they are. If the engine is unsure or a quote does not check out, Claude answers as it always did. If the engine is set up but stopped, gt asks once whether to start it; it never starts one on its own.</td>
+<td>The vault pages are not read into the conversation; the short answer and its quoted lines are. Three real questions kept about 3,500 tokens out (<strong>estimated</strong>), taking 25–70 seconds each (<strong>measured</strong>).</td>
+<td><code>vault_answers local-first</code>; <code>off</code> (default). To stop the start question: <code>vault_answers_start never</code></td>
+</tr>
+<tr>
+<td>Routine work on your own engines</td>
+<td><code>suggest</code> (default): gt tells you what your engines could take and prints the command. <code>auto</code>: gt tests a new engine once, within your budget, then sends it the work it passed.</td>
+<td>Local tokens cost no allowance. On the author's week, 84 packets (186,845 tokens) ran locally: about 0.1% of the work (<strong>measured</strong>).</td>
+<td><code>farm_first suggest</code>, <code>auto</code>, <code>off</code></td>
+</tr>
+<tr>
+<td>Import stages on a local engine</td>
+<td><code>/gt:gt-ingest</code> runs its extract, classify and draft steps on your big local engine; slower, and it falls back to Claude when the answer fails its checks.</td>
+<td>Those steps' tokens. Quality was acceptable on 10 of 12 units, below Claude's (<strong>measured</strong>).</td>
+<td><code>pipeline_engine on</code>; <code>off</code> (default)</td>
+</tr>
+<tr>
+<td>Model per skill</td>
+<td><code>average</code>: quick gt skills run on the small model, balanced ones on the middle model, deep ones on the large model. You may notice a slightly plainer answer from a quick skill.</td>
+<td>On the author's six days, about 9.9% of agent work (<strong>estimated</strong>).</td>
+<td><code>models profile average</code>; <code>very-high</code>, <code>inherit</code> (default)</td>
+</tr>
+<tr>
+<td>Token profile</td>
+<td>One choice that sets seven settings at once (model profile, reply length, skeptic, note hints, idle guard, import helpers, calibration). <code>/gt:gt-settings</code> then shows the profile at the top, or "manual (based on …)" once you change one of the seven yourself.</td>
+<td>The sum of the seven.</td>
+<td><code>token_profile standard</code> (default), <code>minimum</code>, <code>maximum</code></td>
+</tr>
+</tbody>
+</table>
+<p><code>minimum</code> turns off the skeptic and calibration and makes replies terse: the lowest cost, with the
+least checking. <code>maximum</code> runs every skill on the largest model.</p>
+<p>Local engines are a modest lever today: most of the cost is long interactive turns that do not
+move. The guide <em>Farming to Your Own Hardware</em> covers setting one up.</p>
+<p><strong>A send must earn its keep (gt-farm, 0.21.4).</strong> Sending work to an engine also costs Claude tokens: the
+call, the packet when Claude wrote it, and reading the result. Each ledger line now records that as
+<code>claude_overhead</code>, and <code>gt_farm_send.py ledger</code> shows the <strong>net</strong> after it. From gt 0.22.0 the savings report's
+"Farmed packets" row is net the same way: it also takes off the output of a local review that reached your
+session and what a calibration's reference answers cost Claude, and a "Farmed savings by purpose" table under the
+main one shows what the net is made of. The overhead is an estimate (characters / 4, plus a fixed 220 tokens per send).
+Because of that, an automatic send of a packet under <code>farm_min_chars</code> (default 2000 characters) is
+skipped as "not worth sending" and stays in Claude; <code>0</code> turns the rule off, and a send you type is never
+skipped. The default is a first baseline from 88 sends on one machine (break-even near 1,360
+characters), mostly probe traffic, so it is an estimate. An identical packet to the same engine and
+model is not sent twice inside <code>farm_reuse_days</code> (default 7; <code>--fresh</code> forces a send). Every packet is
+scanned for credentials before it leaves. A long send prints a "waiting" line every <code>farm_heartbeat_s</code>
+seconds (default 30; <code>0</code> is off).</p>
+<h3 id="hosted-spend-sample-and-how-to-set-up-your-own">Hosted spend: sample and how to set up your own</h3>
+<p>gt 0.22.0 ships a <strong>sample</strong>, not your setup: <code>templates/hosted-spend.sample.md</code> in the gt-farm module shows the two settings
+(<code>usage_external</code>, <code>farm_budgets</code>) and one service-table row for a made-up engine on a made-up host (<code>example-provider</code>,
+address ending <code>.invalid</code>). It holds no key, no account id and no real address, and gt does not read it.</p>
+<p>What you get without doing anything else is an <strong>estimate</strong>: the tokens sent and received, at the rate in the engine's row. The
+status line says <code>(estimated)</code> and stays quiet until an engine is at 80% of its budget or was answered with a 429. gt 0.22.0
+<strong>does not read a provider's balance or billing API</strong>; the <code>balance_source</code> column in the sample is reserved and ignored.</p>
+<p>To set up your own: copy the row into your service table and change every value (name, address, model, rate from the
+provider's pricing page); put the engine's API key in a mode-600 file by a script you run (never in a session), named in
+<code>key_file</code>; then <code>gt_settings.py set farm_budgets "yourname=10"</code>. For a measured balance you would also need a <strong>read-only billing
+key from the provider, kept in the secrets store</strong> and never entering the session or the repository. gt does not use one yet.</p>
+<h2 id="5-use-helper-agents-well">5. Use helper agents well</h2>
+<p>A helper agent (a subagent) does its reading in its own conversation and hands back a short
+answer. That keeps your main conversation small, but the helper itself is not free.</p>
+<ul>
+<li><strong>Give a narrow brief and ask for a short return.</strong> A helper that explores everything, or
+  returns everything it read, moves the cost instead of saving it.</li>
+<li><strong>Parallel helpers cost the same as one after another</strong> (<strong>measured</strong>, 2026-10-15), and finish
+  3–4 times sooner (<strong>estimated</strong>). Run independent work in parallel.</li>
+<li><strong>Never fold many jobs into one long conversation.</strong> Doing all of a multi-agent build in one
+  growing context was worked out at <strong>2.35–5.4×</strong> the cost (<strong>estimated</strong>).</li>
+<li><strong>Do not hand a small read to a helper.</strong> Below about 18,000 tokens, reading it yourself is
+  cheaper (see the size rule above).</li>
+</ul>
+<h2 id="recommended-profiles">Recommended profiles</h2>
+<table>
+<thead>
+<tr>
+<th>Setting</th>
+<th>Everyday</th>
+<th>Long build sessions</th>
+<th>Demo machine</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>token_profile</code></td>
+<td><code>standard</code></td>
+<td><code>standard</code></td>
+<td><code>standard</code></td>
+</tr>
+<tr>
+<td><code>context_nudge</code></td>
+<td><code>40</code></td>
+<td><code>30</code></td>
+<td><code>40</code></td>
+</tr>
+<tr>
+<td><code>auto_compact</code></td>
+<td><code>auto</code></td>
+<td><code>auto</code></td>
+<td><code>off</code></td>
+</tr>
+<tr>
+<td><code>expiry_guard</code></td>
+<td><code>auto</code></td>
+<td><code>auto</code></td>
+<td><code>warn-only</code></td>
+</tr>
+<tr>
+<td><code>startup_output</code></td>
+<td><code>compact</code></td>
+<td><code>compact</code></td>
+<td><code>compact</code></td>
+</tr>
+<tr>
+<td><code>rules_injection</code></td>
+<td><code>full</code></td>
+<td><code>compact</code></td>
+<td><code>full</code></td>
+</tr>
+<tr>
+<td><code>spill_threshold_lines</code></td>
+<td><code>200</code></td>
+<td><code>200</code></td>
+<td><code>off</code></td>
+</tr>
+<tr>
+<td><code>paste_intake</code></td>
+<td><code>ask</code></td>
+<td><code>ask</code></td>
+<td><code>off</code></td>
+</tr>
+<tr>
+<td><code>vault_answers</code></td>
+<td><code>local-first</code> if you have an engine</td>
+<td><code>local-first</code> if you have an engine</td>
+<td><code>off</code></td>
+</tr>
+<tr>
+<td>Plugins</td>
+<td>disable what you do not use</td>
+<td>disable what you do not use</td>
+<td>keep gt-demo; disable the rest you will not show</td>
+</tr>
+</tbody>
+</table>
+<ul>
+<li><strong>Everyday:</strong> short sessions, close at a natural break. These settings cost nothing you would
+  notice and keep long days cheap.</li>
+<li><strong>Long build sessions:</strong> many turns, so per-turn savings add up: rules sent once and an earlier
+  nudge pay most here.</li>
+<li><strong>Demo machine:</strong> nothing should change under the audience's eyes. No auto-compact mid-demo and
+  no held-back pastes; everything else stays at the defaults.</li>
+</ul>
+<h2 id="measure-your-own">Measure your own</h2>
+<p>Your numbers will differ from the author's. To see them:</p>
+<ul>
+<li><strong><code>/context</code></strong> inside a session lists what the conversation holds: system prompt, skills,
+  agents, memory files, MCP tools and messages. <code>claude -p "/context"</code> prints the same for a new
+  session without opening one.</li>
+<li><strong><code>claude plugin details &lt;name&gt;@golden-thread-plugin</code></strong> shows one plugin's always-on cost.</li>
+<li><strong><code>/gt-usage:gt-usage</code></strong> shows where you stand against the 5-hour and weekly allowance.</li>
+<li><strong><code>/gt-usage:gt-usage-savings</code></strong> shows what each gt mechanism saved and cost, with a net
+  figure; a mechanism losing tokens over 7 days is flagged.</li>
+</ul>
+<p><strong>The three-turn check (before and after a change).</strong> Run three short turns in one headless
+session and read each turn's size. Turn 1 is what a session starts with; the difference between
+turns 2 and 3 is what each turn adds.</p>
+<pre><code class="language-bash">claude -p &quot;Say OK.&quot; --output-format json &gt; t1.json
+SID=$(python3 -c 'import json; print(json.load(open(&quot;t1.json&quot;))[&quot;session_id&quot;])')
+claude -p &quot;Say OK.&quot; --resume &quot;$SID&quot; --output-format json &gt; t2.json
+claude -p &quot;Say OK.&quot; --resume &quot;$SID&quot; --output-format json &gt; t3.json
+for f in t1 t2 t3; do python3 -c 'import json,sys; u=json.load(open(sys.argv[1]))[&quot;usage&quot;]
+print(sys.argv[1], u[&quot;input_tokens&quot;] + u[&quot;cache_creation_input_tokens&quot;]
+      + u[&quot;cache_read_input_tokens&quot;])' $f.json; done
+</code></pre>
+<p>Run it in the folder you normally work in, change one setting, run it again, and compare. One run
+each is a rough reading; repeat it if the difference is small.</p>
+<h2 id="what-we-do-not-claim">What we do not claim</h2>
+<ul>
+<li>Every figure here comes from one person's machine and a handful of author-run tests. No other
+  user has been measured.</li>
+<li>Several levers have no number yet: auto-compact on a live session, long output kept out, big
+  pastes held back, and rules sent once over a long session.</li>
+<li>Local engines save little so far, and their answers were below Claude's quality in blind
+  checks; gt audits them for that reason.</li>
+</ul>
+<h2 id="appendix-how-it-works-underneath">Appendix: how it works underneath</h2>
+<p>For readers who want the mechanics; nothing here is needed to use the settings.</p>
+<ul>
+<li>The rules, hints, allowance and reply-length lines are added by gt's per-message hook. With
+  <code>rules_injection compact</code> it checks that the full text is really in the conversation before it
+  sends the one-line version, and sends the full text again when a rule changes.</li>
+<li>The context nudge reads the session's size from the gt-usage status line (none is set on a default
+  install). Auto-compact reads it from Claude Code itself; it runs only in terminal Claude Code, does nothing while a background task runs or
+  within 6 turns of the last cut, and its busy check needs the <code>background_tasks</code> list in Claude
+  Code's Stop payload (confirmed in 2.1.300): without it nothing is cut, and gt says so.
+  <code>/gt:gt-minimize compact</code> needs Claude Code 2.1.296 or newer; below that nothing cuts and Claude
+  tells you to type <code>/compact</code>. With <code>cut_kind clear</code> the in-session mod runs <code>/clear</code> through Claude
+  Code's command API, at the same size <code>auto_compact</code> cuts at (the <code>auto_clear</code> policy keeps a shadow
+  record, and clears only once <code>on</code> is allowed and was confirmed with the typed word; never while a
+  background task runs or once your next turn has started); that has not yet been seen in a live Claude
+  Code window.</li>
+<li>Long output is kept out by a hook that runs after a successful shell command; the files are
+  private to you and pruned after 7 days. <code>gt_spill.py run -- &lt;command&gt;</code> does the same for a
+  command that fails.</li>
+<li>Held-back pastes are scanned first, then saved to private files under
+  <code>~/.claude/golden-thread/intake/</code> with any line that looks like a credential replaced by a
+  <code>[gt: line N withheld ...]</code> marker (the block message says how many; sending the message again
+  sends them too). Long command outputs are masked the same way. If the scan cannot run, nothing is
+  saved and your message or output goes through as it is. Claude Code still keeps the prompt in
+  your own prompt history.</li>
+<li><code>/gt:gt-settings explain &lt;name&gt;</code> prints the full technical description of any setting.</li>
+</ul>
+</body>
+</html>

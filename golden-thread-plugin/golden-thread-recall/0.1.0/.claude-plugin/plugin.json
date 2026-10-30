@@ -1,0 +1,8 @@
+{
+  "name": "gt-recall",
+  "version": "0.1.0",
+  "description": "Golden Thread Recall: rank the vault's pages for a question by BM25 (page name, headings and the index line above body text), in the standard library, read-only. Each hit says which method found it.",
+  "author": {
+    "name": "Stacy Haven"
+  }
+}

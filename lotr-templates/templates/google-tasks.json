@@ -1,0 +1,40 @@
+{
+  "schema": 1,
+  "name": "google-tasks",
+  "archetype": "http-rest",
+  "summary": "Google Tasks: list your task lists and tasks (reads); adding or completing a task is a write, deleting asks first",
+  "kind": "http",
+  "docs": "https://developers.google.com/tasks/reference/rest",
+  "connect": {
+    "base_url": "https://tasks.googleapis.com/tasks/v1",
+    "profile": "generic",
+    "auth_scheme": "bearer",
+    "credential_ref": "store:google-tasks-token",
+    "trust": "T1",
+    "identity": "<your Google account>",
+    "description": "Google Tasks (OAuth access token)",
+    "policy": {
+      "consent": [
+        "DELETE *",
+        "POST /lists/*/clear"
+      ],
+      "write": []
+    }
+  },
+  "network": {
+    "hosts": [
+      "tasks.googleapis.com"
+    ]
+  },
+  "smoke": {
+    "op": "GET /users/@me/lists",
+    "args": {}
+  },
+  "notes": [
+    "Google has no hosted MCP server for Tasks, so this is the REST API with an OAuth access token held by reference (store:google-tasks-token); the token is not in this file.",
+    "The secret is a Google OAuth access token with the scope https://www.googleapis.com/auth/tasks.readonly (reads only) or https://www.googleapis.com/auth/tasks (to add, complete or delete). A Google access token is short-lived and this connection does not refresh it: renew the stored token when calls start failing with 401 (the lifetime is unverified in the fact sheet).",
+    "Reads: lotr read NAME@zone 'GET /users/@me/lists' lists the task lists; 'GET /lists/LIST_ID/tasks' lists the tasks in one.",
+    "Writes (write tier): POST /lists/LIST_ID/tasks adds a task; PATCH /lists/LIST_ID/tasks/TASK_ID with status=completed completes one.",
+    "Consent: every DELETE (a task or a whole list) and POST /lists/LIST_ID/clear (removes every completed task) ask first."
+  ]
+}

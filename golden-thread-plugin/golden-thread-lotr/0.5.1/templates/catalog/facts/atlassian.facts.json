@@ -1,0 +1,149 @@
+{
+  "schema": 1,
+  "template": "atlassian",
+  "service": "Atlassian (Confluence and Jira, Rovo MCP server)",
+  "archetype": "mcp-oauth",
+  "researched": "2026-10-14",
+  "researcher": "claude sonnet research run 2026-10-14",
+  "facts": [
+    {
+      "id": "f1",
+      "claim": "The current hosted MCP endpoint is the v2 URL on mcp.atlassian.com",
+      "source": "https://developer.atlassian.com/cloud/rovo-mcp/guides/getting-started/",
+      "retrieved": "2026-10-14",
+      "state": "self-verified",
+      "evidence": "Getting-started lists https://mcp.atlassian.com/v2/mcp as the default endpoint; the vendor's protected-resource document reports resource https://mcp.atlassian.com/v2/mcp.",
+      "field": "connect.url",
+      "value": "https://mcp.atlassian.com/v2/mcp"
+    },
+    {
+      "id": "f2",
+      "claim": "These scope names are real Rovo MCP scopes: read/search per product under the agent-interface naming, plus read:me",
+      "source": "https://developer.atlassian.com/cloud/rovo-mcp/guides/supported-tools/",
+      "retrieved": "2026-10-14",
+      "state": "self-verified",
+      "evidence": "Supported tools lists read:jira:agent-interface, search:jira:agent-interface, read/search:confluence:agent-interface; the protected-resource document's scopes_supported also lists them and read:me.",
+      "field": "connect.scopes",
+      "value": [
+        "read:me",
+        "read:jira:agent-interface",
+        "search:jira:agent-interface",
+        "read:confluence:agent-interface",
+        "search:confluence:agent-interface"
+      ]
+    },
+    {
+      "id": "f3",
+      "claim": "Sign-in involves mcp.atlassian.com and the authorization server on auth.atlassian.com",
+      "source": "https://mcp.atlassian.com/.well-known/oauth-protected-resource/v2/mcp",
+      "retrieved": "2026-10-14",
+      "state": "unverified",
+      "evidence": "authorization_servers is https://auth.atlassian.com/<tenant path>; the docs pages fetched name only mcp.atlassian.com.",
+      "field": "network.hosts",
+      "value": [
+        "mcp.atlassian.com",
+        "auth.atlassian.com"
+      ]
+    },
+    {
+      "id": "f4",
+      "claim": "The authorization server publishes a dynamic client registration endpoint, so the client registers itself (mcp-oauth, not preregistered); S256 PKCE is supported",
+      "source": "https://auth.atlassian.com/VCeDsk8ZHncYF1g234fKtc4lNipbBhu3/.well-known/oauth-authorization-server",
+      "retrieved": "2026-10-14",
+      "state": "unverified",
+      "evidence": "registration_endpoint is https://auth.atlassian.com/<tenant path>/dcr/register; code_challenge_methods_supported is S256. No docs page mentions dynamic registration."
+    },
+    {
+      "id": "f5",
+      "claim": "v2 reached general availability on 8 September 2026; v1 usage is moved onto v2 tools from 1 March 2027",
+      "source": "https://developer.atlassian.com/cloud/rovo-mcp/changelog/",
+      "retrieved": "2026-10-14",
+      "state": "unverified",
+      "evidence": "\"On Mar 1, 2027 any existing utilization of v1 will automatically start to expose and utilize v2 tools.\""
+    },
+    {
+      "id": "f6",
+      "claim": "No current Atlassian page mentions an SSE endpoint (/v1/sse); the docs use transport http only",
+      "source": "https://support.atlassian.com/atlassian-rovo-mcp-server/docs/getting-started-with-the-atlassian-remote-mcp-server/",
+      "retrieved": "2026-10-14",
+      "state": "unverified",
+      "evidence": "Page configures \"type\":\"http\" and does not mention SSE (absence of mention, not an explicit retirement notice)."
+    },
+    {
+      "id": "f7",
+      "claim": "OAuth 2.1 is the primary sign-in; API token auth (personal token or service account key) exists only if an organization admin enables it",
+      "source": "https://developer.atlassian.com/cloud/rovo-mcp/guides/authentication-and-authorization/",
+      "retrieved": "2026-10-14",
+      "state": "self-verified",
+      "evidence": "\"Requires admin enablement\" for API token; the support.atlassian.com getting-started page also lists OAuth 2.1 with optional admin-controlled API token."
+    },
+    {
+      "id": "f8",
+      "claim": "delete_jira and manage_jira groups are disabled by default and admin-gated; search_code and Teams are OAuth only; JSM tools are API token only",
+      "source": "https://developer.atlassian.com/cloud/rovo-mcp/guides/supported-tools/",
+      "retrieved": "2026-10-14",
+      "state": "self-verified",
+      "evidence": "Supported tools marks delete_jira and manage_jira \"disabled by default, admin-gated\"; the authentication page repeats this."
+    },
+    {
+      "id": "f9",
+      "claim": "Write tools: createJiraIssue, editJiraIssue, transitionJiraIssue, addOrEditJiraIssueComment, delete* group, createConfluenceContent, updateConfluenceContent, executeWrite, executeDestructive and others; the template asks first for all but transitionJiraIssue and addOrEditJiraIssueComment, which the owner keeps as ordinary writes",
+      "source": "https://developer.atlassian.com/cloud/rovo-mcp/guides/supported-tools/",
+      "retrieved": "2026-10-14",
+      "state": "unverified",
+      "evidence": "Tool catalog names these in write_jira, delete_jira, manage_jira, write_confluence and the core execute tools."
+    },
+    {
+      "id": "f10",
+      "claim": "atlassianUserInfo is a core tool available to both auth methods and is the candidate smoke read",
+      "source": "https://developer.atlassian.com/cloud/rovo-mcp/guides/supported-tools/",
+      "retrieved": "2026-10-14",
+      "state": "unverified",
+      "evidence": "Listed under Common/core as primary; page does not document its inputs."
+    },
+    {
+      "id": "f11",
+      "claim": "No plan or admin-approval requirement is stated for OAuth; Rovo credits apply to some tools; whiteboard and attachment tools need api.media.atlassian.com and *.frontend.public.atl-paas.net reachable",
+      "source": "https://developer.atlassian.com/cloud/rovo-mcp/guides/getting-started/",
+      "retrieved": "2026-10-14",
+      "state": "unverified",
+      "evidence": "Page lists no prerequisites but says some tools consume Rovo credits and names those two allowlist domains."
+    }
+  ],
+  "choices": [
+    {
+      "decision": "Archetype mcp-oauth (hosted URL, browser sign-in, automatic registration), with the v2 URL",
+      "because": "Docs give a hosted OAuth 2.1 endpoint and the authorization server advertises dynamic registration; the API-token route is admin-gated and left out",
+      "facts": [
+        "f1",
+        "f4",
+        "f7"
+      ]
+    },
+    {
+      "decision": "Request only read and search scopes plus read:me",
+      "because": "Narrowest useful set; write scopes can be added with re-consent",
+      "facts": [
+        "f2",
+        "f8"
+      ]
+    },
+    {
+      "decision": "Consent list built from the write, delete and manage tool names",
+      "because": "Those tools create, edit, move, share or delete content",
+      "facts": [
+        "f9"
+      ]
+    }
+  ],
+  "open": [
+    "No documentation page says that /v1/sse (SSE) is deprecated or retired; it is simply absent from current pages. Not confirmed either way.",
+    "The support.atlassian.com page names the v1 URL only inside a Cursor install link, and another Atlassian guide still shows v1 examples; developer.atlassian.com (v2) was treated as current.",
+    "Dynamic client registration is shown only by the discovery document, not by any docs page; whether it is open to any client was not tested (no request to the endpoint).",
+    "The authorization server URL contains a vendor tenant path that may change; only auth.atlassian.com is pinned.",
+    "Plan tier, whether a site admin must approve the OAuth app first, and the exact redirect URI rules for a loopback client are not stated on the pages read.",
+    "Whether atlassianUserInfo needs no input and works with read:me alone is unconfirmed; it may need read:account.",
+    "The page mentions Compass only as an entity type in Teamwork Graph; no Compass tool group exists in the catalog.",
+    "The consent globs assume LOTR matches tool names as written; the Remix and infographic Confluence tools also match createConfluence*/editConfluence*."
+  ]
+}

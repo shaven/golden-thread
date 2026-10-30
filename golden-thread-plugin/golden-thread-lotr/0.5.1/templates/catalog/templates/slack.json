@@ -1,0 +1,56 @@
+{
+  "schema": 1,
+  "name": "slack",
+  "archetype": "mcp-oauth-preregistered",
+  "summary": "Slack's hosted MCP server (search, read and post messages) with your own Slack app",
+  "kind": "mcp-oauth",
+  "docs": "https://docs.slack.dev/ai/mcp-server/",
+  "connect": {
+    "url": "https://mcp.slack.com/mcp",
+    "scopes": [
+      "search:read.public",
+      "channels:read",
+      "channels:history",
+      "users:read",
+      "chat:write"
+    ],
+    "offline_access": false,
+    "client_registration": "preregistered",
+    "client_secret_required": true,
+    "app_setup_url": "https://api.slack.com/apps",
+    "redirect_port": 8977,
+    "redirect_host": "localhost",
+    "send_resource": true,
+    "skip_audience_check": false,
+    "trust": "T1",
+    "identity": "<your Slack user in one workspace>",
+    "description": "Slack (hosted MCP, own app)",
+    "policy": {
+      "consent": [
+        "*delete*",
+        "*remove*",
+        "*archive*",
+        "*kick*"
+      ],
+      "write": [
+        "*send_message*",
+        "*schedule_message*"
+      ]
+    }
+  },
+  "network": {
+    "hosts": [
+      "mcp.slack.com",
+      "slack.com"
+    ]
+  },
+  "notes": [
+    "You create the Slack app first (no dynamic client registration): an internal app in your workspace or a directory-published app; Slack forbids unlisted apps from using MCP. Your workspace admin may need to approve it.",
+    "In the Slack app, turn on PKCE (OAuth & Permissions, or pkce_enabled: true under oauth_config in the manifest) and add the redirect URL http://localhost:8977/callback. Slack treats a localhost redirect as a desktop redirect only once PKCE is on; without it Slack demands https. Turning PKCE on makes the app a public client and cannot be undone without Slack support; refresh tokens then expire after 30 days and the app cannot ask for bot scopes on this redirect.",
+    "lotr setup slack asks for the app's client id and secret as references (Slack's MCP authorization server lists only client_secret_post).",
+    "Scopes are user-token scopes: this template asks to search public channels, read public channels and their history, look up users and post messages. Add the search:read.private / groups:* / im:* / mpim:* scopes only if you mean to reach private channels and DMs.",
+    "Posting a message (send or schedule) is an ordinary write here; it does not ask first. Anything that deletes, removes, archives or kicks asks first (consent). Slack's documented tool set has no delete tool.",
+    "offline_access is off: Slack does not use that scope. Long-lived sign-in depends on whether token rotation is enabled on your Slack app.",
+    "Slack's docs name tools by description, not by tool name, so no smoke op is set."
+  ]
+}

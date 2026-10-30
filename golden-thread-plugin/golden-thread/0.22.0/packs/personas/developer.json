@@ -1,0 +1,39 @@
+{
+  "schema": 1,
+  "name": "developer",
+  "title": "Developer",
+  "description": "A spec stub, and a commands-and-gotchas section in the runbook.",
+  "audience": "Technical and direct: lead with the change and why; include file paths, commands and code where they help; note gotchas and what was tested.",
+  "lotr_templates": ["github", "gitlab", "sentry", "linear", "playwright"],
+  "featured_skills": ["/gt:gt-open", "/gt:gt-plan", "/gt:gt-implement", "/gt:gt-allin", "/gt:gt-allin-commit", "/gt:gt-create", "/gt:gt-close"],
+  "session_focus": ["handoffs", "write_queue", "state"],
+  "close_focus": ["code", "findings", "decisions", "runbook", "handoffs"],
+  "farm_tasks": [
+    {"id": "diff-second-opinion", "class": "review", "title": "Second opinion on a change", "does": "Reads a staged diff as a second reader and lists concrete defects it can point to.", "escalate": "Unverified by nature: Claude checks every finding before you act on it; anything about security, auth or data loss comes to you first."},
+    {"id": "test-failure-triage", "class": "log-triage", "title": "Test failure triage", "does": "Groups a failing test run's output into distinct problems, with the lines that show each.", "escalate": "Claude reads the original output when a failure is not clearly explained, or when the engine finds none in a run that failed."},
+    {"id": "changelog-draft", "class": "draft", "title": "Changelog draft", "does": "Drafts changelog bullets from commit subjects and merged-change notes.", "escalate": "You edit the wording; Claude steps in if a bullet names a change the commits do not show."},
+    {"id": "branch-summary", "class": "summarise", "title": "Branch summary", "does": "Summarises what a branch changed, in plain sentences for a pull request description.", "escalate": "Claude checks the summary against the diff before it is posted anywhere."}
+  ],
+  "scaffold": {
+    "files": [
+      {"path": "spec.md", "content": "# {TITLE} spec\n\n<!-- Written when design.md is settled: behaviour, interfaces, acceptance checks. -->\n\n## Behaviour\n\n## Interfaces\n\n## Acceptance checks\n\n"}
+    ],
+    "sections": [
+      {"file": "runbook.md", "heading": "Commands and gotchas", "body": "<!-- Build, test and run commands that work, and the traps already met. -->\n"}
+    ]
+  },
+  "pane": [
+    {"label": "Start my day", "prompt": "Start my day: show what is waiting for me, what is overdue and what I should do first."},
+    {"label": "Overdue", "prompt": "Show my overdue tasks."},
+    {"label": "Add a task", "prompt": "I want to add a task. Ask me what it is and which project it belongs to."},
+    {"label": "Plan this change", "prompt": "Plan the change I am about to make before any code is written."},
+    {"label": "Build the plan", "prompt": "Implement the approved plan one phase at a time, test first."},
+    {"label": "Run all checks", "prompt": "Run every check on this repo and tell me how many actually ran."},
+    {"label": "Commit when green", "prompt": "Commit once the checks pass and a test receipt covers the changes."},
+    {"label": "Save learnings", "prompt": "Write down what we learned in this session."},
+    {"label": "Write a handoff", "prompt": "Write a handoff for the next session so nothing is lost."},
+    {"label": "Open a project", "prompt": "Open a project for me. Ask me which one."},
+    {"label": "Find in my notes", "prompt": "Look something up in my notes. Ask me what I am looking for."},
+    {"label": "Check gt", "prompt": "Check that my gt install is healthy."}
+  ]
+}

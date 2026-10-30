@@ -1,0 +1,75 @@
+1
+00:00:00,000 --> 00:00:08,000
+This is a replay of the install, drawn
+from recorded text. It is not a screen
+recording.
+
+2
+00:00:08,000 --> 00:00:19,000
+Open Terminal on a Mac, or PowerShell on
+Windows. You will type claude to open
+Claude Code.
+
+3
+00:00:19,000 --> 00:00:28,000
+First, update Claude Code. You need
+version 2.1.300 or newer.
+
+4
+00:00:28,000 --> 00:00:36,000
+Now type claude. That opens Claude Code.
+The rest happens inside it.
+
+5
+00:00:36,000 --> 00:00:45,000
+In Claude Code, add the Golden Thread
+marketplace, using your team's GitHub
+address.
+
+6
+00:00:45,000 --> 00:00:55,000
+Install gt-all. It brings gt and every
+module with it.
+
+7
+00:00:55,000 --> 00:01:04,000
+Restart Claude Code by typing exit and
+then claude again. Then run gt-setup.
+
+8
+00:01:04,000 --> 00:01:12,000
+Pick Install everything. It is the
+recommended answer.
+
+9
+00:01:12,000 --> 00:01:20,000
+For the other questions, take the
+recommended answer.
+
+10
+00:01:20,000 --> 00:01:30,000
+To leave a module out, choose Choose
+modules, or run gt-setup again later.
+
+11
+00:01:30,000 --> 00:01:39,000
+Restart Claude Code once more. Installing
+a module turns none of its behavior on.
+
+12
+00:01:39,000 --> 00:01:51,000
+Ask Claude for the gt help page. It shows
+every command, and plays each one in a
+simulated terminal.
+
+13
+00:01:51,000 --> 00:02:03,000
+gt also puts a column of buttons beside
+the chat. Press one, and Claude does the
+task for you.
+
+14
+00:02:03,000 --> 00:02:14,000
+Links to the install guide, the manual and
+the getting started guide are on screen.
+Inside Claude, gt-help is always there.

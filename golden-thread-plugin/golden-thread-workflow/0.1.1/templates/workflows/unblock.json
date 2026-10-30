@@ -1,0 +1,46 @@
+{
+  "schema": 1,
+  "name": "unblock",
+  "title": "See what is stuck",
+  "description": "Lists the open tasks, overdue ones first, and the handoffs that are waiting.",
+  "personas": [
+    "leadership",
+    "project-manager"
+  ],
+  "help_workflow": "unblock",
+  "say": "What is stuck that I must unblock?",
+  "steps": [
+    {
+      "id": "tasks",
+      "kind": "run",
+      "title": "The open tasks",
+      "script": "gt_task.py",
+      "args": [
+        "list",
+        "--vault",
+        "{{vault}}"
+      ],
+      "ok_exit": [
+        0,
+        1
+      ]
+    },
+    {
+      "id": "handoffs",
+      "kind": "run",
+      "title": "The waiting handoffs",
+      "script": "gt_handoff_status.py",
+      "args": [
+        "list",
+        "--vault",
+        "{{vault}}"
+      ]
+    },
+    {
+      "id": "rank",
+      "kind": "claude",
+      "title": "Rank what is stuck",
+      "prompt": "From these lists, say what is stuck and who or what each item is waiting on, overdue first. Tasks: {{steps.tasks.output.text}} Handoffs: {{steps.handoffs.output.text}} Then offer to close, defer or drop each one."
+    }
+  ]
+}

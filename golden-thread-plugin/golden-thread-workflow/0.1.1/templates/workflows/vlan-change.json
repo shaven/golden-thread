@@ -1,0 +1,73 @@
+{
+  "schema": 1,
+  "name": "vlan-change",
+  "title": "Record a network change",
+  "description": "Writes the before and after into the change log, updates the inventory, and writes a handoff that includes the rollback steps.",
+  "personas": [
+    "network-admin"
+  ],
+  "help_workflow": "vlan-change",
+  "say": "Record tonight's VLAN 20 change and leave a note for the morning.",
+  "inputs": [
+    {
+      "name": "project",
+      "type": "string",
+      "required": true,
+      "prompt": "Which project keeps the change log?"
+    },
+    {
+      "name": "change",
+      "type": "string",
+      "required": true,
+      "prompt": "What changed (before and after)?"
+    },
+    {
+      "name": "rollback",
+      "type": "string",
+      "required": true,
+      "prompt": "How is it rolled back?"
+    }
+  ],
+  "steps": [
+    {
+      "id": "log",
+      "kind": "run",
+      "title": "Add it to the change log",
+      "script": "gt_write_queue.py",
+      "args": [
+        "--vault",
+        "{{vault}}",
+        "--path",
+        "Projects/{{inputs.project}}/network-change-log.md",
+        "--op",
+        "append",
+        "--content=## {{run.date}} Change\n\n{{inputs.change}}\n\nRollback: {{inputs.rollback}}",
+        "--hint",
+        "network change log"
+      ]
+    },
+    {
+      "id": "drain",
+      "kind": "run",
+      "title": "Apply the queued write",
+      "script": "gt_broker.py",
+      "args": [
+        "drain",
+        "--vault",
+        "{{vault}}"
+      ]
+    },
+    {
+      "id": "inventory",
+      "kind": "claude",
+      "title": "Update the inventory",
+      "prompt": "Update the network inventory notes for this change: {{inputs.change}} Show the person what you changed."
+    },
+    {
+      "id": "handoff",
+      "kind": "claude",
+      "title": "Write the morning handoff with the rollback steps",
+      "prompt": "Write the handoff for the morning engineer with /gt:gt-create handoff. Include the change ({{inputs.change}}) and the rollback steps ({{inputs.rollback}})."
+    }
+  ]
+}

@@ -1,0 +1,65 @@
+{
+  "schema": 1,
+  "name": "github",
+  "archetype": "mcp-http-key",
+  "summary": "GitHub's own hosted MCP server: repos, issues, pull requests, Actions (personal access token)",
+  "kind": "mcp-http",
+  "docs": "https://docs.github.com/en/copilot/how-tos/provide-context/use-mcp/set-up-the-github-mcp-server",
+  "connect": {
+    "url": "https://api.githubcopilot.com/mcp/",
+    "auth_scheme": "bearer",
+    "credential_ref": "store:github-pat",
+    "trust": "T1",
+    "identity": "<your GitHub login>",
+    "description": "GitHub (hosted MCP, personal access token)",
+    "policy": {
+      "consent": [
+        "merge_pull_request",
+        "delete_*",
+        "push_files",
+        "create_or_update_file",
+        "update_pull_request_branch",
+        "create_repository",
+        "fork_repository",
+        "actions_run_trigger",
+        "*_write"
+      ],
+      "write": [
+        "add_issue_comment",
+        "add_reply_to_pull_request_comment",
+        "add_comment_to_pending_review"
+      ],
+      "read": [
+        "issue_read",
+        "pull_request_read",
+        "actions_get",
+        "actions_list",
+        "projects_get",
+        "projects_list",
+        "repository_ruleset_read",
+        "custom_properties_read",
+        "github_support_docs_search",
+        "get_commit",
+        "list_commits",
+        "search_commits"
+      ]
+    }
+  },
+  "network": {
+    "hosts": [
+      "api.githubcopilot.com"
+    ]
+  },
+  "smoke": {
+    "op": "get_me",
+    "args": {}
+  },
+  "notes": [
+    "Endpoint https://api.githubcopilot.com/mcp/ is GitHub's own remote MCP server; GitHub says it is available to every GitHub user, and a tool behind a paid feature (Copilot cloud agent) needs that plan.",
+    "Credential: a personal access token sent as Authorization: Bearer. A fine-grained token limited to the repositories you want is best. Put it in the store yourself, in your own terminal: lotr secret put github-pat.",
+    "Read-only instead: use https://api.githubcopilot.com/mcp/readonly as the url (a copy of this template under your own name); GitHub then offers only read tools.",
+    "GitHub's browser sign-in for this server needs an OAuth app you create and does not register clients itself, so this template uses the token; a sign-in variant would be the mcp-oauth-preregistered archetype.",
+    "Tiers: names with a risky word (create, update, merge, delete, write, commit...) are consent on their own; the policy pins merges, file pushes and every *_write tool as consent, keeps comments a write, and makes the reads whose names do not show it reads: issue_read, pull_request_read, the Actions and Projects getters, and the commit readers (get_commit, list_commits, search_commits, which hold the risky word 'commit').",
+    "This is an alternative to the built-in REST connection (lotr add-http ... --profile github), which keeps working."
+  ]
+}
