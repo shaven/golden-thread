@@ -1,11 +1,11 @@
 # Golden Thread — Getting Started
 
 > **Reader:** the first thirty minutes — the happy path only
-> **Stamped for gt 0.22.0:** the counts and version numbers in this document are checked against the code at every release; the prose is re-read when the document is edited, not at every release.
+> **Stamped for gt 0.22.1:** the counts and version numbers in this document are checked against the code at every release; the prose is re-read when the document is edited, not at every release.
 
 A guided walkthrough for your first session. Six steps, ~15 minutes (estimate; not yet timed on a clean machine).
 
-**Requirements:** Python 3.8+, Claude Code installed. Written against **gt v0.22.0**. The installer now asks its questions in order, security first (`bash install.sh --questions` lists them); answer them at the prompt or by flag. The last question can open the Getting started guide (`/gt:gt-help`).
+**Requirements:** Python 3.8+, Claude Code installed. Written against **gt v0.22.1**. The installer now asks its questions in order, security first (`bash install.sh --questions` lists them); answer them at the prompt or by flag. The last question can open the Getting started guide (`/gt:gt-help`).
 
 ---
 

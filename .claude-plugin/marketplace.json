@@ -9,15 +9,15 @@
   "plugins": [
     {
       "name": "gt",
-      "source": "./golden-thread-plugin/golden-thread/0.22.0",
+      "source": "./golden-thread-plugin/golden-thread/0.22.1",
       "description": "Golden Thread: vault-based AI memory system with an enforced Core-rule tier. Turns an Obsidian vault into the single source of truth for all Claude Code sessions, and installs hooks that re-assert and validate the rules that must never drift.",
-      "version": "0.22.0"
+      "version": "0.22.1"
     },
     {
       "name": "gt-all",
       "source": "./golden-thread-plugin/bundles/gt-all",
       "description": "Golden Thread, everything in one step: installs gt and every module (demo, farm, flow, lotr, pane, recall, report-card, usage, visualize, watch, wiki, workflow) as dependencies. Then run /gt:gt-setup. Installing a module turns none of its behaviour on.",
-      "version": "0.22.0"
+      "version": "0.22.1"
     },
     {
       "name": "gt-demo",
@@ -27,9 +27,9 @@
     },
     {
       "name": "gt-farm",
-      "source": "./golden-thread-plugin/golden-thread-farm/0.21.3",
+      "source": "./golden-thread-plugin/golden-thread-farm/0.21.4",
       "description": "Golden Thread farm: hand bulk, mechanical or second-opinion work to an external AI service as a self-contained work packet with a strict return contract, gated so nothing private leaves the session.",
-      "version": "0.21.3"
+      "version": "0.21.4"
     },
     {
       "name": "gt-flow",
@@ -63,15 +63,15 @@
     },
     {
       "name": "gt-usage",
-      "source": "./golden-thread-plugin/golden-thread-usage/0.1.11",
+      "source": "./golden-thread-plugin/golden-thread-usage/0.1.12",
       "description": "Golden Thread Usage: a quiet meter for the plan allowance. Records the 5-hour, weekly and monthly-spend windows from every render, says nothing until one of them is worth acting on, and can say what a cut would save right now.",
-      "version": "0.1.11"
+      "version": "0.1.12"
     },
     {
       "name": "gt-visualize",
-      "source": "./golden-thread-plugin/golden-thread-visualize/0.4.7",
+      "source": "./golden-thread-plugin/golden-thread-visualize/0.4.8",
       "description": "Golden Thread Visualize: draw a repository as an interactive 3D code city -- directories as districts, files as buildings, height by lines, colour by language or churn -- as one self-contained, offline HTML page (three.js inlined), with a --redact mode for anything shared.",
-      "version": "0.4.7"
+      "version": "0.4.8"
     },
     {
       "name": "gt-watch",

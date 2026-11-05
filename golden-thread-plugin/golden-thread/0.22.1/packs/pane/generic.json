@@ -1,0 +1,18 @@
+{
+  "schema": 1,
+  "description": "The gt pane buttons for a person with no persona. A persona pack carries its own \"pane\"; this is the fallback.",
+  "pane": [
+    {"label": "Start my day", "prompt": "Start my day: show what is waiting for me, what is overdue and what I should do first."},
+    {"label": "Overdue", "prompt": "Show my overdue tasks."},
+    {"label": "What is waiting", "prompt": "What handoffs and tasks are waiting for me?"},
+    {"label": "Add a task", "prompt": "I want to add a task. Ask me what it is and which project it belongs to."},
+    {"label": "Open a project", "prompt": "Open a project for me. Ask me which one."},
+    {"label": "Sort my inbox", "prompt": "Review my inbox and file each item into the right project."},
+    {"label": "Find in my notes", "prompt": "Look something up in my notes. Ask me what I am looking for."},
+    {"label": "Save learnings", "prompt": "Write down what we learned in this session."},
+    {"label": "Write a handoff", "prompt": "Write a handoff for the next session so nothing is lost."},
+    {"label": "Clean up tasks", "prompt": "Work through my open tasks with me: close, drop, defer or keep each one."},
+    {"label": "My usage", "prompt": "How much of my allowance have I used?"},
+    {"label": "Check gt", "prompt": "Check that my gt install is healthy."}
+  ]
+}

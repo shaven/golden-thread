@@ -1,10 +1,10 @@
 # Golden Thread — User Manual
 
 > **Reader:** a daily user — the deepest document, where the *why* lives
-> **Stamped for gt 0.22.0:** the counts and version numbers in this document are checked against the code at every release; the prose is re-read when the document is edited, not at every release.
+> **Stamped for gt 0.22.1:** the counts and version numbers in this document are checked against the code at every release; the prose is re-read when the document is edited, not at every release.
 
-Complete reference for gt's forty skills and its twelve modules. Written against **gt v0.22.0**
-(gt-wiki 0.2.10; gt-usage 0.1.11; gt-farm 0.21.3; gt-report-card 0.21.2; gt-demo 0.21.5; gt-watch 0.21.1; gt-flow 0.21.1; gt-visualize 0.4.7;
+Complete reference for gt's forty skills and its twelve modules. Written against **gt v0.22.1**
+(gt-wiki 0.2.10; gt-usage 0.1.12; gt-farm 0.21.4; gt-report-card 0.21.2; gt-demo 0.21.5; gt-watch 0.21.1; gt-flow 0.21.1; gt-visualize 0.4.8;
 gt-lotr 0.5.1; gt-pane 0.1.2; gt-workflow 0.1.1; gt-recall 0.1.0).
 
 > **0.21.0 is summarised in [What 0.21.0 adds](#what-0210-adds)**: the install questions, the two hook routes,
@@ -751,7 +751,7 @@ the same marketplace, versioned with gt, each declared by a `module.json`. `bash
 | `farm` | `gt-farm` | **off** for a fresh install | `/gt-farm:gt-farm`, work packets for an external AI (was `/gt:gt-farm`) |
 | `flow` | `gt-flow` | on | `/gt-flow:gt-flow`, the flow view of the event stream |
 | `visualize` | `gt-visualize` | on | `/gt-visualize:gt-visualize`, a codebase in 3D: a scroll-driven walkthrough of how its parts work, or a code city |
-| `usage` | `gt-usage` | on | `/gt-usage:gt-usage`, the plan-allowance meter: a session-start hook, an optional status line, and the `usage_meter` and `usage_alert` settings; `/gt-usage:gt-usage-savings`, the savings ledger report (farmed packets per engine since 0.1.10) |
+| `usage` | `gt-usage` | on | `/gt-usage:gt-usage`, the plan-allowance meter: a session-start hook, an optional status line, and the `usage_meter` and `usage_alert` settings; `/gt-usage:gt-usage-savings`, the savings ledger report (farmed packets per engine since 0.1.10); `/gt-usage:usage-plan`, the token-saving plan in one command (0.1.12) |
 | `lotr` | `gt-lotr` | **off** | `/gt-lotr:gt-lotr`, one MCP gateway in front of GitHub, Jira, Microsoft 365 and others |
 
 ```bash
@@ -1687,7 +1687,7 @@ the vault.
 Read-only throughout: it never writes the vault, and a question's text and the passages stay on your
 network. Under gt sandbox mode the skill uses the gt-vault tool `vault_report`
 `{report: local_answer, question}`. It ships off; an unset value follows `farm_first` when that
-setting is `auto`.
+setting is `yes`.
 
 ### `/gt:gt-ingest`
 
@@ -2353,6 +2353,8 @@ Every way to spend fewer tokens, with what you notice when each is on, is in the
   puts back what each was before; `show` lists what lean changed. The 120000 is the break-even of cutting
   before the cache lapses (about 115 to 120K, `estimated`, 1,139 idle gaps in 565 sessions) and has not been
   run end to end; `auto` rules reminders are the compact form for sessions under 60,000 tokens (`estimated`).
+  *New in 0.22.1:* the cut advisor stays silent while a cut happens by itself (`auto_clear` on, or `auto_compact` auto, a
+  percent or a token count); `gt_cut_advisor.py why` says so. For one switch over all the savings settings, see `usage_plan` below.
 - **The launcher flag `--exclude-dynamic-system-prompt-sections`** is a Claude Code command-line flag, so it is
   something you type when you start `claude`, not a gt setting and not a hook. In the savings session's test
   (`measured`, small sample) it cut a session's cost by 46% and a chain of six sessions by 16%.
@@ -2712,7 +2714,7 @@ out minus what the model read back. There is no total (the rows have different c
 `estimated`, and a row that cost more than it kept out says NEGATIVE. A mechanism gt routes by itself
 (agent isolation, spill, farm) whose trailing 7-day net is negative over at least five events is flagged
 **PAUSED** and written to `~/.claude/golden-thread/usage/net-paused.json`, which `gt_break_even.paused()`
-reads: the spill hook stands down, and an auto-router (`farm_first auto`, where that setting exists) asks
+reads: the spill hook stands down, and an auto-router (`farm_first yes`, where that setting exists) asks
 before it routes. The state is rewritten at each session start, so it lifts when the window turns.
 
 | Command | What it does | Exit |
@@ -2776,6 +2778,28 @@ handoff levels H0 to H3 inside the auto-clear and fixed-schedule runs (they all 
 runs (the three blind seeds were Sonnet 5.5, one task type); whether the cold-start cost after a clear is
 stable out of sample; Haiku. A live clear by `on` has run only against a fake Claude Code in the tests; it
 has not been watched in a real window.
+
+#### One switch for the savings settings: `/gt-usage:usage-plan` (gt-usage 0.1.12)
+
+`/gt-usage:usage-plan` (or *"save tokens"*, *"usage plan"*) sets gt's token-saving settings as one
+plan, `usage_plan`, kept in gt core: the command prints `gt_settings.py usage-plan <verb>` unchanged,
+so it and `/gt:gt-settings` never disagree. The verbs:
+
+| Verb | What it does |
+|---|---|
+| `show` (the default) | the plan in effect (`off`, `min`, `max` or `custom`) and each setting it covers, now and by default |
+| `changes` | what the plan changed: each setting with its value before the plan |
+| `min` | the safe few: a cut carries a facts handoff and clears, the cut advisor and the expiry guard on, the context nudge at 30% |
+| `max` | all of them: also the minimum token profile, `farm_first yes`, the farm ladder and share, `auto_compact` at 250,000 tokens, `auto_clear shadow` |
+| `off` | the values from before the plan come back |
+| `hold [on\|off\|status]` | this session only: `on` blocks all four automatic cuts (`auto_compact`, `auto_clear`, the expiry guard and the cut advisor) until `off`; other sessions are untouched. The session id comes from `--session ID`, else Claude Code's environment, as for `gt_compact.py` |
+| `farm --base-url URL [--model NAME] [--name NAME] [--dry-run]` | calibrate the engine at URL (`gt_farm_calibrate.py --base-url`); only when at least one task class is `can-take`, run `gt_farm_setup.py --apply` and `gt_settings.py set farm_share on`. A refusal or a calibration with no `can-take` class leaves `farm_share` as it was and says why. `--dry-run` prints the calibration's estimate and sends nothing |
+
+A setting whose module is off is skipped and listed. Changing one of the plan's settings by hand makes
+the plan `custom`. `farm` needs the gt-farm module, does not look for an engine by itself, and does not
+write the service table: the engine still needs a `local: yes` row there, which the setup step names when
+it is missing. Script: `gt_usage_plan.py` in the hooks dir; exit 0 done, 1 refused or failed, 2 usage
+or a part of gt not installed.
 
 #### How many tool calls go out together (the batch ledger, 0.22.0)
 
@@ -3015,12 +3039,12 @@ calibration again replaces it.
 |---|---|
 | `off` | nothing: no recommendation, no automatic farm work, no local review |
 | `suggest` (default) | offers and prints the command; after you add an engine it tells you to calibrate it; the models page and the role guide show what could be handed over |
-| `auto` | also calibrates a newly added **local** engine once (the cost estimated first, the budget respected; never a hosted one, which costs money and is calibrated only when you name it), applies the start rungs the calibration recommends to the farm ladder, and turns the commit review on when a calibrated engine exists |
+| `yes` | a statement, not a hint. It also calibrates a newly added **local** engine once (the cost estimated first, the budget respected; never a hosted one, which costs money and is calibrated only when you name it), and turns the commit review on when a local engine is set up (the review itself runs only on a calibrated one). And gt adds a one-line instruction to every turn so the assistant hands any inline task an engine can do (a draft, a summary, a second opinion on a diff; nothing that needs a shell, files, git or the vault) to the cheapest calibrated engine without asking: your own engine first, a hosted one only when the packet is marked public and passes the Releasable gate and the scrub. Claude does the task itself only when no engine passed calibration for it, the gate refuses, or it needs live tools. `auto` no longer exists: an upgrade turns a stored `auto` into `yes` |
 
 **An engine whose model has no calibration gets no automatic work in any mode** (the ladder's hosted rung 3 included: it
 tries a hosted engine only on a current calibration that covers the packet's class), and a kind it scored
 `review-only` is used only with Claude checking every result. A plain `gt_farm_send.py send --service X` is your
-own choice and always works. `farm_first` makes no routing decisions of its own: for the farm ladder (gt-farm's
+own choice and always works. `farm_first` makes no routing decisions of its own (`yes` adds a standing instruction to the assistant, and the ladder's rules still decide): for the farm ladder (gt-farm's
 ladder mode, when present) it is the switch between *print the recommended start rung* and *use it*. The ladder
 asks `gt_farm_calibration.start_rung(engine, task_class)`: `can-take` starts at the engine's own rung,
 `review-only` at that rung with every result audited (`audit_rate` 1.0), `not-suitable` one rung up; the engine's
@@ -3082,7 +3106,7 @@ A task is offered with an engine only if that engine's calibration says it can t
 
 ### 5. A second reader at commit time
 
-`commit_local_review` (off by default; on when set, or when unset under `farm_first` auto with a calibrated
+`commit_local_review` (off by default; on when set, or when unset under `farm_first` yes with a calibrated
 engine) makes `/gt:gt-allin-commit` send the **staged** diff to a calibrated `local: yes` engine and print what it
 finds under *local review*. It is advisory: it never blocks a commit, `--allow-findings` has nothing to do with it,
 and its findings are **unverified suggestions**: in the trial behind it, 3 of 10 claims were real defects that no
@@ -6645,6 +6669,7 @@ Every other setting the registry gained since the last manual, so `gt_settings.p
 | `expiry_guard.closed_sessions` | compact | compact, notify, off | What auto does to an idle session no terminal has open (acts only when expiry_guard is auto). |
 | `expiry_guard.open_sessions` | compact | compact, ask, clear, fork, notify, off | What auto does to an idle session still open in a terminal (acts only when expiry_guard is auto). |
 | `expiry_guard.handoff_pickup` | on | on, off | After a fork, offer /clear to continue from the saved handoff, and load it. |
+| `expiry_guard.pickup_hold` | first_prompt | first_prompt, off | After a clear loads its handoff, hold automatic cuts for the fresh session until its first prompt. |
 | `expiry_guard.resume_backstop` | on | on, off | Block the first prompt of a large, expired session once, with the cost and its choices. |
 | `expiry_guard.capture_first` | on | on, off | Before an idle session is compacted in place, one warm turn saves new findings to the vault and writes the handoff (0.21.3); off compacts at once. |
 | `closeout_limit` | 3 | 1 to 100, all | How many finished-looking projects one session close asks about; the rest come up at a later close (0.21.0). |

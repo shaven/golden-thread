@@ -1,6 +1,6 @@
 {
   "name": "gt-all",
-  "version": "0.22.0",
+  "version": "0.22.1",
   "description": "Golden Thread, everything in one step: installs gt and every module (demo, farm, flow, lotr, pane, recall, report-card, usage, visualize, watch, wiki, workflow) as dependencies. Then run /gt:gt-setup. Installing a module turns none of its behaviour on.",
   "author": {
     "name": "Stacy Haven"

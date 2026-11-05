@@ -1,0 +1,174 @@
+{
+  "schema": 1,
+  "name": "farm",
+  "plugin": "gt-farm",
+  "version": "0.21.4",
+  "requires_gt": ">=0.22.0,<0.23.0",
+  "summary": "Work packets: hand gated, self-contained tasks to an external AI service -- or to an engine on your own hardware, cheapest rung first, climbing only when a check fails -- and ingest the answers as unverified",
+  "default": "off",
+  "skills": [
+    "gt-farm"
+  ],
+  "scripts": [
+    "gt_farm_accept.py",
+    "gt_farm_adapters.py",
+    "gt_farm_agent.py",
+    "gt_farm_agent_setup.py",
+    "gt_farm_calibrate.py",
+    "gt_farm_calibration.py",
+    "gt_farm_codetest.py",
+    "gt_farm_egress.py",
+    "gt_farm_engine.py",
+    "gt_farm_engines_check.py",
+    "gt_farm_export.py",
+    "gt_farm_hosted_setup.py",
+    "gt_farm_item.py",
+    "gt_farm_ladder.py",
+    "gt_farm_pipeline.py",
+    "gt_farm_probes.py",
+    "gt_farm_review.py",
+    "gt_farm_send.py",
+    "gt_farm_setup.py",
+    "gt_farm_share.py",
+    "gt_farm_validate.py",
+    "gt_farm_workspace.py",
+    "gt_gateway.py"
+  ],
+  "templates": [
+    "agent-tasks",
+    "codetest",
+    "engine-profiles.json",
+    "farm-ladder.tsv",
+    "farm-services.starter.md",
+    "farm-share.tsv",
+    "gt-model-for.sh",
+    "hosted-spend.sample.md"
+  ],
+  "hooks": [],
+  "hookdir_scripts": [],
+  "settings": [
+    {
+      "key": "farm_ladder",
+      "default": "off",
+      "values": [
+        "off",
+        "on"
+      ],
+      "summary": "Ladder mode for farmed packets: try a local engine first, climb to a bigger one, then a hosted one (public material only), then Claude, only when a check fails.",
+      "detail": "off  `gt_farm_send.py ladder` refuses to run (send, relay and ledger are unaffected)  (default)\non   `ladder PACKET --class C` starts at the task class's rung from farm-ladder.tsv, runs the\n     class's check on the reply, escalates on failure and stops with \"escalate to Claude\"\n     (exit 5) at the top; every attempt is a savings-ledger line\n\nThe table of task classes ships in the module (templates/farm-ladder.tsv, also built into\ngt_farm_ladder.py) and is overridden per vault by <vault>/farm-ladder.tsv. Hosted rung 3 is\nreached only for a class marked public (or --public) and a packet that clears the Releasable\ngate after the scrub. GT_FARM_LADDER=off|on in the environment overrides this setting."
+    },
+    {
+      "key": "farm_audit_rate",
+      "default": "0.2",
+      "values": [
+        "0",
+        "0.1",
+        "0.2",
+        "0.3",
+        "0.5",
+        "1"
+      ],
+      "summary": "Share of accepted ladder results marked for a blind Claude audit (a class's own audit_rate in farm-ladder.tsv wins).",
+      "detail": "0    never sample: the audit loop is off and a class's start rung never moves\n0.2  one accepted result in five is marked `audit: pending` in the savings ledger  (default)\n1    every accepted result is marked\n\nA Claude subagent grades a marked result blind; `gt_farm_send.py audit-result KEY pass|fail`\nrecords it. Two failed audits in a class raise its start rung by one, five clean audits in a\nrow lower it by one. GT_FARM_AUDIT_RATE in the environment overrides this setting."
+    },
+    {
+      "key": "pipeline_engine",
+      "default": "off",
+      "values": [
+        "off",
+        "on"
+      ],
+      "summary": "Run gt ingest stages (extract, classify, draft) on a big local engine with the v4 packaging instead of in Claude.",
+      "detail": "off  every stage runs in Claude  (default)\non   `gt_farm_send.py pipeline` may run a stage whose class starts at rung 2 or lower on a\n     `local: yes` engine: the unit's material inline and unsplit, one exemplar, the output\n     fields spelled out, the schema bound, one self-audit, validate and retry once; an answer\n     still not valid is reported (exit 3) and the stage runs in Claude\n\nAn engine that is not local is refused: stage material is vault content. Needs a service-table\nrow with `local: yes` (rung 2). GT_PIPELINE_ENGINE=off|on in the environment overrides this setting."
+    },
+    {
+      "key": "farm_min_chars",
+      "default": "2000",
+      "values": [
+        "0",
+        "1000",
+        "2000",
+        "4000",
+        "8000"
+      ],
+      "summary": "Break-even size for an automatic send: a packet smaller than this many characters is not worth the Claude tokens the send itself costs, so it stays in Claude.",
+      "detail": "0     never skip: every automatic send goes\n2000  an automatic send (ladder, pipeline, `send --auto` as gt-intake and workflow farm steps use it)\n      of a smaller packet is skipped with \"not worth sending: N chars < break-even M\" (exit 5)  (default)\n\nA `send --service X` typed by the user is never skipped. The default comes from the farm ledger on\nthe owner's machine: Claude's fixed cost of a send (~220 tokens) plus the packet scaffold the engine\nreads (~120) is ~340 tokens, ~1,360 characters, with a 1.5x margin. GT_FARM_MIN_CHARS=N in the\nenvironment, or --min-chars N for one run, overrides this setting."
+    },
+    {
+      "key": "farm_reuse_days",
+      "default": "7",
+      "values": [
+        "0",
+        "1",
+        "7",
+        "30"
+      ],
+      "summary": "How long a passing farmed result is reused instead of sending the same packet to the same engine and model again.",
+      "detail": "0   never reuse: every send goes to the engine\n7   a passing result under 7 days old is filed again without a send, reported as \"reused\" and\n    marked `reused: true` in the savings ledger  (default)\n\nThe key is sha256(packet + engine + model). `--fresh` forces a new send. Stored results live in\n~/.claude/golden-thread/farm/cache (folder 0700, files 0600). GT_FARM_REUSE_DAYS=N overrides."
+    },
+    {
+      "key": "farm_heartbeat_s",
+      "default": "30",
+      "values": [
+        "0",
+        "15",
+        "30",
+        "60",
+        "120"
+      ],
+      "summary": "How often a long send says it is still waiting, in seconds. 0 turns the waiting line off.",
+      "detail": "0    no waiting line (the start and finish line of each packet are still printed)\n30   every 30 seconds a \"waiting\" line names each engine still working, for how long, and how many\n     packets are left  (default)\n\nThe lines go to stderr; `--json` output on stdout is unchanged. A send can run up to 15 minutes\n(`send`, `ladder`) or an hour (`pipeline`). GT_FARM_HEARTBEAT_S=N in the environment overrides this setting."
+    },
+    {
+      "key": "farm_engines",
+      "default": "gemini, you.com",
+      "values": [
+        "gemini, you.com",
+        "gemini",
+        "you.com"
+      ],
+      "summary": "The hosted engines an item may be handed to (gt_farm_item.py build); each needs a fresh profile in templates/engine-profiles.json.",
+      "detail": "gemini, you.com  items may be built into packets for Gemini and You.com  (default)\ngemini           Gemini only\nyou.com          You.com only\n\nAn engine's profile (window, maximum output, plan, a `verified` date) must be under 60 days old and carry real figures, or the build for that engine is blocked with the reason; an unverified (null) figure blocks it too. You.com's window is unverified, so a You.com packet is blocked until it is verified. GT_FARM_ENGINES in the environment overrides this setting."
+    },
+    {
+      "key": "farm_engine_refresh",
+      "default": "session-start",
+      "values": [
+        "session-start",
+        "scheduled",
+        "off"
+      ],
+      "summary": "Keep the engine availability status current: at session start, start one bounded background refresh (at most one per 30 minutes) and say one line when an engine is down.",
+      "detail": "session-start  at session start, when a local engine is configured and the status is over 30 minutes old, start `gt_farm_send.py engines status --refresh` detached (20 s cap, never blocks the start); the line `farm engines: 5 of 7 available, engine-5 down since 14:02` appears only when an engine is down  (default)\nscheduled      nothing runs at session start; register one periodic job (default every 30 minutes) with `gt_farm_send.py engines schedule --install` (preview with --dry-run, read back with --status, undo with --remove; nothing registers until you run it), or refresh from your own scheduler with `gt_farm_send.py engines status --refresh`; a stale status is named in the line\noff            nothing runs; a stale or down status is still named in the line when one was recorded\n\nThe refresh checks reachability, key and model from this machine only and sends no packet content. Silent when no engine is configured or all are available. GT_FARM_ENGINE_REFRESH in the environment overrides this setting."
+    },
+    {
+      "key": "farm_share",
+      "default": "off",
+      "values": [
+        "off",
+        "on"
+      ],
+      "summary": "Send a chosen share of eligible agent tasks to your own engine instead of Claude, growing the share only as audited results hold up, and pausing it when spend or failures pass a limit.",
+      "detail": "off  every task stays with Claude; nothing is routed  (default)\non   for each task class that calibration marks can-take, the share set in farm-share.tsv of its tasks\n     goes to the farm engine. The same task always gets the same answer, so a share is reproducible.\n     The share starts small and grows by ramp_step after each clean window of tasks; a failed audit\n     steps it back down. Routing pauses, and tasks go to Claude with the reason in plain words, when a\n     class spends its daily limit, its fail rate passes max_fail_rate, or pause_after tasks fail in a row.\n     A pause ends at midnight (budget), after six hours (failures), or with `gt_farm_share.py resume`.\n\nThe table ships in the module (templates/farm-share.tsv) and is overridden per vault by\n<vault>/farm-share.tsv. `gt_farm_share.py status` shows every class; `explain CLASS` says what happens to\nthe next task. GT_FARM_SHARE=off|on in the environment overrides this setting."
+    },
+    {
+      "key": "farm_agent_budget_usd_day",
+      "default": "off",
+      "values": [
+        "off",
+        "1",
+        "5",
+        "20",
+        "50"
+      ],
+      "summary": "A daily dollar limit on farmed agent tasks across all classes; when it is reached, tasks go to Claude until midnight.",
+      "detail": "off  no all-class limit (each class's own max_usd_day in farm-share.tsv still applies)  (default)\n5    once farmed tasks have cost $5 today, routing pauses with \"paused: daily budget reached\" and\n     every task goes to Claude until midnight\n\nOnly hosted engines cost money; a local engine counts as $0. Any positive number of dollars works, for\nexample `gt_settings.py set farm_agent_budget_usd_day 12`. GT_FARM_AGENT_BUDGET_USD_DAY in the environment\noverrides this setting."
+    }
+  ],
+  "requires_modules": [],
+  "replaces_core": [
+    "skills/gt-farm"
+  ],
+  "lockdown": {},
+  "demo": "demo/act.md"
+}

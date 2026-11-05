@@ -1,0 +1,27 @@
+[
+ {
+  "file": "ledgerlite/aging.py",
+  "old": "from .money import ZERO, fmt\n",
+  "new": "from .money import ZERO, fmt, percent_of, to_decimal\n"
+ },
+ {
+  "file": "ledgerlite/aging.py",
+  "old": "def days_overdue(invoice, as_of):",
+  "new": "@dataclass(frozen=True)\nclass LateFee:\n    number: str\n    amount: Decimal\n    note: str\n\n\ndef days_overdue(invoice, as_of):"
+ },
+ {
+  "file": "ledgerlite/aging.py",
+  "old": "    def __init__(self, as_of, rows, edges):\n        self.as_of = as_of\n        self.rows = list(rows)\n        self.edges = tuple(edges)\n",
+  "new": "    def __init__(self, as_of, rows, edges, fees=(), fee_total=ZERO):\n        self.as_of = as_of\n        self.rows = list(rows)\n        self.edges = tuple(edges)\n        self.fees = tuple(fees)\n        self.fee_total = fee_total\n"
+ },
+ {
+  "file": "ledgerlite/aging.py",
+  "old": "def aging_report(ledger, config, as_of):",
+  "new": "class LateFeePolicy:\n    def __init__(self, config):\n        raw = config.get(\"late_fee_pct\")\n        self.pct = None if raw is None else to_decimal(raw)\n        self.running_total = ZERO\n\n    def charge(self, row):\n        if self.pct is None or self.pct <= 0:\n            return None\n        fee = LateFee(row.number, percent_of(row.balance, self.pct),\n                      f\"Late fee {self.pct}% on {fmt(row.balance)}\")\n        self.running_total += fee.amount\n        return fee\n\n\ndef aging_report(ledger, config, as_of):"
+ },
+ {
+  "file": "ledgerlite/aging.py",
+  "old": "    return AgingReport(as_of, rows, edges)",
+  "new": "    policy = LateFeePolicy(config)\n    fees = [fee for fee in (policy.charge(r) for r in rows) if fee]\n    return AgingReport(as_of, rows, edges, fees, policy.running_total)"
+ }
+]

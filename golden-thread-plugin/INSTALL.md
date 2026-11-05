@@ -1,7 +1,7 @@
 # Golden Thread Plugin — Install Guide
 
 > **Reader:** installing for the first time, or verifying a fork
-> **Stamped for gt 0.22.0:** the counts and version numbers in this document are checked against the code at every release; the prose is re-read when the document is edited, not at every release.
+> **Stamped for gt 0.22.1:** the counts and version numbers in this document are checked against the code at every release; the prose is re-read when the document is edited, not at every release.
 
 **Requirements:** Python 3.8+, Claude Code (any version; 2.1.136 or newer uses the plugin hook route, 2.1.290 or newer is needed for the gt pane; below it the pane is neither asked about nor installed).
 

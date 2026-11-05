@@ -18,6 +18,159 @@ release's own summary line, kept short rather than reconstructed after the fact.
 
 ---
 
+## gt 0.22.1 — 2026-11-01
+
+One setting for the token-saving settings, a way to hold off automatic cuts for a session, and a clear that reads
+its own handoff.
+
+### `usage_plan`: one choice for the token-saving settings
+
+- **New: `usage_plan` (`off`, `min`, `max`, `custom`).** Gt has a dozen settings that save tokens, and they only help
+  when they agree. `min` is the safe few (`cut_handoff facts`, `cut_kind clear`, `cut_advisor suggest`, `expiry_guard
+  auto`, `context_nudge 30`) and cuts nothing while you work. `max` adds `token_profile minimum`, `farm_first auto`,
+  `farm_ladder on`, `farm_share on`, `expiry_guard.handoff_pickup on`, `auto_compact 250000` and `auto_clear shadow`.
+  A plan never turns `auto_clear` on. `gt_settings.py set usage_plan max`, or `/gt-usage:usage-plan max`. [tests: test_usage_plan]
+- **`off` puts everything back.** `min` and `max` save the current values the first time you leave `off`; `off`
+  restores them (a setting you never stored in the config file is removed again). Moving between `min` and `max` keeps the
+  first snapshot, and the snapshot is written before anything changes, so a plan that stops partway can still be undone. [tests: test_usage_plan]
+- **Changing one setting afterwards reads `custom (based on max)`**, by `set` or by editing the file, and changing it
+  back reads `max` again. `250k` and `250000` count as the same value, and a change to one of the seven settings
+  `token_profile` sets is seen too. A member whose module is off (`farm_ladder`, `farm_share`) is skipped and listed. [tests: test_usage_plan]
+- **Every change a plan makes is shown in a table** (setting, what it was, what it is now, default, what it does, how to
+  undo) when you apply `min` or `max`, and `usage-plan changes` prints it again later and marks anything you changed by
+  hand since. Moving from `max` down to `min` lists in one line what it put back. [tests: test_usage_plan]
+- **Not `token_profile`.** Its `maximum` spends more; `usage_plan max` saves and includes `token_profile minimum`. [tests: test_usage_plan]
+
+### Hold: no automatic cut in this session
+
+- **New: `/gt-usage:usage-plan hold`.** One session, all four automatic cuts: `auto_clear`, `auto_compact`, the idle
+  guard and the open-session path. A bare `hold` is `hold on`; `hold off` ends it and `hold status` says whether it is on. Launching with
+  `GT_HOLD_CUTS=1` holds the session from its first prompt, unless another live session's hold already stands: then it holds nothing and says nothing. `hold off`, `/clear` or a new session ends it. The hold belongs to the session id, so resuming the same id should keep it, but no test resumes a session.
+  An idle held session loses cache-expiry protection, and the notice says so. [tests: test_usage_plan_hold]
+
+### A clear that reads its own handoff
+
+- **Changed: an automatic clear now loads the handoff into the fresh session by itself** (`auto_compact` with
+  `cut_kind clear`, and an `auto_clear` policy clear), the way an idle open session already did. Before, the pickup
+  line was put in the prompt box and you pressed Enter. With `expiry_guard.handoff_pickup off`, or when the hook
+  cannot tell which process to arm, it still goes in the prompt box, and so it does when the fresh session has not
+  taken the handoff a few seconds after the clear (the notice says which happened). [tests: test_auto_clear_pickup]
+- **New: `expiry_guard.pickup_hold` (`first_prompt`, `off`; default `first_prompt`).** A fresh session that was given its
+  handoff by itself takes no automatic cut (`auto_compact`, `auto_clear`, the idle compact) until you send its first
+  prompt, which turns them back on. So a session nobody has touched cannot clear and reload in a loop, and a session
+  you are using stays covered. It is a marker per session (`state/pickup-hold-<session>.json`), separate from the hold
+  you set by hand, and a marker older than six hours is ignored. [tests: test_pickup_hold]
+- **Changed: the instruction for the handoff an automatic cut writes now asks for every open thread of the session**, each
+  with what it is trying to show, what is done and the evidence, and what is left, plus your last three messages verbatim.
+  Before, it followed whatever the last topic was, so a session with several threads lost the others. The tests check the
+  instruction that is sent; what the model writes from it is not tested. [tests: test_pickup_hold]
+- **Fixed: the notice no longer says the fresh session was given the handoff when it declined it.** A handoff past its
+  six-hour limit, or one that cannot be read, is now declined and left marked, so the notice says the session did not
+  load it by itself and the pickup line goes in the prompt box. Before, the vanished file was read as "loaded". [tests: test_auto_clear_pickup]
+
+### `farm_first yes`: the assistant hands eligible inline work to an engine (gt-farm 0.21.4)
+
+- **New value `yes`, replacing `auto`.** `yes` does everything `auto` did (calibrates a newly added local engine once,
+  turns the commit review on when a local engine is set up, answers
+  vault questions on your engines first) and more: while it is set, gt adds one line to the context of every turn telling
+  the assistant to send an eligible inline task through the farm ladder, class `inline-reasoning`, before doing it itself.
+  `auto` never did that. Eligible, in short: it fits in one packet, needs no shell, file edit, git or vault write, and ends
+  in prose, structured data, a diff or a summary; the farm skill gives the full rule. `gt_settings.py set farm_first yes`.
+  The default stays `suggest`. [tests: test_farm_first_yes, test_gt_turn_notes, test_farm_engine_calibration_hint]
+- **Hosted engines, one packet at a time.** `inline-reasoning` is not marked public: it starts on the big local engine
+  (rung 2). A hosted engine (rung 3) gets the packet only when the assistant passes `--public`, the engine is calibrated
+  for the class (a calibration of `draft` counts, since no probe measures it separately), and the packet passes the
+  Releasable gate and the scrub. The gate refuses a packet for a hosted engine when it names a private or loopback IPv4
+  address or a host name with an internal-looking ending or label (`.lan`, `.local`, `corp`, `internal` and the like); it is a
+  pattern list, so it does not recognise every private name (see Limits). [tests: test_farm_first_yes, test_farm_ladder]
+- **Limits.** The instruction is a line in the assistant's context: gt does not check that the assistant followed it and
+  nothing counts how often it did. Whether the assistant is right that a packet is public is its judgement; the gate and the
+  scrub are what catch a slip. The gate does not recognise single-label host names (`nas01`), Tailscale-range addresses (100.64.0.0/10), IPv6 private
+  addresses or a company's own domain (`db.mycorp.io`), and the scrub removes only this machine's own host and user names and
+  the terms in `farm_scrub_terms`: put your internal names there. Names of this machine, such as `localhost`, are scrubbed and sent, not refused. A hosted
+  engine that the service table itself puts on rung 1 or 2 is outside the `--public` and calibration checks (as before; the
+  gate and the scrub still apply), and a plain `send --service X` is your own choice and skips them. The class asks for an
+  audit rate of 0.1; an audit is drawn by chance only for an engine whose trust is autonomous and with the ledger on. The
+  result check for this class is the ladder's `schema` check, which judges shape, not whether prose is good.
+  [no-test: states limits]
+- **gt-farm 0.21.4** carries it (the ladder row, the `yes` value in the farm scripts, the `draft` stand-in for the class, the skill text). Defaults: none change. [tests: test_farm_first_yes]
+
+### BREAKING: `farm_first` loses `auto`; a stored `auto` becomes `yes`
+
+- `farm_first` is now `off`, `suggest` or `yes`. `auto` is gone: it set engines up and used them for gt's own steps but never
+  made the assistant hand its own work over, and a setting about whether to use your engines is a statement, not a hint. An
+  install converts a stored `auto` (with or without a vault, clean or not, `--only` included, `--check` excepted), and so
+  does the vault upgrade on a clean vault. A machine that had `auto` therefore now does more than before;
+  `gt_settings.py set farm_first suggest` turns it back. `usage_plan max` sets `yes`. [tests: test_farm_first_migration, test_farm_first_settings, test_usage_plan]
+- Limits of the conversion: an install refused before that step (a failed checksum, locked code, a failed snapshot) converts
+  nothing, and the vault upgrade then does it on a clean vault; a quiet `--only` converts it without printing a line.
+  [no-test: states limits]
+
+### Smaller changes
+
+- **Fixed: the cut advisor suggested a cut when gt was about to make it.** It now stays silent while `auto_clear` is
+  `on` or `auto_compact` is `auto`, a percent or a token count, and `gt_cut_advisor.py why` says so. It still speaks for
+  `auto_clear shadow`, for `auto_compact warn` or `off`, and for a held session, which nothing will cut. [tests: test_gt_cut_advisor]
+- **Changed: a percent `auto_compact` says what it means in tokens.** `gt_settings.py set auto_compact 30`, `show` and
+  `explain` now add that a percent is a share of the window Claude Code reports (30 is 300,000 tokens on a 1,000,000
+  window and 60,000 on a 200,000 one) and that a token count cuts at that size on any model with room for it. A 30 that
+  seemed never to fire was waiting for 300,000. [tests: test_auto_compact_tokens]
+- **New: farm engine set-up.** `/gt-usage:usage-plan farm --base-url URL` calibrates the engine at that URL, applies
+  the farm fixes, and turns `farm_share` on only if both succeed; a refusal, a failed calibration or a failed fix
+  leaves it unchanged. It does not add the engine to your service table (it still needs a `local: yes` row), and
+  there is no auto-detect yet. [tests: test_usage_plan_module]
+- **Help.** The token-savings guide gains a section with a table of exactly what `min` and `max` change (generated from
+  the same table the command reads, so it cannot drift), what each setting does with its on and off commands, and the
+  hold. `gt_settings.py explain` now has plain-language text for `usage_plan`, `cut_handoff`, `cut_kind`,
+  `auto_compact` and `context_nudge`. [tests: test_usage_plan]
+- **Fixed: on Windows, applying an add-on's fix took no lock.** `gt_apply` serialises two applies of the same file with a
+  per-file lock, but the lock was written with `fcntl`, which Windows does not have, and the code skipped it there without a
+  word: two applies of one file could both pass the hash check and both write. Windows now takes an `msvcrt` byte lock and
+  waits up to two minutes for it, then refuses with a message. macOS and Linux are unchanged. The Windows branch itself is
+  proved by the Windows runs of `test_gt_apply_lock` and `test_gt_apply`; on the other platforms only its names are checked.
+  [tests: test_gt_apply_lock, test_gt_apply]
+- **gt-usage 0.1.12** carries the command. Defaults: none change. [tests: test_usage_plan_module]
+- **Fixed: the unlock authority could not start from the installed hooks folder, so the one that ran was refused.**
+  `gt_accept_preview.py`, which the authority imports, was never installed into the hooks folder, so
+  `gt_unlock.py daemon start` ran the authority from the plugin cache instead, and a client run from the hooks folder
+  then refused it as `server_unverified` until Claude Code was restarted. The file is now installed there, and
+  `daemon start` runs the installed hooks copy when it has the same bytes as the client's own and every module the authority
+  imports directly sits beside it with the same bytes; otherwise it runs the client's own copy, as before. The copies the
+  client trusts are unchanged: its own copy and the installed hooks copy. [tests: test_unlock_server_scripts]
+- **New: a refused unlock consumer is told why.** Both `not_a_consumer` refusals (a consent-style ask and a secret resolve)
+  now carry a hint saying what was wrong with the process that asked: its script is not the installed `lotrd.py` (the hint
+  then names that script's path and the installed gt-lotr folders), it was not started with `python -I`, or its script could
+  not be determined (which also happens for a launch with `-c`, `-m` or a relative path). The hint goes only to that refused
+  caller and never turns a refusal into an error. [tests: test_unlock_server_scripts]
+
+### Every visual says what built it
+
+- **New: a small "Built with Golden Thread" mark at the bottom right of every page gt-visualize writes**: the 3D
+  walkthrough (`explain`), the code city (`render`) and the one-part drawings (`doc draw`). It is 10 px, half opacity,
+  ignores the mouse and takes the page's own colour, so it stays out of the way. The half opacity and the inherited colour
+  are in the page's CSS but no test checks them, and none checks where the fixed overlay sits against the drawing. It is on for every user; there
+  is no setting to turn it off. **gt-visualize 0.4.8** carries it (0.4.7 stays as the previous release, 0.4.6 is
+  dropped). Defaults: none change. [tests: test_visualize_module, test_visualize_document]
+
+### Known, and not fixed
+
+- One session can be held at a time (one marker file). `GT_HOLD_CUTS=1` takes effect at the first prompt, not at launch, and
+  holds nothing while another session's hold stands (a live process, or a marker with no recorded process). A hold whose
+  process table cannot be read is kept, not replaced; that case is not tested. [tests: test_usage_plan_hold]
+- The cut, the clear, the auto-read pickup and the first-prompt release ran live once: real Claude Code 2.1.316 on Haiku 5.5, in an isolated home, on macOS. Not run live on Opus or Sonnet, on Windows or Linux, or with `usage_plan hold`; those are tested against the test harness's fake Claude Code. [no-test: states what the tests do not cover, a limit and not behaviour]
+- A session that has never had a prompt gets no pickup hint and falls back to the prompt box. [tests: test_auto_clear_pickup]
+- Typing a prompt while an automatic cut is saving its handoff may leave that cut unfinished: once live, a cut stayed at `capturing` after a prompt was typed during the save step, and no cause was found. [no-test: states a gap that is not fixed]
+
+### How this release was tested
+
+- **What the numbers are.** A *unit* is one test class, the piece `tests/prun.py` schedules. A *test* is one unittest case that ran on that platform, so the counts differ between platforms (skips). The full-suite runs below are on one snapshot of the tree (2,237 files).
+- **Mac (macOS 26.6.2, Darwin 25.6):** the full suite, 14,053 tests in 2,478 units, all passing, with clean secrets and code scans.
+- **Linux (Amazon Linux 2023 VM):** the full suite, 14,027 tests in 2,478 units, all passing, with the same clean scans.
+- **Windows 11:** the full suite, 14,027 tests in 2,478 units, spread over two VMs (9,090 tests in 1,552 units on one, 4,937 in 926 on the other), one unit list split between them; it is not one run on one machine. Everything passed except one timing unit, `test_unlock_core.HookCost`, which measures how fast the unlock check answers: 25.1 ms against its 25 ms limit on the slower VM during the full run, and 3 passes out of 3 when run alone on that VM afterwards.
+- **What earlier passes found:** the first full passes of this build, on earlier snapshots, found a Windows-only fault in `gt_apply` (no lock was taken) and two faults in this release's own changes (a white-paper version line and a test written for POSIX paths). All three were fixed and every platform was re-run on the snapshot above.
+- **Claim review:** each sentence of this CHANGELOG that states what the code does (25 claims) was read next to the code and the tests it cites by reviewers that were not the builder's model (Haiku 5.5 and, for the security, privacy and locking claims, Opus 5.5; the build was done on Sonnet 5.5). Over several rounds reviewers marked sentences overstated or false; each was fixed in the code, covered by a new test, or narrowed to what the code and tests show, and read again, until all 25 held.
+- **Not tested:** the Touch ID and Secure Enclave units (they need an unlocked Mac and a person present); the 24 h soak; the install on a second Mac; the automatic clear and its pickup in a live Claude Code beyond the Haiku run described above.
+
 ## gt 0.22.0 — 2026-10-29
 
 > This entry covers the savings-ledger recorders and the Hermes-comparison hardening, the

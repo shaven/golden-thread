@@ -3772,6 +3772,32 @@ VAULT_SNAP_STATE=""      # clean | dirty | nogit | absent | unreadable
 
 real_path() { python3 -c 'import os,sys;print(os.path.realpath(sys.argv[1]))' "$1" 2>/dev/null || printf '%s\n' "$1"; }
 
+# 0.22.1: farm_first lost `auto`. Everyone who stored it gets `yes`, whatever the vault is doing: it runs on every
+# install (before the vault steps, so an install that stops there still converts it) and needs no vault, no clean tree and
+# no gt_settings.py (a config without vault_path is refused there).
+migrate_farm_first_auto() {
+  python3 - "$HOME/.claude/vault-config.json" <<'PYEOF' 2>/dev/null || true
+import json, os, sys
+p = sys.argv[1]
+try:
+    with open(p, encoding="utf-8") as fh:
+        d = json.load(fh)
+except (OSError, ValueError):
+    sys.exit(0)
+if isinstance(d, dict) and str(d.get("farm_first") or "").strip().lower() == "auto":
+    d["farm_first"] = "yes"
+    tmp = p + ".tmp"
+    with open(tmp, "w", encoding="utf-8") as fh:
+        json.dump(d, fh, indent=2)
+        fh.write("\n")
+    os.replace(tmp, p)
+    print("farm_first: auto -> yes (auto no longer exists; yes does what auto did and has the assistant hand eligible work to your engines. Back to the old behaviour: gt_settings.py set farm_first suggest)")
+PYEOF
+}
+
+{ [ "$ONLY_CHECK" = yes ] || migrate_farm_first_auto; } || true   # also with --only; it edits one key of vault-config.json, never the vault
+
+
 snapshot_vault_state() {  # $1 = vault path, before anything writes into it
   local real porcelain
   real=$(real_path "$1")

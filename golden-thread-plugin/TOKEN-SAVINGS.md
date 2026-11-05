@@ -3,9 +3,90 @@
 **Every way to make Claude Code and Golden Thread use less of your allowance: what to turn on,
 how, what you will notice when it is on, and what you give up.**
 
-*A Golden Thread guide, written against gt 0.22.0 (figures not re-measured for 0.22.0 are marked 0.21.4). Figures are labelled: **measured** (a run or a
+*A Golden Thread guide, written against gt 0.22.1 (figures not re-measured for 0.22.0 are marked 0.21.4). Figures are labelled: **measured** (a run or a
 recorded event produced it, on the author's machine), **estimated** (worked out from a
 measurement), or **not measured**. None has been reproduced by anyone else yet.*
+
+---
+
+## One setting for all of it: `usage_plan` *(new in 0.22.1)*
+
+Gt has a dozen settings that save tokens, and they work best when they agree with each other. `usage_plan` is one
+switch for the group, so you do not have to set them one by one:
+
+| `usage_plan` | What it does |
+|---|---|
+| `off` | No plan. Every setting is yours. **Choosing `off` puts every setting back to what it was before the plan changed it** (a setting you had never set is removed, so its default applies again). |
+| `min` | The safe few. Nothing is cut while you are working. |
+| `max` | `min` plus everything else in the table below. `auto_clear` is only ever set to `shadow` (it logs and never clears), because it has to prove itself first. |
+| `custom` | Your own mix. Shown automatically when you change a setting the plan set: `custom (based on max)`. Change it back and it reads `max` again. |
+
+`min` and `max` save your current values the first time you leave `off`, then write the group. This is exactly what
+each one sets (generated from the same table the command uses, so it cannot drift):
+
+<!-- usage-plan-table:start -->
+| Setting | Default | `min` | `max` | What it does |
+|---|---|---|---|---|
+| `token_profile` | `standard` | unchanged | `minimum` | Cheapest answers: terse replies, no skeptic pass, no vault hints, the average model profile. |
+| `farm_first` | `suggest` | unchanged | `yes` | Hand routine work to your own local engines by itself (needs the farm module). |
+| `farm_ladder` | `off` | unchanged | `on` | Route work through the engines you calibrated, cheapest first (needs the farm module). |
+| `farm_share` | `off` | unchanged | `on` | Send a share of eligible tasks to hosted or local engines (needs the farm module). |
+| `cut_handoff` | `facts` | `facts` | `facts` | What a cut carries into the fresh session: the findings and key facts. |
+| `cut_kind` | `compact` | `clear` | `clear` | A cut is a clear with that handoff, not a /compact. |
+| `expiry_guard.handoff_pickup` | `on` | unchanged | `on` | After a clear, load the saved handoff into the fresh session by itself (nothing to press). |
+| `auto_compact` | `warn` | unchanged | `250000` | Cut the session by itself once its context reaches this many tokens. |
+| `auto_clear` | `off` | unchanged | `shadow` | Score after each reply whether clearing would pay; only logs, never clears. |
+| `cut_advisor` | `off` | `suggest` | `suggest` | Say once when a cut would pay back; never cuts. |
+| `expiry_guard` | `warn-only` | `auto` | `auto` | Cut an idle session while its prompt cache is still warm. |
+| `context_nudge` | `40` | `30` | `30` | Say once when the context passes this percent of the window. |
+<!-- usage-plan-table:end -->
+
+A setting whose module is off (`farm_ladder` and `farm_share` need the farm module) is skipped and listed, never an error.
+Everything on the table has a default you can read with `/gt:gt-settings <name>`.
+
+**Turn it on and off:** `/gt-usage:usage-plan max` (or `min`, `off`), or `gt_settings.py set usage_plan max`.
+
+**See exactly what it changed on this machine:** `/gt-usage:usage-plan changes` (or `gt_settings.py usage-plan changes`)
+prints a table of setting, what it was, what it is now, its default, what it does, and the command that undoes it.
+It also marks any setting you have changed by hand since. `/gt-usage:usage-plan show` lists every member with its
+value now and its on and off commands. The same table is printed the moment you choose `min` or `max`.
+
+**Not the same as `token_profile`.** `token_profile` trades answer quality against tokens, and its `maximum` spends
+*more*. `usage_plan max` is about saving, and it includes `token_profile minimum`. They share a word and nothing else.
+
+### What each setting does, and how to turn it on and off
+
+| Setting | What it does | On | Off |
+|---|---|---|---|
+| `auto_compact` | Cuts the session by itself when it grows large. `warn` (default) says so once and never cuts. | `set auto_compact auto` (150,000 tokens), `250000`, or a percent `30`-`90` | `set auto_compact warn` (say once) or `off` |
+| `cut_kind` | What a cut is: `compact` (summarise in place) or `clear` (a fresh session that starts from the handoff). | `set cut_kind clear` | `set cut_kind compact` |
+| `cut_handoff` | What a cut saves first: `facts` (findings, a handoff and key facts), `handoff`, or `none`. A clear needs one that is not `none`. | `set cut_handoff facts` | `set cut_handoff none` |
+| `auto_clear` | After each reply, scores whether clearing now would pay back. `shadow` only logs; `on` clears for you once the log has proved the rule (it asks you to type a word in a terminal). | `set auto_clear shadow` | `set auto_clear off` |
+| `cut_advisor` | Says once when a cut would pay back, and never cuts. It stays quiet while `auto_clear` is on or `auto_compact` is cutting for you (0.22.1). | `set cut_advisor suggest` | `set cut_advisor off` |
+| `expiry_guard` | Cuts an idle session while its prompt cache is still warm, so coming back is not a full rebuild. | `set expiry_guard auto` | `set expiry_guard warn-only` or `off` |
+| `context_nudge` | One line when this session passes a share of its window. | `set context_nudge 30` | `set context_nudge off` |
+| `token_profile` | The cheapest answer style and models: `minimum` is terse and cheapest, `standard` the default, `maximum` spends most. | `set token_profile minimum` | `set token_profile standard` |
+| `reply_length` | How long Claude's replies are: `terse`, `brief`, `normal`. A part of `token_profile`. | `set reply_length terse` | `set reply_length normal` |
+| `expiry_guard.handoff_pickup` | After a clear, loads the saved handoff into the fresh session by itself, so a cut needs nothing from you. With it off, the pickup line is put in the prompt box and you press Enter. | `set expiry_guard.handoff_pickup on` (default) | `set expiry_guard.handoff_pickup off` |
+| `expiry_guard.pickup_hold` | After a clear hands the fresh session its handoff, no automatic cut happens until you send that session's first prompt, which turns cuts back on. Stops a session nobody has touched from clearing and reloading in a loop. | `set expiry_guard.pickup_hold first_prompt` (default) | `set expiry_guard.pickup_hold off` |
+| `farm_first` | Hands routine work to your own local engines. | `set farm_first yes` | `set farm_first suggest` or `off` |
+| `farm_ladder` | Routes work through the engines you have calibrated, cheapest first (farm module). | `set farm_ladder on` | `set farm_ladder off` |
+| `farm_share` | Sends a share of eligible tasks to engines (farm module). Set it up with `/gt-usage:usage-plan farm --base-url URL`, which calibrates the engine and turns this on only if it passes. | `set farm_share on` | `set farm_share off` |
+
+Each of these has a longer explanation with `gt_settings.py explain <name>`.
+
+### Hold: no automatic cut in this session
+
+Automatic cuts are the right default for a long day and the wrong one when you are mid-debug with exact values in
+the context. **Hold** stops all four automatic cuts for one session: `auto_clear`, `auto_compact`, the idle-session
+guard (`expiry_guard`) and the open-session path.
+
+- **During a session:** `/gt-usage:usage-plan hold` (and `hold off` to end it; `hold status` says whether it is on).
+- **At the start of a session:** launch with `GT_HOLD_CUTS=1 claude`. The session is held from its first prompt
+  (the first hook that runs records it). Only one session can be held at a time, and a launch-time hold holds nothing
+  while another live session's hold exists. The cut advisor still speaks in a held session, because nothing will cut it.
+- **It ends with `hold off`, `/clear` or a new session.** Resuming the same session keeps it. A held session that sits idle loses the
+  cache-expiry protection, so coming back to it later can cost a full rebuild of its context.
 
 ---
 
@@ -194,7 +275,7 @@ Add `# gt:no-spill` to a command to keep its output whole.
 | Lever | What you will notice | What it saves | Setting |
 |---|---|---|---|
 | Notes answered locally | When you ask what your notes say, the answer comes from the model on your own computer: a few sentences with the exact quoted lines and where they are. If the engine is unsure or a quote does not check out, Claude answers as it always did. If the engine is set up but stopped, gt asks once whether to start it; it never starts one on its own. | The vault pages are not read into the conversation; the short answer and its quoted lines are. Three real questions kept about 3,500 tokens out (**estimated**), taking 25–70 seconds each (**measured**). | `vault_answers local-first`; `off` (default). To stop the start question: `vault_answers_start never` |
-| Routine work on your own engines | `suggest` (default): gt tells you what your engines could take and prints the command. `auto`: gt tests a new engine once, within your budget, then sends it the work it passed. | Local tokens cost no allowance. On the author's week, 84 packets (186,845 tokens) ran locally: about 0.1% of the work (**measured**). | `farm_first suggest`, `auto`, `off` |
+| Routine work on your own engines | `suggest` (default): gt tells you what your engines could take and prints the command. `yes`: gt tests a new engine once, within your budget, sends it the work it passed, and tells the assistant every turn to hand any eligible inline task to the cheapest tested engine (a hosted one only for a packet marked public, after the privacy checks). | Local tokens cost no allowance. On the author's week, 84 packets (186,845 tokens) ran locally: about 0.1% of the work (**measured**). | `farm_first suggest`, `yes`, `off` |
 | Import stages on a local engine | `/gt:gt-ingest` runs its extract, classify and draft steps on your big local engine; slower, and it falls back to Claude when the answer fails its checks. | Those steps' tokens. Quality was acceptable on 10 of 12 units, below Claude's (**measured**). | `pipeline_engine on`; `off` (default) |
 | Model per skill | `average`: quick gt skills run on the small model, balanced ones on the middle model, deep ones on the large model. You may notice a slightly plainer answer from a quick skill. | On the author's six days, about 9.9% of agent work (**estimated**). | `models profile average`; `very-high`, `inherit` (default) |
 | Token profile | One choice that sets seven settings at once (model profile, reply length, skeptic, note hints, idle guard, import helpers, calibration). `/gt:gt-settings` then shows the profile at the top, or "manual (based on …)" once you change one of the seven yourself. | The sum of the seven. | `token_profile standard` (default), `minimum`, `maximum` |

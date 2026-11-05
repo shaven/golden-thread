@@ -1,7 +1,7 @@
 # Golden Thread Plugin
 
 > **Reader:** someone who has installed it and wants the reference
-> **Stamped for gt 0.22.0:** the counts and version numbers in this document are checked against the code at every release; the prose is re-read when the document is edited, not at every release.
+> **Stamped for gt 0.22.1:** the counts and version numbers in this document are checked against the code at every release; the prose is re-read when the document is edited, not at every release.
 
 A Claude Code plugin that turns an Obsidian vault into the single source of truth for all AI memory across every project and every session.
 
@@ -110,7 +110,7 @@ nothing is deleted.
 | `/gt:gt-validation` | Record what a validation established, and what it could not determine, stamped with the file's content hash so the definition expires when the file changes. |
 | `/gt:gt-lint` | Audit the vault for structural problems: broken wikilinks, orphaned pages, missing index entries, unlisted memory files, Knowledge pages citing superseded sources, stale pages, and Core rules that are stored but not enforced. Since 0.18.1 four checks file questions to the review queue: `adr-expires`, `bundled-concept`, `decision-candidate`, `memory-entity-orphan` — and `release-pipeline` checks each project's `release_pipeline:` flag. Applies fixes with your approval. |
 | `/gt:gt-runbook-lint` | Scan all project `runbook.md` files for content that has drifted into multiple runbooks. Classifies duplicated content by type and routes it to the right shared layer (PROTOCOL.md, Knowledge page, or repo CLAUDE.md) via `gt-promote`. |
-| `/gt:gt-settings` | View and change what Golden Thread does automatically. 227 settings ship with gt (`gt_settings.py show` lists the common ones, `show --all` every one) — among them `component_updates`, `version_check`, `orphan_check`, `push_check`, `surface`, `daily_comms_content`, `daily_finalize`, `release_announce`, `agent_specialization`, `skeptic_pass`, `handoff_surface`, `task_surface`, `test_gate`, `parallel_work`, `parallel_max`, `protected_paths`, and, from 0.18.1, `brief_absence_days`, `foreign_checkout_guard`, `decision_signals`, `knowledge_access_log`, `optimize_session_days`, `optimize_avoidable_pct`, `memory_contradiction_check`, `promotion_candidates`, `promotion_overlap`, `review_stamp`, `sync_check`, `reminder_days`, `reminder_macos`, `reminder_relay`, `reminder_email`, `commit_checks`, `addon_fixes`, `addon_fix_size_limit`, `execution_metrics`, `scoped_receipts`, `test_tmpdir`, `runners` — plus every setting an installed module adds (`report_card`, `closeout_check`, `usage_meter`, `usage_alert`, `visualize_publish`, `visualize_publish_visibility`, `watch`). Every automatic behaviour can be switched off. |
+| `/gt:gt-settings` | View and change what Golden Thread does automatically. 229 settings ship with gt (`gt_settings.py show` lists the common ones, `show --all` every one) — among them `component_updates`, `version_check`, `orphan_check`, `push_check`, `surface`, `daily_comms_content`, `daily_finalize`, `release_announce`, `agent_specialization`, `skeptic_pass`, `handoff_surface`, `task_surface`, `test_gate`, `parallel_work`, `parallel_max`, `protected_paths`, and, from 0.18.1, `brief_absence_days`, `foreign_checkout_guard`, `decision_signals`, `knowledge_access_log`, `optimize_session_days`, `optimize_avoidable_pct`, `memory_contradiction_check`, `promotion_candidates`, `promotion_overlap`, `review_stamp`, `sync_check`, `reminder_days`, `reminder_macos`, `reminder_relay`, `reminder_email`, `commit_checks`, `addon_fixes`, `addon_fix_size_limit`, `execution_metrics`, `scoped_receipts`, `test_tmpdir`, `runners` — plus every setting an installed module adds (`report_card`, `closeout_check`, `usage_meter`, `usage_alert`, `visualize_publish`, `visualize_publish_visibility`, `watch`). Every automatic behaviour can be switched off. |
 
 ### Modules
 
@@ -133,6 +133,7 @@ by `install.sh` while it is on. There are twelve; `lotr` joined in 0.17.11 and `
 | `pane` (`gt-pane`) | asked at install | `/gt-pane:gt-pane` | The gt button pane (Claude Code mods, 2.1.287 or later): twelve plain-words buttons in a side pane; press one and it sends its prompt as if you had typed it. The list is yours to reorder, rename, add to and remove from. |
 | `recall` (`gt-recall`) | off | `/gt-recall:gt-recall` | Rank the vault's pages for a question by BM25 over page name, headings and the index line above body text, in the standard library, read-only; each hit says which method found it. |
 | `usage` (`gt-usage`) | on | `/gt-usage:gt-usage` | Where this account stands against its Claude plan allowance — the 5-hour, weekly and monthly-spend windows. Records a reading a minute and says nothing until one is worth acting on; `usage_alert always` keeps it on screen. |
+| `usage` (`gt-usage`) | on | `/gt-usage:usage-plan` | gt's token-saving settings as one plan (0.22.1): `min` the safe few, `max` all of them, `off` puts back what was there, `changes` lists what the plan changed. `hold` stops all four automatic cuts for this session only; `farm --base-url URL` calibrates your own engine and turns `farm_share` on only when it passes. |
 
 #### What flow shows
 
@@ -488,7 +489,7 @@ Python scripts can also be run directly from the command line. One variable, so 
 bump does not strand eight copied paths — from the release tree, or from the install:
 
 ```bash
-GT=golden-thread/0.22.0/scripts
+GT=golden-thread/0.22.1/scripts
 # installed instead:  GT=$(ls -d ~/.claude/plugins/cache/golden-thread-plugin/gt/*/scripts | sort -V | tail -1)
 
 # Create a new vault
@@ -706,6 +707,10 @@ Two scripts in `golden-thread-wiki` come directly from Jonathan's work:
 ## Version History
 
 Newest first. Each entry is the note that used to sit at the top of this file.
+
+### 0.22.1
+
+**0.22.1: one setting for the token-saving settings, a hold for automatic cuts, and a clear that reads its own handoff.** `gt_settings.py set usage_plan max` (or `/gt-usage:usage-plan max`) sets the whole group, `min` the safe few, and `off` puts back exactly what you had; change one setting afterwards and it reads `custom (based on max)`, and `usage-plan changes` lists what was changed. `/gt-usage:usage-plan hold` stops all four automatic cuts for one session. An automatic clear now loads its handoff into the fresh session with nothing to press. The cut advisor stays quiet while a cut happens by itself. No default changes.
 
 ### 0.22.0
 

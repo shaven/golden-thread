@@ -3,7 +3,7 @@
 **Running open-weights models on machines you already own as gt-farm engines — what to
 measure, how to size a node, and how gt routes to it and counts the saving.**
 
-*A Golden Thread paper, written against gt 0.22.0 and gt-farm 0.21.3. The figures are one owner's measurements on
+*A Golden Thread paper, updated for gt 0.22.1 and gt-farm 0.21.4 (the figures were measured with gt 0.22.0 and gt-farm 0.21.3). The figures are one owner's measurements on
 2026-10-14, labelled `self-verified` (one run each, not independently reproduced). Your
 hardware will differ; the method is the point, and the first section tells you how to get your
 own numbers in an afternoon.*
@@ -616,7 +616,7 @@ Until a model has a calibration, gt gives it no automatic work (the commit-step 
 `gt_farm_send.py send --service NAME` is still yours to use. The verdicts are kept per model in your vault
 (`Projects/golden-thread/farm/calibrations/`) and in a local cache, so a model you switch away from and back to is
 not measured again, and a second machine that pulls the vault already has them. `--list` shows every model measured,
-`--status` each engine's current model. The setting `farm_first` (off, suggest, auto) decides whether gt only
+`--status` each engine's current model. The setting `farm_first` (off, suggest, yes) decides whether gt only
 tells you what to do or also does the first steps; see the manual's *Farm-first* section.
 
 ### Test an engine on code (gt 0.22.0)
@@ -1017,7 +1017,7 @@ rows the same `pool` name to spread a batch across them.
 **2. Turn routing on.**
 
 ```
-python3 $GT/gt_settings.py set farm_first auto        # gt uses calibrated engines on its own
+python3 $GT/gt_settings.py set farm_first yes         # gt uses calibrated engines on its own
 python3 $GT/gt_settings.py set farm_audit_rate 0.1    # Claude re-checks about one farmed result in ten
 ```
 

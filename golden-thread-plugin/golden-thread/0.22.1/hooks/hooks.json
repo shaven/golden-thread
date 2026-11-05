@@ -1,0 +1,457 @@
+{
+  "description": "Golden Thread (gt): each entry runs the command gt's installer wired for this machine, when it wired one",
+  "hooks": {
+    "SessionStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "[ -f \"${HOME:-$USERPROFILE}/.claude/golden-thread/hooks/gt_paths.py\" ] || { s=\"${CLAUDE_PLUGIN_ROOT}/scripts/gt_setup.py\"; { command -v py >/dev/null 2>&1 && py -3 -I \"$s\" hook; } || python3 -I \"$s\" hook 2>/dev/null || python -I \"$s\" hook; }",
+            "timeout": 5
+          }
+        ]
+      },
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "f=\"${HOME:-$USERPROFILE}/.claude/golden-thread/wired/SessionStart__gt_components.py\"; if [ -f \"$f\" ]; then . \"$f\"; fi"
+          }
+        ]
+      },
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "f=\"${HOME:-$USERPROFILE}/.claude/golden-thread/wired/SessionStart__gt_workers.py\"; if [ -f \"$f\" ]; then . \"$f\"; fi"
+          }
+        ]
+      },
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "f=\"${HOME:-$USERPROFILE}/.claude/golden-thread/wired/SessionStart__gt_version_check.py\"; if [ -f \"$f\" ]; then . \"$f\"; fi"
+          }
+        ]
+      },
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "f=\"${HOME:-$USERPROFILE}/.claude/golden-thread/wired/SessionStart__gt_push_check.py\"; if [ -f \"$f\" ]; then . \"$f\"; fi"
+          }
+        ]
+      },
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "f=\"${HOME:-$USERPROFILE}/.claude/golden-thread/wired/SessionStart__gt_surface.py\"; if [ -f \"$f\" ]; then . \"$f\"; fi"
+          }
+        ]
+      },
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "f=\"${HOME:-$USERPROFILE}/.claude/golden-thread/wired/SessionStart__gt_unlock.py\"; if [ -f \"$f\" ]; then . \"$f\"; fi"
+          }
+        ]
+      },
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "f=\"${HOME:-$USERPROFILE}/.claude/golden-thread/wired/SessionStart__gt_grant.py\"; if [ -f \"$f\" ]; then . \"$f\"; fi"
+          }
+        ]
+      },
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "f=\"${HOME:-$USERPROFILE}/.claude/golden-thread/wired/SessionStart__gt_queue_autodrain.py\"; if [ -f \"$f\" ]; then . \"$f\"; fi",
+            "timeout": 30
+          }
+        ]
+      },
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "f=\"${HOME:-$USERPROFILE}/.claude/golden-thread/wired/SessionStart__gt_calibration_schedule.py\"; if [ -f \"$f\" ]; then . \"$f\"; fi",
+            "timeout": 5
+          }
+        ]
+      },
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "f=\"${HOME:-$USERPROFILE}/.claude/golden-thread/wired/SessionStart__gt_skill_runlog.py\"; if [ -f \"$f\" ]; then . \"$f\"; fi",
+            "timeout": 10
+          }
+        ]
+      },
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "f=\"${HOME:-$USERPROFILE}/.claude/golden-thread/wired/SessionStart__gt_session_search.py\"; if [ -f \"$f\" ]; then . \"$f\"; fi",
+            "timeout": 10
+          }
+        ]
+      },
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "f=\"${HOME:-$USERPROFILE}/.claude/golden-thread/wired/SessionStart__gt_addon_scan.py\"; if [ -f \"$f\" ]; then . \"$f\"; fi",
+            "timeout": 10
+          }
+        ]
+      },
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "f=\"${HOME:-$USERPROFILE}/.claude/golden-thread/wired/SessionStart__gt_mcp_pin.py\"; if [ -f \"$f\" ]; then . \"$f\"; fi",
+            "timeout": 10
+          }
+        ]
+      },
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "f=\"${HOME:-$USERPROFILE}/.claude/golden-thread/wired/SessionStart__inject_core_rules.sh\"; if [ -f \"$f\" ]; then . \"$f\"; fi",
+            "timeout": 10
+          }
+        ],
+        "matcher": "compact"
+      }
+    ],
+    "UserPromptSubmit": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "f=\"${HOME:-$USERPROFILE}/.claude/golden-thread/wired/UserPromptSubmit__gt_state.py\"; if [ -f \"$f\" ]; then . \"$f\"; fi"
+          }
+        ]
+      },
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "f=\"${HOME:-$USERPROFILE}/.claude/golden-thread/wired/UserPromptSubmit__vault_hints.py\"; if [ -f \"$f\" ]; then . \"$f\"; fi",
+            "timeout": 3
+          }
+        ]
+      },
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "f=\"${HOME:-$USERPROFILE}/.claude/golden-thread/wired/UserPromptSubmit__gt_expiry_guard.py\"; if [ -f \"$f\" ]; then . \"$f\"; fi",
+            "timeout": 5
+          }
+        ]
+      },
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "f=\"${HOME:-$USERPROFILE}/.claude/golden-thread/wired/UserPromptSubmit__gt_hints.py\"; if [ -f \"$f\" ]; then . \"$f\"; fi",
+            "timeout": 3
+          }
+        ]
+      },
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "f=\"${HOME:-$USERPROFILE}/.claude/golden-thread/wired/UserPromptSubmit__gt_intake.py\"; if [ -f \"$f\" ]; then . \"$f\"; fi",
+            "timeout": 10
+          }
+        ]
+      },
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "f=\"${HOME:-$USERPROFILE}/.claude/golden-thread/wired/UserPromptSubmit__inject_core_rules.sh\"; if [ -f \"$f\" ]; then . \"$f\"; fi",
+            "timeout": 10
+          }
+        ]
+      }
+    ],
+    "PreCompact": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "f=\"${HOME:-$USERPROFILE}/.claude/golden-thread/wired/PreCompact__gt_state.py\"; if [ -f \"$f\" ]; then . \"$f\"; fi"
+          }
+        ]
+      }
+    ],
+    "PreToolUse": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "f=\"${HOME:-$USERPROFILE}/.claude/golden-thread/wired/PreToolUse__guard_protected_paths.sh\"; if [ -f \"$f\" ]; then . \"$f\"; fi",
+            "timeout": 10,
+            "onFailure": "block"
+          }
+        ],
+        "matcher": "Write|Edit|MultiEdit|NotebookEdit|Bash"
+      },
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "f=\"${HOME:-$USERPROFILE}/.claude/golden-thread/wired/PreToolUse__guard_foreign_checkout.sh\"; if [ -f \"$f\" ]; then . \"$f\"; fi",
+            "timeout": 10,
+            "if": "Bash(*git*)",
+            "onFailure": "block"
+          }
+        ],
+        "matcher": "Bash"
+      },
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "f=\"${HOME:-$USERPROFILE}/.claude/golden-thread/wired/PreToolUse__guard_scope_contract.sh\"; if [ -f \"$f\" ]; then . \"$f\"; fi",
+            "timeout": 10,
+            "if": "Bash(*git*)"
+          }
+        ],
+        "matcher": "Bash"
+      },
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "f=\"${HOME:-$USERPROFILE}/.claude/golden-thread/wired/PreToolUse__guard_lotr_agent.py\"; if [ -f \"$f\" ]; then . \"$f\"; fi",
+            "timeout": 5
+          }
+        ],
+        "matcher": "Bash"
+      },
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "f=\"${HOME:-$USERPROFILE}/.claude/golden-thread/wired/PreToolUse__gt_grant.py\"; if [ -f \"$f\" ]; then . \"$f\"; fi",
+            "timeout": 5
+          }
+        ],
+        "matcher": "Bash"
+      },
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "f=\"${HOME:-$USERPROFILE}/.claude/golden-thread/wired/PreToolUse__guard_install.sh\"; if [ -f \"$f\" ]; then . \"$f\"; fi",
+            "timeout": 75,
+            "onFailure": "block"
+          }
+        ],
+        "matcher": "Bash|PowerShell"
+      },
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "f=\"${HOME:-$USERPROFILE}/.claude/golden-thread/wired/PreToolUse__gt_integrity.py\"; if [ -f \"$f\" ]; then . \"$f\"; fi",
+            "timeout": 5
+          }
+        ],
+        "matcher": "Bash"
+      },
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "f=\"${HOME:-$USERPROFILE}/.claude/golden-thread/wired/PreToolUse__gt_agent_model.py\"; if [ -f \"$f\" ]; then . \"$f\"; fi",
+            "timeout": 5
+          }
+        ],
+        "matcher": "Agent|Task"
+      },
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "f=\"${HOME:-$USERPROFILE}/.claude/golden-thread/wired/PreToolUse__guard_session_claims.sh\"; if [ -f \"$f\" ]; then . \"$f\"; fi",
+            "timeout": 10,
+            "onFailure": "block"
+          }
+        ],
+        "matcher": "Write|Edit|MultiEdit|NotebookEdit|Bash|PowerShell"
+      },
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "f=\"${HOME:-$USERPROFILE}/.claude/golden-thread/wired/PreToolUse__guard_test_before_commit.sh\"; if [ -f \"$f\" ]; then . \"$f\"; fi",
+            "timeout": 10,
+            "if": "Bash(*git*)",
+            "onFailure": "block"
+          }
+        ],
+        "matcher": "Bash"
+      },
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "f=\"${HOME:-$USERPROFILE}/.claude/golden-thread/wired/PreToolUse__guard_vault_writes.sh\"; if [ -f \"$f\" ]; then . \"$f\"; fi",
+            "timeout": 10,
+            "onFailure": "block"
+          }
+        ],
+        "matcher": "Bash|PowerShell"
+      }
+    ],
+    "PostToolUse": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "f=\"${HOME:-$USERPROFILE}/.claude/golden-thread/wired/PostToolUse__log_knowledge_read.sh\"; if [ -f \"$f\" ]; then . \"$f\"; fi",
+            "timeout": 5
+          }
+        ],
+        "matcher": "Read"
+      },
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "f=\"${HOME:-$USERPROFILE}/.claude/golden-thread/wired/PostToolUse__gt_grant.py\"; if [ -f \"$f\" ]; then . \"$f\"; fi",
+            "timeout": 5
+          }
+        ],
+        "matcher": "Bash"
+      },
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "f=\"${HOME:-$USERPROFILE}/.claude/golden-thread/wired/PostToolUse__gt_spill.py\"; if [ -f \"$f\" ]; then . \"$f\"; fi",
+            "timeout": 5
+          }
+        ],
+        "matcher": "Bash"
+      }
+    ],
+    "SessionEnd": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "f=\"${HOME:-$USERPROFILE}/.claude/golden-thread/wired/SessionEnd__gt_unlock.py\"; if [ -f \"$f\" ]; then . \"$f\"; fi"
+          }
+        ]
+      }
+    ],
+    "PermissionDenied": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "f=\"${HOME:-$USERPROFILE}/.claude/golden-thread/wired/PermissionDenied__gt_grant.py\"; if [ -f \"$f\" ]; then . \"$f\"; fi",
+            "timeout": 5
+          }
+        ]
+      }
+    ],
+    "Notification": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "f=\"${HOME:-$USERPROFILE}/.claude/golden-thread/wired/Notification__gt_expiry_guard.py\"; if [ -f \"$f\" ]; then . \"$f\"; fi",
+            "timeout": 10
+          }
+        ],
+        "matcher": "idle_prompt"
+      }
+    ],
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "f=\"${HOME:-$USERPROFILE}/.claude/golden-thread/wired/Stop__gt_expiry_guard.py\"; if [ -f \"$f\" ]; then . \"$f\"; fi",
+            "timeout": 10
+          }
+        ]
+      },
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "f=\"${HOME:-$USERPROFILE}/.claude/golden-thread/wired/Stop__gt_hints.py\"; if [ -f \"$f\" ]; then . \"$f\"; fi",
+            "timeout": 5
+          }
+        ]
+      },
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "f=\"${HOME:-$USERPROFILE}/.claude/golden-thread/wired/Stop__gt_cut_advisor.py\"; if [ -f \"$f\" ]; then . \"$f\"; fi",
+            "timeout": 5
+          }
+        ]
+      },
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "f=\"${HOME:-$USERPROFILE}/.claude/golden-thread/wired/Stop__gt_auto_clear.py\"; if [ -f \"$f\" ]; then . \"$f\"; fi",
+            "timeout": 5
+          }
+        ]
+      },
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "f=\"${HOME:-$USERPROFILE}/.claude/golden-thread/wired/Stop__gt_queue_autodrain.py\"; if [ -f \"$f\" ]; then . \"$f\"; fi",
+            "timeout": 30
+          }
+        ]
+      },
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "f=\"${HOME:-$USERPROFILE}/.claude/golden-thread/wired/Stop__validate_response.sh\"; if [ -f \"$f\" ]; then . \"$f\"; fi",
+            "timeout": 10
+          }
+        ]
+      }
+    ],
+    "PostToolBatch": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "f=\"${HOME:-$USERPROFILE}/.claude/golden-thread/wired/PostToolBatch__gt_batch_ledger.py\"; if [ -f \"$f\" ]; then . \"$f\"; fi",
+            "timeout": 5
+          }
+        ]
+      }
+    ]
+  },
+  "modules": [
+    "./guard_mod.js"
+  ]
+}
