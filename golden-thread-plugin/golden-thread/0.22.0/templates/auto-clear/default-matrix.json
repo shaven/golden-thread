@@ -1,0 +1,1132 @@
+{
+ "schema": "gt.auto_clear_default_matrix/0",
+ "status": "Setting 1, the default matrix. Measured, n=1 per cell (three blind seeds), list-price dollars, handoff H4 for the schedules and blind runs. Not a published benchmark; none of it independently verified.",
+ "source": "Projects/golden-thread/cut-savings/DATA.md (sets) and the owner's page 'Savings Curve Pilot' updated 2026-10-25 (fixed schedules, cold-start table, blind runs). Written into the build 2026-10-27.",
+ "window_tokens": 1000000,
+ "measured_range_pct_of_window": {
+  "min": 5.7,
+  "max": 39.0,
+  "note": "nothing below 5.7% or above 39.0% is measured for any model; the auto-clear floor is 100,000 tokens (10% of a 1M window), a safety choice"
+ },
+ "units": "saved_pct_at_prompts_after_cut: percent of the no-cut cost saved, cut cost included, negative = behind the control. cost_change_pct: percent change in session cost against the no-cut baseline, negative = cheaper.",
+ "not_measured": [
+  "behaviour below 100K tokens except Sonnet 5.5 at 5.7%",
+  "handoff levels H0-H3 in the fixed-schedule and blind runs",
+  "Opus live blind runs",
+  "Haiku",
+  "whether cold-start overhead is stable out of sample",
+  "long contexts above 39% of the window"
+ ],
+ "sets": [
+  {
+   "id": "rt",
+   "model": "Sonnet 5.5",
+   "shape": "LPLR",
+   "cut_pct_of_window": null,
+   "cut_tokens": null,
+   "prompts_after_cut": 6,
+   "control_cost_usd": 2.29,
+   "levels": {
+    "H0": {
+     "saved_pct_at_prompts_after_cut": {
+      "1": -49,
+      "2": -6,
+      "4": 9,
+      "6": 13
+     }
+    },
+    "H1": {
+     "saved_pct_at_prompts_after_cut": {
+      "1": -72,
+      "2": -21,
+      "4": -1,
+      "6": 5
+     }
+    },
+    "H2": {
+     "saved_pct_at_prompts_after_cut": {
+      "1": -97,
+      "2": -23,
+      "4": -6,
+      "6": 0
+     }
+    },
+    "H3": {
+     "saved_pct_at_prompts_after_cut": {
+      "1": -96,
+      "2": -28,
+      "4": -3,
+      "6": 5
+     }
+    },
+    "H4": {
+     "saved_pct_at_prompts_after_cut": {
+      "1": -36,
+      "2": 4,
+      "4": 7,
+      "6": 6
+     }
+    }
+   },
+   "state": "measured",
+   "n": 1
+  },
+  {
+   "id": "rt",
+   "model": "Sonnet 5.5",
+   "shape": "SPLR",
+   "cut_pct_of_window": null,
+   "cut_tokens": null,
+   "prompts_after_cut": 6,
+   "control_cost_usd": 1.35,
+   "levels": {
+    "H0": {
+     "saved_pct_at_prompts_after_cut": {
+      "1": -124,
+      "2": -29,
+      "4": 5,
+      "6": 15
+     }
+    },
+    "H1": {
+     "saved_pct_at_prompts_after_cut": {
+      "1": -145,
+      "2": -33,
+      "4": -6,
+      "6": 5
+     }
+    },
+    "H2": {
+     "saved_pct_at_prompts_after_cut": {
+      "1": -153,
+      "2": -33,
+      "4": 3,
+      "6": 13
+     }
+    },
+    "H3": {
+     "saved_pct_at_prompts_after_cut": {
+      "1": -159,
+      "2": -57,
+      "4": -14,
+      "6": -1
+     }
+    },
+    "H4": {
+     "saved_pct_at_prompts_after_cut": {
+      "1": -138,
+      "2": -39,
+      "4": -4,
+      "6": 6
+     }
+    }
+   },
+   "state": "measured",
+   "n": 1
+  },
+  {
+   "id": "L100",
+   "model": "Sonnet 5.5",
+   "shape": "SPSR",
+   "cut_pct_of_window": 11.0,
+   "cut_tokens": 110325,
+   "prompts_after_cut": 10,
+   "control_cost_usd": 1.06,
+   "levels": {
+    "H0": {
+     "saved_pct_at_prompts_after_cut": {
+      "1": -538,
+      "2": -126,
+      "4": -29,
+      "6": -5,
+      "10": 11
+     }
+    },
+    "H1": {
+     "saved_pct_at_prompts_after_cut": {
+      "1": -537,
+      "2": -126,
+      "4": -29,
+      "6": -4,
+      "10": 12
+     }
+    },
+    "H2": {
+     "saved_pct_at_prompts_after_cut": {
+      "1": -544,
+      "2": -128,
+      "4": -29,
+      "6": -5,
+      "10": 11
+     }
+    },
+    "H3": {
+     "saved_pct_at_prompts_after_cut": {
+      "1": -559,
+      "2": -132,
+      "4": -31,
+      "6": -6,
+      "10": 11
+     }
+    },
+    "H4": {
+     "saved_pct_at_prompts_after_cut": {
+      "1": -380,
+      "2": -77,
+      "4": -6,
+      "6": 12,
+      "10": 23
+     }
+    }
+   },
+   "state": "measured",
+   "n": 1
+  },
+  {
+   "id": "L175",
+   "model": "Sonnet 5.5",
+   "shape": "SPSR",
+   "cut_pct_of_window": 17.3,
+   "cut_tokens": 173349,
+   "prompts_after_cut": 10,
+   "control_cost_usd": 1.19,
+   "levels": {
+    "H0": {
+     "saved_pct_at_prompts_after_cut": {
+      "1": -269,
+      "2": -58,
+      "4": 8,
+      "6": 27,
+      "10": 38
+     }
+    },
+    "H1": {
+     "saved_pct_at_prompts_after_cut": {
+      "1": -333,
+      "2": -81,
+      "4": -2,
+      "6": 20,
+      "10": 35
+     }
+    },
+    "H2": {
+     "saved_pct_at_prompts_after_cut": {
+      "1": -323,
+      "2": -85,
+      "4": -12,
+      "6": 7,
+      "10": 18
+     }
+    },
+    "H3": {
+     "saved_pct_at_prompts_after_cut": {
+      "1": -360,
+      "2": -92,
+      "4": -8,
+      "6": 16,
+      "10": 31
+     }
+    },
+    "H4": {
+     "saved_pct_at_prompts_after_cut": {
+      "1": -168,
+      "2": -25,
+      "4": 26,
+      "6": 40,
+      "10": 49
+     }
+    }
+   },
+   "state": "measured",
+   "n": 1
+  },
+  {
+   "id": "L200",
+   "model": "Sonnet 5.5",
+   "shape": "SPSR",
+   "cut_pct_of_window": 19.5,
+   "cut_tokens": 194559,
+   "prompts_after_cut": 10,
+   "control_cost_usd": 1.34,
+   "levels": {
+    "H0": {
+     "saved_pct_at_prompts_after_cut": {
+      "1": -271,
+      "2": -65,
+      "4": -2,
+      "6": 15,
+      "10": 25
+     }
+    },
+    "H1": {
+     "saved_pct_at_prompts_after_cut": {
+      "1": -278,
+      "2": -68,
+      "4": -2,
+      "6": 16,
+      "10": 26
+     }
+    },
+    "H2": {
+     "saved_pct_at_prompts_after_cut": {
+      "1": -269,
+      "2": -65,
+      "4": 0,
+      "6": 19,
+      "10": 34
+     }
+    },
+    "H3": {
+     "saved_pct_at_prompts_after_cut": {
+      "1": -335,
+      "2": -90,
+      "4": -13,
+      "6": 8,
+      "10": 21
+     }
+    },
+    "H4": {
+     "saved_pct_at_prompts_after_cut": {
+      "1": -161,
+      "2": -20,
+      "4": 26,
+      "6": 38,
+      "10": 46
+     }
+    }
+   },
+   "state": "measured",
+   "n": 1
+  },
+  {
+   "id": "L225",
+   "model": "Sonnet 5.5",
+   "shape": "SPSR",
+   "cut_pct_of_window": 21.7,
+   "cut_tokens": 217148,
+   "prompts_after_cut": 10,
+   "control_cost_usd": 1.44,
+   "levels": {
+    "H0": {
+     "saved_pct_at_prompts_after_cut": {
+      "1": -235,
+      "2": -47,
+      "4": 10,
+      "6": 23,
+      "10": 32
+     }
+    },
+    "H1": {
+     "saved_pct_at_prompts_after_cut": {
+      "1": -263,
+      "2": -50,
+      "4": 16,
+      "6": 33,
+      "10": 46
+     }
+    },
+    "H2": {
+     "saved_pct_at_prompts_after_cut": {
+      "1": -316,
+      "2": -76,
+      "4": -2,
+      "6": 15,
+      "10": 28
+     }
+    },
+    "H3": {
+     "saved_pct_at_prompts_after_cut": {
+      "1": -298,
+      "2": -69,
+      "4": 1,
+      "6": 17,
+      "10": 29
+     }
+    },
+    "H4": {
+     "saved_pct_at_prompts_after_cut": {
+      "1": -150,
+      "2": -11,
+      "4": 35,
+      "6": 47,
+      "10": 57
+     }
+    }
+   },
+   "state": "measured",
+   "n": 1
+  },
+  {
+   "id": "L250",
+   "model": "Sonnet 5.5",
+   "shape": "SPSR",
+   "cut_pct_of_window": 23.8,
+   "cut_tokens": 237676,
+   "prompts_after_cut": 10,
+   "control_cost_usd": 1.57,
+   "levels": {
+    "H0": {
+     "saved_pct_at_prompts_after_cut": {
+      "1": -187,
+      "2": -21,
+      "4": 30,
+      "6": 44,
+      "10": 53
+     }
+    },
+    "H1": {
+     "saved_pct_at_prompts_after_cut": {
+      "1": -325,
+      "2": -76,
+      "4": -1,
+      "6": 19,
+      "10": 32
+     }
+    },
+    "H2": {
+     "saved_pct_at_prompts_after_cut": {
+      "1": -282,
+      "2": -61,
+      "4": 6,
+      "6": 23,
+      "10": 34
+     }
+    },
+    "H3": {
+     "saved_pct_at_prompts_after_cut": {
+      "1": -303,
+      "2": -68,
+      "4": 3,
+      "6": 21,
+      "10": 33
+     }
+    },
+    "H4": {
+     "saved_pct_at_prompts_after_cut": {
+      "1": -179,
+      "2": -21,
+      "4": 26,
+      "6": 38,
+      "10": 45
+     }
+    }
+   },
+   "state": "measured",
+   "n": 1
+  },
+  {
+   "id": "L300",
+   "model": "Sonnet 5.5",
+   "shape": "SPSR",
+   "cut_pct_of_window": 34.1,
+   "cut_tokens": 341065,
+   "prompts_after_cut": 10,
+   "control_cost_usd": 2.17,
+   "levels": {
+    "H0": {
+     "saved_pct_at_prompts_after_cut": {
+      "1": -168,
+      "2": -8,
+      "4": 41,
+      "6": 54,
+      "10": 63
+     }
+    },
+    "H1": {
+     "saved_pct_at_prompts_after_cut": {
+      "1": -198,
+      "2": -18,
+      "4": 36,
+      "6": 51,
+      "10": 62
+     }
+    },
+    "H2": {
+     "saved_pct_at_prompts_after_cut": {
+      "1": -204,
+      "2": -20,
+      "4": 35,
+      "6": 51,
+      "10": 61
+     }
+    },
+    "H3": {
+     "saved_pct_at_prompts_after_cut": {
+      "1": -253,
+      "2": -42,
+      "4": 21,
+      "6": 37,
+      "10": 48
+     }
+    },
+    "H4": {
+     "saved_pct_at_prompts_after_cut": {
+      "1": -99,
+      "2": 16,
+      "4": 49,
+      "6": 58,
+      "10": 63
+     }
+    }
+   },
+   "state": "measured",
+   "n": 1
+  },
+  {
+   "id": "L350",
+   "model": "Sonnet 5.5",
+   "shape": "SPSR",
+   "cut_pct_of_window": 38.4,
+   "cut_tokens": 384280,
+   "prompts_after_cut": 10,
+   "control_cost_usd": 2.41,
+   "levels": {
+    "H0": {
+     "saved_pct_at_prompts_after_cut": {
+      "1": -135,
+      "2": 1,
+      "4": 41,
+      "6": 51,
+      "10": 57
+     }
+    },
+    "H1": {
+     "saved_pct_at_prompts_after_cut": {
+      "1": -265,
+      "2": -44,
+      "4": 22,
+      "6": 39,
+      "10": 51
+     }
+    },
+    "H2": {
+     "saved_pct_at_prompts_after_cut": {
+      "1": -213,
+      "2": -22,
+      "4": 36,
+      "6": 52,
+      "10": 63
+     }
+    },
+    "H3": {
+     "saved_pct_at_prompts_after_cut": {
+      "1": -221,
+      "2": -29,
+      "4": 27,
+      "6": 42,
+      "10": 52
+     }
+    },
+    "H4": {
+     "saved_pct_at_prompts_after_cut": {
+      "1": -88,
+      "2": 24,
+      "4": 58,
+      "6": 67,
+      "10": 74
+     }
+    }
+   },
+   "state": "measured",
+   "n": 1
+  },
+  {
+   "id": "L60",
+   "model": "Sonnet 5.5",
+   "shape": "SPSR",
+   "cut_pct_of_window": 5.7,
+   "cut_tokens": 56918,
+   "prompts_after_cut": 10,
+   "control_cost_usd": 0.99,
+   "levels": {
+    "H0": {
+     "saved_pct_at_prompts_after_cut": {
+      "1": -101,
+      "2": -59,
+      "4": -27,
+      "6": -15,
+      "10": -5
+     }
+    },
+    "H1": {
+     "saved_pct_at_prompts_after_cut": {
+      "1": -83,
+      "2": -35,
+      "4": -1,
+      "6": 13,
+      "10": 27
+     }
+    },
+    "H2": {
+     "saved_pct_at_prompts_after_cut": {
+      "1": -84,
+      "2": -45,
+      "4": -16,
+      "6": -5,
+      "10": 4
+     }
+    },
+    "H3": {
+     "saved_pct_at_prompts_after_cut": {
+      "1": -168,
+      "2": -93,
+      "4": -41,
+      "6": -18,
+      "10": 2
+     }
+    },
+    "H4": {
+     "saved_pct_at_prompts_after_cut": {
+      "1": -26,
+      "2": -3,
+      "4": 14,
+      "6": 21,
+      "10": 26
+     }
+    }
+   },
+   "state": "measured",
+   "n": 1
+  },
+  {
+   "id": "o48",
+   "model": "Opus 4.8",
+   "shape": "SPSR",
+   "cut_pct_of_window": 12.2,
+   "cut_tokens": 122445,
+   "prompts_after_cut": 10,
+   "control_cost_usd": 5.02,
+   "levels": {
+    "H0": {
+     "saved_pct_at_prompts_after_cut": {
+      "1": -221,
+      "2": -42,
+      "4": 8,
+      "6": 20,
+      "10": 27
+     }
+    },
+    "H1": {
+     "saved_pct_at_prompts_after_cut": {
+      "1": -368,
+      "2": -90,
+      "4": -13,
+      "6": 7,
+      "10": 20
+     }
+    },
+    "H2": {
+     "saved_pct_at_prompts_after_cut": {
+      "1": -321,
+      "2": -70,
+      "4": 2,
+      "6": 22,
+      "10": 37
+     }
+    },
+    "H3": {
+     "saved_pct_at_prompts_after_cut": {
+      "1": -322,
+      "2": -76,
+      "4": -7,
+      "6": 10,
+      "10": 21
+     }
+    },
+    "H4": {
+     "saved_pct_at_prompts_after_cut": {
+      "1": -134,
+      "2": -7,
+      "4": 28,
+      "6": 36,
+      "10": 40
+     }
+    }
+   },
+   "state": "measured",
+   "n": 1
+  },
+  {
+   "id": "o55",
+   "model": "Opus 5.5",
+   "shape": "SPSR",
+   "cut_pct_of_window": 14.4,
+   "cut_tokens": 143936,
+   "prompts_after_cut": 10,
+   "control_cost_usd": 2.54,
+   "levels": {
+    "H0": {
+     "saved_pct_at_prompts_after_cut": {
+      "1": -271,
+      "2": -51,
+      "4": 13,
+      "6": 30,
+      "10": 42
+     }
+    },
+    "H1": {
+     "saved_pct_at_prompts_after_cut": {
+      "1": -347,
+      "2": -75,
+      "4": 4,
+      "6": 25,
+      "10": 39
+     }
+    },
+    "H2": {
+     "saved_pct_at_prompts_after_cut": {
+      "1": -377,
+      "2": -83,
+      "4": 0,
+      "6": 23,
+      "10": 39
+     }
+    },
+    "H3": {
+     "saved_pct_at_prompts_after_cut": {
+      "1": -355,
+      "2": -79,
+      "4": 0,
+      "6": 22,
+      "10": 38
+     }
+    },
+    "H4": {
+     "saved_pct_at_prompts_after_cut": {
+      "1": -192,
+      "2": -31,
+      "4": 23,
+      "6": 38,
+      "10": 49
+     }
+    }
+   },
+   "state": "measured",
+   "n": 1
+  },
+  {
+   "id": "o55L250",
+   "model": "Opus 5.5",
+   "shape": "SPSR",
+   "cut_pct_of_window": 24.3,
+   "cut_tokens": 243007,
+   "prompts_after_cut": 10,
+   "control_cost_usd": 3.33,
+   "levels": {
+    "H0": {
+     "saved_pct_at_prompts_after_cut": {
+      "1": -149,
+      "2": 4,
+      "4": 39,
+      "6": 50,
+      "10": 57
+     }
+    },
+    "H1": {
+     "saved_pct_at_prompts_after_cut": {
+      "1": -232,
+      "2": -22,
+      "4": 27,
+      "6": 42,
+      "10": 52
+     }
+    },
+    "H2": {
+     "saved_pct_at_prompts_after_cut": {
+      "1": -223,
+      "2": -20,
+      "4": 28,
+      "6": 42,
+      "10": 52
+     }
+    },
+    "H3": {
+     "saved_pct_at_prompts_after_cut": {
+      "1": -266,
+      "2": -38,
+      "4": 21,
+      "6": 37,
+      "10": 49
+     }
+    },
+    "H4": {
+     "saved_pct_at_prompts_after_cut": {
+      "1": -107,
+      "2": 20,
+      "4": 50,
+      "6": 58,
+      "10": 63
+     }
+    }
+   },
+   "state": "measured",
+   "n": 1
+  },
+  {
+   "id": "o55L350",
+   "model": "Opus 5.5",
+   "shape": "SPSR",
+   "cut_pct_of_window": 39.0,
+   "cut_tokens": 389965,
+   "prompts_after_cut": 10,
+   "control_cost_usd": 4.84,
+   "levels": {
+    "H0": {
+     "saved_pct_at_prompts_after_cut": {
+      "1": -160,
+      "2": 15,
+      "4": 54,
+      "6": 63,
+      "10": 69
+     }
+    },
+    "H1": {
+     "saved_pct_at_prompts_after_cut": {
+      "1": -320,
+      "2": -28,
+      "4": 36,
+      "6": 52,
+      "10": 63
+     }
+    },
+    "H2": {
+     "saved_pct_at_prompts_after_cut": {
+      "1": -266,
+      "2": -12,
+      "4": 42,
+      "6": 56,
+      "10": 66
+     }
+    },
+    "H3": {
+     "saved_pct_at_prompts_after_cut": {
+      "1": -286,
+      "2": -19,
+      "4": 39,
+      "6": 54,
+      "10": 64
+     }
+    },
+    "H4": {
+     "saved_pct_at_prompts_after_cut": {
+      "1": -147,
+      "2": 24,
+      "4": 59,
+      "6": 68,
+      "10": 73
+     }
+    }
+   },
+   "state": "measured",
+   "n": 1
+  },
+  {
+   "id": "s46",
+   "model": "Sonnet 4.6",
+   "shape": "SPSR",
+   "cut_pct_of_window": 11.3,
+   "cut_tokens": 113218,
+   "prompts_after_cut": 10,
+   "control_cost_usd": 2.75,
+   "levels": {
+    "H0": {
+     "saved_pct_at_prompts_after_cut": {
+      "1": -279,
+      "2": -54,
+      "4": 9,
+      "6": 26,
+      "10": 39
+     }
+    },
+    "H1": {
+     "saved_pct_at_prompts_after_cut": {
+      "1": -384,
+      "2": -96,
+      "4": -10,
+      "6": 13,
+      "10": 31
+     }
+    },
+    "H2": {
+     "saved_pct_at_prompts_after_cut": {
+      "1": -352,
+      "2": -80,
+      "4": -2,
+      "6": 19,
+      "10": 35
+     }
+    },
+    "H3": {
+     "saved_pct_at_prompts_after_cut": {
+      "1": -370,
+      "2": -84,
+      "4": -4,
+      "6": 18,
+      "10": 34
+     }
+    },
+    "H4": {
+     "saved_pct_at_prompts_after_cut": {
+      "1": -161,
+      "2": -15,
+      "4": 23,
+      "6": 33,
+      "10": 37
+     }
+    }
+   },
+   "state": "measured",
+   "n": 1
+  },
+  {
+   "id": "s55",
+   "model": "Sonnet 5.5",
+   "shape": "SPSR",
+   "cut_pct_of_window": 14.2,
+   "cut_tokens": 142264,
+   "prompts_after_cut": 10,
+   "control_cost_usd": 1.25,
+   "levels": {
+    "H0": {
+     "saved_pct_at_prompts_after_cut": {
+      "1": -295,
+      "2": -69,
+      "4": -4,
+      "6": 14,
+      "10": 25
+     }
+    },
+    "H1": {
+     "saved_pct_at_prompts_after_cut": {
+      "1": -376,
+      "2": -97,
+      "4": -15,
+      "6": 7,
+      "10": 21
+     }
+    },
+    "H2": {
+     "saved_pct_at_prompts_after_cut": {
+      "1": -364,
+      "2": -93,
+      "4": -14,
+      "6": 7,
+      "10": 21
+     }
+    },
+    "H3": {
+     "saved_pct_at_prompts_after_cut": {
+      "1": -422,
+      "2": -112,
+      "4": -22,
+      "6": 2,
+      "10": 18
+     }
+    },
+    "H4": {
+     "saved_pct_at_prompts_after_cut": {
+      "1": -209,
+      "2": -35,
+      "4": 15,
+      "6": 28,
+      "10": 36
+     }
+    }
+   },
+   "state": "measured",
+   "n": 1
+  }
+ ],
+ "fixed_schedules": [
+  {
+   "shape": "LPSR",
+   "model": "Sonnet 5.5",
+   "base_usd": 5.97,
+   "cost_change_pct": {
+    "C50": -7.5,
+    "C25": -26.4,
+    "C12": -34.5
+   },
+   "c12_tokens_change_pct": -61.3,
+   "cold_start": "not counted",
+   "state": "measured",
+   "n": 1,
+   "note": ""
+  },
+  {
+   "shape": "LPLR",
+   "model": "Sonnet 5.5",
+   "base_usd": 6.31,
+   "cost_change_pct": {
+    "C50": -7.6,
+    "C25": -20.0,
+    "C12": -25.7
+   },
+   "c12_tokens_change_pct": -60.1,
+   "cold_start": "not counted",
+   "state": "measured",
+   "n": 1,
+   "note": ""
+  },
+  {
+   "shape": "SPSR",
+   "model": "Sonnet 5.5",
+   "base_usd": 11.8,
+   "cost_change_pct": {
+    "C50": -6.6,
+    "C25": -34.8,
+    "C12": -48.1
+   },
+   "c12_tokens_change_pct": -63.5,
+   "cold_start": "not counted",
+   "state": "measured",
+   "n": 1,
+   "note": ""
+  },
+  {
+   "shape": "SPLR",
+   "model": "Sonnet 5.5",
+   "base_usd": 15.36,
+   "cost_change_pct": {
+    "C50": -6.8,
+    "C25": -46.4,
+    "C12": -59.7
+   },
+   "c12_tokens_change_pct": -72.7,
+   "cold_start": "not counted",
+   "state": "measured",
+   "n": 1,
+   "note": ""
+  },
+  {
+   "shape": "LPSR",
+   "model": "Opus 5.5",
+   "base_usd": 11.08,
+   "cost_change_pct": {
+    "C50": -7.3,
+    "C25": -25.4,
+    "C12": -33.3
+   },
+   "c12_tokens_change_pct": -61.1,
+   "cold_start": "not counted",
+   "state": "measured",
+   "n": 1,
+   "note": ""
+  },
+  {
+   "shape": "LPLR",
+   "model": "Opus 5.5",
+   "base_usd": 11.91,
+   "cost_change_pct": {
+    "C50": -6.7,
+    "C25": -18.4,
+    "C12": -18.2
+   },
+   "c12_tokens_change_pct": -59.5,
+   "cold_start": "not counted",
+   "state": "measured",
+   "n": 1,
+   "note": ""
+  },
+  {
+   "shape": "SPSR",
+   "model": "Opus 5.5",
+   "base_usd": 23.35,
+   "cost_change_pct": {
+    "C50": -6.7,
+    "C25": -34.6,
+    "C12": -49.7
+   },
+   "c12_tokens_change_pct": -65.0,
+   "cold_start": "not counted",
+   "state": "measured",
+   "n": 1,
+   "note": ""
+  },
+  {
+   "shape": "SPLR",
+   "model": "Opus 5.5",
+   "base_usd": 37.78,
+   "cost_change_pct": {
+    "C50": -4.4,
+    "C25": -35.1,
+    "C12": -62.2
+   },
+   "c12_tokens_change_pct": -76.2,
+   "cold_start": "not counted",
+   "state": "measured",
+   "n": 1,
+   "note": "baseline fell 769K to 70K at prompt 31 (apparent self-compaction); saving probably understated"
+  }
+ ],
+ "fixed_schedules_cold_start_counted": [
+  {
+   "shape": "LPSR",
+   "model": "Sonnet 5.5",
+   "base_usd": 5.93,
+   "cost_change_pct": {
+    "C50": -7.7,
+    "C25": -26.4,
+    "C12": -28.0
+   },
+   "cold_start": "counted as handoff cost",
+   "state": "measured",
+   "n": 1
+  },
+  {
+   "shape": "LPLR",
+   "model": "Sonnet 5.5",
+   "base_usd": 6.58,
+   "cost_change_pct": {
+    "C50": -7.8,
+    "C25": -19.6,
+    "C12": -20.9
+   },
+   "cold_start": "counted as handoff cost",
+   "state": "measured",
+   "n": 1
+  },
+  {
+   "shape": "LPSR",
+   "model": "Opus 5.5",
+   "base_usd": 11.9,
+   "cost_change_pct": {
+    "C50": -7.5,
+    "C25": -21.8,
+    "C12": -28.5
+   },
+   "cold_start": "counted as handoff cost",
+   "state": "measured",
+   "n": 1
+  }
+ ],
+ "blind_runs_sonnet_5_5": [
+  {
+   "seed": 11,
+   "prompts": 25,
+   "base_usd": 10.96,
+   "auto_rule_cost_change_pct": -50.3,
+   "clears": 6,
+   "hindsight_best_pct": -50.7,
+   "regret_pts": 0.4
+  },
+  {
+   "seed": 12,
+   "prompts": 15,
+   "base_usd": 7.59,
+   "auto_rule_cost_change_pct": -34.4,
+   "clears": 4,
+   "hindsight_best_pct": -38.3,
+   "regret_pts": 3.9
+  },
+  {
+   "seed": 13,
+   "prompts": 19,
+   "base_usd": 10.1,
+   "auto_rule_cost_change_pct": -41.0,
+   "clears": 5,
+   "hindsight_best_pct": -42.0,
+   "regret_pts": 0.9
+  }
+ ]
+}

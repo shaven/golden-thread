@@ -1,0 +1,17 @@
+[
+ {
+  "file": "ledgerlite/money.py",
+  "old": "    return (to_decimal(amount) * to_decimal(pct) / 100).quantize(CENT, rounding=ROUND_DOWN)",
+  "new": "    return quantize(to_decimal(amount) * to_decimal(pct) / 100)"
+ },
+ {
+  "file": "ledgerlite/invoice.py",
+  "old": "return sum((l.gross() for l in self.lines if l.taxable), ZERO)",
+  "new": "return sum((l.net() for l in self.lines if l.taxable), ZERO)"
+ },
+ {
+  "file": "ledgerlite/aging.py",
+  "old": "and as_of >= invoice.due_date",
+  "new": "and as_of > invoice.due_date"
+ }
+]

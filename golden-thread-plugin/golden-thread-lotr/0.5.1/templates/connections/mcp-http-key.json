@@ -1,0 +1,30 @@
+{
+  "schema": 1,
+  "name": "mcp-http-key",
+  "archetype": "mcp-http-key",
+  "summary": "ARCHETYPE: a hosted MCP server that takes a static API key or token (TODO: service)",
+  "kind": "mcp-http",
+  "docs": "https://todo-host.example/docs",
+  "connect": {
+    "url": "https://todo-host.example/mcp",
+    "auth_scheme": "bearer",
+    "credential_ref": "store:TODO-secret-name",
+    "trust": "T1",
+    "identity": "TODO: your account at the service",
+    "description": "TODO (hosted MCP, key)"
+  },
+  "network": {
+    "hosts": [
+      "todo-host.example"
+    ]
+  },
+  "smoke": {
+    "op": "TODO: the name of one read-only tool",
+    "args": {}
+  },
+  "notes": [
+    "ARCHETYPE: copy with `lotr template new NAME --archetype mcp-http-key`, then replace every TODO.",
+    "auth_scheme bearer sends Authorization: Bearer <key>. If the vendor wants a named header (X-Api-Key...), set auth_scheme to header and connect.auth_header to its name.",
+    "The key lives where credential_ref points (put it there with lotr secret put); never in this file."
+  ]
+}

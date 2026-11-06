@@ -1,0 +1,54 @@
+{
+  "schema": 1,
+  "name": "operations",
+  "title": "Operations",
+  "description": "An incident log, a change log, a contacts/escalation list, and a health-check section in the runbook.",
+  "audience": "Operational and concrete: lead with current state and impact, then what changed, what to watch and who to call; give exact commands and a rollback.",
+  "lotr_templates": ["pagerduty", "sentry", "github", "slack"],
+  "featured_skills": ["/gt:gt-open", "/gt:gt-list", "/gt:gt-handle", "/gt:gt-runbook-lint", "/gt:gt-validate", "/gt:gt-create", "/gt:gt-close"],
+  "session_focus": ["must_do", "handoffs", "tasks"],
+  "close_focus": ["incidents", "runbook", "deadlines", "config", "handoffs"],
+  "farm_tasks": [
+    {"id": "incident-timeline", "class": "log-triage", "title": "Incident timeline", "does": "Orders the problems in a log into a timeline, each with the lines that show it.", "escalate": "Claude reads the log itself for any incident with customer impact, and whenever the timeline has a gap."},
+    {"id": "runbook-step-summary", "class": "summarise", "title": "Runbook step summary", "does": "Summarises a runbook section into a short checklist of its steps and checks.", "escalate": "Claude compares the checklist with the runbook before anyone follows it during an incident."},
+    {"id": "alert-triage", "class": "classify", "title": "Alert triage", "does": "Labels each alert as page, ticket or ignorable noise from its text.", "escalate": "Claude samples what was called ignorable; a paging alert is never closed automatically."},
+    {"id": "handoff-draft", "class": "draft", "title": "Shift handoff draft", "does": "Drafts the shift handoff note from the incident log and the open items.", "escalate": "You read it before the next shift does; Claude steps in for anything still unresolved."}
+  ],
+  "scaffold": {
+    "files": [
+      {
+        "path": "incident-log.md",
+        "content": "# {TITLE} incident log\n\n<!-- One entry per incident, newest first: when, impact, cause, fix, follow-up. -->\n\n| Date | Impact | Cause | Fix | Follow-up |\n|---|---|---|---|---|\n\n"
+      },
+      {
+        "path": "change-log.md",
+        "content": "# {TITLE} change log\n\n<!-- Every change to production: when, what, who, window, rollback. -->\n\n| Date | Change | By | Window | Rollback |\n|---|---|---|---|---|\n\n"
+      },
+      {
+        "path": "contacts.md",
+        "content": "# {TITLE} contacts and escalation\n\n<!-- Who to call, in what order, for what. -->\n\n| Role | Name | How to reach | When |\n|---|---|---|---|\n\n"
+      }
+    ],
+    "sections": [
+      {
+        "file": "runbook.md",
+        "heading": "Health check and common fixes",
+        "body": "<!-- How to check this system is healthy, and the fixes that work. One procedure per sub-heading. -->\n"
+      }
+    ]
+  },
+  "pane": [
+    {"label": "Start my day", "prompt": "Start my day: show what is waiting for me, what is overdue and what I should do first."},
+    {"label": "Overdue", "prompt": "Show my overdue tasks."},
+    {"label": "Add a task", "prompt": "I want to add a task. Ask me what it is and which project it belongs to."},
+    {"label": "Log an incident", "prompt": "Add an entry to the incident log. Ask me what happened."},
+    {"label": "Log a change", "prompt": "Add an entry to the change log. Ask me what changed."},
+    {"label": "Who to call", "prompt": "Show the contacts and escalation list."},
+    {"label": "Health check", "prompt": "Run through the health-check section of the runbook with me."},
+    {"label": "Runbook check", "prompt": "Check my runbooks for content that is repeated and should be shared."},
+    {"label": "Open a project", "prompt": "Open a project for me. Ask me which one."},
+    {"label": "Find in my notes", "prompt": "Look something up in my notes. Ask me what I am looking for."},
+    {"label": "Write a handoff", "prompt": "Write a handoff for the next session so nothing is lost."},
+    {"label": "Sort my inbox", "prompt": "Review my inbox and file each item into the right project."}
+  ]
+}

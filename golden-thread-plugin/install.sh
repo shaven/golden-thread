@@ -131,9 +131,11 @@ export GT_U_INSTALL="$U_INSTALL"
 #
 # Deliberate rollback:  ./install.sh 0.11.0  (or GT_VERSION=0.11.0 ./install.sh)
 #
-# Only the current release and the one before it are kept on disk (2026-09-12: fifteen
-# version directories were 9.6 MB of tree that nothing read). Every earlier release is
-# still in git, so rolling back further is two steps rather than one:
+# The PUBLIC build carries only the current release and the one before it (owner, 2026-09-14,
+# and 2026-10-25: dev/public_build.py --dry-run lists what it drops; 2026-09-12 fifteen version
+# directories were 9.6 MB of tree that nothing read). The maintainers' tree keeps older folders
+# until they are pruned. Every earlier release is still in git, so rolling back further is
+# two steps rather than one:
 #
 #   git log --oneline -- golden-thread/0.9.14        # find the commit that had it
 #   git checkout <commit> -- golden-thread/0.9.14    # restore the directory
@@ -677,8 +679,8 @@ def cmd_bundle(a):
         names = sorted(bymplug[x] for x in deps if x in bymplug)
         if not names:
             # no bundle file in this tree (an old zip): the same rule dev/plugins.py applies --
-            # every module on by default, plus the pane
-            names = sorted(n for n, dflt in byname_default.items() if dflt == "on" or n == "pane")
+            # every module this tree ships (0.22.0: lotr, farm and workflow too)
+            names = sorted(byname_default)
     for n in names:
         print(n)
     return 0
@@ -1069,8 +1071,8 @@ def _body(p):
 
 
 COPIED_DIRS = (".claude-plugin", "skills", "scripts", "templates", "commands", "hooks", "demo",
-               "packs", "agents", "workflows", "help")
-COPIED_FILES = ("module.json", "MANIFEST.json")
+               "packs", "agents", "workflows", "help", "walkthroughs", "docs", "tests")
+COPIED_FILES = ("module.json", "MANIFEST.json", "retired.json", "SPEC.md")
 
 
 def _tree(root):
@@ -1266,14 +1268,18 @@ PERSONA_SET=no           # yes once --persona was given (an empty/none value is 
 SANDBOX_MODE=""          # --sandbox-mode off|on (0.21.0, item #33: every install question has a flag)
 PARANOID=""              # --paranoid off|on (0.21.0: not asked; the paranoid level answers it)
 EXPIRY_GUARD=""          # --expiry-guard auto|warn-only|off
-TOKEN_PROFILE=""         # --token-profile minimum|calibrated|maximum (0.21.0, item #43)
+TOKEN_PROFILE=""         # --token-profile minimum|standard|maximum (0.21.0, item #43; `standard` was `calibrated` before 0.22.0)
 PERSONA_ALIGNED=""       # --persona-aligned on|off (0.21.0, item #45)
 REPLY_LENGTH=""          # --reply-length normal|brief|terse (0.21.0, item #39)
+PARALLEL_MAX=""          # --parallel-max auto|N (0.22.0, phase 129)
 OPEN_GUIDE=""            # --open-guide yes|no: open the Getting started page at the end (item #36)
+OBSIDIAN_PLUGINS=""      # --obsidian-plugins yes|no: download the pinned Terminal and Claudian plugins (0.22.0, phase 89b; off by default)
+TELEMETRY=""             # --telemetry off|local (0.22.0, phase 107b: off by default; nothing is sent in this release)
 STATUSLINE=""            # --statusline yes|no
 AST_GREP=""              # --ast-grep yes|no
 ALL_MODULES=no           # --all-modules (0.22.0): every module the gt-all bundle names, in one flag
 CORE_ONLY=no             # --core-only (0.22.0): gt alone, every module off
+STARTER=no               # --starter (0.22.0, phase 116): core only, three questions, nothing at machine level
 ANSWERS_FILE=""          # --answers FILE: the JSON that `--questions --json` described, filled in
 ACCEPT_DEFAULTS=no       # --accept-defaults: the explicit opt-out of the exit-5 stop (CI)
 QUESTIONS=no             # --questions: print every install question, install nothing
@@ -1299,6 +1305,7 @@ while [ $# -gt 0 ]; do
     --without=*) MODULE_FLAGS+=("without:${1#--without=}"); shift ;;
     --all-modules) ALL_MODULES=yes; shift ;;
     --core-only)   CORE_ONLY=yes; shift ;;
+    --starter)     STARTER=yes; shift ;;
     --vault)    VAULT_ARG="${2:-}"; shift 2 || true ;;
     --vault=*)  VAULT_ARG="${1#--vault=}"; shift ;;
     --no-vault) NO_VAULT=yes; shift ;;
@@ -1320,8 +1327,14 @@ while [ $# -gt 0 ]; do
     --persona-aligned=*) PERSONA_ALIGNED="${1#--persona-aligned=}"; shift ;;
     --reply-length)   REPLY_LENGTH="${2:-}"; shift 2 || true ;;
     --reply-length=*) REPLY_LENGTH="${1#--reply-length=}"; shift ;;
+    --parallel-max)   PARALLEL_MAX="${2:-}"; shift 2 || true ;;
+    --parallel-max=*) PARALLEL_MAX="${1#--parallel-max=}"; shift ;;
     --open-guide)   OPEN_GUIDE="${2:-}"; shift 2 || true ;;
     --open-guide=*) OPEN_GUIDE="${1#--open-guide=}"; shift ;;
+    --obsidian-plugins)   OBSIDIAN_PLUGINS="${2:-}"; shift 2 || true ;;
+    --obsidian-plugins=*) OBSIDIAN_PLUGINS="${1#--obsidian-plugins=}"; shift ;;
+    --telemetry)   TELEMETRY="${2:-}"; shift 2 || true ;;
+    --telemetry=*) TELEMETRY="${1#--telemetry=}"; shift ;;
     --statusline)   STATUSLINE="${2:-}"; shift 2 || true ;;
     --statusline=*) STATUSLINE="${1#--statusline=}"; shift ;;
     --ast-grep)   AST_GREP="${2:-}"; shift 2 || true ;;
@@ -1379,8 +1392,15 @@ install.sh — install the Golden Thread Claude Code plugins (gt and every plugi
   ./install.sh --with NAME            install module NAME (repeatable); remembered
   ./install.sh --without NAME         remove module NAME and keep it off (repeatable);
                                       remembered in ~/.claude/golden-thread/install-choices.json
+  ./install.sh --starter              the small install for a person who is not a power user: core
+                                      only, asks the notes location, the security level and the
+                                      model size (nothing else), and adds nothing at machine level
+                                      (no scheduled job, credential helper, sandbox entry or git
+                                      hooks path). Undo: ./install.sh --uninstall
   ./install.sh --all-modules          install gt and EVERY module the gt-all bundle names (wiki, flow,
-                                      usage, visualize, report-card, watch, demo, pane); remembered.
+                                      usage, visualize, report-card, watch, demo, pane, lotr, farm,
+                                      workflow, recall); remembered. Installing a module turns none of its
+                                      behaviour on.
                                       At a terminal, a new install asks this first: everything /
                                       let me choose / core only
   ./install.sh --core-only            install gt alone and keep every module off; remembered
@@ -1407,7 +1427,7 @@ install.sh — install the Golden Thread Claude Code plugins (gt and every plugi
                                       what each choice means; install nothing. The answers are
                                       flags: --lockdown, --sandbox-mode, --paranoid,
                                       --token-profile, --model-profile, --persona, --persona-aligned, --reply-length,
-                                      --expiry-guard, --statusline, --ast-grep, --open-guide;
+                                      --expiry-guard, --parallel-max, --statusline, --ast-grep, --obsidian-plugins, --telemetry, --open-guide;
                                       or --answers FILE (the JSON back)
   ./install.sh --accept-defaults      NOT at a terminal, a new install stops with exit 5 until the
                                       security questions are answered; this takes the defaults on
@@ -1504,12 +1524,13 @@ if [ -n "$ONLY" ]; then
   [ "${#MODULE_FLAGS[@]}" -gt 0 ] && _gt_only_bad="$_gt_only_bad --with/--without"
   [ "$ALL_MODULES" = yes ] && _gt_only_bad="$_gt_only_bad --all-modules"
   [ "$CORE_ONLY" = yes ] && _gt_only_bad="$_gt_only_bad --core-only"
+  [ "$STARTER" = yes ] && _gt_only_bad="$_gt_only_bad --starter"
   [ -n "$POSITIONAL" ] && _gt_only_bad="$_gt_only_bad $POSITIONAL"
   [ "$NO_VAULT" = yes ] && _gt_only_bad="$_gt_only_bad --no-vault"
   [ -n "${VAULT_ARG:-}" ] && [ "${VAULT_ARG:-}" != "${GT_VAULT:-}" ] && _gt_only_bad="$_gt_only_bad --vault"
   [ -n "$ANSWERS_FILE" ] && _gt_only_bad="$_gt_only_bad --answers"
   for _v in "$LOCKDOWN" "$SANDBOX_MODE" "$PARANOID" "$MODEL_PROFILE" "$EXPIRY_GUARD" "$TOKEN_PROFILE" \
-            "$PERSONA_ALIGNED" "$REPLY_LENGTH" "$OPEN_GUIDE" "$STATUSLINE" "$AST_GREP"; do
+            "$PERSONA_ALIGNED" "$REPLY_LENGTH" "$PARALLEL_MAX" "$OPEN_GUIDE" "$STATUSLINE" "$AST_GREP" "$OBSIDIAN_PLUGINS" "$TELEMETRY"; do
     if [ -n "$_v" ]; then _gt_only_bad="$_gt_only_bad (a setting)"; break; fi
   done
   [ "$PERSONA_SET" = yes ] && _gt_only_bad="$_gt_only_bad --persona"
@@ -1696,6 +1717,9 @@ while [ "$i" -lt "$PLUGIN_COUNT" ]; do
   if [ ! -d "$root/$ver" ]; then
     echo "✗ $label version $ver requested, but $root/$ver does not exist."
     echo "  Available: $(ls -1 "$root" 2>/dev/null | tr '\n' ' ')"
+    echo "  A public copy holds only the current release and the previous one. An older release is in git:"
+    echo "    git log --oneline -- ${PLUGIN_DIRS[$i]}/$ver   # find the commit that had it"
+    echo "    git checkout <commit> -- ${PLUGIN_DIRS[$i]}/$ver"
     exit 1
   fi
   assert_manifest_version "$root/$ver" "$ver" "$label"
@@ -1730,7 +1754,7 @@ KNOWN="$HOME/.claude/plugins/known_marketplaces.json"
 
 # Who owns the marketplace named golden-thread-plugin (0.22.0). Terminal route: this installer
 # writes it, a directory marketplace with one entry per installed plugin (MARKET_MODE=local).
-# Prompt route: the person ran `/plugin marketplace add shaven/golden-thread` (or a path), so
+# Prompt route: the person ran `/plugin marketplace add <github repo>/golden-thread.git` (or a path), so
 # Claude Code owns it -- a GitHub clone inside ~/.claude/plugins/marketplaces/ that this installer
 # may even be running FROM. Writing our directory marketplace over it would replace the source
 # they chose and scribble into a git clone, so there the installer touches only what is
@@ -1851,6 +1875,15 @@ fi
 if [ "$ALL_MODULES" = yes ] && [ "$CORE_ONLY" = yes ]; then
   echo "✗ --all-modules and --core-only contradict each other; give one"; exit 1
 fi
+# --starter is core only (phase 116): a module flag asks for more than it installs.
+if [ "$STARTER" = yes ]; then
+  if [ "$ALL_MODULES" = yes ] || [ "${#MODULE_FLAGS[@]}" -gt 0 ]; then
+    echo "✗ --starter installs core only; --all-modules and --with/--without contradict it. Add a module later with --with NAME"
+    exit 1
+  fi
+  CORE_ONLY=yes
+  export GT_STARTER=1       # vault_init.py: no git hooks path in the vault
+fi
 if [ "$ALL_MODULES" = no ] && [ "$CORE_ONLY" = no ] && [ "${#MODULE_FLAGS[@]}" -eq 0 ] \
    && [ "$ACCEPT_DEFAULTS" = no ] && [ "$LIST_MODULES" != yes ] && [ "$QUESTIONS" != yes ] \
    && [ -t 0 ] && [ -t 1 ] \
@@ -1893,6 +1926,7 @@ if [ -f "$GT_QUESTIONS" ] && [ "$LIST_MODULES" != yes ]; then
   _gt_prev=$(mktemp "${TMPDIR:-/tmp}/gt-plan-rev.XXXXXX")
   _gt_pa=(plan --env-out "$_gt_penv" --summary-out "$_gt_psum" --review-out "$_gt_prev")
   if [ "$ACCEPT_DEFAULTS" = yes ]; then _gt_pa+=(--accept-defaults); fi
+  if [ "$STARTER" = yes ]; then _gt_pa+=(--starter); fi
   if [ -t 0 ] && [ -t 1 ]; then _gt_pa+=(--tty); fi
   if [ -n "$ANSWERS_FILE" ]; then _gt_pa+=(--answers "$ANSWERS_FILE"); fi
   if [ -n "$LOCKDOWN" ]; then _gt_pa+=(--set "lockdown=$LOCKDOWN"); fi
@@ -1904,7 +1938,10 @@ if [ -f "$GT_QUESTIONS" ] && [ "$LIST_MODULES" != yes ]; then
   if [ -n "$TOKEN_PROFILE" ]; then _gt_pa+=(--set "token_profile=$TOKEN_PROFILE"); fi
   if [ -n "$PERSONA_ALIGNED" ]; then _gt_pa+=(--set "persona_aligned=$PERSONA_ALIGNED"); fi
   if [ -n "$REPLY_LENGTH" ]; then _gt_pa+=(--set "reply_length=$REPLY_LENGTH"); fi
+  if [ -n "$PARALLEL_MAX" ]; then _gt_pa+=(--set "parallel_max=$PARALLEL_MAX"); fi
   if [ -n "$OPEN_GUIDE" ]; then _gt_pa+=(--set "open_guide=$OPEN_GUIDE"); fi
+  if [ -n "$OBSIDIAN_PLUGINS" ]; then _gt_pa+=(--set "obsidian_plugins=$OBSIDIAN_PLUGINS"); fi
+  if [ -n "$TELEMETRY" ]; then _gt_pa+=(--set "telemetry=$TELEMETRY"); fi
   if [ -n "$STATUSLINE" ]; then _gt_pa+=(--set "statusline=$STATUSLINE"); fi
   if [ -n "$AST_GREP" ]; then _gt_pa+=(--set "ast_grep=$AST_GREP"); fi
   # --with pane / --without pane answer the pane question (item #41)
@@ -2461,7 +2498,7 @@ verify_source_tree() {
       echo "prevent, reached by deleting the check rather than defeating it."
       echo ""
       echo "  Restore it:        git -C \"$SRC\" checkout -- MANIFEST.json"
-      echo "  Meant to cut a new release?  python3 dev/plugins.py manifest \"$SRC\""
+      echo "  Meant to cut a new release?  python3 dev/plugins.py manifest \"$SRC\"   (development repository only: a published copy has no dev/)"
       exit 6
     fi
     # No git: a zip install, where regenerating is correct. Say so anyway -- the component
@@ -2521,7 +2558,7 @@ verify_source_tree() {
        echo "different route, and until 0.16.3 it printed 'continuing' and did exactly that."
        echo ""
        echo "  Restore it:    git -C \"$SRC\" checkout -- MANIFEST.json"
-       echo "  Regenerate:    python3 dev/plugins.py manifest \"$SRC\""
+       echo "  Regenerate:    python3 dev/plugins.py manifest \"$SRC\"   (development repository only: a published copy has no dev/)"
        echo "  Install anyway: $U_INSTALL --force-manifest-mismatch"
        exit 6 ;;
     *) # An exit code this installer does not know: gt_components.py crashed, python3 is
@@ -2594,6 +2631,14 @@ set_modes() {  # $@ = files or directory trees install.sh itself wrote
 # Each directory is REPLACED, not merged into: a cache of the same version from an earlier
 # install otherwise keeps files the release no longer ships -- which is how the gt plugin
 # would go on carrying the demo after 0.14.0 moved it into the gt-demo module.
+#
+# The top-level files copied below are the ones the INSTALLED gt release's own doctor lists
+# (CACHE_FILES in its gt_doctor.py). A pinned rollback to a release older than 0.22.0 runs that
+# older, frozen doctor, which calls retired.json and SPEC.md "left over" and fails the install
+# (exit 9, found 2026-10-29 by test_install_quiet.RollbackIsQuiet). No doctor to read, or a list
+# that does not parse: copy them all.
+GT_DOCTOR_CACHE_FILES=$(sed -n 's/^CACHE_FILES = (\(.*\))$/\1/p' "$(plugin_src 0)/scripts/gt_doctor.py" 2>/dev/null | head -1 | tr -d '",')
+[ -n "$GT_DOCTOR_CACHE_FILES" ] || GT_DOCTOR_CACHE_FILES="module.json MANIFEST.json retired.json SPEC.md"
 i=0
 while [ "$i" -lt "$PLUGIN_COUNT" ]; do
   p_src=$(plugin_src "$i"); p_cache=$(plugin_cache "$i")
@@ -2606,7 +2651,10 @@ while [ "$i" -lt "$PLUGIN_COUNT" ]; do
   # agents/ and workflows/ (0.20.1): the stage agent definitions (gt:<stage>) and the pipeline
   # workflow Claude Code loads from a plugin; replaced like every other dir, so a rollback to a
   # release without them leaves none behind.
-  for dir in .claude-plugin skills scripts templates commands hooks demo packs agents workflows help; do
+  # walkthroughs/, docs/, tests/ (0.22.0): a plugin carries them when it ships them (gt-demo's
+  # walkthroughs, gt-lotr's docs, gt-pane's tests). The plugin manager copies the whole tree, so
+  # a cache this loop fills must hold the same files or gt_doctor's plugin-files row fails.
+  for dir in .claude-plugin skills scripts templates commands hooks demo packs agents workflows help walkthroughs docs tests; do
     rm -rf "${p_cache:?}/$dir"
     [ -d "$p_src/$dir" ] && cp -r "$p_src/$dir" "$p_cache/"
   done
@@ -2614,8 +2662,11 @@ while [ "$i" -lt "$PLUGIN_COUNT" ]; do
   # ONLY runtime integrity control on an installed pack. Without it gt_registry.py cannot
   # verify a single pack, and since it now fails closed, every shipped pack would refuse to
   # load on an installed machine (both halves found by security review, 2026-09-16).
-  for f in module.json MANIFEST.json; do
+  # retired.json (the files a release retires, read by the installer) and SPEC.md (gt-lotr's
+  # spec) travel too, for the same plugin-files reason as the dirs above (0.22.0).
+  for f in module.json MANIFEST.json retired.json SPEC.md; do
     rm -f "${p_cache:?}/$f"
+    case " $GT_DOCTOR_CACHE_FILES " in *" $f "*) ;; *) continue ;; esac
     [ -f "$p_src/$f" ] && cp "$p_src/$f" "$p_cache/$f"
   done
   set_modes "$p_cache"
@@ -2717,6 +2768,20 @@ if [ -d "$SRC/hooks" ]; then
   rm -rf "${HOME:?}/.claude/golden-thread/packs"
   [ -d "$SRC/packs" ] && cp -r "$SRC/packs" "$HOME/.claude/golden-thread/packs"
   [ -f "$SRC/MANIFEST.json" ] && cp "$SRC/MANIFEST.json" "$HOME/.claude/golden-thread/MANIFEST.json"
+  # templates/shipped-hashes.json and templates/tools/ beside the hooks dir too (0.22.0). The
+  # broker and gt_accept run a vault's gt_session.py / gt_task.py only when its bytes are in that
+  # hash list, else gt's own tools/ copy; their hook copies look in ../templates, and a machine
+  # with no gt in the plugin cache had neither. Only those two travel, REPLACED like packs/ so a
+  # re-run or an upgrade converges and a rollback to a release without the list leaves none.
+  rm -rf "${HOME:?}/.claude/golden-thread/templates"
+  if [ -f "$SRC/templates/shipped-hashes.json" ]; then
+    mkdir -p "$HOME/.claude/golden-thread/templates/tools"
+    cp "$SRC/templates/shipped-hashes.json" "$HOME/.claude/golden-thread/templates/"
+    for f in "$SRC/templates/tools"/*.py; do
+      [ -f "$f" ] && cp "$f" "$HOME/.claude/golden-thread/templates/tools/"
+    done
+    set_modes "$HOME/.claude/golden-thread/templates"
+  fi
   # gt unlock's Touch ID helper (0.20.1, macOS). Built HERE from the shipped Swift source
   # (scripts/gt-presence.swift) with the Xcode Command Line Tools and ad-hoc signed, unless an
   # identical build is already in place. A Developer ID signed release binary installed with a
@@ -2974,8 +3039,7 @@ for name, manifest in zip(rest[0::2], rest[1::2]):
     plugins.append({"name": name, "source": "./plugins/%s" % name, "description": desc})
 with open(out, "w", encoding="utf-8", newline="\n") as fh:
     fh.write(json.dumps({"name": market,
-                         "owner": {"name": "Stacy Haven",
-                                   "email": "shaven@shavenconsulting.com"},
+                         "owner": {"name": "Stacy Haven"},
                          "plugins": plugins}, indent=2) + "\n")
 EOF
 # Rewriting a file keeps its old mode, so marketplace.json needs set_modes like the plugin
@@ -2997,11 +3061,11 @@ i=0
 while [ "$MARKET_MODE" = local ] && [ "$i" -lt "$PLUGIN_COUNT" ]; do
   p_src=$(plugin_src "$i"); p_market="$MARKETPLACE/plugins/${PLUGIN_NAMES[$i]}"
   cp "$p_src/.claude-plugin/plugin.json" "$p_market/.claude-plugin/plugin.json"
-  for dir in skills scripts templates commands hooks demo packs agents workflows help; do
+  for dir in skills scripts templates commands hooks demo packs agents workflows help walkthroughs docs tests; do
     rm -rf "$p_market/$dir"
     [ -d "$p_src/$dir" ] && cp -r "$p_src/$dir" "$p_market/$dir"
   done
-  for f in module.json MANIFEST.json; do          # MANIFEST.json: see the cache loop above
+  for f in module.json MANIFEST.json retired.json SPEC.md; do   # MANIFEST.json: see the cache loop above
     rm -f "$p_market/$f"
     [ -f "$p_src/$f" ] && cp "$p_src/$f" "$p_market/$f"
   done
@@ -3308,6 +3372,7 @@ sys.exit(0 if isinstance(d, dict) and d.get("statusLine") else 1)' 2>/dev/null; 
       yes) python3 "$u" --setup-statusline || echo "  ⚠ the status line could not be added"
            echo "  statusline: yes ($(plan_words "$PLAN_statusline_SRC"))" ;;
       *)   echo "  Status line not set. Later: python3 \"$u\" --setup-statusline"
+           echo "  Without it gt cannot read the context size, so the context nudge stays silent."
            echo "  statusline: no ($(plan_words "$PLAN_statusline_SRC"))" ;;
     esac
   elif [ -z "${PLAN_statusline_SRC:-}" ] && [ -t 0 ] && [ -t 1 ]; then
@@ -3316,10 +3381,12 @@ sys.exit(0 if isinstance(d, dict) and d.get("statusLine") else 1)' 2>/dev/null; 
     local ans=""; read -r ans </dev/tty || ans=""
     case "$ans" in
       y|Y|yes|YES) python3 "$u" --setup-statusline || echo "  ⚠ the status line could not be added" ;;
-      *) echo "  Status line not set. Later: python3 \"$u\" --setup-statusline" ;;
+      *) echo "  Status line not set. Later: python3 \"$u\" --setup-statusline"
+         echo "  Without it gt cannot read the context size, so the context nudge stays silent." ;;
     esac
   else
     echo "Status line: not set (no terminal to ask). To show the allowance meter: python3 \"$u\" --setup-statusline"
+    echo "  Without a status line gt cannot read the context size, so the context nudge stays silent."
   fi
 }
 
@@ -3533,6 +3600,10 @@ else:
     # route, and its wired files would only sit there inert (its plugin ships no hooks.json).
     import shutil
     _wd = os.path.expanduser('~/.claude/golden-thread/wired')
+    try:
+        os.unlink(os.path.expanduser('~/.claude/golden-thread/wired-manifest.json'))
+    except OSError:
+        pass
     if os.path.isdir(_wd):
         shutil.rmtree(_wd, ignore_errors=True)
         print('Hook route is settings: removed ~/.claude/golden-thread/wired/')
@@ -3700,6 +3771,32 @@ VAULT_SNAP_PATH=""
 VAULT_SNAP_STATE=""      # clean | dirty | nogit | absent | unreadable
 
 real_path() { python3 -c 'import os,sys;print(os.path.realpath(sys.argv[1]))' "$1" 2>/dev/null || printf '%s\n' "$1"; }
+
+# 0.22.1: farm_first lost `auto`. Everyone who stored it gets `yes`, whatever the vault is doing: it runs on every
+# install (before the vault steps, so an install that stops there still converts it) and needs no vault, no clean tree and
+# no gt_settings.py (a config without vault_path is refused there).
+migrate_farm_first_auto() {
+  python3 - "$HOME/.claude/vault-config.json" <<'PYEOF' 2>/dev/null || true
+import json, os, sys
+p = sys.argv[1]
+try:
+    with open(p, encoding="utf-8") as fh:
+        d = json.load(fh)
+except (OSError, ValueError):
+    sys.exit(0)
+if isinstance(d, dict) and str(d.get("farm_first") or "").strip().lower() == "auto":
+    d["farm_first"] = "yes"
+    tmp = p + ".tmp"
+    with open(tmp, "w", encoding="utf-8") as fh:
+        json.dump(d, fh, indent=2)
+        fh.write("\n")
+    os.replace(tmp, p)
+    print("farm_first: auto -> yes (auto no longer exists; yes does what auto did and has the assistant hand eligible work to your engines. Back to the old behaviour: gt_settings.py set farm_first suggest)")
+PYEOF
+}
+
+{ [ "$ONLY_CHECK" = yes ] || migrate_farm_first_auto; } || true   # also with --only; it edits one key of vault-config.json, never the vault
+
 
 snapshot_vault_state() {  # $1 = vault path, before anything writes into it
   local real porcelain
@@ -3914,6 +4011,15 @@ if [ -n "$VAULT_PATH" ] && [ -d "$VAULT_PATH" ]; then
   wire_enforcement_hooks "$VAULT_PATH"
 fi
 
+# gt-farm (0.22.0): local routing needs <vault>/farm-ladder.tsv, and nothing used to say so. When the farm module
+# is on and the vault is known, place the template once; an existing file is never touched.
+if [ -n "$VAULT_PATH" ] && [ -d "$VAULT_PATH" ] && [ -z "$ONLY" ]; then
+  _farm_send=$(ls "$SCRIPT_DIR"/golden-thread-farm/*/scripts/gt_farm_send.py 2>/dev/null | sort | tail -1) || _farm_send=""
+  if [ -n "$_farm_send" ] && python3 -c "import json,os,sys;p=os.path.expanduser('~/.claude/golden-thread/install-choices.json');sys.exit(0 if json.load(open(p)).get('choices',{}).get('farm')=='on' else 1)" 2>/dev/null; then
+    GT_CORE_SCRIPTS="$SRC/scripts" python3 "$_farm_send" setup --apply-template 2>&1 | sed 's/^/  /' || true
+  fi
+fi
+
 # The vault_refresh.py to run (0.20.1). Normally the release's own. On a ROLLBACK the older
 # release's copy knows the tool and hook texts gt shipped up to ITSELF only, so every file a
 # newer release put in the vault matched "no version gt has shipped" and was reported MODIFIED
@@ -3952,7 +4058,7 @@ PYEOF
 
 # Ask git, not the filesystem: .git is a FILE for a worktree, a submodule or a
 # --separate-git-dir checkout, and `-d .git` skipped all of those silently.
-if [ -n "$VAULT_PATH" ] && git -C "$VAULT_PATH" rev-parse --git-dir >/dev/null 2>&1; then
+if [ -n "$VAULT_PATH" ] && [ "$STARTER" != yes ] && git -C "$VAULT_PATH" rev-parse --git-dir >/dev/null 2>&1; then
   # .githooks/, the vault tools and core.hooksPath, refreshed by CONTENT (0.15.0): a copy
   # gt shipped is replaced, the owner's own is kept (or, for a committed hook edit, backed
   # up first). The rules and why: scripts/vault_refresh.py. Until 0.15.0 this block copied
@@ -4198,7 +4304,7 @@ apply_plan_setting() {  # $1 = key
   [ "$src" != kept ] || return 0
   cur=$(python3 -B "$SRC/scripts/gt_settings.py" get "$key" 2>/dev/null || true)
   # token_profile is compared with the STORED choice, not `get`: `get` answers the registry default
-  # (calibrated) when nothing is stored, so a fresh machine looked as if the default were in force
+  # (standard) when nothing is stored, so a fresh machine looked as if the default were in force
   # and the seven settings it writes were never written (fix B1, 0.21.4). The other keys hold one
   # value each, so their effective value is the one that counts.
   if [ "$key" = token_profile ]; then
@@ -4233,6 +4339,13 @@ print(v if isinstance(v, str) else "")' "$key" 2>/dev/null || true)
 }
 apply_plan_setting sandbox_mode
 apply_plan_setting paranoid
+# --starter records itself (phase 116), so `gt_settings.py show` and the doctor can say which install this is
+if [ "$STARTER" = yes ] && [ -z "$ONLY" ] && [ -f "$HOME/.claude/vault-config.json" ]; then
+  python3 -B "$SRC/scripts/gt_settings.py" set profile starter >/dev/null 2>&1 \
+    || echo "  ⚠ profile: starter NOT RECORDED; run: gt_settings.py set profile starter"
+  python3 -B "$SRC/scripts/gt_settings.py" set rules_set lite >/dev/null 2>&1 \
+    || echo "  ⚠ rules_set: lite NOT APPLIED; run: gt_settings.py set rules_set lite"
+fi
 # the token profile first (it sets seven settings), then the two it shares an answer with: an answer
 # the person gave for the expiry guard or the reply length is applied after it and so wins
 # A token profile nobody chose (defaulted or accepted) must not undo a setting the plan KEPT -- a
@@ -4251,7 +4364,9 @@ apply_plan_setting token_profile
 unset GT_TOKEN_PROFILE_KEEP
 apply_plan_setting expiry_guard
 apply_plan_setting reply_length
+apply_plan_setting parallel_max
 apply_plan_setting persona_aligned
+apply_plan_setting telemetry
 if [ -f "$HOME/.claude/vault-config.json" ]; then
   # Said in words (0.20.1): the raw line named the internal key (parallel_profile, cpu_max).
   python3 "$SRC/scripts/gt_settings.py" detect-machine --write 2>/dev/null \
@@ -4713,6 +4828,17 @@ if [ -n "${PLAN_NOT_APPLIED:-}" ]; then
   printf '%s' "$PLAN_NOT_APPLIED"
 fi
 
+# "Download Obsidian's plugins?" (phase 89b): only a yes runs the pinned installer, one plugin at a time; each
+# is all-or-nothing against its sha256 pin, and a failure here never fails the install. It writes into the
+# vault named by ~/.claude/vault-config.json; with no vault it says so and fetches nothing.
+if [ -z "$ONLY" ] && [ "${PLAN_obsidian_plugins:-}" = yes ]; then
+  echo ""
+  for _pl in terminal realclaudian; do
+    python3 -B "$SRC/scripts/gt_prereqs.py" plugin "$_pl" --yes \
+      || echo "  (the $_pl plugin was not installed: run python3 $SRC/scripts/gt_prereqs.py check)"
+  done
+fi
+
 # "Open the guide?" (item #36): a yes opens the Getting started page of the offline help for the chosen
 # persona (the first, when there are several); anything else says how to open it later.
 if [ -z "$ONLY" ] && [ "${PLAN_open_guide:-}" = yes ]; then
@@ -4730,4 +4856,25 @@ else
   echo "Getting started: say \"show me around Golden Thread\" to Claude, or run /gt:gt-help start"
 fi
 
+# Persona hand-off (phase 95e): after an install with a persona that has one (project manager, product manager,
+# executive, leadership), name the three core commands, the tour and the offline walk-through; then, only if
+# something an Obsidian-first setup needs is missing, one line pointing at `gt_prereqs.py plan`. Nothing is
+# installed or asked here; a persona with no hand-off, and --only, print nothing.
+if [ -z "$ONLY" ]; then
+  _hp="${PLAN_persona:-}"
+  case "$_hp" in none) _hp="" ;; esac
+  if [ -n "$_hp" ]; then
+    _hout=$(python3 -B "$SRC/scripts/gt_persona.py" handoff --personas "$_hp" 2>/dev/null) || _hout=""
+    if [ -n "$_hout" ]; then
+      echo ""
+      printf '%s\n' "$_hout"
+      _pout=$(python3 -B "$SRC/scripts/gt_prereqs.py" check --brief 2>/dev/null) || _pout=""
+      if [ -n "$_pout" ]; then printf '%s\n' "$_pout"; fi
+    fi
+  fi
+fi
+
+if [ "$STARTER" = yes ] && [ -z "$ONLY" ]; then
+  echo "Starter install: core only, nothing scheduled, no sandbox or credential helper. To remove it: $U_INSTALL --uninstall"
+fi
 echo "Restart Claude Code to load the plugins."

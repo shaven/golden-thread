@@ -1,0 +1,67 @@
+{
+  "schema": 1,
+  "name": "migration-record",
+  "title": "Record a migration and check it",
+  "description": "Writes the migration into the log through the safe queue, then asks a fresh-context checker to re-derive the claim from the evidence.",
+  "personas": [
+    "dba"
+  ],
+  "help_workflow": "migration-record",
+  "say": "Record migration 0142 and check we lost no rows.",
+  "inputs": [
+    {
+      "name": "project",
+      "type": "string",
+      "required": true,
+      "prompt": "Which project keeps the migration log?"
+    },
+    {
+      "name": "migration",
+      "type": "string",
+      "required": true,
+      "prompt": "Which migration (its number and a few words)?"
+    },
+    {
+      "name": "result",
+      "type": "string",
+      "required": true,
+      "prompt": "What did you check and what did you find (for example rows before and after)?"
+    }
+  ],
+  "steps": [
+    {
+      "id": "log",
+      "kind": "run",
+      "title": "Add it to the migration log",
+      "script": "gt_write_queue.py",
+      "args": [
+        "--vault",
+        "{{vault}}",
+        "--path",
+        "Projects/{{inputs.project}}/migration-log.md",
+        "--op",
+        "append",
+        "--content=## {{run.date}} Migration {{inputs.migration}}\n\n{{inputs.result}}",
+        "--hint",
+        "migration log"
+      ]
+    },
+    {
+      "id": "drain",
+      "kind": "run",
+      "title": "Apply the queued write",
+      "script": "gt_broker.py",
+      "args": [
+        "drain",
+        "--vault",
+        "{{vault}}"
+      ]
+    },
+    {
+      "id": "verify",
+      "kind": "claude",
+      "title": "Have a fresh checker re-derive the claim",
+      "prompt": "Use /gt:gt-validate to have a fresh-context checker re-derive this claim from the evidence, without your reasoning: migration {{inputs.migration}}: {{inputs.result}}"
+    }
+  ]
+}

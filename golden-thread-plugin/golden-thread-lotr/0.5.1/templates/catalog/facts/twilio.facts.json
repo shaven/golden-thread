@@ -1,0 +1,79 @@
+{
+  "schema": 1,
+  "template": "twilio",
+  "service": "Twilio messaging",
+  "archetype": "http-rest",
+  "researched": "2026-10-25",
+  "researcher": "claude, offline-style read of the vendor docs pages named in each fact (phase 88)",
+  "facts": [
+    {
+      "id": "f1",
+      "field": "connect.base_url",
+      "value": "https://api.twilio.com/2010-04-01",
+      "claim": "The Messages API lives under https://api.twilio.com/2010-04-01 (Accounts/{AccountSid}/Messages).",
+      "source": "https://www.twilio.com/docs/messaging/api/message-resource",
+      "retrieved": "2026-10-25",
+      "state": "self-verified",
+      "evidence": "Page: POST and GET https://api.twilio.com/2010-04-01/Accounts/{AccountSid}/Messages.json and .../Messages/{Sid}.json."
+    },
+    {
+      "id": "f2",
+      "claim": "Fetching a message returns a single Message resource by SID; creating one is a POST to the Messages list resource.",
+      "source": "https://www.twilio.com/docs/messaging/api/message-resource",
+      "retrieved": "2026-10-25",
+      "state": "self-verified",
+      "evidence": "Page: 'Returns a single Message resource specified by the provided Message SID'; 'To send a new outgoing message, send an HTTP POST request to your Account's Messages list resource URI.'"
+    },
+    {
+      "id": "f3",
+      "field": "connect.auth_scheme",
+      "value": "basic",
+      "claim": "Requests use HTTP Basic credentials: Account SID or API key SID as user, Auth Token or key secret as password.",
+      "source": "https://www.twilio.com/docs/usage/security",
+      "retrieved": "2026-10-25",
+      "state": "unverified",
+      "evidence": "The page shows curl -u user:secret and says the Auth Token provides REST API access; it does not name the scheme in words."
+    },
+    {
+      "id": "f4",
+      "field": "network.hosts",
+      "value": [
+        "api.twilio.com"
+      ],
+      "claim": "Only api.twilio.com is called.",
+      "source": "https://www.twilio.com/docs/messaging/api/message-resource",
+      "retrieved": "2026-10-25",
+      "state": "self-verified",
+      "evidence": "All endpoint URLs on the page are on api.twilio.com."
+    },
+    {
+      "id": "f5",
+      "claim": "A message can be deleted (a Delete a Message section exists); the exact path was not read.",
+      "source": "https://www.twilio.com/docs/messaging/api/message-resource",
+      "retrieved": "2026-10-25",
+      "state": "unverified",
+      "evidence": "The page lists 'Delete messages from your account' and a 'Delete a Message resource' section; the fetch cut the text before it."
+    }
+  ],
+  "choices": [
+    {
+      "decision": "send and call are consent, every DELETE is consent",
+      "because": "they cost money, reach a person, or destroy a record; a plain POST elsewhere stays a write",
+      "facts": [
+        "f2",
+        "f5"
+      ]
+    },
+    {
+      "decision": "basic auth with a secret ref",
+      "because": "the docs' examples use -u user:secret",
+      "facts": [
+        "f3"
+      ]
+    }
+  ],
+  "open": [
+    "No live call was made. The Auth Token versus API key choice, and the delete path, are unverified.",
+    "The consent globs assume the message-send path is /Accounts/*/Messages.json (f1)."
+  ]
+}

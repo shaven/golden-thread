@@ -1,0 +1,106 @@
+{
+  "schema": 1,
+  "template": "git",
+  "service": "MCP git reference server",
+  "archetype": "stdio-uvx",
+  "researched": "2026-10-14",
+  "researcher": "claude sonnet research run 2026-10-14",
+  "facts": [
+    {
+      "id": "f1",
+      "field": "connect.command",
+      "value": [
+        "uvx",
+        "mcp-server-git==2026.10.10",
+        "--repository",
+        "{repo}"
+      ],
+      "claim": "The server is the PyPI package mcp-server-git (latest 2026.10.10, uploaded 2026-10-11), run with uvx; --repository/-r selects the repository.",
+      "source": "https://github.com/modelcontextprotocol/servers/blob/main/src/git/README.md",
+      "retrieved": "2026-10-14",
+      "state": "self-verified",
+      "evidence": "README: uvx mcp-server-git; args [\"mcp-server-git\",\"--repository\",\"path/to/git/repo\"]; PyPI info.version 2026.10.10, not yanked."
+    },
+    {
+      "id": "f2",
+      "field": "connect.runtime",
+      "value": "uv",
+      "claim": "uvx is part of uv.",
+      "source": "https://github.com/modelcontextprotocol/servers/blob/main/src/git/README.md",
+      "retrieved": "2026-10-14",
+      "state": "unverified",
+      "evidence": "README shows the uvx command."
+    },
+    {
+      "id": "f3",
+      "claim": "Tools, all taking repo_path: git_status, git_diff_unstaged, git_diff_staged, git_diff, git_commit, git_add, git_reset, git_log, git_create_branch, git_checkout, git_show, git_branch.",
+      "source": "https://github.com/modelcontextprotocol/servers/blob/main/src/git/README.md",
+      "retrieved": "2026-10-14",
+      "state": "unverified",
+      "evidence": "12 tools listed; git_status needs only repo_path."
+    },
+    {
+      "id": "f4",
+      "claim": "State-changing tools: git_commit, git_add, git_reset, git_create_branch, git_checkout. Read tools: git_status, git_diff*, git_log, git_show, git_branch.",
+      "source": "https://github.com/modelcontextprotocol/servers/blob/main/src/git/README.md",
+      "retrieved": "2026-10-14",
+      "state": "unverified",
+      "evidence": "Tool list in README."
+    },
+    {
+      "id": "f5",
+      "claim": "Maintained in the modelcontextprotocol/servers repo (src/git), Beta classifier, README says early development; requires MCP Python SDK 1.x (mcp>=1.29.0,<2), v2 port in progress. Not archived.",
+      "source": "https://pypi.org/pypi/mcp-server-git/json",
+      "retrieved": "2026-10-14",
+      "state": "self-verified",
+      "evidence": "PyPI: Development Status :: 4 - Beta; README and GitHub index list Git as a current reference server."
+    },
+    {
+      "id": "f6",
+      "claim": "--repository accepts any path inside a working tree and walks up to the repository root.",
+      "source": "https://github.com/modelcontextprotocol/servers/blob/main/src/git/README.md",
+      "retrieved": "2026-10-14",
+      "state": "unverified",
+      "evidence": "accepts any path inside a Git working tree"
+    }
+  ],
+  "choices": [
+    {
+      "decision": "stdio-uvx archetype, runtime uv",
+      "because": "official server is a PyPI package run with uvx",
+      "facts": [
+        "f1",
+        "f2"
+      ]
+    },
+    {
+      "decision": "repo is a connect.param with no default",
+      "because": "the repository is the access grant and only the user may choose it",
+      "facts": [
+        "f1",
+        "f6"
+      ]
+    },
+    {
+      "decision": "consent on git_commit, git_add, git_reset, git_create_branch, git_checkout",
+      "because": "each changes repository or working-tree state",
+      "facts": [
+        "f4"
+      ]
+    },
+    {
+      "decision": "no smoke op",
+      "because": "every tool requires repo_path, so none runs with no arguments",
+      "facts": [
+        "f3"
+      ]
+    }
+  ],
+  "open": [
+    "No smoke op: every documented tool needs repo_path; a git_status call with repo_path equal to the chosen path was not confirmed to be accepted.",
+    "Whether the server rejects repo_path values other than the --repository one was not confirmed in the docs.",
+    "Version pin rests on PyPI plus the README, which shows it unpinned.",
+    "Tool names read from the README only; not checked against source or a tools/list response.",
+    "Whether git_add/git_checkout can discard work or only restage was not examined."
+  ]
+}

@@ -1,0 +1,195 @@
+{
+  "schema": 1,
+  "name": "triage-ticket",
+  "title": "Triage a ticket",
+  "description": "Read a ticket and its comments, make sure it has an owner, work out a timeline, move it to the backlog and tell the owner. Writes and sends wait for you until you approve them.",
+  "personas": [
+    "project-manager",
+    "product-manager",
+    "leadership"
+  ],
+  "say": "Triage PROJ-123.",
+  "notes": [
+    "The connection and op names in a LOTR step are examples. Run `lotr find` (or ask Claude to) and edit them to match your own gateway before you approve a write.",
+    "The move to the backlog is a write: approve it once (gt_workflow.py approve triage-ticket to_backlog) and it runs on its own from then on. The note to the owner is a send, so it always waits for you."
+  ],
+  "inputs": [
+    {
+      "name": "issue",
+      "type": "issue-key",
+      "required": true,
+      "prompt": "Which issue? (like PROJ-123)"
+    }
+  ],
+  "steps": [
+    {
+      "id": "get_issue",
+      "kind": "lotr",
+      "title": "Read the issue and its comments",
+      "tier": "read",
+      "connection": "atlassian@personal",
+      "op": "getJiraIssue",
+      "args": {
+        "issueIdOrKey": "{{inputs.issue}}",
+        "fields": [
+          "summary",
+          "status",
+          "assignee",
+          "duedate",
+          "comment"
+        ]
+      }
+    },
+    {
+      "id": "summarise",
+      "kind": "farm",
+      "class": "summarise",
+      "title": "Summarise it",
+      "task": "Summarise this issue and its comments in three sentences. Say who has commented and what is being asked of whom.",
+      "input": "{{steps.get_issue.output}}",
+      "schema": {
+        "type": "object",
+        "properties": {
+          "summary": {
+            "type": "string",
+            "description": "three sentences"
+          },
+          "status": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "asked_of": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "who is being asked to do something"
+          }
+        },
+        "required": [
+          "summary"
+        ]
+      }
+    },
+    {
+      "id": "ask_owner",
+      "kind": "you",
+      "title": "Who owns it?",
+      "message": "The issue {{inputs.issue}} has no owner.",
+      "question": "Who should own it? (a name or email)",
+      "when": {
+        "not": {
+          "exists": "{{steps.get_issue.output.fields.assignee}}"
+        }
+      }
+    },
+    {
+      "id": "timeline",
+      "kind": "farm",
+      "class": "draft",
+      "title": "Work out a timeline",
+      "task": "From this issue and its comments, give a realistic timeline: when work can start and when it can finish. If the issue states a due date, use it and say so.",
+      "input": "{{steps.get_issue.output}}",
+      "schema": {
+        "type": "object",
+        "properties": {
+          "start": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "finish": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "reasoning": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "reasoning"
+        ]
+      },
+      "escalate": {
+        "prompt": "Work out a realistic timeline for this issue from its content and comments."
+      }
+    },
+    {
+      "id": "to_backlog",
+      "kind": "lotr",
+      "title": "Move it to the backlog",
+      "tier": "write",
+      "connection": "atlassian@personal",
+      "op": "transitionJiraIssue",
+      "args": {
+        "issueIdOrKey": "{{inputs.issue}}",
+        "transition": {
+          "name": "Backlog"
+        }
+      }
+    },
+    {
+      "id": "draft_note",
+      "kind": "farm",
+      "class": "draft",
+      "title": "Draft the note to the owner",
+      "task": "Write a short, friendly note (two or three sentences) telling the owner that the issue is in the backlog, with the timeline.",
+      "input": {
+        "summary": "{{steps.summarise.output.summary}}",
+        "timeline": "{{steps.timeline.output.reasoning}}"
+      },
+      "schema": {
+        "type": "object",
+        "properties": {
+          "message": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "message"
+        ]
+      }
+    },
+    {
+      "id": "notify_assignee",
+      "kind": "lotr",
+      "title": "Tell the owner",
+      "tier": "consent",
+      "connection": "m365@personal",
+      "op": "do_action",
+      "args": {
+        "action": "send mail",
+        "to": "{{steps.get_issue.output.fields.assignee}}",
+        "subject": "{{inputs.issue}} is in the backlog",
+        "body": "{{steps.draft_note.output.message}}"
+      },
+      "when": {
+        "exists": "{{steps.get_issue.output.fields.assignee}}"
+      }
+    },
+    {
+      "id": "notify_new_owner",
+      "kind": "lotr",
+      "title": "Tell the new owner",
+      "tier": "consent",
+      "connection": "m365@personal",
+      "op": "do_action",
+      "args": {
+        "action": "send mail",
+        "to": "{{steps.ask_owner.output.answer}}",
+        "subject": "{{inputs.issue}} is yours",
+        "body": "{{steps.draft_note.output.message}}"
+      },
+      "when": {
+        "not": {
+          "exists": "{{steps.get_issue.output.fields.assignee}}"
+        }
+      }
+    }
+  ]
+}

@@ -1,0 +1,38 @@
+{
+ "files": {
+  "hooks/hooks.json": {
+   "bytes": 453,
+   "sha256": "6a7b9b99660a891a5f9dd2faf2e03e1d655ffbeaf24f9e80e8c516ac287540f6"
+  },
+  "hooks/pane_core.js": {
+   "bytes": 14040,
+   "sha256": "465afafd496df9167e4877667e6892e812a818d27606f67b55c1f3467a690d9f"
+  },
+  "hooks/register.js": {
+   "bytes": 17721,
+   "sha256": "6d2c49f67a8f45630ccc1d515d7545e39d8a159481fa103030e4aa4ef1e7f610"
+  },
+  "scripts/gt_home.py": {
+   "bytes": 15091,
+   "sha256": "fad15c2653f732fe8565d5cf65c317893abf93bd16070d12846b0cc421f72b82"
+  },
+  "scripts/gt_pane.py": {
+   "bytes": 13011,
+   "sha256": "e3f54d30c344e5e9e3fd6f87ae6eb1cdf4d66047cb4b767fd5d7025389f3df89"
+  },
+  "templates/obsidian-gt-panel/main.js": {
+   "bytes": 21907,
+   "sha256": "9f98131f680ce5457fd97f9a33ba01328172b9193d4aa00573a8c80580c9ad14"
+  },
+  "templates/obsidian-gt-panel/manifest.json": {
+   "bytes": 332,
+   "sha256": "a9fc2bb2edabd65121071cda17e32b5d89dd524554ae49b1efb0034b27bc8010"
+  },
+  "templates/obsidian-gt-panel/styles.css": {
+   "bytes": 474,
+   "sha256": "f7f890d4d1fc2dc0e51d2da49cd21e8c170506c39190f1d382589ecd57d69f37"
+  }
+ },
+ "generated": "2026-10-29T06:55:16",
+ "version": "0.1.2"
+}

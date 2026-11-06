@@ -1,0 +1,48 @@
+{
+  "schema": 1,
+  "name": "healthy",
+  "title": "Check everything is healthy",
+  "description": "Checks the install, the hooks and your notes, and tells you what, if anything, needs fixing.",
+  "personas": [
+    "executive",
+    "operations"
+  ],
+  "help_workflow": "healthy",
+  "say": "Is everything healthy?",
+  "steps": [
+    {
+      "id": "doctor",
+      "kind": "run",
+      "title": "Check the install and its hooks",
+      "script": "gt_doctor.py",
+      "args": [
+        "--vault",
+        "{{vault}}"
+      ],
+      "ok_exit": [
+        0,
+        1
+      ],
+      "note_exit": {
+        "1": "something needs attention"
+      }
+    },
+    {
+      "id": "lint",
+      "kind": "run",
+      "title": "Audit the notes",
+      "script": "gt_lint.py",
+      "args": [
+        "--vault",
+        "{{vault}}"
+      ],
+      "ok_exit": [
+        0,
+        1
+      ],
+      "note_exit": {
+        "1": "there are findings to read"
+      }
+    }
+  ]
+}

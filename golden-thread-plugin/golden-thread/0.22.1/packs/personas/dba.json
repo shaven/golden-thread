@@ -1,0 +1,48 @@
+{
+  "schema": 1,
+  "name": "dba",
+  "title": "Database administrator",
+  "description": "A migration log, a backup and restore record and an access register (pair with operations for the runbook and logs).",
+  "audience": "Precise and operational: name the database, the change and the rollback; show exact commands, versions and row counts; flag data-loss and downtime risk first.",
+  "lotr_templates": ["postgres", "sqlite"],
+  "featured_skills": ["/gt:gt-open", "/gt:gt-plan", "/gt:gt-validate", "/gt:gt-runbook-lint", "/gt:gt-create", "/gt:gt-close"],
+  "session_focus": ["must_do", "handoffs"],
+  "close_focus": ["migrations", "runbook", "deadlines", "incidents"],
+  "farm_tasks": [
+    {"id": "migration-record-summary", "class": "summarise", "title": "Migration record summary", "does": "Summarises a migration log: what ran, in what order, what failed or was skipped.", "escalate": "Claude checks the summary against the log before a rollback or a sign-off."},
+    {"id": "row-count-check", "class": "summarise", "title": "Row-count check narrative", "does": "Turns before and after row counts into a plain-words check: which tables match, which differ and by how much.", "escalate": "Claude recomputes any difference before it is called safe; a mismatch is never accepted automatically."},
+    {"id": "slow-query-triage", "class": "log-triage", "title": "Slow query triage", "does": "Groups a slow-query log into distinct problem queries, with the lines that show them.", "escalate": "Claude reads the queries themselves before any index or schema change is proposed."},
+    {"id": "backup-log-evidence", "class": "quote-extract", "title": "Backup log evidence", "does": "Quotes, word for word, the log lines that show a backup or restore finished or failed.", "escalate": "A quote that is not verbatim is dropped; Claude reads the log if fewer quotes remain than the log should hold."}
+  ],
+  "scaffold": {
+    "files": [
+      {
+        "path": "migration-log.md",
+        "content": "# {TITLE} migration log\n\n<!-- Every schema change: when, migration id, what it does, applied where, rollback. -->\n\n| Date | Migration | What | Applied to | Rollback |\n|---|---|---|---|---|\n\n"
+      },
+      {
+        "path": "backup-restore.md",
+        "content": "# {TITLE} backups and restores\n\n<!-- Backup schedule, where they go, and every restore TEST with its result. A backup never restored is not known to work. -->\n\n## Schedule\n\n## Restore tests\n\n| Date | Backup | Restored to | Result |\n|---|---|---|---|\n\n"
+      },
+      {
+        "path": "access-register.md",
+        "content": "# {TITLE} access register\n\n<!-- Who has which access, granted when and by whom. Never write a password here. -->\n\n| Account | Access | Granted | By | Review by |\n|---|---|---|---|---|\n\n"
+      }
+    ],
+    "sections": []
+  },
+  "pane": [
+    {"label": "Start my day", "prompt": "Start my day: show what is waiting for me, what is overdue and what I should do first."},
+    {"label": "Overdue", "prompt": "Show my overdue tasks."},
+    {"label": "Add a task", "prompt": "I want to add a task. Ask me what it is and which project it belongs to."},
+    {"label": "Log a migration", "prompt": "Add an entry to the migration log. Ask me what changed."},
+    {"label": "Backup check", "prompt": "Show the backup and restore record and tell me what is out of date."},
+    {"label": "Access register", "prompt": "Show who has access to what, from the access register."},
+    {"label": "Open a project", "prompt": "Open a project for me. Ask me which one."},
+    {"label": "Find in my notes", "prompt": "Look something up in my notes. Ask me what I am looking for."},
+    {"label": "Save learnings", "prompt": "Write down what we learned in this session."},
+    {"label": "Write a handoff", "prompt": "Write a handoff for the next session so nothing is lost."},
+    {"label": "Check gt", "prompt": "Check that my gt install is healthy."},
+    {"label": "Sort my inbox", "prompt": "Review my inbox and file each item into the right project."}
+  ]
+}

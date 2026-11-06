@@ -1,0 +1,71 @@
+{
+  "schema": 1,
+  "template": "tailscale",
+  "service": "Tailscale API v2",
+  "archetype": "http-rest",
+  "researched": "2026-10-25",
+  "researcher": "claude, offline-style read of the vendor docs pages named in each fact (phase 88)",
+  "facts": [
+    {
+      "id": "f1",
+      "field": "connect.base_url",
+      "value": "https://api.tailscale.com/api/v2",
+      "claim": "The API is served at https://api.tailscale.com/api/v2.",
+      "source": "https://tailscale.com/kb/1101/api",
+      "retrieved": "2026-10-25",
+      "state": "unverified",
+      "evidence": "The KB page does not give the base URL (it points to the interactive docs, which did not load); this is from memory of the vendor's docs."
+    },
+    {
+      "id": "f2",
+      "field": "connect.auth_scheme",
+      "value": "bearer",
+      "claim": "Requests carry an access token.",
+      "source": "https://tailscale.com/kb/1101/api",
+      "retrieved": "2026-10-25",
+      "state": "unverified",
+      "evidence": "Page: requests are authenticated with an access token; it does not say basic or bearer."
+    },
+    {
+      "id": "f3",
+      "claim": "An access token expires after 1 to 90 days chosen at creation, and can be revoked earlier.",
+      "source": "https://tailscale.com/kb/1101/api",
+      "retrieved": "2026-10-25",
+      "state": "self-verified",
+      "evidence": "Page: 'between 1 and 90 inclusive, for the key expiry'; 'will automatically expire after the chosen number of days'."
+    },
+    {
+      "id": "f4",
+      "field": "network.hosts",
+      "value": [
+        "api.tailscale.com"
+      ],
+      "claim": "Only api.tailscale.com is called.",
+      "source": "https://tailscale.com/kb/1101/api",
+      "retrieved": "2026-10-25",
+      "state": "unverified",
+      "evidence": "Host from memory; not on the fetched page."
+    },
+    {
+      "id": "f5",
+      "claim": "Paths /tailnet/-/devices, /tailnet/-/acl and /tailnet/-/keys list devices, the policy and keys.",
+      "source": "https://tailscale.com/kb/1101/api",
+      "retrieved": "2026-10-25",
+      "state": "unverified",
+      "evidence": "From memory of the API reference; the reference page did not load (404 at /api/v2)."
+    }
+  ],
+  "choices": [
+    {
+      "decision": "all writes are consent",
+      "because": "the API edits the access policy and removes devices; read-only use is the point (key-expiry dates)",
+      "facts": [
+        "f5"
+      ]
+    }
+  ],
+  "open": [
+    "Base URL, paths and the bearer scheme are not confirmed from the vendor's docs; read the interactive API reference before a live check.",
+    "OAuth-client tokens (a fine-grained alternative to a full-access token) are not covered."
+  ]
+}

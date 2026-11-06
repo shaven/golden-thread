@@ -1,0 +1,14 @@
+{
+ "files": {
+  "hooks/hooks.json": {
+   "bytes": 1004,
+   "sha256": "d503a883dc268bdcfbabdb75d9798104a77cd7e6adc502329133559821da8574"
+  },
+  "scripts/gt_report_card.py": {
+   "bytes": 40397,
+   "sha256": "b73e5cb9a291faa466eac8f70fe4e3afeb459a7fd4c618b6d8253d3add46b8f3"
+  }
+ },
+ "generated": "2026-10-29T06:55:16",
+ "version": "0.21.2"
+}

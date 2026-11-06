@@ -1,0 +1,48 @@
+{
+  "schema": 1,
+  "name": "network-admin",
+  "title": "Network administrator",
+  "description": "A device inventory, an IP/VLAN map and a network change log (pair with operations for the runbook and incident log).",
+  "audience": "Concrete and operational: name the device, VLAN or link and the exact change; give commands and addresses; flag outage risk and the rollback first.",
+  "lotr_templates": ["git", "pagerduty"],
+  "featured_skills": ["/gt:gt-open", "/gt:gt-runbook-lint", "/gt:gt-validate", "/gt:gt-query", "/gt:gt-create", "/gt:gt-close"],
+  "session_focus": ["must_do", "handoffs"],
+  "close_focus": ["config", "runbook", "topology", "incidents"],
+  "farm_tasks": [
+    {"id": "config-change-summary", "class": "summarise", "title": "Config change summary", "does": "Summarises a device config change: what was added, removed or changed, in plain words.", "escalate": "Claude checks the summary against the diff before approval; a routing or firewall-rule change comes to you."},
+    {"id": "ip-vlan-lookup", "class": "quote-extract", "title": "IP and VLAN lookup", "does": "Quotes, word for word, the lines of the IP/VLAN map that answer a question such as which VLAN holds a subnet.", "escalate": "Claude reads the map itself when the engine returns no quote, or a quote that does not answer the question."},
+    {"id": "link-log-triage", "class": "log-triage", "title": "Link and firewall log triage", "does": "Groups link-flap or firewall log lines into distinct problems, with the lines that show each.", "escalate": "Claude reads the raw log for any outage, and before a rule is changed."},
+    {"id": "change-record-draft", "class": "draft", "title": "Change record draft", "does": "Drafts the network change record from the config summary: what, why, window, rollback.", "escalate": "You check the window and the rollback; Claude steps in if either is missing from the source."}
+  ],
+  "scaffold": {
+    "files": [
+      {
+        "path": "device-inventory.md",
+        "content": "# {TITLE} device inventory\n\n<!-- Every device: name, model, location, management address, owner. Never write a credential here. -->\n\n| Device | Model | Location | Mgmt address | Owner |\n|---|---|---|---|---|\n\n"
+      },
+      {
+        "path": "ip-map.md",
+        "content": "# {TITLE} IP and VLAN map\n\n<!-- Subnets, VLANs and what lives on them. -->\n\n| Subnet / VLAN | Purpose | Gateway | Notes |\n|---|---|---|---|\n\n"
+      },
+      {
+        "path": "network-change-log.md",
+        "content": "# {TITLE} network change log\n\n<!-- Firewall, DNS, routing and certificate changes: when, what, window, rollback. -->\n\n| Date | Change | Device | Window | Rollback |\n|---|---|---|---|---|\n\n"
+      }
+    ],
+    "sections": []
+  },
+  "pane": [
+    {"label": "Start my day", "prompt": "Start my day: show what is waiting for me, what is overdue and what I should do first."},
+    {"label": "Overdue", "prompt": "Show my overdue tasks."},
+    {"label": "Add a task", "prompt": "I want to add a task. Ask me what it is and which project it belongs to."},
+    {"label": "Log a change", "prompt": "Add an entry to the network change log. Ask me what changed."},
+    {"label": "Device inventory", "prompt": "Show the device inventory and flag any device with missing details."},
+    {"label": "IP/VLAN map", "prompt": "Show the IP and VLAN map."},
+    {"label": "Runbook check", "prompt": "Check my runbooks for content that is repeated and should be shared."},
+    {"label": "Open a project", "prompt": "Open a project for me. Ask me which one."},
+    {"label": "Find in my notes", "prompt": "Look something up in my notes. Ask me what I am looking for."},
+    {"label": "Write a handoff", "prompt": "Write a handoff for the next session so nothing is lost."},
+    {"label": "Save learnings", "prompt": "Write down what we learned in this session."},
+    {"label": "Sort my inbox", "prompt": "Review my inbox and file each item into the right project."}
+  ]
+}

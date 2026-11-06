@@ -1,0 +1,70 @@
+{
+  "schema": 1,
+  "template": "google-calendar",
+  "service": "Google Calendar MCP",
+  "archetype": "mcp-oauth-preregistered",
+  "researched": "2026-10-25",
+  "researcher": "claude, offline-style read of the vendor docs pages named in each fact (phase 88)",
+  "facts": [
+    {
+      "id": "f1",
+      "field": "connect.url",
+      "value": "https://calendarmcp.googleapis.com/mcp/v1",
+      "claim": "The hosted Calendar MCP server is at https://calendarmcp.googleapis.com/mcp/v1.",
+      "source": "https://developers.google.com/workspace/guides/configure-mcp-servers",
+      "retrieved": "2026-10-25",
+      "state": "self-verified",
+      "evidence": "Page lists the server URL under its product."
+    },
+    {
+      "id": "f2",
+      "field": "connect.scopes",
+      "value": [
+        "https://www.googleapis.com/auth/calendar.calendarlist.readonly",
+        "https://www.googleapis.com/auth/calendar.events.readonly"
+      ],
+      "claim": "Scopes the server accepts: calendar.calendarlist.readonly, calendar.events.freebusy, calendar.events.readonly; this template asks only for calendar.calendarlist.readonly, calendar.events.readonly.",
+      "source": "https://developers.google.com/workspace/guides/configure-mcp-servers",
+      "retrieved": "2026-10-25",
+      "state": "self-verified",
+      "evidence": "Page lists the scopes per product."
+    },
+    {
+      "id": "f3",
+      "field": "network.hosts",
+      "value": [
+        "calendarmcp.googleapis.com",
+        "accounts.google.com",
+        "oauth2.googleapis.com"
+      ],
+      "claim": "The server host plus Google's sign-in and token hosts.",
+      "source": "https://developers.google.com/identity/protocols/oauth2",
+      "retrieved": "2026-10-25",
+      "state": "unverified",
+      "evidence": "Sign-in hosts carried over from the google-drive template, which read them from Google's OAuth guide."
+    },
+    {
+      "id": "f4",
+      "field": "connect.client_registration",
+      "value": "preregistered",
+      "claim": "Google offers no dynamic client registration for these servers: you create the OAuth client.",
+      "source": "https://developers.google.com/workspace/guides/configure-mcp-servers",
+      "retrieved": "2026-10-25",
+      "state": "unverified",
+      "evidence": "Carried over from the google-drive template; the page's setup steps create an OAuth client."
+    }
+  ],
+  "choices": [
+    {
+      "decision": "read-only scopes by default",
+      "because": "least privilege; the write scopes are opt-in by editing the scope list",
+      "facts": [
+        "f2"
+      ]
+    }
+  ],
+  "open": [
+    "No live sign-in was tried.",
+    "Tool names and which tools write are not documented on the page."
+  ]
+}

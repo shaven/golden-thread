@@ -1,0 +1,42 @@
+{
+  "schema": 1,
+  "name": "product-manager",
+  "title": "Product manager",
+  "description": "A status board, a roadmap and a stakeholders list beside the standard project files.",
+  "audience": "Plain language: lead with status, risks and the decisions needed; say what it means for users and the roadmap; no code unless asked.",
+  "plain_mode": true,
+  "handoff": {"commands": ["/gt:gt-open", "/gt:gt-list", "/gt:gt-close"], "track": "pm"},
+  "lotr_templates": ["atlassian", "linear", "notion"],
+  "featured_skills": ["/gt:gt-open", "/gt:gt-list", "/gt:gt-create", "/gt:gt-review", "/gt:gt-query", "/gt:gt-close"],
+  "session_focus": ["tasks", "handoffs"],
+  "close_focus": ["decisions", "tasks", "findings", "handoffs"],
+  "farm_tasks": [
+    {"id": "status-summary", "class": "summarise", "title": "Status summary", "does": "Turns the open tasks and recent notes into a short status: what moved, what is blocked.", "escalate": "Claude checks any figure or date against the task list before it goes to a stakeholder."},
+    {"id": "action-items", "class": "extract", "title": "Action items from notes", "does": "Pulls each action, its owner and its due date out of meeting notes.", "escalate": "An item with no named owner is listed as unassigned; Claude reads the notes when an owner or date is ambiguous."},
+    {"id": "stakeholder-update", "class": "draft", "title": "Stakeholder update draft", "does": "Drafts a plain-language update from the status summary and the decisions needed.", "escalate": "You read it before it is sent; Claude steps in for anything about money, promised dates or people."},
+    {"id": "feedback-triage", "class": "classify", "title": "Feedback triage", "does": "Labels customer feedback as bug, feature request, question or noise.", "escalate": "Claude reads any item labelled bug before it is filed, and anything that mentions data loss or security."},
+    {"id": "release-notes-draft", "class": "draft", "title": "Release notes draft", "does": "Drafts release notes from the shipped items, in the words users would use.", "escalate": "You approve the wording; Claude steps in if a note claims behaviour the change list does not show."}
+  ],
+  "scaffold": {
+    "files": [
+      {"path": "status-board.md", "content": "# {TITLE} status board\n\n<!-- Where the work stands this week. Keep it current; move history to research.md. -->\n\n| Workstream | Owner | Status | Next step | Due |\n|---|---|---|---|---|\n\n## Risks and blockers\n\n"},
+      {"path": "roadmap.md", "content": "# {TITLE} roadmap\n\n<!-- Milestones in order. One line each: date, outcome, owner. -->\n\n## Now\n\n## Next\n\n## Later\n\n"},
+      {"path": "stakeholders.md", "content": "# {TITLE} stakeholders\n\n<!-- Who needs to know, who decides, who is waiting on whom. -->\n\n| Name | Role | Interest | Contact cadence |\n|---|---|---|---|\n\n"}
+    ],
+    "sections": []
+  },
+  "pane": [
+    {"label": "Start my day", "prompt": "Start my day: show what is waiting for me, what is overdue and what I should do first."},
+    {"label": "Overdue", "prompt": "Show my overdue tasks."},
+    {"label": "What is waiting", "prompt": "What handoffs and tasks are waiting for me?"},
+    {"label": "Add a task", "prompt": "I want to add a task. Ask me what it is and which project it belongs to."},
+    {"label": "Update roadmap", "prompt": "Help me update the roadmap for the project we are in."},
+    {"label": "Stakeholder update", "prompt": "Draft a short update for the stakeholders of this project."},
+    {"label": "Note a decision", "prompt": "Write down a decision. Ask me what was decided and why."},
+    {"label": "Open a project", "prompt": "Open a project for me. Ask me which one."},
+    {"label": "Sort my inbox", "prompt": "Review my inbox and file each item into the right project."},
+    {"label": "Write a handoff", "prompt": "Write a handoff for the next session so nothing is lost."},
+    {"label": "Find in my notes", "prompt": "Look something up in my notes. Ask me what I am looking for."},
+    {"label": "Save learnings", "prompt": "Write down what we learned in this session."}
+  ]
+}

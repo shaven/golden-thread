@@ -1,0 +1,27 @@
+{
+  "schema": 1,
+  "name": "ip-lookup",
+  "title": "Look up where an address lives",
+  "description": "Looks in the IP map and tells you the answer with where it came from; if the map was wrong, you say so and the correction is filed.",
+  "personas": [
+    "network-admin"
+  ],
+  "help_workflow": "ip-lookup",
+  "say": "Where does 10.20.4.0/24 live?",
+  "inputs": [
+    {
+      "name": "address",
+      "type": "string",
+      "required": true,
+      "prompt": "Which address or network?"
+    }
+  ],
+  "steps": [
+    {
+      "id": "lookup",
+      "kind": "claude",
+      "title": "Look in the IP map",
+      "prompt": "Find where {{inputs.address}} lives in the person's IP map notes (use /gt:gt-query). Answer in a sentence and quote where the answer came from. If the map turns out to be wrong, say so and file the correction with /gt:gt-work."
+    }
+  ]
+}

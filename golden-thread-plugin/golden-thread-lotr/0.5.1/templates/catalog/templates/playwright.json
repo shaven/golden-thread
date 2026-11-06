@@ -1,0 +1,56 @@
+{
+  "schema": 1,
+  "name": "playwright",
+  "archetype": "stdio-npx",
+  "summary": "Microsoft Playwright MCP: browser automation by a local headless browser, no credentials",
+  "kind": "mcp-stdio",
+  "docs": "https://github.com/microsoft/playwright-mcp",
+  "connect": {
+    "command": [
+      "npx",
+      "-y",
+      "@playwright/mcp@0.0.83",
+      "--headless",
+      "--isolated",
+      "--block-service-workers"
+    ],
+    "runtime": "node",
+    "env": {},
+    "trust": "T1",
+    "identity": "<none: runs a local browser, no account>",
+    "description": "Playwright MCP (local stdio, headless isolated browser)",
+    "timeouts": {
+      "start_s": 60,
+      "call_s": 120,
+      "idle_s": 600
+    },
+    "policy": {
+      "consent": [
+        "browser_navigate",
+        "browser_navigate_back",
+        "browser_evaluate",
+        "browser_run_code_unsafe",
+        "browser_file_upload",
+        "browser_drop",
+        "browser_pdf_save",
+        "browser_route",
+        "browser_set_storage_state",
+        "browser_cookie_*",
+        "browser_localstorage_*",
+        "browser_sessionstorage_*",
+        "browser_start_*"
+      ]
+    }
+  },
+  "notes": [
+    "No credentials: this server needs no account or key.",
+    "Needs Node.js 18 or newer (the package's engines field and the README agree). Browsers must be installed for Playwright before first use; the README's own 'Browser installation' section is empty, so install them with Playwright's standard install step and check the result.",
+    "Pinned to @playwright/mcp@0.0.83 (the npm latest on 2026-10-14); the README itself suggests @latest, which this template deliberately avoids. Update the pin on purpose.",
+    "Safety flags chosen here: --headless (the default is a visible window), --isolated (profile kept in memory, nothing saved to disk) and --block-service-workers. Files outside the workspace roots and file:// URLs are blocked by default; do NOT add --allow-unrestricted-file-access.",
+    "Do not add --no-sandbox: it disables the browser sandbox for every process type. Also avoid --extension (drives your real Chrome or Edge with its logins), --user-data-dir (persistent profile), --cdp-endpoint, --secrets and --caps unless you need them.",
+    "--allowed-origins (semicolon-separated) and --blocked-origins narrow what the browser requests, but the README says they do not affect redirects and are not a security boundary; the README also says Playwright MCP is not a security boundary. Page content is untrusted, so pages can try to steer the model.",
+    "--allowed-hosts is a different thing: the hosts this server may serve from (only relevant to the HTTP transport, not stdio).",
+    "Policy: asks first before navigating to a page, running page scripts (browser_evaluate, browser_run_code_unsafe), uploading files, saving files and touching cookies or storage. Note that most useful work involves browser_navigate, so expect a prompt per navigation.",
+    "No smoke test is set: the only read-only tool without navigation is browser_tabs, whose action argument values are not spelled out in the README."
+  ]
+}

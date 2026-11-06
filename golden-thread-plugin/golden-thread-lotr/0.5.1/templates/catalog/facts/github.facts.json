@@ -1,0 +1,84 @@
+{
+ "schema": 1,
+ "template": "github",
+ "service": "GitHub (GitHub's remote MCP server)",
+ "archetype": "mcp-http-key",
+ "researched": "2026-10-14",
+ "researcher": "claude opus built-in connector review 2026-10-14",
+ "facts": [
+  {
+   "id": "f1",
+   "claim": "GitHub's hosted MCP server is at https://api.githubcopilot.com/mcp/",
+   "source": "https://github.com/github/github-mcp-server/blob/main/docs/remote-server.md",
+   "retrieved": "2026-10-14",
+   "state": "self-verified",
+   "evidence": "remote-server.md gives the URL; the protected-resource document at https://api.githubcopilot.com/.well-known/oauth-protected-resource/mcp/ names resource https://api.githubcopilot.com/mcp/.",
+   "field": "connect.url",
+   "value": "https://api.githubcopilot.com/mcp/"
+  },
+  {
+   "id": "f2",
+   "claim": "A personal access token works as Authorization: Bearer",
+   "source": "https://docs.github.com/en/copilot/how-tos/provide-context/use-mcp/set-up-the-github-mcp-server",
+   "retrieved": "2026-10-14",
+   "state": "self-verified",
+   "evidence": "\"manually configure it to use a personal access token (PAT)\" with \"Authorization\": \"Bearer YOUR_GITHUB_PAT\".",
+   "field": "connect.auth_scheme",
+   "value": "bearer"
+  },
+  {
+   "id": "f3",
+   "claim": "The server's OAuth authorization server (github.com/login/oauth) publishes no dynamic registration, so a browser sign-in needs an app the user creates",
+   "source": "https://api.githubcopilot.com/.well-known/oauth-protected-resource/mcp/",
+   "retrieved": "2026-10-14",
+   "state": "unverified",
+   "evidence": "authorization_servers is https://github.com/login/oauth; no registration endpoint was found. The docs say OAuth needs the client's OAuth app enabled for organisations with restrictions."
+  },
+  {
+   "id": "f4",
+   "claim": "A /readonly path suffix (or the X-MCP-Readonly header) limits the server to read tools",
+   "source": "https://github.com/github/github-mcp-server/blob/main/docs/remote-server.md",
+   "retrieved": "2026-10-14",
+   "state": "self-verified",
+   "evidence": "\"append /readonly, for example https://api.githubcopilot.com/mcp/readonly\"."
+  },
+  {
+   "id": "f5",
+   "claim": "Available to all GitHub users; a tool behind a paid feature needs that subscription",
+   "source": "https://docs.github.com/en/copilot/how-tos/provide-context/use-mcp/set-up-the-github-mcp-server",
+   "retrieved": "2026-10-14",
+   "state": "self-verified",
+   "evidence": "\"available to all GitHub users regardless of plan type\"; \"tools that interact with Copilot Cloud Agent require a paid Copilot license\"."
+  },
+  {
+   "id": "f6",
+   "claim": "get_me is a read tool with no required arguments (smoke)",
+   "source": "https://github.com/github/github-mcp-server/blob/main/README.md",
+   "retrieved": "2026-10-14",
+   "state": "unverified",
+   "evidence": "README tool list names get_me (\"Get my user profile\") with no parameters.",
+   "field": "smoke.op",
+   "value": "get_me"
+  },
+  {
+   "id": "f7",
+   "claim": "issue_read, pull_request_read, actions_get/list, projects_get/list only read; merge_pull_request, push_files, create_or_update_file, delete_file and the *_write tools change things",
+   "source": "https://github.com/github/github-mcp-server/blob/main/README.md",
+   "retrieved": "2026-10-14",
+   "state": "unverified",
+   "evidence": "README tool list and parameter descriptions (method values get, get_diff, get_status ... for the *_read tools)."
+  },
+  {
+   "id": "f8",
+   "claim": "The MCP endpoint is the only host LOTR talks to for a token connection",
+   "source": "https://github.com/github/github-mcp-server/blob/main/docs/remote-server.md",
+   "retrieved": "2026-10-14",
+   "state": "self-verified",
+   "evidence": "The token is sent to https://api.githubcopilot.com/mcp/ only; no sign-in host is involved with a personal access token.",
+   "field": "network.hosts",
+   "value": [
+    "api.githubcopilot.com"
+   ]
+  }
+ ]
+}

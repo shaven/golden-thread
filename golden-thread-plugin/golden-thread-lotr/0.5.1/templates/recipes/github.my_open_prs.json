@@ -1,0 +1,20 @@
+{
+  "name": "github.my_open_prs",
+  "summary": "My open pull requests (PRs) I authored, across all GitHub repos, newest first",
+  "tier": "read",
+  "tags": ["github", "pr", "pull request", "mine", "open"],
+  "params": {
+    "repo": {"description": "optional owner/name to limit the search to one repository", "default": null},
+    "query": {"description": "optional extra GitHub search qualifiers, e.g. 'draft:false' or 'review:approved'", "default": null}
+  },
+  "profiles": {
+    "github": {
+      "steps": [
+        {"op": "search_issues",
+         "args": {"q": "is:pr is:open author:@me{{#repo}} repo:{{repo}}{{/repo}}{{#query}} {{query}}{{/query}}",
+                  "sort": "updated", "order": "desc"}}
+      ]
+    }
+  },
+  "select": "total_count,items[].number,items[].title,items[].html_url,items[].updated_at,items[].draft,items[].repository_url"
+}

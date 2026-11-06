@@ -1,0 +1,13 @@
+{
+  "three-bundle.min.js": {
+    "package": "three",
+    "version": "0.186.1",
+    "license": "MIT (THREE-LICENSE)",
+    "npm_integrity": "sha512-blFeqb49wRCSGUGj7gtpfnSGHy2lwDk94RhUmS1c/hTby70kvChbWpkJ4Pm1390LqzzvTmzgXKHPEafJwCb8jA==",
+    "bundler": "esbuild 0.25.10 (@esbuild/darwin-arm64, npm integrity checked)",
+    "command": "esbuild entry.js (the exports list below, from three) --bundle --format=iife --global-name=THREE --minify --legal-comments=inline --target=es2020 --alias:three/addons=./node_modules/three/examples/jsm",
+    "exports": ["AmbientLight", "Box3", "BoxGeometry", "CanvasTexture", "Color", "CylinderGeometry", "DirectionalLight", "Fog", "GridHelper", "Group", "HemisphereLight", "InstancedMesh", "LinearFilter", "Mesh", "MeshBasicMaterial", "MeshLambertMaterial", "MeshStandardMaterial", "Object3D", "OrbitControls", "PerspectiveCamera", "PlaneGeometry", "QuadraticBezierCurve3", "Raycaster", "SRGBColorSpace", "Scene", "SphereGeometry", "Sprite", "SpriteMaterial", "TubeGeometry", "Vector2", "Vector3", "WebGLRenderer"],
+    "sha256": "84747b01d6856104f9888ffa55707dfbfd5f5c9e2b9fe6c116b21fa993e4c7a6",
+    "rebuild": "python3 dev/vendor_three.py --check (verifies) | --write (rebuilds)"
+  }
+}

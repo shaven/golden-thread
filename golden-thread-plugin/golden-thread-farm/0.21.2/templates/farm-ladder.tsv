@@ -1,0 +1,8 @@
+task_class	start_rung	check	audit_rate	public
+log-triage	1	log-lines	-	no
+quote-extract	2	quote	-	no
+extract	2	schema	-	no
+classify	2	schema	-	no
+draft	2	schema	-	no
+generalize	4	schema	-	no
+default	4	schema	-	no

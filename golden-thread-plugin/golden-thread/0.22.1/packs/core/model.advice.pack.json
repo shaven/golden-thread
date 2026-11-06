@@ -1,0 +1,171 @@
+{
+  "schema": 1,
+  "slot": "model_advice",
+  "name": "advice",
+  "tier": "D",
+  "spdx": "MIT",
+  "provenance": {
+    "origin": "original",
+    "contributor": "Golden Thread <gt@example.com>",
+    "upstream": null
+  },
+  "dco": "Signed-off-by: Golden Thread <gt@example.com>",
+  "notes": "EXAMPLE rows, edit for your own work; not measured (state: example). recommend opus = when the deepest model is worth it. A measured row needs class, agent_types, recommend, evidence, samples (>= 30), opus_needed_pct (<= 10), verified; see gt_model_advice.py.",
+  "entries": [
+    {
+      "class": "sweeps",
+      "agent_types": [
+        "Explore"
+      ],
+      "recommend": "haiku",
+      "state": "example",
+      "evidence": "example: a read-only search over a fixed file set is mostly matching, so a small model usually finds the same files",
+      "verified": "2026-10-27"
+    },
+    {
+      "class": "extraction",
+      "agent_types": [
+        "gt:extract",
+        "gt:classify"
+      ],
+      "recommend": "haiku",
+      "state": "example",
+      "evidence": "example: pulling named fields out of a document is a lookup against the text, with a schema to check the result",
+      "verified": "2026-10-27"
+    },
+    {
+      "class": "rubric-judging",
+      "agent_types": [
+        "gt:reconcile"
+      ],
+      "recommend": "haiku",
+      "state": "example",
+      "evidence": "example: scoring an answer against a written rubric is a bounded comparison, and a second judge can double-check it",
+      "verified": "2026-10-27"
+    },
+    {
+      "class": "summaries",
+      "agent_types": [
+        "general-purpose"
+      ],
+      "recommend": "sonnet",
+      "state": "example",
+      "evidence": "example: condensing a known document keeps the main points at the balanced tier, and the source is there to check against",
+      "verified": "2026-10-27"
+    },
+    {
+      "class": "edits",
+      "agent_types": [
+        "general-purpose"
+      ],
+      "recommend": "sonnet",
+      "state": "example",
+      "evidence": "example: a small, well-specified edit with tests to run is routine work at the balanced tier",
+      "verified": "2026-10-27"
+    },
+    {
+      "class": "builds",
+      "agent_types": [
+        "general-purpose",
+        "Plan"
+      ],
+      "recommend": "sonnet",
+      "state": "example",
+      "evidence": "example: writing a module from a clear spec, with tests that decide whether it is right, is balanced-tier work",
+      "verified": "2026-10-27"
+    },
+    {
+      "class": "security-sensitive-build",
+      "agent_types": [
+        "general-purpose"
+      ],
+      "recommend": "opus",
+      "state": "example",
+      "evidence": "example, estimated from this build: Sonnet builders shipped the relax, auto-clear and code-contract work, and independent Opus reviews of presence code on 2026-10-25 (research.md, phase 96 review) found defects the builder missed: a Hello fall-through and an invisible-character check",
+      "rule": "Sonnet may build security-sensitive code (unlock, presence, secrets, redaction, signing, sandbox), but a deep-tier reviewer must review it before it ships.",
+      "verified": "2026-10-27",
+      "when_high_stakes": "(1) High stakes if wrong: the work guards access or secrets (unlock, presence, redaction, signing, sandbox), handles untrusted input, or can lose data or race (clears, claims, request files).",
+      "when_new_logic": "(2) New logic, not a mechanical change: docs, tables, templates, samples, test-only work and grep audits are outside it.",
+      "when_tests_pass": "(3) Its tests already pass: red code is not reviewed.",
+      "when_no_gate": "(4) No exhaustive deterministic gate already covers it: where a scanner, a schema or an exact-match test is the check, that is the check.",
+      "limit_cluster": "Rarity: one deep reviewer per risk cluster per release, never per fork.",
+      "limit_fixer": "Rarity: a deep fixer only for confirmed HIGH or MEDIUM findings.",
+      "limit_differ": "Rarity: the reviewer must differ from the builder.",
+      "policy_evidence": "Estimated, from this build: of about 16 Sonnet forks on 2026-10-27, 2 risk clusters met all four conditions (relax; auto-clear with the CODE contract, batch ledger and 402 mapping). The 2 Opus reviews found 7 MEDIUM defects the builders missed; the other forks met none and got no Opus."
+    },
+    {
+      "class": "independent-review",
+      "agent_types": [
+        "general-purpose",
+        "gt:verify"
+      ],
+      "recommend": "opus",
+      "state": "example",
+      "evidence": "example, estimated from this build: independent Opus reviews of Sonnet-built presence code found real defects the builder's own tests did not (research.md 2026-10-25, phase 96 review)",
+      "rule": "The reviewer must be a different model than the builder (builder != reviewer) and must not start from the builder's report, so it does not anchor on it.",
+      "verified": "2026-10-27",
+      "when_high_stakes": "(1) High stakes if wrong: the work guards access or secrets (unlock, presence, redaction, signing, sandbox), handles untrusted input, or can lose data or race (clears, claims, request files).",
+      "when_new_logic": "(2) New logic, not a mechanical change: docs, tables, templates, samples, test-only work and grep audits are outside it.",
+      "when_tests_pass": "(3) Its tests already pass: red code is not reviewed.",
+      "when_no_gate": "(4) No exhaustive deterministic gate already covers it: where a scanner, a schema or an exact-match test is the check, that is the check.",
+      "limit_cluster": "Rarity: one deep reviewer per risk cluster per release, never per fork.",
+      "limit_fixer": "Rarity: a deep fixer only for confirmed HIGH or MEDIUM findings.",
+      "limit_differ": "Rarity: the reviewer must differ from the builder.",
+      "policy_evidence": "Estimated, from this build: of about 16 Sonnet forks on 2026-10-27, 2 risk clusters met all four conditions (relax; auto-clear with the CODE contract, batch ledger and 402 mapping). The 2 Opus reviews found 7 MEDIUM defects the builders missed; the other forks met none and got no Opus."
+    },
+    {
+      "class": "concurrency-and-data-loss",
+      "agent_types": [
+        "general-purpose"
+      ],
+      "recommend": "opus",
+      "state": "example",
+      "evidence": "example: races and double actions (session claims, request files, a clear that fires twice) depend on orderings a test rarely covers, and a miss loses data silently",
+      "rule": "Have the deep tier read the code path end to end and name the interleavings before anything is written.",
+      "verified": "2026-10-27"
+    },
+    {
+      "class": "ambiguous-design",
+      "agent_types": [
+        "Plan",
+        "general-purpose"
+      ],
+      "recommend": "opus",
+      "state": "example",
+      "evidence": "example: when the spec must be decided and not followed, a wrong choice is paid for later, so the deeper model's judgement is worth the price",
+      "rule": "Decide the design with the deep tier; hand the settled spec to Sonnet to build.",
+      "verified": "2026-10-27"
+    },
+    {
+      "class": "long-horizon-change",
+      "agent_types": [
+        "general-purpose"
+      ],
+      "recommend": "opus",
+      "state": "example",
+      "evidence": "example: a change across many files with invariants between them (this build's manifests, doc counts and hook registry) needs one model to hold all of it",
+      "rule": "One deep-tier model holds the whole change, because splitting the invariants across builders loses them.",
+      "verified": "2026-10-27"
+    },
+    {
+      "class": "test-writing",
+      "agent_types": [
+        "general-purpose"
+      ],
+      "recommend": "sonnet",
+      "state": "example",
+      "evidence": "example: writing tests from a written spec is well-specified work, and running them says at once whether they are right",
+      "verified": "2026-10-27"
+    },
+    {
+      "class": "doc-generation",
+      "agent_types": [
+        "general-purpose"
+      ],
+      "recommend": "sonnet",
+      "state": "example",
+      "evidence": "example: generating a table or a document from material that is already settled is routine work at the balanced tier, and the source is there to check against",
+      "verified": "2026-10-27"
+    }
+  ]
+}

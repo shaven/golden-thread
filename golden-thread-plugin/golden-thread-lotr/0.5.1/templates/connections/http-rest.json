@@ -1,0 +1,38 @@
+{
+  "schema": 1,
+  "name": "http-rest",
+  "archetype": "http-rest",
+  "summary": "ARCHETYPE: a REST API with no MCP server, bearer token (TODO: service)",
+  "kind": "http",
+  "docs": "https://todo-host.example/docs",
+  "connect": {
+    "base_url": "https://todo-host.example/v1",
+    "profile": "generic",
+    "auth_scheme": "bearer",
+    "credential_ref": "store:TODO-secret-name",
+    "trust": "T1",
+    "identity": "TODO: your account at the service",
+    "description": "TODO (REST API)",
+    "policy": {
+      "consent": [
+        "DELETE *"
+      ],
+      "write": []
+    }
+  },
+  "network": {
+    "hosts": [
+      "todo-host.example"
+    ]
+  },
+  "smoke": {
+    "op": "GET /TODO-a-harmless-read-path",
+    "args": {}
+  },
+  "notes": [
+    "ARCHETYPE: copy with `lotr template new NAME --archetype http-rest`, then replace every TODO.",
+    "Other auth: auth_scheme basic needs connect.auth_user (the secret is the password); auth_scheme header needs connect.auth_header (the header name) and the secret is its value.",
+    "Add policy globs for anything that bills, sends or deletes (consent) before you use it.",
+    "Calls look like: lotr read NAME@zone 'GET /path' k=v"
+  ]
+}

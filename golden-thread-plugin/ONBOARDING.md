@@ -1,11 +1,11 @@
 # Golden Thread — Getting Started
 
 > **Reader:** the first thirty minutes — the happy path only
-> **Claims last checked against the code:** 2026-10-02 (gt 0.19.1) — see *The documents, and what belongs in each* in [`CLAUDE.md`](../CLAUDE.md).
+> **Stamped for gt 0.22.1:** the counts and version numbers in this document are checked against the code at every release; the prose is re-read when the document is edited, not at every release.
 
-A guided walkthrough for your first session. Six steps, ~15 minutes.
+A guided walkthrough for your first session. Six steps, ~15 minutes (estimate; not yet timed on a clean machine).
 
-**Requirements:** Python 3.8+, Claude Code installed. Written against **gt v0.21.5**. The installer now asks its questions in order, security first (`bash install.sh --questions` lists them); answer them at the prompt or by flag. The last question can open the Getting started guide (`/gt:gt-help`).
+**Requirements:** Python 3.8+, Claude Code installed. Written against **gt v0.22.1**. The installer now asks its questions in order, security first (`bash install.sh --questions` lists them); answer them at the prompt or by flag. The last question can open the Getting started guide (`/gt:gt-help`).
 
 ---
 
@@ -55,6 +55,8 @@ New to gt? `/gt:gt-help` opens a First day walkthrough and a guide for each role
 picked a role (a persona), gt offers that role's commands first; it never changes what gt
 enforces.
 
+**Context nudge needs a status line.** The context nudge (default 40%) reads the session size from the gt-usage status line, and a default install sets none, so the nudge never speaks. To turn the status line on, answer yes to the installer's status-line question (`bash install.sh --statusline yes`) or run `python3 ~/.claude/golden-thread/hooks/gt_usage.py --setup-statusline` in a terminal; it never replaces a status line you already have.
+
 ---
 
 ## Step 2 — Initialize your vault
@@ -69,7 +71,7 @@ Claude will ask for:
 1. A vault path — an Obsidian vault folder is ideal, but any folder works
 2. Your domain/team name — e.g. "Platform Engineering" or "My Team"
 
-The script creates the folder structure, writes `~/.claude/vault-config.json` (the pointer every other skill reads), and **installs Core-rule enforcement hooks** into `~/.claude/settings.json`. Safe to re-run on a machine you've already set up.
+The script creates the folder structure, writes `~/.claude/vault-config.json` (the pointer every other skill reads), and **installs the Core-rule enforcement hooks**. On the default plugin route (Claude Code 2.1.136 or newer) `settings.json` holds only `enabledPlugins`, and the hooks come from each plugin's `hooks/hooks.json`, which run the commands wired under `~/.claude/golden-thread/wired/`; only the older settings route (`--hook-mode settings`) writes hook entries into `settings.json`. Safe to re-run on a machine you've already set up.
 
 > **If you already have an Obsidian vault**, just give `gt-init` that path. It will only add what's missing — your existing notes are untouched.
 
@@ -306,7 +308,7 @@ The wiki uses immutable sources — every ingested document is stored verbatim a
 
 ## Key concepts in one paragraph
 
-The vault is organized by **how widely a fact applies**. Session findings go in `memory/`. Settled discoveries go in `research.md`. Choices that shaped the architecture go in `decisions.md`. Facts true across multiple projects go in `Knowledge/`. Facts needed in every session everywhere go in `global-memory/`. Above all of these sits the **Core-rule tier**: rules enforced via hooks wired into `~/.claude/settings.json`, not merely stored as files. `gt-init` installs these hooks automatically. Promote a fact when a second project proves it general — not before. When unsure, file it narrow; promotion is cheap, demotion isn't. One more principle: **claims should be verified by re-deriving them, not by reviewing the reasoning that produced them** — a reviewer who sees your reasoning inherits your blind spot. Use `/gt:gt-validate` before recording any finding that matters.
+The vault is organized by **how widely a fact applies**. Session findings go in `memory/`. Settled discoveries go in `research.md`. Choices that shaped the architecture go in `decisions.md`. Facts true across multiple projects go in `Knowledge/`. Facts needed in every session everywhere go in `global-memory/`. Above all of these sits the **Core-rule tier**: rules enforced via hooks (from the plugins' `hooks/hooks.json` on the default route, or `~/.claude/settings.json` on the older settings route), not merely stored as files. `gt-init` installs these hooks automatically. Promote a fact when a second project proves it general — not before. When unsure, file it narrow; promotion is cheap, demotion isn't. One more principle: **claims should be verified by re-deriving them, not by reviewing the reasoning that produced them** — a reviewer who sees your reasoning inherits your blind spot. Use `/gt:gt-validate` before recording any finding that matters.
 
 ---
 

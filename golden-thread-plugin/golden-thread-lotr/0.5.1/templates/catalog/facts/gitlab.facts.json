@@ -1,0 +1,105 @@
+{
+  "schema": 1,
+  "template": "gitlab",
+  "service": "GitLab",
+  "archetype": "mcp-oauth",
+  "researched": "2026-10-14",
+  "researcher": "claude opus research run 2026-10-14",
+  "facts": [
+    {
+      "id": "f1",
+      "field": "connect.url",
+      "value": "https://gitlab.com/api/v4/mcp",
+      "claim": "GitLab's MCP server is at https://gitlab.com/api/v4/mcp (https://<host>/api/v4/mcp for self-managed); generally available since GitLab 19.5, all tiers.",
+      "source": "https://docs.gitlab.com/user/model_context_protocol/mcp_server/",
+      "retrieved": "2026-10-14",
+      "state": "self-verified",
+      "evidence": "Docs give the endpoint; protected-resource document at /.well-known/oauth-protected-resource/api/v4/mcp names resource https://gitlab.com/api/v4/mcp."
+    },
+    {
+      "id": "f2",
+      "field": "connect.scopes",
+      "value": [
+        "mcp"
+      ],
+      "claim": "The resource's only supported scope is mcp; tokens come from an OAuth flow with dynamic client registration or a pre-registered app.",
+      "source": "https://gitlab.com/.well-known/oauth-protected-resource/api/v4/mcp",
+      "retrieved": "2026-10-14",
+      "state": "self-verified",
+      "evidence": "scopes_supported [\"mcp\"]; docs: 'An OAuth access token with the mcp scope', via DCR or a pre-registered application."
+    },
+    {
+      "id": "f3",
+      "field": "network.hosts",
+      "value": [
+        "gitlab.com"
+      ],
+      "claim": "Issuer, authorize, token and register endpoints are all on gitlab.com; lotr discovery resolves them.",
+      "source": "https://gitlab.com/.well-known/oauth-authorization-server",
+      "retrieved": "2026-10-14",
+      "state": "self-verified",
+      "evidence": "issuer https://gitlab.com, registration_endpoint https://gitlab.com/oauth/register; lotrlib.oauth.discover (GET only) returned hosts [gitlab.com]."
+    },
+    {
+      "id": "f4",
+      "claim": "offline_access is not a GitLab scope; the server grants refresh_token.",
+      "source": "https://gitlab.com/.well-known/oauth-authorization-server",
+      "retrieved": "2026-10-14",
+      "state": "unverified",
+      "evidence": "scopes_supported has no offline_access; grant_types_supported includes refresh_token."
+    },
+    {
+      "id": "f5",
+      "claim": "Tools that delete, merge or run: accept_merge_request, start_duo_session, send_duo_session_input, save_pipeline, manage_pipeline; get_mcp_server_version takes no arguments.",
+      "source": "https://docs.gitlab.com/user/model_context_protocol/mcp_server_tools/",
+      "retrieved": "2026-10-14",
+      "state": "unverified",
+      "evidence": "Tools page groups these under delete, merge or run; get_mcp_server_version is the page's no-argument example."
+    },
+    {
+      "id": "f6",
+      "claim": "On GitLab.com the MCP server must be allowed for the top-level group; legacy personal, project and group access tokens get 403.",
+      "source": "https://docs.gitlab.com/user/model_context_protocol/mcp_server/",
+      "retrieved": "2026-10-14",
+      "state": "unverified",
+      "evidence": "Prerequisites and authentication sections."
+    }
+  ],
+  "choices": [
+    {
+      "decision": "mcp-oauth (auto registration), GitLab.com endpoint",
+      "because": "Hosted official MCP with DCR; nothing to create first.",
+      "facts": [
+        "f1",
+        "f3"
+      ]
+    },
+    {
+      "decision": "scopes [mcp], offline_access false",
+      "because": "mcp is the only supported scope; offline_access would be an invalid scope.",
+      "facts": [
+        "f2",
+        "f4"
+      ]
+    },
+    {
+      "decision": "consent on merge, pipeline run/delete and Duo session tools",
+      "because": "They merge, run CI, delete or spend credits.",
+      "facts": [
+        "f5"
+      ]
+    },
+    {
+      "decision": "smoke op get_mcp_server_version",
+      "because": "documented read with no arguments",
+      "facts": [
+        "f5"
+      ]
+    }
+  ],
+  "open": [
+    "Whether lotr's DCR request (redirect http://127.0.0.1:PORT/callback) is accepted by GitLab was not tested (no registration attempted).",
+    "Tool tiers come from the tools page only; not checked against tools/list.",
+    "A 2025 GitLab issue said clients must ask for the mcp scope themselves; the template asks for it explicitly either way."
+  ]
+}

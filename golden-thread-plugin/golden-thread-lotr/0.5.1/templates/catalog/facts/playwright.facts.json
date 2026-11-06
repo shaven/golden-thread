@@ -1,0 +1,126 @@
+{
+  "schema": 1,
+  "template": "playwright",
+  "service": "Playwright MCP (Microsoft)",
+  "archetype": "stdio-npx",
+  "researched": "2026-10-14",
+  "researcher": "claude sonnet research run 2026-10-14",
+  "facts": [
+    {
+      "id": "f1",
+      "claim": "Run with npx from the vendor package @playwright/mcp, pinned to the current npm version 0.0.83, with headless, isolated and block-service-workers flags",
+      "source": "https://registry.npmjs.org/@playwright/mcp",
+      "retrieved": "2026-10-14",
+      "state": "self-verified",
+      "evidence": "dist-tags.latest is 0.0.83 (published 2026-09-28); the vendor README documents npx @playwright/mcp and the flags --headless, --isolated, --block-service-workers.",
+      "field": "connect.command",
+      "value": [
+        "npx",
+        "-y",
+        "@playwright/mcp@0.0.83",
+        "--headless",
+        "--isolated",
+        "--block-service-workers"
+      ]
+    },
+    {
+      "id": "f2",
+      "claim": "Needs Node.js 18 or newer",
+      "source": "https://github.com/microsoft/playwright-mcp",
+      "retrieved": "2026-10-14",
+      "state": "self-verified",
+      "evidence": "README requires Node.js 18 or newer; the npm registry entry for 0.0.83 has engines node >=18.",
+      "field": "connect.runtime",
+      "value": "node"
+    },
+    {
+      "id": "f3",
+      "claim": "The package is published by the vendor's repository microsoft/playwright-mcp (Apache-2.0)",
+      "source": "https://registry.npmjs.org/@playwright/mcp/0.0.83",
+      "retrieved": "2026-10-14",
+      "state": "self-verified",
+      "evidence": "Registry repository url git+https://github.com/microsoft/playwright-mcp.git, matching the README page."
+    },
+    {
+      "id": "f4",
+      "claim": "--headless runs without a window (headed is the default); --isolated keeps the profile in memory; --block-service-workers blocks service workers",
+      "source": "https://github.com/microsoft/playwright-mcp",
+      "retrieved": "2026-10-14",
+      "state": "unverified",
+      "evidence": "\"run browser in headless mode, headed by default\"; \"keep the browser profile in memory, do not save it to disk.\""
+    },
+    {
+      "id": "f5",
+      "claim": "--allowed-origins and --blocked-origins do not affect redirects and are not a security boundary; Playwright MCP is not a security boundary",
+      "source": "https://github.com/microsoft/playwright-mcp",
+      "retrieved": "2026-10-14",
+      "state": "unverified",
+      "evidence": "\"does not serve as a security boundary\""
+    },
+    {
+      "id": "f6",
+      "claim": "File access is limited to workspace roots and file:// is blocked unless --allow-unrestricted-file-access is passed",
+      "source": "https://github.com/microsoft/playwright-mcp",
+      "retrieved": "2026-10-14",
+      "state": "unverified",
+      "evidence": "\"allow access to files outside of the workspace roots\""
+    },
+    {
+      "id": "f7",
+      "claim": "--no-sandbox disables the browser sandbox for all process types",
+      "source": "https://github.com/microsoft/playwright-mcp",
+      "retrieved": "2026-10-14",
+      "state": "unverified",
+      "evidence": "\"disable the sandbox for all process types that are normally sandboxed.\""
+    },
+    {
+      "id": "f8",
+      "claim": "Tools that navigate, run scripts, upload or save: browser_navigate, browser_evaluate, browser_run_code_unsafe, browser_file_upload, browser_pdf_save, browser_route, cookie and storage tools",
+      "source": "https://github.com/microsoft/playwright-mcp",
+      "retrieved": "2026-10-14",
+      "state": "unverified",
+      "evidence": "Tool list names these under core automation and the opt-in capability groups."
+    },
+    {
+      "id": "f9",
+      "claim": "browser_tabs is the read-only tab tool but its action values are not spelled out, so no smoke test is set",
+      "source": "https://github.com/microsoft/playwright-mcp",
+      "retrieved": "2026-10-14",
+      "state": "unverified",
+      "evidence": "\"List, create, close, or select a browser tab\" with an undocumented action enum."
+    }
+  ],
+  "choices": [
+    {
+      "decision": "Archetype stdio-npx with the version pinned to 0.0.83",
+      "because": "The vendor ships a local npm package and no hosted server; the README suggests @latest, which the template avoids",
+      "facts": [
+        "f1",
+        "f2",
+        "f3"
+      ]
+    },
+    {
+      "decision": "Conservative args: --headless --isolated --block-service-workers",
+      "because": "No window, no saved profile; these are documented flags usable over stdio",
+      "facts": [
+        "f4"
+      ]
+    },
+    {
+      "decision": "Consent on navigation, script, upload, save and storage tools",
+      "because": "Arbitrary pages and scripts are the main risk",
+      "facts": [
+        "f5",
+        "f8"
+      ]
+    }
+  ],
+  "open": [
+    "The README's 'Browser installation' section is empty: the exact browser install step and whether the server installs a browser itself were not confirmed.",
+    "The README suggests @playwright/mcp@latest; the pin 0.0.83 is an alpha-era 0.0.x release and its compatibility with older Node 18 builds was not tested.",
+    "browser_tabs action values (list, new, close, select) are not enumerated; no smoke test is set.",
+    "The README says origin allow lists are not a security boundary, so no --allowed-origins is set; whether to add one is the owner's call.",
+    "Flag descriptions come from one page (the README); the npm registry cannot confirm them."
+  ]
+}

@@ -1,0 +1,8 @@
+{
+  "name": "gt-pane",
+  "version": "0.1.2",
+  "description": "Golden Thread pane: twelve plain-words buttons in a side pane (Claude Code mods, 2.1.287 or later). Press one and it sends its prompt as if you had typed it. The list is yours to reorder, rename, add to and remove from.",
+  "author": {
+    "name": "Stacy Haven"
+  }
+}

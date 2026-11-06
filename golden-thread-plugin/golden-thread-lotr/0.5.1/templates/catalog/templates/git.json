@@ -1,0 +1,46 @@
+{
+  "schema": 1,
+  "name": "git",
+  "archetype": "stdio-uvx",
+  "summary": "Inspect and change one local Git repository (official MCP reference server, local stdio)",
+  "kind": "mcp-stdio",
+  "docs": "https://github.com/modelcontextprotocol/servers/blob/main/src/git/README.md",
+  "connect": {
+    "command": [
+      "uvx",
+      "mcp-server-git==2026.10.10",
+      "--repository",
+      "{repo}"
+    ],
+    "runtime": "uv",
+    "params": {
+      "repo": {
+        "prompt": "A path inside the one Git working tree this server may use",
+        "kind": "path"
+      }
+    },
+    "trust": "T1",
+    "identity": "local git repository",
+    "description": "Local Git repository access (stdio, uvx)",
+    "policy": {
+      "consent": [
+        "git_commit",
+        "git_add",
+        "git_reset",
+        "git_create_branch",
+        "git_checkout"
+      ]
+    },
+    "timeouts": {
+      "start_s": 60,
+      "call_s": 120,
+      "idle_s": 600
+    }
+  },
+  "notes": [
+    "You are granting access to the repository containing the path you give: its full history and working tree can be read, and changed through the tools that stage, commit, reset, branch and check out.",
+    "The server walks up from the path to the repository root at startup. The README calls it early development, so tool names and behaviour may change.",
+    "There is no read tool that works without arguments (each takes repo_path), so no smoke test is configured.",
+    "Runs on your machine via uvx and needs uv. The version is pinned; update it deliberately."
+  ]
+}

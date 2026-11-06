@@ -206,24 +206,44 @@ def check_one(md, htm):
         if target not in ids:
             findings.append(f"dead internal link: #{target} has no matching id")
 
+    # 5. The words themselves. Checks 1-4 read versions, skill names, headings and anchors, so a
+    #    prose edit made in the .html (or a .md edit never rebuilt) passed them: obsidian-36 changed
+    #    "twelve" to "eleven" in MANUAL.html by hand and every check above stayed green. When the
+    #    `markdown` module is present, render the .md exactly as --build would and compare its text with
+    #    the page on disk word for word. Without the module this check cannot run, and says so.
+    try:
+        rendered, _ = render_html(md, htm)
+    except ImportError:
+        rendered = None
+        print(f"    note {htm}: content not compared: the `markdown` module is not installed (pip install markdown)")
+    if rendered:
+        p = TextExtractor()
+        p.feed(rendered)
+        want, have = " ".join(p.text().split()), " ".join(ht.split())
+        if want != have:
+            import difflib
+            w, h = want.split(" "), have.split(" ")
+            sm = difflib.SequenceMatcher(None, w, h, autojunk=False)
+            shown = 0
+            for op, a1, a2, b1, b2 in sm.get_opcodes():
+                if op != "equal" and shown < 4:
+                    findings.append('text differs from the .md render: .md has "%s", .html has "%s"'
+                                    % (" ".join(w[a1:a2])[:70], " ".join(h[b1:b2])[:70]))
+                    shown += 1
+
     return findings
 
 
-def build_one(md, htm):
-    """Re-render the <body> of htm from md, preserving its head and any header."""
-    try:
-        import markdown
-    except ImportError:
-        sys.exit(
-            "--build needs the `markdown` module (pip install markdown).\n"
-            "Check mode needs nothing and works without it."
-        )
+def render_html(md, htm):
+    """-> (the whole html the markdown renders to, how many overrides applied), or (None, why) when the
+    page has no <body> to keep. Needs the `markdown` module (ImportError propagates)."""
+    import markdown
 
     old = read(htm)
     # Keep everything through <body>, plus a pandoc-style title block if present.
     m = re.search(r"(.*?<body[^>]*>\s*(?:<header\b.*?</header>\s*)?)", old, re.S)
     if not m:
-        return f"SKIP {htm}: no <body> found"
+        return None, f"SKIP {htm}: no <body> found"
     head = m.group(1)
 
     # `toc` is not optional: it is what puts id= on the headings. Without it
@@ -243,7 +263,21 @@ def build_one(md, htm):
         applied += n
         if n == 0:
             print(f"    WARNING {htm}: override matched nothing -- {pattern[:52]}")
+    return out, applied
 
+
+def build_one(md, htm):
+    """Re-render the <body> of htm from md, preserving its head and any header."""
+    try:
+        import markdown  # noqa: F401
+    except ImportError:
+        sys.exit(
+            "--build needs the `markdown` module (pip install markdown).\n"
+            "Check mode needs nothing and works without it."
+        )
+    out, applied = render_html(md, htm)
+    if out is None:
+        return applied
     with open(os.path.join(REPO, htm), "w", encoding="utf-8") as f:
         f.write(out)
     extra = f", {applied} override(s) applied" if applied else ""

@@ -1,0 +1,59 @@
+{
+  "schema": 1,
+  "name": "wrap-up-project",
+  "title": "Wrap up a project",
+  "description": "Goes through every open task and waiting handoff with you (complete, drop, move, or keep), then archives the project where it is.",
+  "personas": [
+    "project-manager",
+    "product-manager"
+  ],
+  "help_workflow": "wrap-up-project",
+  "say": "We're done with the website redo.",
+  "inputs": [
+    {
+      "name": "project",
+      "type": "string",
+      "required": true,
+      "prompt": "Which project is finished?"
+    }
+  ],
+  "steps": [
+    {
+      "id": "open_items",
+      "kind": "run",
+      "title": "List what is still open",
+      "script": "gt_close.py",
+      "args": [
+        "project",
+        "{{inputs.project}}",
+        "--vault",
+        "{{vault}}"
+      ],
+      "ok_exit": [
+        0,
+        1
+      ],
+      "note_exit": {
+        "1": "tasks or handoffs are still undecided"
+      }
+    },
+    {
+      "id": "settle",
+      "kind": "claude",
+      "title": "Settle every open task and waiting handoff",
+      "prompt": "The project {{inputs.project}} is being wrapped up. What is still open is listed in: {{steps.open_items.output.text}}. Go through every open task and every waiting handoff with the person, one at a time: complete it, drop it with a reason, move it to another project, or keep it (shelved). Use /gt:gt-complete for each one. Do not archive anything yet."
+    },
+    {
+      "id": "check_list",
+      "kind": "you",
+      "title": "Check nothing is left undecided",
+      "message": "Look at what was settled. Say done when you are happy to archive the project (nothing is deleted)."
+    },
+    {
+      "id": "archive",
+      "kind": "claude",
+      "title": "Archive the project where it is",
+      "prompt": "The person has agreed to archive {{inputs.project}}. Use /gt:gt-complete to archive it in place and offer to graduate what it learned into the wiki."
+    }
+  ]
+}

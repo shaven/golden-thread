@@ -1,0 +1,87 @@
+{
+  "schema": 1,
+  "template": "llama-server",
+  "service": "llama.cpp server (llama-server)",
+  "archetype": "http-rest",
+  "researched": "2026-10-24",
+  "researcher": "claude, read of the llama.cpp server README",
+  "facts": [
+    {
+      "id": "f1",
+      "field": "connect.base_url",
+      "value": "http://127.0.0.1:8080",
+      "claim": "llama-server listens on 127.0.0.1 by default; its own default port is 9931 and gt's farm engines run it on 8080, so the template default is the farm's port and the owner passes --base-url for another.",
+      "source": "https://github.com/ggml-org/llama.cpp/blob/master/tools/server/README.md",
+      "retrieved": "2026-10-24",
+      "state": "self-verified",
+      "evidence": "README: by default listens on 127.0.0.1:9931; --host default 127.0.0.1, --port default 9931."
+    },
+    {
+      "id": "f2",
+      "claim": "GET /health is public (no API key check) and returns 200 {\"status\": \"ok\"} when the model is loaded, or 503 with an error body while it is loading.",
+      "source": "https://github.com/ggml-org/llama.cpp/blob/master/tools/server/README.md",
+      "retrieved": "2026-10-24",
+      "state": "self-verified",
+      "evidence": "README, GET /health: 'This endpoint is public (no API key check)'; ready 200 {\"status\": \"ok\" }; loading 503 'Loading model'."
+    },
+    {
+      "id": "f3",
+      "claim": "The server offers OpenAI-compatible chat completions at /v1/chat/completions.",
+      "source": "https://github.com/ggml-org/llama.cpp/blob/master/tools/server/README.md",
+      "retrieved": "2026-10-24",
+      "state": "unverified",
+      "evidence": "README features list: 'OpenAI API compatible chat completions, responses, and embeddings routes'. The page does not document the response shape or a `usage` object with prompt_tokens and completion_tokens (the feature request says it does)."
+    },
+    {
+      "id": "f4",
+      "claim": "There is no key unless the server was started with --api-key (default: none); GET /props is read-only unless the server is started with --props.",
+      "source": "https://github.com/ggml-org/llama.cpp/blob/master/tools/server/README.md",
+      "retrieved": "2026-10-24",
+      "state": "self-verified",
+      "evidence": "README: --api-key 'default: none'; /props 'By default, it is read-only'.",
+      "field": "connect.auth_scheme",
+      "value": "none"
+    },
+    {
+      "id": "f5",
+      "field": "network.hosts",
+      "value": [
+        "127.0.0.1"
+      ],
+      "claim": "The server binds 127.0.0.1 by default, so a connection to it names only the loopback host; a remote engine is reached through an SSH tunnel to that loopback address.",
+      "source": "https://github.com/ggml-org/llama.cpp/blob/master/tools/server/README.md",
+      "retrieved": "2026-10-24",
+      "state": "self-verified",
+      "evidence": "README: --host default 127.0.0.1."
+    }
+  ],
+  "choices": [
+    {
+      "decision": "auth_scheme none, http to loopback",
+      "because": "no key by default; LOTR allows plain http only to this machine, so a remote engine uses an SSH tunnel",
+      "facts": [
+        "f1",
+        "f4",
+        "f5"
+      ]
+    },
+    {
+      "decision": "health check GET /health",
+      "because": "public, answers 200 only when the model is loaded",
+      "facts": [
+        "f2"
+      ]
+    },
+    {
+      "decision": "chat completions at write tier",
+      "because": "a completion costs compute and is the call the farm makes",
+      "facts": [
+        "f3"
+      ]
+    }
+  ],
+  "open": [
+    "The `usage` object in a chat-completions reply is not in the README; token counts from it are unverified until read from a live reply.",
+    "GET /v1/models is listed as read-only but its response was not documented on the page read."
+  ]
+}

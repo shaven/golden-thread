@@ -1,0 +1,72 @@
+{
+ "schema": 1,
+ "track": "pm",
+ "title": "A product or project manager's first day",
+ "audience": "Someone who plans, tracks and reports rather than writes code. Plain words throughout.",
+ "project": "demo-pizzabot",
+ "steps": [
+  {
+   "n": 1,
+   "goal": "Pick the project up where it was left",
+   "say": "/gt:gt-open demo-pizzabot",
+   "see": "A short summary of PizzaBot 3000: what it is, what was decided, what is open, and a question about where to start.",
+   "why": "You never re-read old notes to find your place; the summary is built from the project's own files."
+  },
+  {
+   "n": 2,
+   "goal": "Ask what to do first",
+   "say": "/gt:gt-next",
+   "see": "Up to three lines: the one task to do now, why it is the one, and a command to try after it.",
+   "why": "When everything feels urgent, one clear next step beats a list.",
+   "run": {
+    "script": "gt_next.py",
+    "args": [
+     "--vault",
+     "{vault}",
+     "--today",
+     "{today}"
+    ],
+    "expect": [
+     "Next:",
+     "Why:",
+     "/gt:gt-open demo-pizzabot"
+    ]
+   }
+  },
+  {
+   "n": 3,
+   "goal": "See what is waiting on you",
+   "say": "/gt:gt-list tasks mine",
+   "see": "Your open tasks, most urgent first, with due dates and anything waiting on someone.",
+   "why": "Overdue and waiting items are the ones that slip; this shows them without opening a spreadsheet."
+  },
+  {
+   "n": 4,
+   "goal": "Add a task in one sentence",
+   "say": "/gt:gt-create task Send the stakeholder update by Friday",
+   "see": "One new line under the project's Tasks, with the date understood from your words.",
+   "why": "A task written now is a task not forgotten at 5 pm."
+  },
+  {
+   "n": 5,
+   "goal": "Write a decision down",
+   "say": "Write down a decision: we cap the negotiation at three rounds, because longer rounds lost customers",
+   "see": "A short decision record: what was decided, why, and what was rejected, filed in the project.",
+   "why": "In three months nobody remembers why; the record does."
+  },
+  {
+   "n": 6,
+   "goal": "Find what the notes say",
+   "say": "/gt:gt-query what did we decide about negotiation rounds",
+   "see": "The answer in a sentence or two, with the note it came from.",
+   "why": "Your notes answer questions so you do not have to ask a colleague twice."
+  },
+  {
+   "n": 7,
+   "goal": "Close the day",
+   "say": "/gt:gt-close",
+   "see": "A plain brief of what moved, what was decided and what is blocked, then the notes saved and a handoff if anything is unfinished.",
+   "why": "Tomorrow's session starts from what you learned today, not from a blank page."
+  }
+ ]
+}

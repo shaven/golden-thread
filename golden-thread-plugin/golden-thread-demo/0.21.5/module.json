@@ -1,0 +1,47 @@
+{
+  "schema": 1,
+  "name": "demo",
+  "plugin": "gt-demo",
+  "version": "0.21.5",
+  "requires_gt": ">=0.22.0,<0.23.0",
+  "summary": "Live Golden Thread demo: the PizzaBot 3000 guided tour in its own vault",
+  "default": "on",
+  "skills": [
+    "gt-demo"
+  ],
+  "scripts": [
+    "gt_demo.sh",
+    "gt_demo_track.py"
+  ],
+  "templates": [
+    "demo-pizzabot",
+    "demo-tracks"
+  ],
+  "hooks": [],
+  "hookdir_scripts": [],
+  "settings": [],
+  "requires_modules": [
+    {
+      "name": "watch",
+      "soft": true
+    },
+    {
+      "name": "wiki",
+      "soft": true
+    }
+  ],
+  "replaces_core": [
+    "skills/gt-demo",
+    "scripts/gt_demo.sh",
+    "templates/demo-pizzabot"
+  ],
+  "lockdown": {
+    "trust-local": {
+      "allow": [
+        "Bash(bash {scripts}/gt_demo.sh *)",
+        "Bash(python3 {scripts}/gt_demo_track.py *)"
+      ],
+      "deny": []
+    }
+  }
+}

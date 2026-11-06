@@ -1,0 +1,7 @@
+{
+  "id": "example-fix-bug",
+  "prompt": "The function average() in calc.py returns the wrong number and the tests in test_calc.py fail. Find the bug and fix it in calc.py. Do not edit the tests.",
+  "test_command": "python3 -m unittest test_calc",
+  "files": ["calc.py", "test_calc.py"],
+  "edit_scope": ["calc.py"]
+}

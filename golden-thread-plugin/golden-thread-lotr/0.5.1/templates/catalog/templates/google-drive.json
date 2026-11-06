@@ -1,0 +1,58 @@
+{
+  "schema": 1,
+  "name": "google-drive",
+  "archetype": "mcp-oauth-preregistered",
+  "summary": "Google's hosted Drive MCP server (search, read, create files) with your own Google OAuth client",
+  "kind": "mcp-oauth",
+  "docs": "https://developers.google.com/workspace/drive/api/guides/configure-mcp-server",
+  "connect": {
+    "url": "https://drivemcp.googleapis.com/mcp/v1",
+    "scopes": [
+      "https://www.googleapis.com/auth/drive.readonly",
+      "https://www.googleapis.com/auth/drive.file"
+    ],
+    "offline_access": false,
+    "auth_params": {
+      "access_type": "offline",
+      "prompt": "consent"
+    },
+    "client_registration": "preregistered",
+    "client_secret_required": true,
+    "app_setup_url": "https://console.cloud.google.com/auth/clients",
+    "redirect_port": 8977,
+    "redirect_host": "127.0.0.1",
+    "send_resource": true,
+    "skip_audience_check": false,
+    "trust": "T1",
+    "identity": "<your Google account>",
+    "description": "Google Drive (hosted MCP, own OAuth client)",
+    "policy": {
+      "read": [
+        "read_file_content",
+        "download_file_content"
+      ],
+      "write": [
+        "create_file",
+        "copy_file"
+      ]
+    }
+  },
+  "network": {
+    "hosts": [
+      "drivemcp.googleapis.com",
+      "accounts.google.com",
+      "oauth2.googleapis.com"
+    ]
+  },
+  "smoke": {
+    "op": "list_recent_files",
+    "args": {}
+  },
+  "notes": [
+    "Sign-in asks Google for offline access (auth_params access_type=offline, prompt=consent), so Google returns a refresh token and the connection renews itself. prompt=consent shows the consent screen on every sign-in; that is what makes Google re-issue the refresh token.",
+    "Before setup, in a Google Cloud project: enable the Google Drive API and the Google Drive MCP API, configure the OAuth consent screen (Internal, or External with test users), add the two scopes under Data Access, and create an OAuth client. Register the redirect URI http://127.0.0.1:8977/callback on it. lotr setup asks for the client id and secret as references.",
+    "Google lists the Drive MCP server under the Google Workspace Developer Preview Program: your account or organisation must be enrolled.",
+    "Scopes: drive.readonly (read everything you can see) and drive.file (create files and change only files this client created or you opened with it), as Google's guide lists. The server also offers the full drive scope; it is not requested.",
+    "Tools: search_files, list_recent_files, get_file_metadata, get_file_permissions, read_file_content, download_file_content (reads); create_file, copy_file (writes). No documented tool deletes or shares a file."
+  ]
+}

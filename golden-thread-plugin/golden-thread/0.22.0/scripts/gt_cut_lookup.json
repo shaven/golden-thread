@@ -1,0 +1,1431 @@
+{
+ "schema": "gt.cut_lookup/0",
+ "status": "measured, n=1 per cell, NOT a final rule; 9 context sizes 5.7% to 38.4%; refit 2026-10-22 shows extrapolation above 38% is unsafe, so interpolate between rows and do not extrapolate",
+ "model": "sonnet-5-5",
+ "shape": "SPSR (short prompt, short response)",
+ "window_tokens": 1000000,
+ "units": "fraction saved against a no-cut control, cut cost included; negative = behind the control",
+ "prompts_after_cut_keys": [
+  1,
+  2,
+  3,
+  4,
+  6,
+  8,
+  10
+ ],
+ "levels": {
+  "H0": "plain /compact",
+  "H1": "handoff then compact",
+  "H2": "handoff + key facts",
+  "H3": "H2 + where to find things",
+  "H4": "clear + handoff + facts in a fresh session"
+ },
+ "noise_note": "H0-H3 differences of 10-15 points are inside run-to-run noise (not yet measured by repeat)",
+ "long_response_guard": {
+  "measure": "mean output tokens of the post-cut long responses divided by the control (or pre-cut) mean for the same prompts",
+  "observed_failed": [
+   0.47,
+   0.3,
+   0.24,
+   0.1
+  ],
+  "observed_ok": [
+   0.83,
+   0.84,
+   0.89,
+   1.06
+  ],
+  "threshold": "between 0.47 and 0.83; exact value not measured. Provisional 0.7 for a tripwire only; calibrate before shipping."
+ },
+ "source": "tracker https://claude.ai/artifact/NNNkDBntqmEbBZnjVEmHKM section \"Which handoff level wins\"; vault CUT_ADVISOR_REQUEST.md",
+ "rows": [
+  {
+   "context_pct_of_window": 5.7,
+   "context_tokens": 56918,
+   "by_prompts_after_cut": {
+    "1": {
+     "winner_usd": "H4",
+     "winner_usd_pct": -0.261,
+     "winner_tok": "H2",
+     "winner_tok_pct": -0.566,
+     "usd_pct": {
+      "H0": -1.011,
+      "H1": -0.831,
+      "H2": -0.836,
+      "H3": -1.676,
+      "H4": -0.261
+     },
+     "tok_pct": {
+      "H0": -0.669,
+      "H1": -0.742,
+      "H2": -0.566,
+      "H3": -0.927,
+      "H4": -0.646
+     }
+    },
+    "2": {
+     "winner_usd": "H4",
+     "winner_usd_pct": -0.027,
+     "winner_tok": "H4",
+     "winner_tok_pct": 0.145,
+     "usd_pct": {
+      "H0": -0.586,
+      "H1": -0.351,
+      "H2": -0.447,
+      "H3": -0.931,
+      "H4": -0.027
+     },
+     "tok_pct": {
+      "H0": -0.096,
+      "H1": 0.049,
+      "H2": 0.022,
+      "H3": -0.164,
+      "H4": 0.145
+     }
+    },
+    "3": {
+     "winner_usd": "H4",
+     "winner_usd_pct": 0.081,
+     "winner_tok": "H4",
+     "winner_tok_pct": 0.311,
+     "usd_pct": {
+      "H0": -0.388,
+      "H1": -0.138,
+      "H2": -0.266,
+      "H3": -0.602,
+      "H4": 0.081
+     },
+     "tok_pct": {
+      "H0": 0.026,
+      "H1": 0.19,
+      "H2": 0.144,
+      "H3": -0.042,
+      "H4": 0.311
+     }
+    },
+    "4": {
+     "winner_usd": "H4",
+     "winner_usd_pct": 0.142,
+     "winner_tok": "H4",
+     "winner_tok_pct": 0.377,
+     "usd_pct": {
+      "H0": -0.273,
+      "H1": -0.012,
+      "H2": -0.163,
+      "H3": -0.407,
+      "H4": 0.142
+     },
+     "tok_pct": {
+      "H0": 0.076,
+      "H1": 0.255,
+      "H2": 0.193,
+      "H3": 0.021,
+      "H4": 0.377
+     }
+    },
+    "6": {
+     "winner_usd": "H4",
+     "winner_usd_pct": 0.206,
+     "winner_tok": "H4",
+     "winner_tok_pct": 0.427,
+     "usd_pct": {
+      "H0": -0.149,
+      "H1": 0.133,
+      "H2": -0.051,
+      "H3": -0.185,
+      "H4": 0.206
+     },
+     "tok_pct": {
+      "H0": 0.116,
+      "H1": 0.323,
+      "H2": 0.227,
+      "H3": 0.093,
+      "H4": 0.427
+     }
+    },
+    "8": {
+     "winner_usd": "H4",
+     "winner_usd_pct": 0.238,
+     "winner_tok": "H4",
+     "winner_tok_pct": 0.44,
+     "usd_pct": {
+      "H0": -0.084,
+      "H1": 0.214,
+      "H2": 0.006,
+      "H3": -0.058,
+      "H4": 0.238
+     },
+     "tok_pct": {
+      "H0": 0.129,
+      "H1": 0.361,
+      "H2": 0.235,
+      "H3": 0.139,
+      "H4": 0.44
+     }
+    },
+    "10": {
+     "winner_usd": "H1",
+     "winner_usd_pct": 0.266,
+     "winner_tok": "H4",
+     "winner_tok_pct": 0.441,
+     "usd_pct": {
+      "H0": -0.047,
+      "H1": 0.266,
+      "H2": 0.036,
+      "H3": 0.023,
+      "H4": 0.256
+     },
+     "tok_pct": {
+      "H0": 0.133,
+      "H1": 0.387,
+      "H2": 0.233,
+      "H3": 0.174,
+      "H4": 0.441
+     }
+    }
+   },
+   "break_even_prompt_usd": {
+    "H0": null,
+    "H1": 5,
+    "H2": 8,
+    "H3": 10,
+    "H4": 3
+   },
+   "control_cost_usd_10_prompts": 0.99
+  },
+  {
+   "context_pct_of_window": 11.0,
+   "context_tokens": 110325,
+   "by_prompts_after_cut": {
+    "1": {
+     "winner_usd": "H4",
+     "winner_usd_pct": -3.804,
+     "winner_tok": "H0",
+     "winner_tok_pct": -0.424,
+     "usd_pct": {
+      "H0": -5.38,
+      "H1": -5.368,
+      "H2": -5.436,
+      "H3": -5.592,
+      "H4": -3.804
+     },
+     "tok_pct": {
+      "H0": -0.424,
+      "H1": -1.416,
+      "H2": -1.2,
+      "H3": -1.426,
+      "H4": -1.529
+     }
+    },
+    "2": {
+     "winner_usd": "H4",
+     "winner_usd_pct": -0.769,
+     "winner_tok": "H0",
+     "winner_tok_pct": 0.294,
+     "usd_pct": {
+      "H0": -1.264,
+      "H1": -1.256,
+      "H2": -1.276,
+      "H3": -1.32,
+      "H4": -0.769
+     },
+     "tok_pct": {
+      "H0": 0.294,
+      "H1": 0.06,
+      "H2": 0.112,
+      "H3": 0.056,
+      "H4": 0.104
+     }
+    },
+    "3": {
+     "winner_usd": "H4",
+     "winner_usd_pct": -0.261,
+     "winner_tok": "H0",
+     "winner_tok_pct": 0.385,
+     "usd_pct": {
+      "H0": -0.575,
+      "H1": -0.567,
+      "H2": -0.579,
+      "H3": -0.604,
+      "H4": -0.261
+     },
+     "tok_pct": {
+      "H0": 0.385,
+      "H1": 0.259,
+      "H2": 0.288,
+      "H3": 0.256,
+      "H4": 0.324
+     }
+    },
+    "4": {
+     "winner_usd": "H4",
+     "winner_usd_pct": -0.056,
+     "winner_tok": "H0",
+     "winner_tok_pct": 0.415,
+     "usd_pct": {
+      "H0": -0.294,
+      "H1": -0.286,
+      "H2": -0.295,
+      "H3": -0.314,
+      "H4": -0.056
+     },
+     "tok_pct": {
+      "H0": 0.415,
+      "H1": 0.332,
+      "H2": 0.351,
+      "H3": 0.329,
+      "H4": 0.404
+     }
+    },
+    "6": {
+     "winner_usd": "H4",
+     "winner_usd_pct": 0.119,
+     "winner_tok": "H4",
+     "winner_tok_pct": 0.459,
+     "usd_pct": {
+      "H0": -0.05,
+      "H1": -0.043,
+      "H2": -0.048,
+      "H3": -0.06,
+      "H4": 0.119
+     },
+     "tok_pct": {
+      "H0": 0.43,
+      "H1": 0.383,
+      "H2": 0.395,
+      "H3": 0.381,
+      "H4": 0.459
+     }
+    },
+    "8": {
+     "winner_usd": "H4",
+     "winner_usd_pct": 0.193,
+     "winner_tok": "H4",
+     "winner_tok_pct": 0.472,
+     "usd_pct": {
+      "H0": 0.056,
+      "H1": 0.063,
+      "H2": 0.059,
+      "H3": 0.05,
+      "H4": 0.193
+     },
+     "tok_pct": {
+      "H0": 0.426,
+      "H1": 0.396,
+      "H2": 0.404,
+      "H3": 0.394,
+      "H4": 0.472
+     }
+    },
+    "10": {
+     "winner_usd": "H4",
+     "winner_usd_pct": 0.231,
+     "winner_tok": "H4",
+     "winner_tok_pct": 0.47,
+     "usd_pct": {
+      "H0": 0.111,
+      "H1": 0.117,
+      "H2": 0.114,
+      "H3": 0.107,
+      "H4": 0.231
+     },
+     "tok_pct": {
+      "H0": 0.417,
+      "H1": 0.396,
+      "H2": 0.402,
+      "H3": 0.394,
+      "H4": 0.47
+     }
+    }
+   },
+   "break_even_prompt_usd": {
+    "H0": 7,
+    "H1": 7,
+    "H2": 7,
+    "H3": 7,
+    "H4": 5
+   },
+   "control_cost_usd_10_prompts": 1.06
+  },
+  {
+   "context_pct_of_window": 14.2,
+   "context_tokens": 142264,
+   "by_prompts_after_cut": {
+    "1": {
+     "winner_usd": "H4",
+     "winner_usd_pct": -2.089,
+     "winner_tok": "H0",
+     "winner_tok_pct": 0.04,
+     "usd_pct": {
+      "H0": -2.949,
+      "H1": -3.762,
+      "H2": -3.645,
+      "H3": -4.224,
+      "H4": -2.089
+     },
+     "tok_pct": {
+      "H0": 0.04,
+      "H1": -0.508,
+      "H2": -0.385,
+      "H3": -0.645,
+      "H4": -0.203
+     }
+    },
+    "2": {
+     "winner_usd": "H4",
+     "winner_usd_pct": -0.353,
+     "winner_tok": "H0",
+     "winner_tok_pct": 0.423,
+     "usd_pct": {
+      "H0": -0.693,
+      "H1": -0.965,
+      "H2": -0.928,
+      "H3": -1.124,
+      "H4": -0.353
+     },
+     "tok_pct": {
+      "H0": 0.423,
+      "H1": 0.244,
+      "H2": 0.288,
+      "H3": 0.197,
+      "H4": 0.411
+     }
+    },
+    "3": {
+     "winner_usd": "H4",
+     "winner_usd_pct": 0.001,
+     "winner_tok": "H4",
+     "winner_tok_pct": 0.524,
+     "usd_pct": {
+      "H0": -0.232,
+      "H1": -0.393,
+      "H2": -0.374,
+      "H3": -0.49,
+      "H4": 0.001
+     },
+     "tok_pct": {
+      "H0": 0.491,
+      "H1": 0.386,
+      "H2": 0.413,
+      "H3": 0.356,
+      "H4": 0.524
+     }
+    },
+    "4": {
+     "winner_usd": "H4",
+     "winner_usd_pct": 0.15,
+     "winner_tok": "H4",
+     "winner_tok_pct": 0.565,
+     "usd_pct": {
+      "H0": -0.037,
+      "H1": -0.15,
+      "H2": -0.138,
+      "H3": -0.219,
+      "H4": 0.15
+     },
+     "tok_pct": {
+      "H0": 0.514,
+      "H1": 0.441,
+      "H2": 0.46,
+      "H3": 0.419,
+      "H4": 0.565
+     }
+    },
+    "6": {
+     "winner_usd": "H4",
+     "winner_usd_pct": 0.278,
+     "winner_tok": "H4",
+     "winner_tok_pct": 0.59,
+     "usd_pct": {
+      "H0": 0.135,
+      "H1": 0.066,
+      "H2": 0.071,
+      "H3": 0.021,
+      "H4": 0.278
+     },
+     "tok_pct": {
+      "H0": 0.524,
+      "H1": 0.479,
+      "H2": 0.493,
+      "H3": 0.465,
+      "H4": 0.59
+     }
+    },
+    "8": {
+     "winner_usd": "H4",
+     "winner_usd_pct": 0.331,
+     "winner_tok": "H4",
+     "winner_tok_pct": 0.59,
+     "usd_pct": {
+      "H0": 0.21,
+      "H1": 0.161,
+      "H2": 0.163,
+      "H3": 0.128,
+      "H4": 0.331
+     },
+     "tok_pct": {
+      "H0": 0.519,
+      "H1": 0.488,
+      "H2": 0.498,
+      "H3": 0.476,
+      "H4": 0.59
+     }
+    },
+    "10": {
+     "winner_usd": "H4",
+     "winner_usd_pct": 0.357,
+     "winner_tok": "H4",
+     "winner_tok_pct": 0.582,
+     "usd_pct": {
+      "H0": 0.247,
+      "H1": 0.21,
+      "H2": 0.21,
+      "H3": 0.184,
+      "H4": 0.357
+     },
+     "tok_pct": {
+      "H0": 0.509,
+      "H1": 0.486,
+      "H2": 0.493,
+      "H3": 0.476,
+      "H4": 0.582
+     }
+    }
+   },
+   "break_even_prompt_usd": {
+    "H0": 5,
+    "H1": 6,
+    "H2": 6,
+    "H3": 6,
+    "H4": 3
+   },
+   "control_cost_usd_10_prompts": 1.25
+  },
+  {
+   "context_pct_of_window": 17.3,
+   "context_tokens": 173349,
+   "by_prompts_after_cut": {
+    "1": {
+     "winner_usd": "H4",
+     "winner_usd_pct": -1.675,
+     "winner_tok": "H0",
+     "winner_tok_pct": 0.046,
+     "usd_pct": {
+      "H0": -2.687,
+      "H1": -3.329,
+      "H2": -3.226,
+      "H3": -3.604,
+      "H4": -1.675
+     },
+     "tok_pct": {
+      "H0": 0.046,
+      "H1": -0.321,
+      "H2": -0.412,
+      "H3": -0.525,
+      "H4": -0.102
+     }
+    },
+    "2": {
+     "winner_usd": "H4",
+     "winner_usd_pct": -0.251,
+     "winner_tok": "H0",
+     "winner_tok_pct": 0.474,
+     "usd_pct": {
+      "H0": -0.583,
+      "H1": -0.813,
+      "H2": -0.853,
+      "H3": -0.921,
+      "H4": -0.251
+     },
+     "tok_pct": {
+      "H0": 0.474,
+      "H1": 0.354,
+      "H2": 0.317,
+      "H3": 0.285,
+      "H4": 0.473
+     }
+    },
+    "3": {
+     "winner_usd": "H4",
+     "winner_usd_pct": 0.103,
+     "winner_tok": "H4",
+     "winner_tok_pct": 0.583,
+     "usd_pct": {
+      "H0": -0.122,
+      "H1": -0.261,
+      "H2": -0.339,
+      "H3": -0.332,
+      "H4": 0.103
+     },
+     "tok_pct": {
+      "H0": 0.557,
+      "H1": 0.486,
+      "H2": 0.452,
+      "H3": 0.443,
+      "H4": 0.583
+     }
+    },
+    "4": {
+     "winner_usd": "H4",
+     "winner_usd_pct": 0.257,
+     "winner_tok": "H4",
+     "winner_tok_pct": 0.628,
+     "usd_pct": {
+      "H0": 0.079,
+      "H1": -0.02,
+      "H2": -0.119,
+      "H3": -0.076,
+      "H4": 0.257
+     },
+     "tok_pct": {
+      "H0": 0.59,
+      "H1": 0.54,
+      "H2": 0.502,
+      "H3": 0.509,
+      "H4": 0.628
+     }
+    },
+    "6": {
+     "winner_usd": "H4",
+     "winner_usd_pct": 0.395,
+     "winner_tok": "H4",
+     "winner_tok_pct": 0.664,
+     "usd_pct": {
+      "H0": 0.266,
+      "H1": 0.204,
+      "H2": 0.072,
+      "H3": 0.158,
+      "H4": 0.395
+     },
+     "tok_pct": {
+      "H0": 0.627,
+      "H1": 0.597,
+      "H2": 0.533,
+      "H3": 0.565,
+      "H4": 0.664
+     }
+    },
+    "8": {
+     "winner_usd": "H4",
+     "winner_usd_pct": 0.458,
+     "winner_tok": "H4",
+     "winner_tok_pct": 0.678,
+     "usd_pct": {
+      "H0": 0.348,
+      "H1": 0.303,
+      "H2": 0.151,
+      "H3": 0.265,
+      "H4": 0.458
+     },
+     "tok_pct": {
+      "H0": 0.633,
+      "H1": 0.611,
+      "H2": 0.534,
+      "H3": 0.587,
+      "H4": 0.678
+     }
+    },
+    "10": {
+     "winner_usd": "H4",
+     "winner_usd_pct": 0.485,
+     "winner_tok": "H4",
+     "winner_tok_pct": 0.677,
+     "usd_pct": {
+      "H0": 0.383,
+      "H1": 0.348,
+      "H2": 0.176,
+      "H3": 0.314,
+      "H4": 0.485
+     },
+     "tok_pct": {
+      "H0": 0.627,
+      "H1": 0.61,
+      "H2": 0.515,
+      "H3": 0.589,
+      "H4": 0.677
+     }
+    }
+   },
+   "break_even_prompt_usd": {
+    "H0": 4,
+    "H1": 5,
+    "H2": 6,
+    "H3": 5,
+    "H4": 3
+   },
+   "control_cost_usd_10_prompts": 1.19
+  },
+  {
+   "context_pct_of_window": 19.5,
+   "context_tokens": 194559,
+   "by_prompts_after_cut": {
+    "1": {
+     "winner_usd": "H4",
+     "winner_usd_pct": -1.605,
+     "winner_tok": "H0",
+     "winner_tok_pct": -0.087,
+     "usd_pct": {
+      "H0": -2.714,
+      "H1": -2.776,
+      "H2": -2.69,
+      "H3": -3.349,
+      "H4": -1.605
+     },
+     "tok_pct": {
+      "H0": -0.087,
+      "H1": -0.279,
+      "H2": -0.277,
+      "H3": -0.568,
+      "H4": -0.191
+     }
+    },
+    "2": {
+     "winner_usd": "H4",
+     "winner_usd_pct": -0.196,
+     "winner_tok": "H4",
+     "winner_tok_pct": 0.483,
+     "usd_pct": {
+      "H0": -0.648,
+      "H1": -0.681,
+      "H2": -0.649,
+      "H3": -0.904,
+      "H4": -0.196
+     },
+     "tok_pct": {
+      "H0": 0.472,
+      "H1": 0.384,
+      "H2": 0.385,
+      "H3": 0.277,
+      "H4": 0.483
+     }
+    },
+    "3": {
+     "winner_usd": "H4",
+     "winner_usd_pct": 0.115,
+     "winner_tok": "H4",
+     "winner_tok_pct": 0.609,
+     "usd_pct": {
+      "H0": -0.206,
+      "H1": -0.217,
+      "H2": -0.197,
+      "H3": -0.361,
+      "H4": 0.115
+     },
+     "tok_pct": {
+      "H0": 0.553,
+      "H1": 0.507,
+      "H2": 0.508,
+      "H3": 0.436,
+      "H4": 0.609
+     }
+    },
+    "4": {
+     "winner_usd": "H4",
+     "winner_usd_pct": 0.258,
+     "winner_tok": "H4",
+     "winner_tok_pct": 0.669,
+     "usd_pct": {
+      "H0": -0.017,
+      "H1": -0.019,
+      "H2": -0.004,
+      "H3": -0.128,
+      "H4": 0.258
+     },
+     "tok_pct": {
+      "H0": 0.58,
+      "H1": 0.552,
+      "H2": 0.554,
+      "H3": 0.497,
+      "H4": 0.669
+     }
+    },
+    "6": {
+     "winner_usd": "H4",
+     "winner_usd_pct": 0.384,
+     "winner_tok": "H4",
+     "winner_tok_pct": 0.715,
+     "usd_pct": {
+      "H0": 0.149,
+      "H1": 0.156,
+      "H2": 0.186,
+      "H3": 0.08,
+      "H4": 0.384
+     },
+     "tok_pct": {
+      "H0": 0.592,
+      "H1": 0.581,
+      "H2": 0.584,
+      "H3": 0.54,
+      "H4": 0.715
+     }
+    },
+    "8": {
+     "winner_usd": "H4",
+     "winner_usd_pct": 0.436,
+     "winner_tok": "H4",
+     "winner_tok_pct": 0.728,
+     "usd_pct": {
+      "H0": 0.216,
+      "H1": 0.228,
+      "H2": 0.285,
+      "H3": 0.166,
+      "H4": 0.436
+     },
+     "tok_pct": {
+      "H0": 0.585,
+      "H1": 0.582,
+      "H2": 0.595,
+      "H3": 0.547,
+      "H4": 0.728
+     }
+    },
+    "10": {
+     "winner_usd": "H4",
+     "winner_usd_pct": 0.462,
+     "winner_tok": "H4",
+     "winner_tok_pct": 0.729,
+     "usd_pct": {
+      "H0": 0.245,
+      "H1": 0.26,
+      "H2": 0.339,
+      "H3": 0.207,
+      "H4": 0.462
+     },
+     "tok_pct": {
+      "H0": 0.571,
+      "H1": 0.572,
+      "H2": 0.599,
+      "H3": 0.542,
+      "H4": 0.729
+     }
+    }
+   },
+   "break_even_prompt_usd": {
+    "H0": 5,
+    "H1": 5,
+    "H2": 5,
+    "H3": 6,
+    "H4": 3
+   },
+   "control_cost_usd_10_prompts": 1.34
+  },
+  {
+   "context_pct_of_window": 21.7,
+   "context_tokens": 217148,
+   "by_prompts_after_cut": {
+    "1": {
+     "winner_usd": "H4",
+     "winner_usd_pct": -1.503,
+     "winner_tok": "H0",
+     "winner_tok_pct": 0.338,
+     "usd_pct": {
+      "H0": -2.35,
+      "H1": -2.625,
+      "H2": -3.156,
+      "H3": -2.979,
+      "H4": -1.503
+     },
+     "tok_pct": {
+      "H0": 0.338,
+      "H1": -0.319,
+      "H2": -0.664,
+      "H3": -0.406,
+      "H4": -0.078
+     }
+    },
+    "2": {
+     "winner_usd": "H4",
+     "winner_usd_pct": -0.108,
+     "winner_tok": "H0",
+     "winner_tok_pct": 0.607,
+     "usd_pct": {
+      "H0": -0.473,
+      "H1": -0.5,
+      "H2": -0.756,
+      "H3": -0.694,
+      "H4": -0.108
+     },
+     "tok_pct": {
+      "H0": 0.607,
+      "H1": 0.404,
+      "H2": 0.279,
+      "H3": 0.364,
+      "H4": 0.515
+     }
+    },
+    "3": {
+     "winner_usd": "H4",
+     "winner_usd_pct": 0.204,
+     "winner_tok": "H0",
+     "winner_tok_pct": 0.651,
+     "usd_pct": {
+      "H0": -0.07,
+      "H1": -0.038,
+      "H2": -0.24,
+      "H3": -0.203,
+      "H4": 0.204
+     },
+     "tok_pct": {
+      "H0": 0.651,
+      "H1": 0.546,
+      "H2": 0.458,
+      "H3": 0.509,
+      "H4": 0.629
+     }
+    },
+    "4": {
+     "winner_usd": "H4",
+     "winner_usd_pct": 0.352,
+     "winner_tok": "H4",
+     "winner_tok_pct": 0.686,
+     "usd_pct": {
+      "H0": 0.1,
+      "H1": 0.162,
+      "H2": -0.02,
+      "H3": 0.007,
+      "H4": 0.352
+     },
+     "tok_pct": {
+      "H0": 0.664,
+      "H1": 0.605,
+      "H2": 0.529,
+      "H3": 0.565,
+      "H4": 0.686
+     }
+    },
+    "6": {
+     "winner_usd": "H4",
+     "winner_usd_pct": 0.472,
+     "winner_tok": "H4",
+     "winner_tok_pct": 0.726,
+     "usd_pct": {
+      "H0": 0.227,
+      "H1": 0.326,
+      "H2": 0.151,
+      "H3": 0.168,
+      "H4": 0.472
+     },
+     "tok_pct": {
+      "H0": 0.654,
+      "H1": 0.644,
+      "H2": 0.568,
+      "H3": 0.591,
+      "H4": 0.726
+     }
+    },
+    "8": {
+     "winner_usd": "H4",
+     "winner_usd_pct": 0.538,
+     "winner_tok": "H4",
+     "winner_tok_pct": 0.748,
+     "usd_pct": {
+      "H0": 0.295,
+      "H1": 0.417,
+      "H2": 0.242,
+      "H3": 0.253,
+      "H4": 0.538
+     },
+     "tok_pct": {
+      "H0": 0.645,
+      "H1": 0.668,
+      "H2": 0.585,
+      "H3": 0.601,
+      "H4": 0.748
+     }
+    },
+    "10": {
+     "winner_usd": "H4",
+     "winner_usd_pct": 0.574,
+     "winner_tok": "H4",
+     "winner_tok_pct": 0.758,
+     "usd_pct": {
+      "H0": 0.324,
+      "H1": 0.464,
+      "H2": 0.284,
+      "H3": 0.293,
+      "H4": 0.574
+     },
+     "tok_pct": {
+      "H0": 0.631,
+      "H1": 0.679,
+      "H2": 0.586,
+      "H3": 0.598,
+      "H4": 0.758
+     }
+    }
+   },
+   "break_even_prompt_usd": {
+    "H0": 4,
+    "H1": 4,
+    "H2": 5,
+    "H3": 4,
+    "H4": 3
+   },
+   "control_cost_usd_10_prompts": 1.44
+  },
+  {
+   "context_pct_of_window": 23.8,
+   "context_tokens": 237676,
+   "by_prompts_after_cut": {
+    "1": {
+     "winner_usd": "H4",
+     "winner_usd_pct": -1.79,
+     "winner_tok": "H0",
+     "winner_tok_pct": 0.286,
+     "usd_pct": {
+      "H0": -1.865,
+      "H1": -3.253,
+      "H2": -2.821,
+      "H3": -3.026,
+      "H4": -1.79
+     },
+     "tok_pct": {
+      "H0": 0.286,
+      "H1": -0.801,
+      "H2": -0.522,
+      "H3": -0.392,
+      "H4": -0.384
+     }
+    },
+    "2": {
+     "winner_usd": "H4",
+     "winner_usd_pct": -0.209,
+     "winner_tok": "H0",
+     "winner_tok_pct": 0.609,
+     "usd_pct": {
+      "H0": -0.212,
+      "H1": -0.763,
+      "H2": -0.614,
+      "H3": -0.683,
+      "H4": -0.209
+     },
+     "tok_pct": {
+      "H0": 0.609,
+      "H1": 0.239,
+      "H2": 0.334,
+      "H3": 0.375,
+      "H4": 0.419
+     }
+    },
+    "3": {
+     "winner_usd": "H0",
+     "winner_usd_pct": 0.143,
+     "winner_tok": "H0",
+     "winner_tok_pct": 0.671,
+     "usd_pct": {
+      "H0": 0.143,
+      "H1": -0.234,
+      "H2": -0.144,
+      "H3": -0.185,
+      "H4": 0.123
+     },
+     "tok_pct": {
+      "H0": 0.671,
+      "H1": 0.439,
+      "H2": 0.497,
+      "H3": 0.52,
+      "H4": 0.571
+     }
+    },
+    "4": {
+     "winner_usd": "H0",
+     "winner_usd_pct": 0.297,
+     "winner_tok": "H0",
+     "winner_tok_pct": 0.696,
+     "usd_pct": {
+      "H0": 0.297,
+      "H1": -0.007,
+      "H2": 0.059,
+      "H3": 0.029,
+      "H4": 0.265
+     },
+     "tok_pct": {
+      "H0": 0.696,
+      "H1": 0.519,
+      "H2": 0.561,
+      "H3": 0.577,
+      "H4": 0.631
+     }
+    },
+    "6": {
+     "winner_usd": "H0",
+     "winner_usd_pct": 0.435,
+     "winner_tok": "H0",
+     "winner_tok_pct": 0.716,
+     "usd_pct": {
+      "H0": 0.435,
+      "H1": 0.191,
+      "H2": 0.233,
+      "H3": 0.214,
+      "H4": 0.384
+     },
+     "tok_pct": {
+      "H0": 0.716,
+      "H1": 0.58,
+      "H2": 0.608,
+      "H3": 0.617,
+      "H4": 0.673
+     }
+    },
+    "8": {
+     "winner_usd": "H0",
+     "winner_usd_pct": 0.498,
+     "winner_tok": "H0",
+     "winner_tok_pct": 0.722,
+     "usd_pct": {
+      "H0": 0.498,
+      "H1": 0.275,
+      "H2": 0.307,
+      "H3": 0.292,
+      "H4": 0.431
+     },
+     "tok_pct": {
+      "H0": 0.722,
+      "H1": 0.598,
+      "H2": 0.62,
+      "H3": 0.625,
+      "H4": 0.682
+     }
+    },
+    "10": {
+     "winner_usd": "H0",
+     "winner_usd_pct": 0.531,
+     "winner_tok": "H0",
+     "winner_tok_pct": 0.723,
+     "usd_pct": {
+      "H0": 0.531,
+      "H1": 0.315,
+      "H2": 0.341,
+      "H3": 0.328,
+      "H4": 0.451
+     },
+     "tok_pct": {
+      "H0": 0.723,
+      "H1": 0.601,
+      "H2": 0.618,
+      "H3": 0.622,
+      "H4": 0.679
+     }
+    }
+   },
+   "break_even_prompt_usd": {
+    "H0": 3,
+    "H1": 5,
+    "H2": 4,
+    "H3": 4,
+    "H4": 3
+   },
+   "control_cost_usd_10_prompts": 1.57
+  },
+  {
+   "context_pct_of_window": 34.1,
+   "context_tokens": 341065,
+   "by_prompts_after_cut": {
+    "1": {
+     "winner_usd": "H4",
+     "winner_usd_pct": -0.993,
+     "winner_tok": "H0",
+     "winner_tok_pct": 0.401,
+     "usd_pct": {
+      "H0": -1.677,
+      "H1": -1.981,
+      "H2": -2.036,
+      "H3": -2.527,
+      "H4": -0.993
+     },
+     "tok_pct": {
+      "H0": 0.401,
+      "H1": -0.21,
+      "H2": -0.163,
+      "H3": -0.473,
+      "H4": 0.066
+     }
+    },
+    "2": {
+     "winner_usd": "H4",
+     "winner_usd_pct": 0.155,
+     "winner_tok": "H0",
+     "winner_tok_pct": 0.694,
+     "usd_pct": {
+      "H0": -0.077,
+      "H1": -0.18,
+      "H2": -0.2,
+      "H3": -0.421,
+      "H4": 0.155
+     },
+     "tok_pct": {
+      "H0": 0.694,
+      "H1": 0.494,
+      "H2": 0.509,
+      "H3": 0.399,
+      "H4": 0.619
+     }
+    },
+    "3": {
+     "winner_usd": "H4",
+     "winner_usd_pct": 0.394,
+     "winner_tok": "H0",
+     "winner_tok_pct": 0.762,
+     "usd_pct": {
+      "H0": 0.267,
+      "H1": 0.2,
+      "H2": 0.188,
+      "H3": 0.02,
+      "H4": 0.394
+     },
+     "tok_pct": {
+      "H0": 0.762,
+      "H1": 0.633,
+      "H2": 0.641,
+      "H3": 0.567,
+      "H4": 0.725
+     }
+    },
+    "4": {
+     "winner_usd": "H4",
+     "winner_usd_pct": 0.494,
+     "winner_tok": "H0",
+     "winner_tok_pct": 0.782,
+     "usd_pct": {
+      "H0": 0.41,
+      "H1": 0.364,
+      "H2": 0.355,
+      "H3": 0.208,
+      "H4": 0.494
+     },
+     "tok_pct": {
+      "H0": 0.782,
+      "H1": 0.691,
+      "H2": 0.697,
+      "H3": 0.635,
+      "H4": 0.766
+     }
+    },
+    "6": {
+     "winner_usd": "H4",
+     "winner_usd_pct": 0.58,
+     "winner_tok": "H4",
+     "winner_tok_pct": 0.798,
+     "usd_pct": {
+      "H0": 0.539,
+      "H1": 0.512,
+      "H2": 0.506,
+      "H3": 0.373,
+      "H4": 0.58
+     },
+     "tok_pct": {
+      "H0": 0.797,
+      "H1": 0.742,
+      "H2": 0.745,
+      "H3": 0.689,
+      "H4": 0.798
+     }
+    },
+    "8": {
+     "winner_usd": "H4",
+     "winner_usd_pct": 0.615,
+     "winner_tok": "H4",
+     "winner_tok_pct": 0.806,
+     "usd_pct": {
+      "H0": 0.598,
+      "H1": 0.58,
+      "H2": 0.575,
+      "H3": 0.444,
+      "H4": 0.615
+     },
+     "tok_pct": {
+      "H0": 0.802,
+      "H1": 0.763,
+      "H2": 0.765,
+      "H3": 0.706,
+      "H4": 0.806
+     }
+    },
+    "10": {
+     "winner_usd": "H4",
+     "winner_usd_pct": 0.631,
+     "winner_tok": "H4",
+     "winner_tok_pct": 0.805,
+     "usd_pct": {
+      "H0": 0.63,
+      "H1": 0.617,
+      "H2": 0.607,
+      "H3": 0.478,
+      "H4": 0.631
+     },
+     "tok_pct": {
+      "H0": 0.803,
+      "H1": 0.774,
+      "H2": 0.774,
+      "H3": 0.71,
+      "H4": 0.805
+     }
+    }
+   },
+   "break_even_prompt_usd": {
+    "H0": 3,
+    "H1": 3,
+    "H2": 3,
+    "H3": 3,
+    "H4": 2
+   },
+   "control_cost_usd_10_prompts": 2.17
+  },
+  {
+   "context_pct_of_window": 38.4,
+   "context_tokens": 384280,
+   "by_prompts_after_cut": {
+    "1": {
+     "winner_usd": "H4",
+     "winner_usd_pct": -0.88,
+     "winner_tok": "H0",
+     "winner_tok_pct": 0.325,
+     "usd_pct": {
+      "H0": -1.349,
+      "H1": -2.646,
+      "H2": -2.133,
+      "H3": -2.21,
+      "H4": -0.88
+     },
+     "tok_pct": {
+      "H0": 0.325,
+      "H1": -0.63,
+      "H2": -0.248,
+      "H3": -0.251,
+      "H4": 0.09
+     }
+    },
+    "2": {
+     "winner_usd": "H4",
+     "winner_usd_pct": 0.245,
+     "winner_tok": "H0",
+     "winner_tok_pct": 0.672,
+     "usd_pct": {
+      "H0": 0.005,
+      "H1": -0.441,
+      "H2": -0.223,
+      "H3": -0.292,
+      "H4": 0.245
+     },
+     "tok_pct": {
+      "H0": 0.672,
+      "H1": 0.358,
+      "H2": 0.488,
+      "H3": 0.481,
+      "H4": 0.636
+     }
+    },
+    "3": {
+     "winner_usd": "H4",
+     "winner_usd_pct": 0.481,
+     "winner_tok": "H4",
+     "winner_tok_pct": 0.743,
+     "usd_pct": {
+      "H0": 0.288,
+      "H1": 0.021,
+      "H2": 0.187,
+      "H3": 0.093,
+      "H4": 0.481
+     },
+     "tok_pct": {
+      "H0": 0.736,
+      "H1": 0.55,
+      "H2": 0.644,
+      "H3": 0.62,
+      "H4": 0.743
+     }
+    },
+    "4": {
+     "winner_usd": "H4",
+     "winner_usd_pct": 0.583,
+     "winner_tok": "H4",
+     "winner_tok_pct": 0.788,
+     "usd_pct": {
+      "H0": 0.407,
+      "H1": 0.219,
+      "H2": 0.359,
+      "H3": 0.267,
+      "H4": 0.583
+     },
+     "tok_pct": {
+      "H0": 0.759,
+      "H1": 0.629,
+      "H2": 0.702,
+      "H3": 0.675,
+      "H4": 0.788
+     }
+    },
+    "6": {
+     "winner_usd": "H4",
+     "winner_usd_pct": 0.675,
+     "winner_tok": "H4",
+     "winner_tok_pct": 0.827,
+     "usd_pct": {
+      "H0": 0.51,
+      "H1": 0.394,
+      "H2": 0.515,
+      "H3": 0.421,
+      "H4": 0.675
+     },
+     "tok_pct": {
+      "H0": 0.774,
+      "H1": 0.693,
+      "H2": 0.753,
+      "H3": 0.719,
+      "H4": 0.827
+     }
+    },
+    "8": {
+     "winner_usd": "H4",
+     "winner_usd_pct": 0.716,
+     "winner_tok": "H4",
+     "winner_tok_pct": 0.843,
+     "usd_pct": {
+      "H0": 0.552,
+      "H1": 0.47,
+      "H2": 0.586,
+      "H3": 0.487,
+      "H4": 0.716
+     },
+     "tok_pct": {
+      "H0": 0.773,
+      "H1": 0.716,
+      "H2": 0.775,
+      "H3": 0.732,
+      "H4": 0.843
+     }
+    },
+    "10": {
+     "winner_usd": "H4",
+     "winner_usd_pct": 0.739,
+     "winner_tok": "H4",
+     "winner_tok_pct": 0.851,
+     "usd_pct": {
+      "H0": 0.572,
+      "H1": 0.508,
+      "H2": 0.626,
+      "H3": 0.519,
+      "H4": 0.739
+     },
+     "tok_pct": {
+      "H0": 0.768,
+      "H1": 0.724,
+      "H2": 0.786,
+      "H3": 0.735,
+      "H4": 0.851
+     }
+    }
+   },
+   "break_even_prompt_usd": {
+    "H0": 2,
+    "H1": 3,
+    "H2": 3,
+    "H3": 3,
+    "H4": 2
+   },
+   "control_cost_usd_10_prompts": 2.41
+  }
+ ],
+ "refit_note": "Per-prompt saving grows faster than linearly with context; the linear fit under-predicts 34-38% by $0.02-0.50 at 10 prompts, a quadratic fit errs by -1.16..+1.35. Use this table, not the equation, above 24%. Context range covered: 5.7% to 38.4%. Above 38.4% nothing is measured. H0/H1 fell 6/11 points at 38.4% vs 34.1% (one observation)."
+}

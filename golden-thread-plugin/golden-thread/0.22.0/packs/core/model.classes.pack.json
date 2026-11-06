@@ -1,0 +1,203 @@
+{
+  "schema": 1,
+  "slot": "model_class",
+  "name": "classes",
+  "tier": "D",
+  "spdx": "MIT",
+  "provenance": {
+    "origin": "original",
+    "contributor": "Golden Thread <gt@example.com>",
+    "upstream": null
+  },
+  "dco": "Signed-off-by: Golden Thread <gt@example.com>",
+  "notes": "Keyword table for class routing (phase 82, setting explicit_model_policy). Rows: class, keywords (lowercase prefixes), tier (fast|balanced|deep), verified (YYYY-MM-DD). A deep class is never downgraded; others lower a model only via a passing advice row. Full rules: gt_model_classes.py docstring.",
+  "entries": [
+    {
+      "class": "security",
+      "tier": "deep",
+      "verified": "2026-10-25",
+      "keywords": [
+        "security",
+        "sandbox",
+        "lockdown",
+        "release gate",
+        "release-gate",
+        "vulnerab",
+        "exploit",
+        "threat model",
+        "penetration",
+        "credential",
+        "privilege"
+      ]
+    },
+    {
+      "class": "rubric-judging",
+      "tier": "fast",
+      "verified": "2026-10-25",
+      "keywords": [
+        "rubric",
+        "grade the",
+        "score the",
+        "judge the",
+        "blind judge"
+      ]
+    },
+    {
+      "class": "extraction",
+      "tier": "fast",
+      "verified": "2026-10-25",
+      "keywords": [
+        "extract",
+        "pull out",
+        "list every",
+        "collect all"
+      ]
+    },
+    {
+      "class": "sweeps",
+      "tier": "fast",
+      "verified": "2026-10-25",
+      "keywords": [
+        "sweep",
+        "scan for",
+        "find all",
+        "grep for",
+        "look for every"
+      ]
+    },
+    {
+      "class": "builds",
+      "tier": "balanced",
+      "verified": "2026-10-25",
+      "keywords": [
+        "build",
+        "implement",
+        "write the code",
+        "add a feature",
+        "create the"
+      ]
+    },
+    {
+      "class": "edits",
+      "tier": "balanced",
+      "verified": "2026-10-25",
+      "keywords": [
+        "edit",
+        "rename",
+        "refactor",
+        "fix the",
+        "update the"
+      ]
+    },
+    {
+      "class": "summaries",
+      "tier": "balanced",
+      "verified": "2026-10-25",
+      "keywords": [
+        "summar",
+        "digest",
+        "condense",
+        "tl;dr",
+        "recap"
+      ]
+    },
+    {
+      "class": "security-sensitive-build",
+      "keywords": [
+        "unlock policy",
+        "presence gate",
+        "step-up",
+        "touch id",
+        "windows hello",
+        "redact",
+        "signing key",
+        "keychain",
+        "secrets scan",
+        "sandbox mode"
+      ],
+      "tier": "deep",
+      "verified": "2026-10-27"
+    },
+    {
+      "class": "independent-review",
+      "keywords": [
+        "independent review",
+        "independently review",
+        "adversarial review",
+        "second opinion",
+        "review the work of",
+        "review another model",
+        "fresh-eyes review",
+        "audit the build"
+      ],
+      "tier": "deep",
+      "verified": "2026-10-27"
+    },
+    {
+      "class": "concurrency-and-data-loss",
+      "keywords": [
+        "race condition",
+        "concurren",
+        "session claim",
+        "double clear",
+        "data loss",
+        "lost write",
+        "deadlock",
+        "atomic write"
+      ],
+      "tier": "deep",
+      "verified": "2026-10-27"
+    },
+    {
+      "class": "ambiguous-design",
+      "keywords": [
+        "design decision",
+        "decide how",
+        "which approach",
+        "trade-off",
+        "tradeoff",
+        "under-specified",
+        "underspecified",
+        "ambiguous"
+      ],
+      "tier": "deep",
+      "verified": "2026-10-27"
+    },
+    {
+      "class": "long-horizon-change",
+      "keywords": [
+        "across many files",
+        "cross-file",
+        "multi-file",
+        "large refactor",
+        "migration of"
+      ],
+      "tier": "deep",
+      "verified": "2026-10-27"
+    },
+    {
+      "class": "test-writing",
+      "keywords": [
+        "write the tests",
+        "write tests for",
+        "add tests",
+        "test cases for",
+        "unit tests for"
+      ],
+      "tier": "balanced",
+      "verified": "2026-10-27"
+    },
+    {
+      "class": "doc-generation",
+      "keywords": [
+        "write the docs",
+        "draft the docs",
+        "generate the table",
+        "docs table",
+        "draft the readme"
+      ],
+      "tier": "balanced",
+      "verified": "2026-10-27"
+    }
+  ]
+}

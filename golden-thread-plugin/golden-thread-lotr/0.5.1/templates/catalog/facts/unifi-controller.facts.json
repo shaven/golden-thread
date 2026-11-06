@@ -1,0 +1,108 @@
+{
+  "schema": 1,
+  "template": "unifi-controller",
+  "service": "UniFi Network integration API (self-hosted controller)",
+  "archetype": "http-rest",
+  "researched": "2026-10-26",
+  "researcher": "claude, from memory of the vendor docs; the docs site is script-rendered and was not fetched for this sheet (0.22.0, trust_ca route)",
+  "facts": [
+    {
+      "id": "f1",
+      "field": "connect.base_url",
+      "value": "https://unifi-controller.invalid/proxy/network/integration",
+      "claim": "On a UniFi OS console the Network integration API is served under /proxy/network/integration on the console's own address; the host here is a placeholder (.invalid never resolves) that the owner replaces with --base-url.",
+      "source": "https://developer.ui.com/network-api/gettingstarted",
+      "retrieved": "2026-10-26",
+      "state": "unverified",
+      "evidence": "Path from memory; the host is deliberately a reserved name (RFC 6761), not a fact about the service."
+    },
+    {
+      "id": "f2",
+      "field": "connect.auth_header",
+      "value": "X-API-KEY",
+      "claim": "A request carries the controller's API key in the X-API-KEY header.",
+      "source": "https://developer.ui.com/network-api/gettingstarted",
+      "retrieved": "2026-10-26",
+      "state": "unverified",
+      "evidence": "From memory; the page text was not fetched."
+    },
+    {
+      "id": "f2b",
+      "field": "connect.auth_scheme",
+      "value": "header",
+      "claim": "The key is sent as a request header, not as a bearer token.",
+      "source": "https://developer.ui.com/network-api/gettingstarted",
+      "retrieved": "2026-10-26",
+      "state": "unverified",
+      "evidence": "From memory; the page text was not fetched."
+    },
+    {
+      "id": "f3",
+      "field": "network.hosts",
+      "value": [
+        "unifi-controller.invalid"
+      ],
+      "claim": "The template pins only its placeholder host; add-http pins the host of the --base-url the owner gives, and nothing else is called.",
+      "source": "https://developer.ui.com/network-api/gettingstarted",
+      "retrieved": "2026-10-26",
+      "state": "unverified",
+      "evidence": "A placeholder by design; the pinning behaviour is LOTR's own (add-http)."
+    },
+    {
+      "id": "f4",
+      "claim": "Reads: GET /v1/info, /v1/sites, /v1/sites/{siteId}/devices and /v1/sites/{siteId}/clients return the application version, sites, adopted devices and connected clients.",
+      "source": "https://developer.ui.com/network-api/gettingstarted",
+      "retrieved": "2026-10-26",
+      "state": "unverified",
+      "evidence": "From memory of the API reference."
+    },
+    {
+      "id": "f5",
+      "claim": "Changes are POSTs and DELETEs: device and port actions (restart, power-cycle), client actions (authorize guest access) and hotspot vouchers.",
+      "source": "https://developer.ui.com/network-api/gettingstarted",
+      "retrieved": "2026-10-26",
+      "state": "unverified",
+      "evidence": "From memory of the API reference."
+    },
+    {
+      "id": "f6",
+      "claim": "The key is created in the UniFi Network application on the controller itself (its integrations settings) and is not a unifi.ui.com Site Manager key.",
+      "source": "https://developer.ui.com/network-api/gettingstarted",
+      "retrieved": "2026-10-26",
+      "state": "unverified",
+      "evidence": "From memory; the settings path differs between application versions."
+    }
+  ],
+  "choices": [
+    {
+      "decision": "all writes are consent",
+      "because": "read-mostly is the point (site, device and client state); restarting a device or letting a guest on should never be silent",
+      "facts": [
+        "f4",
+        "f5"
+      ]
+    },
+    {
+      "decision": "reach the controller over https with the owner's private CA (trust_ca), never plain http and never a disabled check",
+      "because": "a controller on a private address has no publicly trusted certificate; gt-lotr 0.5.1 trusts the owner's own CA for this one connection and refuses plain http off this machine",
+      "facts": [
+        "f1",
+        "f3"
+      ]
+    },
+    {
+      "decision": "the base URL host is a reserved .invalid placeholder",
+      "because": "every controller has its own address; a placeholder that never resolves means a forgotten --base-url fails closed instead of reaching some other host",
+      "facts": [
+        "f1",
+        "f3"
+      ]
+    }
+  ],
+  "open": [
+    "Nothing here is confirmed from the vendor's docs; read the reference before a live check.",
+    "Not tried against a real controller: whether a UniFi OS console accepts an uploaded certificate from a private CA, and where, is not recorded here.",
+    "Older self-hosted UniFi Network Application installs (not UniFi OS) may serve the API without the /proxy/network prefix; not checked.",
+    "Rate limits and paging parameters (offset, limit) are not recorded."
+  ]
+}

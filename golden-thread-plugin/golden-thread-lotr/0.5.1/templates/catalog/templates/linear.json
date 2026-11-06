@@ -1,0 +1,33 @@
+{
+  "schema": 1,
+  "name": "linear",
+  "archetype": "mcp-oauth",
+  "summary": "Linear's hosted MCP server (issues, projects, comments) with browser sign-in",
+  "kind": "mcp-oauth",
+  "docs": "https://linear.app/docs/mcp",
+  "connect": {
+    "url": "https://mcp.linear.app/mcp",
+    "scopes": [],
+    "offline_access": true,
+    "skip_audience_check": false,
+    "send_resource": true,
+    "redirect_host": "127.0.0.1",
+    "trust": "T1",
+    "identity": "your Linear account",
+    "description": "Linear (hosted MCP, sign-in)"
+  },
+  "network": {
+    "hosts": [
+      "mcp.linear.app"
+    ]
+  },
+  "notes": [
+    "Sign in with your Linear account in the browser: lotr setup linear. The server registers clients itself (dynamic client registration); nothing to create first.",
+    "scopes is left empty: the server decides. Linear says /mcp is read-write by default; requesting only the 'read' OAuth scope limits a token to read-only, and https://mcp.linear.app/mcp/readonly exposes only read tools.",
+    "Alternative: send a Linear API key or OAuth token as a bearer header (Linear suggests this for app users or restricted keys); that would be the mcp-http-key archetype.",
+    "The legacy SSE URL https://mcp.linear.app/sse is documented as a deprecated fallback; not used here.",
+    "Okta-managed (enterprise) authorization exists and needs a Linear admin to configure SAML; not needed for a personal sign-in.",
+    "The mcp-oauth kind takes no connect.policy; the gateway classes risky tool names (delete, send) as consent by itself.",
+    "Linear's docs name no tools, so no smoke op is set; setup will pick a read that needs no input."
+  ]
+}

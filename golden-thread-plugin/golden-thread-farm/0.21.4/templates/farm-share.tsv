@@ -1,0 +1,9 @@
+# task_class	share_target	ramp_step	ramp_window	audit_rate	max_usd_day	max_fail_rate	pause_after	engine
+# share_target: percent (0-100) of eligible tasks sent to the farm engine. ramp_step: percent added after each clean window (0 = fixed share).
+# ramp_window: tasks per window. audit_rate: share of farmed results a Claude audit re-checks (- = farm_audit_rate setting). max_usd_day: spend cap (0 = none).
+# max_fail_rate: 0-1, pause when exceeded over a window. pause_after: consecutive failures that pause the class. engine: optional pinned engine (- = any).
+task_class	share_target	ramp_step	ramp_window	audit_rate	max_usd_day	max_fail_rate	pause_after	engine
+extract	20	5	20	0.2	2	0.2	3	-
+classify	20	5	20	0.2	2	0.2	3	-
+log-triage	10	5	20	0.3	1	0.2	3	-
+default	0	0	20	0.3	1	0.2	3	-

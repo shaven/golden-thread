@@ -1,0 +1,83 @@
+{
+  "schema": 1,
+  "name": "outage-log",
+  "title": "Keep an incident log as it happens",
+  "description": "Appends each step to the incident log through the safe queue, makes a task for the fix, and writes the shift-change handoff.",
+  "personas": [
+    "operations"
+  ],
+  "help_workflow": "outage-log",
+  "say": "We had an outage; keep the log as we go.",
+  "inputs": [
+    {
+      "name": "project",
+      "type": "string",
+      "required": true,
+      "prompt": "Which project keeps the incident log?"
+    },
+    {
+      "name": "entry",
+      "type": "string",
+      "required": true,
+      "prompt": "What happened, in a few sentences?"
+    },
+    {
+      "name": "fix",
+      "type": "string",
+      "required": true,
+      "prompt": "What is the follow-up fix, in one line?"
+    }
+  ],
+  "steps": [
+    {
+      "id": "log",
+      "kind": "run",
+      "title": "Add it to the incident log",
+      "script": "gt_write_queue.py",
+      "args": [
+        "--vault",
+        "{{vault}}",
+        "--path",
+        "Projects/{{inputs.project}}/incident-log.md",
+        "--op",
+        "append",
+        "--content=## {{run.date}} Incident\n\n{{inputs.entry}}",
+        "--hint",
+        "incident log"
+      ]
+    },
+    {
+      "id": "drain",
+      "kind": "run",
+      "title": "Apply the queued write",
+      "script": "gt_broker.py",
+      "args": [
+        "drain",
+        "--vault",
+        "{{vault}}"
+      ]
+    },
+    {
+      "id": "task",
+      "kind": "run",
+      "title": "Make a task for the fix",
+      "script": "gt_task.py",
+      "args": [
+        "add",
+        "--vault",
+        "{{vault}}",
+        "--project",
+        "{{inputs.project}}",
+        "--p",
+        "1",
+        "{{inputs.fix}}"
+      ]
+    },
+    {
+      "id": "handoff",
+      "kind": "claude",
+      "title": "Write the shift-change handoff",
+      "prompt": "Write the handoff for the next on-call with /gt:gt-create handoff: what happened ({{inputs.entry}}), what is done, what is still open ({{inputs.fix}}) and how to roll back if there is a rollback."
+    }
+  ]
+}

@@ -1,0 +1,43 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>An executive&#x27;s first day</title><style>:root{--bg:#fbfaf7;--fg:#1d1c1a;--mut:#615e57;--card:#fff;--line:#d9d5cc;--acc:#1f5f8b;--accfg:#fff;--code:#f1eee7}
+@media (prefers-color-scheme:dark){:root{--bg:#171614;--fg:#ece9e2;--mut:#aaa59a;--card:#211f1c;--line:#3a3732;--acc:#79b4e0;--accfg:#10202c;--code:#2a2723}}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--fg);font:16px/1.55 system-ui,sans-serif}
+main{max-width:46rem;margin:0 auto;padding:1.5rem 16px 4rem}h1{font-size:1.5rem;margin:.2rem 0}
+.sub{color:var(--mut);margin:0 0 1rem}
+.bar{height:.5rem;background:var(--line);border-radius:.25rem;overflow:hidden;margin:1rem 0 .4rem}
+.bar>i{display:block;height:100%;width:0;background:var(--acc);transition:width .2s}
+.count{color:var(--mut);font-size:.9rem;margin-bottom:1rem}
+.step{display:none;background:var(--card);border:1px solid var(--line);border-radius:.6rem;padding:1rem 1.2rem}
+.step.on{display:block}.step h2{font-size:1.15rem;margin:.1rem 0 .8rem}
+dt{font-weight:600;margin-top:.8rem;color:var(--mut);font-size:.85rem;text-transform:uppercase;letter-spacing:.04em}
+dd{margin:.2rem 0 0}.say{display:flex;gap:.6rem;align-items:flex-start}
+code{background:var(--code);padding:.35rem .55rem;border-radius:.35rem;font:.95rem ui-monospace,monospace;flex:1;overflow-wrap:anywhere}
+button{font:inherit;border:1px solid var(--line);background:var(--card);color:var(--fg);border-radius:.4rem;padding:.45rem .9rem;cursor:pointer}
+button.p{background:var(--acc);color:var(--accfg);border-color:var(--acc)}button:disabled{opacity:.45;cursor:default}
+nav{display:flex;gap:.6rem;margin-top:1rem}nav .sp{flex:1}</style></head><body><main>
+<h1>An executive&#x27;s first day</h1><p class="sub">Someone who decides and delegates. Short answers, decisions first. Practice project: demo-pizzabot (a pretend project; nothing here touches your real notes).</p>
+<div class="bar" id="bar" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0"><i id="fill"></i></div><div class="count" id="count"></div>
+<section class="step" aria-label="Step 1"><h2>1. Get the picture of one project</h2><dl><dt>What you are doing</dt><dd>Get the picture of one project</dd><dt>What to type</dt><dd class="say"><code>/gt:gt-open demo-pizzabot</code><button type="button" data-copy="/gt:gt-open demo-pizzabot">Copy</button></dd><dt>What you will see</dt><dd>A short summary with the status, the risks and the decisions waiting for you.</dd><dt>Why it matters</dt><dd>You get the state of play in under a minute.</dd></dl></section>
+<section class="step" aria-label="Step 2"><h2>2. Ask what needs you</h2><dl><dt>What you are doing</dt><dd>Ask what needs you</dd><dt>What to type</dt><dd class="say"><code>/gt:gt-next</code><button type="button" data-copy="/gt:gt-next">Copy</button></dd><dt>What you will see</dt><dd>Up to three lines: the one thing that needs you now, why, and what to try after.</dd><dt>Why it matters</dt><dd>Your time goes to the decision that is actually waiting.</dd></dl></section>
+<section class="step" aria-label="Step 3"><h2>3. Work through what is waiting</h2><dl><dt>What you are doing</dt><dd>Work through what is waiting</dd><dt>What to type</dt><dd class="say"><code>/gt:gt-handle task</code><button type="button" data-copy="/gt:gt-handle task">Copy</button></dd><dt>What you will see</dt><dd>One waiting item at a time with the choices: close it, keep it, drop it or push it to a date.</dd><dt>Why it matters</dt><dd>A backlog gets cleared in minutes instead of growing.</dd></dl></section>
+<section class="step" aria-label="Step 4"><h2>4. Sort what you jotted down</h2><dl><dt>What you are doing</dt><dd>Sort what you jotted down</dd><dt>What to type</dt><dd class="say"><code>/gt:gt-review</code><button type="button" data-copy="/gt:gt-review">Copy</button></dd><dt>What you will see</dt><dd>Each loose note from your inbox, with the project it probably belongs to, for you to accept or change.</dd><dt>Why it matters</dt><dd>Thoughts caught in passing end up where someone will act on them.</dd></dl></section>
+<section class="step" aria-label="Step 5"><h2>5. Ask your notes a question</h2><dl><dt>What you are doing</dt><dd>Ask your notes a question</dd><dt>What to type</dt><dd class="say"><code>/gt:gt-query what is the biggest open risk</code><button type="button" data-copy="/gt:gt-query what is the biggest open risk">Copy</button></dd><dt>What you will see</dt><dd>A short answer with the note it came from.</dd><dt>Why it matters</dt><dd>You ask in your own words; nobody has to prepare a report.</dd></dl></section>
+<section class="step" aria-label="Step 6"><h2>6. Close the day</h2><dl><dt>What you are doing</dt><dd>Close the day</dd><dt>What to type</dt><dd class="say"><code>/gt:gt-close</code><button type="button" data-copy="/gt:gt-close">Copy</button></dd><dt>What you will see</dt><dd>A brief first: what moved, what was decided, what is blocked, then the saved notes.</dd><dt>Why it matters</dt><dd>The record of today exists without you writing it.</dd></dl></section>
+<nav><button type="button" id="back">Back</button><span class="sp"></span><button type="button" class="p" id="next">Next</button></nav>
+</main><script>(function(){
+var steps=[].slice.call(document.querySelectorAll('.step')),i=0,bar=document.getElementById('fill'),
+    pb=document.getElementById('bar'),cnt=document.getElementById('count'),b=document.getElementById('back'),
+    n=document.getElementById('next');
+function show(k){i=Math.max(0,Math.min(steps.length-1,k));
+ steps.forEach(function(s,j){s.classList.toggle('on',j===i);});
+ var pct=Math.round((i+1)*100/steps.length);bar.style.width=pct+'%';pb.setAttribute('aria-valuenow',pct);
+ cnt.textContent='Step '+(i+1)+' of '+steps.length;b.disabled=i===0;n.disabled=i===steps.length-1;}
+b.addEventListener('click',function(){show(i-1);});n.addEventListener('click',function(){show(i+1);});
+document.addEventListener('keydown',function(e){if(e.key==='ArrowRight')show(i+1);if(e.key==='ArrowLeft')show(i-1);});
+[].forEach.call(document.querySelectorAll('[data-copy]'),function(btn){
+ btn.addEventListener('click',function(){var t=btn.getAttribute('data-copy');
+  var done=function(){btn.textContent='Copied';setTimeout(function(){btn.textContent='Copy';},1500);};
+  if(navigator.clipboard&&navigator.clipboard.writeText){navigator.clipboard.writeText(t).then(done,function(){});}
+  else{var a=document.createElement('textarea');a.value=t;document.body.appendChild(a);a.select();
+   try{document.execCommand('copy');done();}catch(x){}document.body.removeChild(a);}});});
+show(0);})();</script></body></html>

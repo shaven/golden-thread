@@ -1,0 +1,35 @@
+{
+  "schema": 1,
+  "name": "fetch",
+  "archetype": "stdio-uvx",
+  "summary": "Fetch a web page and return it as markdown (official MCP reference server, local stdio)",
+  "kind": "mcp-stdio",
+  "docs": "https://github.com/modelcontextprotocol/servers/blob/main/src/fetch/README.md",
+  "connect": {
+    "command": [
+      "uvx",
+      "mcp-server-fetch==2026.10.10"
+    ],
+    "runtime": "uv",
+    "trust": "T1",
+    "identity": "the public web, requested from this machine",
+    "description": "Web page fetcher (stdio, uvx)",
+    "policy": {
+      "consent": [
+        "fetch"
+      ]
+    },
+    "timeouts": {
+      "start_s": 60,
+      "call_s": 120,
+      "idle_s": 600
+    }
+  },
+  "notes": [
+    "The server makes requests from YOUR machine to any URL it is given, so a prompt-injected page could steer it at internal addresses (SSRF). By default it refuses private, loopback, link-local and metadata addresses and checks every redirect, but the README says this does not stop DNS rebinding, and a host only a proxy can resolve is not checked.",
+    "Because of that risk the fetch tool asks first (consent) on every call.",
+    "Do NOT add the optional flags --allow-private-ips (removes the internal-address guard) or --ignore-robots-txt (stops obeying robots.txt for model-initiated requests) unless you understand the exposure. --user-agent and --proxy-url only change identity and routing.",
+    "No arguments or credentials are needed. No smoke test is configured because the only tool needs a URL.",
+    "Runs on your machine via uvx and needs uv. The version is pinned; update it deliberately."
+  ]
+}

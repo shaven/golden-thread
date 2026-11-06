@@ -1,0 +1,105 @@
+{
+  "schema": 1,
+  "template": "sentry",
+  "service": "Sentry",
+  "archetype": "mcp-oauth",
+  "researched": "2026-10-14",
+  "researcher": "claude sonnet research run 2026-10-14",
+  "facts": [
+    {
+      "id": "f1",
+      "field": "connect.url",
+      "value": "https://mcp.sentry.dev/mcp",
+      "claim": "Sentry's hosted MCP server endpoint is /mcp (optionally /mcp/{org}[/{project}])",
+      "source": "https://github.com/getsentry/sentry-mcp",
+      "retrieved": "2026-10-14",
+      "state": "self-verified",
+      "evidence": "Vendor docs site and the vendor's GitHub repo both give the remote endpoint https://mcp.sentry.dev/mcp."
+    },
+    {
+      "id": "f2",
+      "field": "network.hosts",
+      "value": [
+        "mcp.sentry.dev"
+      ],
+      "claim": "MCP host and OAuth issuer/authorize/token/register endpoints are all on mcp.sentry.dev",
+      "source": "https://mcp.sentry.dev/.well-known/oauth-authorization-server",
+      "retrieved": "2026-10-14",
+      "state": "self-verified",
+      "evidence": "Discovery document: issuer https://mcp.sentry.dev; endpoints under /oauth/ on the same host."
+    },
+    {
+      "id": "f3",
+      "field": "connect.scopes",
+      "value": [],
+      "claim": "Sentry's page names no scopes for the hosted server; discovery lists org:read, project:write, team:write, event:write, alerts:write; template leaves scopes empty so the server decides",
+      "source": "https://mcp.sentry.dev/.well-known/oauth-authorization-server",
+      "retrieved": "2026-10-14",
+      "state": "self-verified",
+      "evidence": "scopes_supported: org:read, project:write, team:write, event:write, alerts:write; docs page: scopes not specified."
+    },
+    {
+      "id": "f4",
+      "claim": "Dynamic client registration is offered, so no OAuth app has to be created first",
+      "source": "https://mcp.sentry.dev/.well-known/oauth-authorization-server",
+      "retrieved": "2026-10-14",
+      "state": "self-verified",
+      "evidence": "registration_endpoint https://mcp.sentry.dev/oauth/register; docs: All connections use OAuth."
+    },
+    {
+      "id": "f5",
+      "claim": "The smoke tool whoami exists (named as an example on the vendor's llms.txt); arguments not stated",
+      "source": "https://mcp.sentry.dev/llms.txt",
+      "retrieved": "2026-10-14",
+      "state": "unverified",
+      "evidence": "Example tools: whoami, find_organizations, update_issue."
+    },
+    {
+      "id": "f6",
+      "claim": "npm package @sentry/mcp-server (stdio) latest is 0.42.0; needs a Sentry user auth token and --host for self-hosted",
+      "source": "https://registry.npmjs.org/@sentry/mcp-server/latest",
+      "retrieved": "2026-10-14",
+      "state": "self-verified",
+      "evidence": "Registry latest 0.42.0; repo README documents npx @sentry/mcp-server with SENTRY_ACCESS_TOKEN."
+    },
+    {
+      "id": "f7",
+      "claim": "A Sentry token can be sent to the hosted server as Authorization: Sentry-Bearer (kept distinct from Bearer)",
+      "source": "https://github.com/getsentry/sentry-mcp",
+      "retrieved": "2026-10-14",
+      "state": "unverified",
+      "evidence": "Sentry-Bearer is intentionally separate from Bearer."
+    }
+  ],
+  "choices": [
+    {
+      "decision": "mcp-oauth, hosted",
+      "because": "Vendor says all hosted connections use OAuth and discovery advertises a registration endpoint; hosted preferred over the stdio package, which needs a pasted token.",
+      "facts": [
+        "f1",
+        "f4"
+      ]
+    },
+    {
+      "decision": "scopes left empty",
+      "because": "The hosted docs name no scopes; the server decides.",
+      "facts": [
+        "f3"
+      ]
+    },
+    {
+      "decision": "smoke op whoami",
+      "because": "Named on the vendor's llms.txt as a tool.",
+      "facts": [
+        "f5"
+      ]
+    }
+  ],
+  "open": [
+    "Argument-free behaviour and read-only nature of whoami are not stated in the docs read.",
+    "No vendor page was found listing the full tool set or marking tools read/write; no tool-based consent list could be sourced.",
+    "The docs say nothing on plan requirements; self-hosted Sentry cannot use the hosted endpoint (stdio package with --host is the route), read on one page.",
+    "docs.sentry.io/product/sentry-mcp/ redirects (301) to mcp.sentry.dev; the sheet cites mcp.sentry.dev as the docs.",
+    "The GitHub README mentions a local-development OAuth app with a localhost redirect; that is for developing the server, not for using the hosted one."
+  ]
+}

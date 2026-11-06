@@ -1,0 +1,79 @@
+{
+  "schema": 1,
+  "template": "vault-mcp",
+  "service": "gt vault MCP server (gt_vault_mcp.py)",
+  "archetype": "stdio-binary",
+  "researched": "2026-10-24",
+  "researcher": "claude, read of the gt 0.22.0 tree",
+  "facts": [
+    {
+      "id": "f1",
+      "field": "connect.command",
+      "value": [
+        "python3",
+        "{scripts_dir}/gt_vault_mcp.py",
+        "--vault",
+        "{vault}"
+      ],
+      "claim": "gt's vault MCP server is a stdio script, started as `gt_vault_mcp.py --vault V`; it imports sibling modules from its own folder, so an absolute script path is enough and no cwd is needed.",
+      "source": "https://github.com/example-account/golden-thread/blob/main/golden-thread-plugin/golden-thread/0.22.0/scripts/gt_vault_mcp.py",
+      "retrieved": "2026-10-24",
+      "state": "self-verified",
+      "evidence": "Header of gt_vault_mcp.py: `gt_vault_mcp.py [--vault V]`, JSON-RPC over stdio. Launched from another working directory with an absolute path, tools/list answered (tests/test_lotr_vault_mcp_template.py)."
+    },
+    {
+      "id": "f2",
+      "field": "connect.runtime",
+      "value": "python",
+      "claim": "The server is Python 3 and needs python3 (python on Windows).",
+      "source": "https://github.com/example-account/golden-thread/blob/main/golden-thread-plugin/golden-thread/0.22.0/scripts/gt_vault_mcp.py",
+      "retrieved": "2026-10-24",
+      "state": "self-verified",
+      "evidence": "Shebang #!/usr/bin/env python3; run under python3 in the test."
+    },
+    {
+      "id": "f3",
+      "claim": "Vault tools are offered only while the vault_mcp setting is on (or auto with sandbox mode on); the disk and network brokers are offered whatever vault_mcp says, unless io_tools is off.",
+      "source": "https://github.com/example-account/golden-thread/blob/main/golden-thread-plugin/golden-thread/0.22.0/scripts/gt_vault_mcp.py",
+      "retrieved": "2026-10-24",
+      "state": "self-verified",
+      "evidence": "Header text, and tools/list with vault_mcp on and off in a throwaway HOME (tests/test_lotr_vault_mcp_template.py)."
+    },
+    {
+      "id": "f4",
+      "claim": "vault_queue_write never writes a vault file itself: it queues the request and the broker applies, holds or escalates it; vault_queue_drain runs the broker. So vault_queue_write is write-tier, not consent-tier.",
+      "source": "https://github.com/example-account/golden-thread/blob/main/golden-thread-plugin/golden-thread/0.22.0/scripts/gt_vault_mcp.py",
+      "retrieved": "2026-10-24",
+      "state": "self-verified",
+      "evidence": "Header: `this server never writes a vault file itself`."
+    }
+  ],
+  "choices": [
+    {
+      "decision": "stdio-binary archetype with runtime python",
+      "because": "the server is a script run by python3, with no key",
+      "facts": [
+        "f1",
+        "f2"
+      ]
+    },
+    {
+      "decision": "scripts_dir resolves to the newest installed gt",
+      "because": "the script sits in a versioned plugin folder that changes with every upgrade",
+      "facts": [
+        "f1"
+      ]
+    },
+    {
+      "decision": "vault_queue_write at write tier, no consent tier",
+      "because": "LOTR tiers are per tool; the queue validates and the broker escalates destructive writes itself",
+      "facts": [
+        "f4"
+      ]
+    }
+  ],
+  "open": [
+    "The tool list and tiers come from reading the server's header and tool table, not from a live tools/list over LOTR on a signed-in app.",
+    "Whether replace-file should ask first (consent) is the owner's call; shipped as write."
+  ]
+}

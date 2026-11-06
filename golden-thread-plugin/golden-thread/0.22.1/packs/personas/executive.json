@@ -1,0 +1,40 @@
+{
+  "schema": 1,
+  "name": "executive",
+  "title": "Executive",
+  "description": "A one-page brief and a decisions-needed list beside the standard project files.",
+  "audience": "Brief and plain: lead with the decision or the status in one or two sentences, then risks and what is needed from me; no code or jargon unless asked.",
+  "plain_mode": true,
+  "handoff": {"commands": ["/gt:gt-open", "/gt:gt-list", "/gt:gt-handle"], "track": "executive"},
+  "lotr_templates": ["m365", "google-drive", "notion"],
+  "featured_skills": ["/gt:gt-open", "/gt:gt-list", "/gt:gt-handle", "/gt:gt-review", "/gt:gt-query", "/gt:gt-complete", "/gt:gt-close"],
+  "session_focus": ["tasks", "must_do"],
+  "close_focus": ["decisions", "handoffs", "tasks", "deadlines"],
+  "close_summary": "brief-first",
+  "farm_tasks": [
+    {"id": "one-page-brief", "class": "draft", "title": "One-page brief draft", "does": "Drafts a one-page brief: the decision or status first, then risks and what is needed.", "escalate": "You read it first; Claude checks every number against its source before the brief is shared."},
+    {"id": "decisions-needed", "class": "extract", "title": "Decisions needed", "does": "Lists the decisions waiting on someone in the notes, with who and by when.", "escalate": "A decision with no named owner is listed as unassigned; Claude reads the notes when a deadline is ambiguous."},
+    {"id": "weekly-digest", "class": "summarise", "title": "Weekly digest", "does": "Summarises the week's project notes into a short digest, decisions first.", "escalate": "Claude checks any figure against its source before the digest is forwarded."}
+  ],
+  "scaffold": {
+    "files": [
+      {"path": "brief.md", "content": "# {TITLE} brief\n\n<!-- One page: what this is, where it stands, what it costs, what is at risk. -->\n\n## Outcome sought\n\n## Where it stands\n\n## Risks\n\n"},
+      {"path": "decisions-needed.md", "content": "# {TITLE} decisions needed\n\n<!-- One line each: the decision, who decides, by when, what waits on it. -->\n\n"}
+    ],
+    "sections": []
+  },
+  "pane": [
+    {"label": "Start my day", "prompt": "Start my day: show what is waiting for me, what is overdue and what I should do first."},
+    {"label": "Decisions needed", "prompt": "Show the decisions that are waiting on me."},
+    {"label": "One-page brief", "prompt": "Write a one-page brief of where this project stands: outcome sought, status, cost and risks."},
+    {"label": "Overdue", "prompt": "Show my overdue tasks."},
+    {"label": "What is waiting", "prompt": "What handoffs and tasks are waiting for me?"},
+    {"label": "Note a decision", "prompt": "Write down a decision. Ask me what was decided and why."},
+    {"label": "Open a project", "prompt": "Open a project for me. Ask me which one."},
+    {"label": "Sort my inbox", "prompt": "Review my inbox and file each item into the right project."},
+    {"label": "Find in my notes", "prompt": "Look something up in my notes. Ask me what I am looking for."},
+    {"label": "What changed", "prompt": "What has changed since I last looked?"},
+    {"label": "Add a task", "prompt": "I want to add a task. Ask me what it is and which project it belongs to."},
+    {"label": "Close a project", "prompt": "Close out a project. Ask me which one."}
+  ]
+}

@@ -1,0 +1,125 @@
+{
+  "schema": 1,
+  "template": "pagerduty",
+  "service": "PagerDuty",
+  "archetype": "mcp-oauth-preregistered",
+  "researched": "2026-10-14",
+  "researcher": "claude opus research run 2026-10-14",
+  "facts": [
+    {
+      "id": "f1",
+      "field": "connect.url",
+      "value": "https://mcp.pagerduty.com/mcp",
+      "claim": "PagerDuty's hosted MCP server is https://mcp.pagerduty.com/mcp (EU: https://mcp.eu.pagerduty.com/mcp); the self-hosted server is deprecated and its repository archived.",
+      "source": "https://support.pagerduty.com/main/docs/pagerduty-mcp-server",
+      "retrieved": "2026-10-14",
+      "state": "self-verified",
+      "evidence": "Support page gives both URLs (updated 2026-09-04); the protected-resource document at /.well-known/oauth-protected-resource/mcp names resource https://mcp.pagerduty.com/mcp."
+    },
+    {
+      "id": "f2",
+      "field": "connect.client_registration",
+      "value": "preregistered",
+      "claim": "PagerDuty does not support dynamic client registration; OAuth needs static client credentials.",
+      "source": "https://support.pagerduty.com/main/docs/pagerduty-mcp-server-integration-guide",
+      "retrieved": "2026-10-14",
+      "state": "self-verified",
+      "evidence": "'PagerDuty does not currently support Dynamic Client Registration (DCR)'; the authorization-server document has no registration_endpoint."
+    },
+    {
+      "id": "f3",
+      "field": "network.hosts",
+      "value": [
+        "mcp.pagerduty.com",
+        "app.pagerduty.com"
+      ],
+      "claim": "Issuer https://mcp.pagerduty.com/, authorize and token endpoints on app.pagerduty.com/global/oauth; PKCE S256 supported; client_secret_post or basic.",
+      "source": "https://mcp.pagerduty.com/.well-known/oauth-authorization-server",
+      "retrieved": "2026-10-14",
+      "state": "self-verified",
+      "evidence": "Discovery document fields; lotrlib.oauth.discover (GET only) resolved hosts [app.pagerduty.com, mcp.pagerduty.com]."
+    },
+    {
+      "id": "f4",
+      "field": "connect.scopes",
+      "value": [
+        "read"
+      ],
+      "claim": "Supported scopes include the broad read and write plus per-object scopes (incidents.read, services.write ...); offline_access is not among them.",
+      "source": "https://mcp.pagerduty.com/.well-known/oauth-protected-resource/mcp",
+      "retrieved": "2026-10-14",
+      "state": "self-verified",
+      "evidence": "scopes_supported (82 entries) includes read and write and not offline_access; the authorization-server document lists the same set."
+    },
+    {
+      "id": "f5",
+      "claim": "Tools: browse_* (incidents, services, schedules, teams, event orchestrations, alert grouping, status pages, escalation policies, users, change events, activity) read; manage_* write; manage_teams and manage_alert_grouping include delete; manage_status_pages creates posts; manage_incidents creates and updates incidents.",
+      "source": "https://support.pagerduty.com/main/docs/pagerduty-mcp-server-integration-guide",
+      "retrieved": "2026-10-14",
+      "state": "unverified",
+      "evidence": "Tool table: manage_teams (create, update, delete, add_member, remove_member); manage_alert_grouping (create, update, delete)."
+    },
+    {
+      "id": "f6",
+      "claim": "The API-key header is 'Authorization: Token token=<key>' (expressible in lotr's mcp-http kind as auth_scheme prefix with auth_prefix 'Token token='); a bearer token (for example a client-credentials app token) is also accepted.",
+      "source": "https://support.pagerduty.com/main/docs/pagerduty-mcp-server-integration-guide",
+      "retrieved": "2026-10-14",
+      "state": "unverified",
+      "evidence": "Authentication section of the integration guide."
+    },
+    {
+      "id": "f7",
+      "claim": "The vendor's Claude Code example registers a static localhost redirect, http://localhost:8080/callback; Scoped OAuth apps can be created only by account admins.",
+      "source": "https://support.pagerduty.com/main/docs/pagerduty-mcp-server",
+      "retrieved": "2026-10-14",
+      "state": "unverified",
+      "evidence": "Example uses http://localhost:8080/callback as a static-port illustration."
+    },
+    {
+      "id": "f8",
+      "claim": "Requires a PagerDuty account with Advanced Permissions.",
+      "source": "https://support.pagerduty.com/main/docs/pagerduty-mcp-server",
+      "retrieved": "2026-10-14",
+      "state": "unverified",
+      "evidence": "Requirements list."
+    }
+  ],
+  "choices": [
+    {
+      "decision": "mcp-oauth-preregistered",
+      "because": "Hosted official MCP, OAuth discovery published, no DCR; the API-key header format is not expressible by mcp-http.",
+      "facts": [
+        "f1",
+        "f2",
+        "f6"
+      ]
+    },
+    {
+      "decision": "scopes [read], offline_access false",
+      "because": "Narrowest useful scope; offline_access is not offered.",
+      "facts": [
+        "f4"
+      ]
+    },
+    {
+      "decision": "redirect_host localhost",
+      "because": "The vendor's example registers a localhost redirect.",
+      "facts": [
+        "f7"
+      ]
+    },
+    {
+      "decision": "consent on manage_incidents, manage_teams, manage_alert_grouping, manage_status_pages",
+      "because": "They page people, delete, or publish; the rest of manage_* are writes and browse_* reads.",
+      "facts": [
+        "f5"
+      ]
+    }
+  ],
+  "open": [
+    "Whether PagerDuty accepts the plain-http localhost redirect for a Scoped OAuth app was read only in an example; not tested.",
+    "Whether the token endpoint issues a refresh token without offline_access was not checked.",
+    "EU authorization-server hosts were not researched.",
+    "Tool names come from the integration guide only; not checked against tools/list."
+  ]
+}

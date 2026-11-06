@@ -1,0 +1,65 @@
+{
+ "schema": 1,
+ "track": "executive",
+ "title": "An executive's first day",
+ "audience": "Someone who decides and delegates. Short answers, decisions first.",
+ "project": "demo-pizzabot",
+ "steps": [
+  {
+   "n": 1,
+   "goal": "Get the picture of one project",
+   "say": "/gt:gt-open demo-pizzabot",
+   "see": "A short summary with the status, the risks and the decisions waiting for you.",
+   "why": "You get the state of play in under a minute."
+  },
+  {
+   "n": 2,
+   "goal": "Ask what needs you",
+   "say": "/gt:gt-next",
+   "see": "Up to three lines: the one thing that needs you now, why, and what to try after.",
+   "why": "Your time goes to the decision that is actually waiting.",
+   "run": {
+    "script": "gt_next.py",
+    "args": [
+     "--vault",
+     "{vault}",
+     "--today",
+     "{today}"
+    ],
+    "expect": [
+     "Next:",
+     "Why:",
+     "/gt:gt-open demo-pizzabot"
+    ]
+   }
+  },
+  {
+   "n": 3,
+   "goal": "Work through what is waiting",
+   "say": "/gt:gt-handle task",
+   "see": "One waiting item at a time with the choices: close it, keep it, drop it or push it to a date.",
+   "why": "A backlog gets cleared in minutes instead of growing."
+  },
+  {
+   "n": 4,
+   "goal": "Sort what you jotted down",
+   "say": "/gt:gt-review",
+   "see": "Each loose note from your inbox, with the project it probably belongs to, for you to accept or change.",
+   "why": "Thoughts caught in passing end up where someone will act on them."
+  },
+  {
+   "n": 5,
+   "goal": "Ask your notes a question",
+   "say": "/gt:gt-query what is the biggest open risk",
+   "see": "A short answer with the note it came from.",
+   "why": "You ask in your own words; nobody has to prepare a report."
+  },
+  {
+   "n": 6,
+   "goal": "Close the day",
+   "say": "/gt:gt-close",
+   "see": "A brief first: what moved, what was decided, what is blocked, then the saved notes.",
+   "why": "The record of today exists without you writing it."
+  }
+ ]
+}

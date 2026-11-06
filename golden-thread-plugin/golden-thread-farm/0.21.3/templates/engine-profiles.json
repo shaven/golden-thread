@@ -1,0 +1,71 @@
+{
+  "schema": 1,
+  "note": "What gt_farm_item.py needs to size a packet for a hosted engine. A figure is a number only where an official page stated it (verified: the date it was read; 2026-10-25 through a summarising fetch, so self-verified, not read from the raw page). null means unverified: a packet is not built from an unverified window or output cap. A profile with no `verified` date, or one older than stale_days, blocks a packet build with the reason. Keys are references, never values.",
+  "stale_days": 60,
+  "engines": {
+    "gemini": {
+      "provider": "google",
+      "plan": "unverified: the plan tier (Free, or Tier 1-3 by billing and spend) is the owner's account; the tier rules were read 2026-10-25 (Tier 1 billing linked; Tier 2 100 USD spend and 3 days; Tier 3 1000 USD and 30 days)",
+      "verified": "2026-10-25",
+      "source": "https://ai.google.dev/gemini-api/docs/pricing (page dated 2026-10-22) and the model pages",
+      "window": 1048576,
+      "max_output": 65536,
+      "models": ["gemini-2.5-flash-lite", "gemini-2.5-flash", "gemini-2.5-pro", "gemini-3.1-flash-lite", "gemini-3.1-pro-preview"],
+      "model_notes": "window and max_output hold for all five models. The gemini-2.5-* models are access-limited to users who used them before (2026-10-25): a risk for a new engine row. No default model is chosen here; the farm table row names one.",
+      "rate_limits": {"rpm": null, "tpm": null, "rpd": null, "status": "unverified (the per-model AI Studio page needs a login)"},
+      "key_ref": "file:~/.config/gt/gemini.key (mode 600; a reference only: move it into the secrets store when convenient)",
+      "row_template": {
+        "name": "gemini",
+        "enabled": false,
+        "enabled_when": "the owner supplies a key reference (key_file or the store) and a model",
+        "transport": "chat-completions",
+        "api": "openai-chat",
+        "provider": "google",
+        "base_url": "https://generativelanguage.googleapis.com/v1beta/openai",
+        "base_url_status": "unverified (not in the 2026-10-25 research; check before the live round trip)",
+        "model": null,
+        "key_file": null,
+        "local": "no"
+      }
+    },
+    "you.com": {
+      "provider": "you.com",
+      "plan": "unverified",
+      "verified": "2026-10-25",
+      "source": "https://you.com/docs (Research API, Inference Router), read 2026-10-25 through a summarising fetch",
+      "window": null,
+      "max_output": null,
+      "models": [],
+      "surfaces": {
+        "research_api": {
+          "kind": "not a chat API",
+          "input_limit_chars": 40000,
+          "usd_per_1k_calls": {"lite": 12, "standard": 50, "deep": 100, "exhaustive": 450, "frontier": 1200},
+          "other_usd_per_1k": {"web_search_calls": 5, "contents_pages": 1}
+        },
+        "inference_router": {
+          "kind": "OpenAI-compatible chat completions (POST /v1/chat/completions; also /v1/messages, GET /v1/models; one key)",
+          "models": null,
+          "limits": null,
+          "prices": null,
+          "status": "exists (verified 2026-10-25); its models, limits and prices are unverified"
+        }
+      },
+      "rate_limits": {"status": "unverified (unpublished; a 100-queries-a-day free tier seen only in a search snippet)"},
+      "key_ref": null,
+      "row_template": {
+        "name": "you-router",
+        "enabled": false,
+        "enabled_when": "the owner supplies a key reference and the router's base URL and a model are verified",
+        "transport": "chat-completions",
+        "api": "openai-chat",
+        "provider": "you.com",
+        "base_url": null,
+        "base_url_status": "unverified (the docs page gives the path /v1/chat/completions, not the host)",
+        "model": null,
+        "key_file": null,
+        "local": "no"
+      }
+    }
+  }
+}

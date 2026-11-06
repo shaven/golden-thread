@@ -1,0 +1,158 @@
+{
+  "schema": 1,
+  "template": "slack",
+  "service": "Slack",
+  "archetype": "mcp-oauth-preregistered",
+  "researched": "2026-10-14",
+  "researcher": "claude opus research run 2026-10-14",
+  "facts": [
+    {
+      "id": "f1",
+      "field": "connect.url",
+      "value": "https://mcp.slack.com/mcp",
+      "claim": "Slack's hosted MCP server is at https://mcp.slack.com/mcp over streamable HTTP; SSE is not supported.",
+      "source": "https://docs.slack.dev/ai/mcp-server/",
+      "retrieved": "2026-10-14",
+      "state": "self-verified",
+      "evidence": "Docs give the URL and 'We do not support SSE-based connections or Dynamic Client Registration at this time.'; the protected-resource document is served on the same host."
+    },
+    {
+      "id": "f2",
+      "field": "connect.client_registration",
+      "value": "preregistered",
+      "claim": "No dynamic client registration: the client is a Slack app you create (confidential OAuth with client id and secret).",
+      "source": "https://docs.slack.dev/ai/mcp-server/",
+      "retrieved": "2026-10-14",
+      "state": "self-verified",
+      "evidence": "Docs: confidential OAuth with the app's client_id and client_secret; the authorization-server document has no registration_endpoint and only client_secret_post."
+    },
+    {
+      "id": "f3",
+      "field": "network.hosts",
+      "value": [
+        "mcp.slack.com",
+        "slack.com"
+      ],
+      "claim": "Authorization runs at https://slack.com/oauth/v2_user/authorize with tokens from https://slack.com/api/oauth.v2.user.access; the issuer is https://mcp.slack.com.",
+      "source": "https://mcp.slack.com/.well-known/oauth-authorization-server",
+      "retrieved": "2026-10-14",
+      "state": "self-verified",
+      "evidence": "Discovery: issuer https://mcp.slack.com, authorization_endpoint slack.com/oauth/v2_user/authorize, token_endpoint slack.com/api/oauth.v2.user.access; docs page lists the same endpoints."
+    },
+    {
+      "id": "f4",
+      "field": "connect.scopes",
+      "value": [
+        "search:read.public",
+        "channels:read",
+        "channels:history",
+        "users:read",
+        "chat:write"
+      ],
+      "claim": "Per-tool user scopes: search:read.public (search), channels:read (list channels), channels:history (read channel), users:read (user info), chat:write (send or schedule a message); offline_access is not among the supported scopes.",
+      "source": "https://docs.slack.dev/ai/mcp-server/",
+      "retrieved": "2026-10-14",
+      "state": "self-verified",
+      "evidence": "Docs scope table; the protected-resource document scopes_supported lists these and no offline_access."
+    },
+    {
+      "id": "f5",
+      "claim": "Only directory-published or internal apps may use MCP; workspace admins approve and manage MCP client integrations.",
+      "source": "https://docs.slack.dev/ai/mcp-server/",
+      "retrieved": "2026-10-14",
+      "state": "unverified",
+      "evidence": "'Only directory-published apps or internal apps may use MCP.'"
+    },
+    {
+      "id": "f8",
+      "claim": "Documented writes: send message, schedule message, create conversation, add reaction, create/update canvas, upload file, create/update lists; no delete tool is documented.",
+      "source": "https://docs.slack.dev/ai/mcp-server/",
+      "retrieved": "2026-10-14",
+      "state": "unverified",
+      "evidence": "Tool list by category on the docs page."
+    },
+    {
+      "id": "f6",
+      "field": "connect.redirect_host",
+      "value": "localhost",
+      "claim": "Slack treats a localhost redirect (for example http://localhost:8080/auth) as a desktop redirect once the app has opted into PKCE; otherwise redirect URLs must be https.",
+      "source": "https://docs.slack.dev/authentication/using-pkce",
+      "retrieved": "2026-10-14",
+      "state": "unverified",
+      "evidence": "Localhost redirects are 'treated as desktop redirects if the app has opted into PKCE'; installing-with-oauth: 'The redirect_uri must use HTTPS.' Not yet tried against a live app."
+    },
+    {
+      "id": "f7",
+      "field": "connect.client_secret_required",
+      "value": true,
+      "claim": "The MCP authorization server advertises only client_secret_post for the token endpoint, so the client secret is sent.",
+      "source": "https://mcp.slack.com/.well-known/oauth-authorization-server",
+      "retrieved": "2026-10-14",
+      "state": "unverified",
+      "evidence": "token_endpoint_auth_methods_supported [client_secret_post]. Slack's PKCE page says a PKCE app is a public client and the exchange should not include client_secret: the two disagree. Not tried."
+    },
+    {
+      "id": "f9",
+      "claim": "Slack's protected-resource metadata names https://mcp.slack.com (the origin) for the /mcp endpoint; lotr 0.5.0 accepts a same-origin, whole-segment path prefix and sends that identifier as resource.",
+      "source": "https://mcp.slack.com/.well-known/oauth-protected-resource",
+      "retrieved": "2026-10-14",
+      "state": "self-verified",
+      "evidence": "Document: resource https://mcp.slack.com; lotr SPEC 0.5.0 discovery rule names this Slack case."
+    },
+    {
+      "id": "f10",
+      "claim": "PKCE is enabled in app settings (OAuth & Permissions; Published App Settings for directory apps) or by pkce_enabled: true under oauth_config; it is one-way; PKCE apps get 30-day refresh tokens and desktop redirects cannot request bot scopes. PKCE is generally available since March 2026.",
+      "source": "https://docs.slack.dev/authentication/using-pkce",
+      "retrieved": "2026-10-14",
+      "state": "self-verified",
+      "evidence": "PKCE page; Slack changelog 2026-03-30 announces PKCE general availability in app settings."
+    }
+  ],
+  "choices": [
+    {
+      "decision": "mcp-oauth-preregistered against the hosted server",
+      "because": "Slack's official MCP is hosted and needs your own app (no DCR).",
+      "facts": [
+        "f1",
+        "f2"
+      ]
+    },
+    {
+      "decision": "narrow default scopes: public search and read, users, chat:write",
+      "because": "Narrowest set that covers search, reading and posting; private and DM scopes are opt-in.",
+      "facts": [
+        "f4"
+      ]
+    },
+    {
+      "decision": "sending is write, delete/remove/archive/kick is consent",
+      "because": "Owner rule: posting a message is call_write, deleting is consent.",
+      "facts": [
+        "f8"
+      ]
+    },
+    {
+      "decision": "offline_access false",
+      "because": "Slack does not support that scope; asking for it would be an invalid scope.",
+      "facts": [
+        "f4"
+      ]
+    },
+    {
+      "decision": "redirect localhost:8977 with PKCE on, client secret sent",
+      "because": "Slack accepts http://localhost only as a PKCE desktop redirect; the MCP authorization server lists only client_secret_post.",
+      "facts": [
+        "f6",
+        "f7",
+        "f10"
+      ]
+    }
+  ],
+  "open": [
+    "Not yet tried against a live Slack app: the localhost redirect with PKCE on, and whether oauth.v2.user.access accepts (or refuses) client_secret from a PKCE-enabled public client. If the exchange fails with the secret, set client_secret_required false.",
+    "Slack's PKCE page does not say whether the redirect port must match exactly; the template registers a fixed port (8977) to be safe.",
+    "The PKCE page does not mention the MCP user flow (oauth.v2.user.access); that the desktop-redirect rule applies to it is assumed.",
+    "Exact tool names are not on Slack's page (third-party guides show send_message / search_public, with or without a slack_ prefix); the policy globs are written to match either.",
+    "Whether Slack's token endpoint returns a refresh token depends on the app's token-rotation setting; not verified."
+  ]
+}

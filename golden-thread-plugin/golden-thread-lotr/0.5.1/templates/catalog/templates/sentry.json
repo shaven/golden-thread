@@ -1,0 +1,36 @@
+{
+  "schema": 1,
+  "name": "sentry",
+  "archetype": "mcp-oauth",
+  "summary": "Sentry's hosted MCP server (issues, errors, traces, projects) with browser sign-in",
+  "kind": "mcp-oauth",
+  "docs": "https://mcp.sentry.dev/",
+  "connect": {
+    "url": "https://mcp.sentry.dev/mcp",
+    "scopes": [],
+    "offline_access": true,
+    "skip_audience_check": false,
+    "send_resource": true,
+    "redirect_host": "127.0.0.1",
+    "trust": "T1",
+    "identity": "your Sentry account",
+    "description": "Sentry (hosted MCP, sign-in)"
+  },
+  "network": {
+    "hosts": [
+      "mcp.sentry.dev"
+    ]
+  },
+  "notes": [
+    "Sign in with your Sentry account in the browser: lotr setup sentry. The server's discovery document advertises dynamic client registration; nothing to create first.",
+    "scopes is left empty: the server decides. Sentry's page names none; its discovery document lists org:read, project:write, team:write, event:write, alerts:write.",
+    "To limit the tools, the vendor documents org-scoped and project-scoped URLs: https://mcp.sentry.dev/mcp/{organizationSlug}[/{projectSlug}]. Edit connect.url (and keep the host) if you want that.",
+    "Alternative, local: npm package @sentry/mcp-server (stdio) with a Sentry user auth token and --host for self-hosted Sentry; self-hosted Sentry cannot use the hosted server.",
+    "smoke 'whoami' is named on the vendor's llms.txt; the docs do not state its arguments, so confirm it takes none.",
+    "The mcp-oauth kind takes no connect.policy; the gateway classes risky tool names (delete, send) as consent by itself."
+  ],
+  "smoke": {
+    "op": "whoami",
+    "args": {}
+  }
+}

@@ -1,0 +1,64 @@
+{
+  "schema": 1,
+  "name": "workflow",
+  "plugin": "gt-workflow",
+  "version": "0.1.1",
+  "requires_gt": ">=0.22.0,<0.23.0",
+  "summary": "Workflows you own: save a chain of steps as a workflow, run it by name (/gt-workflow NAME), schedule the unattended ones; steps run gt tools, call connected services through LOTR, send routine work to a local engine, or wait for you or Claude",
+  "default": "off",
+  "skills": [
+    "gt-workflow"
+  ],
+  "scripts": [
+    "gt_workflow.py"
+  ],
+  "templates": [
+    "workflows"
+  ],
+  "hooks": [
+    {
+      "event": "SessionStart",
+      "script": "gt_workflow.py",
+      "args": [
+        "attention",
+        "--hook"
+      ],
+      "kind": "reporter"
+    }
+  ],
+  "hookdir_scripts": [
+    "gt_workflow.py"
+  ],
+  "settings": [],
+  "requires_modules": [
+    {
+      "name": "farm",
+      "soft": true
+    },
+    {
+      "name": "lotr",
+      "soft": true
+    }
+  ],
+  "replaces_core": [],
+  "demo": "demo/act.md",
+  "lockdown": {
+    "trust-local": {
+      "allow": [
+        "Bash(python3 {hooks}/gt_workflow.py list*)",
+        "Bash(python3 {hooks}/gt_workflow.py show*)",
+        "Bash(python3 {hooks}/gt_workflow.py check*)"
+      ],
+      "deny": []
+    },
+    "trust-network": {
+      "allow": [
+        "Bash(python3 {hooks}/gt_workflow.py new *)",
+        "Bash(python3 {hooks}/gt_workflow.py copy *)",
+        "Bash(python3 {hooks}/gt_workflow.py edit *)",
+        "Bash(python3 {hooks}/gt_workflow.py remove *)"
+      ],
+      "deny": []
+    }
+  }
+}

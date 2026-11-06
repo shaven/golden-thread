@@ -3,7 +3,7 @@
 **Running open-weights models on machines you already own as gt-farm engines — what to
 measure, how to size a node, and how gt routes to it and counts the saving.**
 
-*A Golden Thread paper, written against gt 0.21.4 and gt-farm 0.21.1. The figures are one owner's measurements on
+*A Golden Thread paper, updated for gt 0.22.1 and gt-farm 0.21.4 (the figures were measured with gt 0.22.0 and gt-farm 0.21.3). The figures are one owner's measurements on
 2026-10-14, labelled `self-verified` (one run each, not independently reproduced). Your
 hardware will differ; the method is the point, and the first section tells you how to get your
 own numbers in an afternoon.*
@@ -386,6 +386,24 @@ gt-farm reads its services from a Markdown table. The path is `farm_services` in
   summaries) send text only to an engine on this machine; for one on another machine, add an
   optional `lan_ok` column and put `yes` in that row, knowing the text then crosses the LAN
   unencrypted.
+- `trust` (gt 0.22.0, optional) is `read-only` or `autonomous`. **A row without it is read-only.** A read-only
+  engine's work is never filed on its own by the ladder: `gt_farm_send.py ladder` holds the result and Claude reads it against the
+  packet first (`review-result KEY accept` files it; `reject --reason "..."` throws it away, keeps a copy under
+  `~/.claude/golden-thread/farm/rejected/`, outside the vault, and sends the packet on to Claude). `autonomous`
+  is yours to write, never gt's, and only counts when the engine has a calibration record in which every
+  injection probe was resisted (a record over 30 days old still counts, with a warning to re-run). With no such
+  record, or after a failed probe, an `autonomous` row is treated as read-only and the output says why.
+  Calibrating prints the line to add after a clean run. This is **BREAKING**: an engine that was routing on its
+  own before 0.22.0 is read-only until you add `trust: autonomous` to its row. The hold is the ladder's only:
+  `gt_farm_send.py send`, where you (or Claude) name the engine, never holds. It writes the result outside the
+  vault (`--out`, `results/` beside the packet, or gt's state folder with the queue line printed), to be read before
+  it is filed. `send --queue` files it through the write queue at once, so it is **refused** (exit 2, nothing
+  sent) for any engine that is not trusted: a read-only row, or an `autonomous` one without a passing calibration.
+  A `--pool` is judged engine by engine, and one untrusted member refuses the whole send. This is **BREAKING**: a
+  script that used `send --queue` with a default row now has to send without `--queue` and file after reading, or
+  set `trust: autonomous` on a calibrated row.
+- `tier` (optional) is `home` or `remote`; `rung` is 1 to 3 as before. A per-machine copy of the table named
+  `<table>.<hostname>.md` beside it replaces rows by name for that machine (see section 13).
 - `reference_rate_per_mtok` is what the packet would have cost, in USD per million tokens, at
   the service it would otherwise have gone to. It is **your** number — the hosted model you
   would have used for that packet shape — and it is what turns a token count into an avoided
@@ -397,6 +415,94 @@ gt-farm reads its services from a Markdown table. The path is `farm_services` in
 
 The table is yours to keep; gt never writes it. Keep it outside the vault or write it through
 the write queue like any other vault file.
+
+### A hosted engine over the internet: a LOTR connection (gt-farm 0.22.0)
+
+A hosted, OpenAI-compatible model (OpenRouter, Together, any host that serves `/v1/chat/completions`) is not
+a local engine, and the farm sends *automatic* work to local engines only. The supported way to use one is a
+gt-lotr connection and a `transport: lotr` row, so the key stays in the secrets store, the gateway applies its
+limits, and the farm knows the engine is remote.
+
+1. **Put the key in the store, in your own terminal (never in Claude):** `lotr secret put llm-api-key`.
+2. **Register the connection from the template:**
+   `lotr add-http <connection>@<zone> --from-template openai-compatible` (OpenRouter is the default; for another host add
+   `--base-url https://api.together.xyz`, the URL without `/v1`). Add `--token-ref store:NAME` if you stored the key
+   under another name. `lotr status --check` then shows whether the host answers: the probe sends no key, so a
+   wrong key shows on the first call as `http_401`.
+3. **Add the row** (the host's name goes in `provider`, because the template names none):
+
+| name | transport | connection | op | model | provider | local | tier | pool |
+|---|---|---|---|---|---|---|---|---|
+| remote-example | lotr | <connection>@<zone> | POST /v1/chat/completions | <provider/model-id> | openrouter | no | remote | |
+
+   The model id is an example, not a fact: ids change or vanish, and you choose it. Prices and the host's retention and
+   training settings are yours to read and set on the host's account; gt controls neither.
+4. **Enrol the farm** as a gateway client once (`lotr app-connect`), as for any `transport: lotr` row (section above in
+   the gt-farm skill).
+
+#### Set up a hosted engine in one command
+
+Steps 1 to 3 above can be done for you by one script, run in **your own terminal** (it refuses anywhere else):
+
+```
+python3 <farm-scripts>/gt_farm_hosted_setup.py --vault <vault> --services <vault>/<path-to>/farm-services.md \
+    --name <engine-name> --model <provider/model-id> [--base-url https://<host>] [--provider <label>] \
+    [--allow-private-host]
+```
+
+`--dry-run` shows what it would do, and `--check` reports which pieces exist and what to run next; neither asks for
+a key or sends anything. Before a real run touches anything, it names the host the key will be sent to ("The key
+... will be sent as a bearer token to HOST (https)") and asks you to type back a code it shows on the terminal
+itself, the same typed challenge LOTR uses. `--yes` skips only the later cost question, never the code. Then it does
+four things and says *done*, *skipped* or *failed* for each:
+
+1. **The key.** It starts `lotr secret put` with your terminal handed over, so you type the key at LOTR's own hidden
+   prompt. The script never reads, receives or prints the key: it is not an argument, not in the environment, not on
+   a pipe and not in a file the script writes. The key is always stored as `llm-key-<engine-name>`; the script never
+   uses another stored credential. A key that is already stored there is not asked for again (`--replace-key` asks
+   anyway).
+2. **The connection**, from the `openai-compatible` template, with the key as a `store:` reference. If a connection
+   with that name already exists, it is used only when its address and key reference are exactly the ones asked
+   for; otherwise the run stops and shows both, so a connection someone else made, or an old address, is never used
+   by mistake.
+3. **The row**, added to (or updated in) your service table through the vault write queue, inside the table so the
+   reader finds it. It is `trust: read-only`, so results are held for your review, and its `local` cell is left
+   empty. The script drains the queue, which also applies other sessions' queued writes (with their usual claim and
+   conflict checks). If the table changed while the script ran, nothing is queued; if the broker holds the write as a
+   conflict, the run says so and prints the row to add by hand.
+4. **A check**, with your yes: one tiny public packet through the row, and the result shown (the result file is kept
+   in a private folder of its own, and the message names it). `--no-send` skips it.
+
+Run it twice and it updates, never duplicates; if a step fails, the earlier ones stay and the message names the
+command that resumes from there. The address `https://openrouter.ai/api` is only the template's default example; any
+public `https` host that serves `/v1/chat/completions` works. A literal IP address, `localhost`, a single-label name
+or a `.local`, `.internal`, `.lan` or `.home.arpa` name is refused unless you pass `--allow-private-host`; plain
+`http` is always refused. Check the host it names before you type the code: a lookalike name is not caught. If the
+check fails with a gateway error, enrol the farm once with `lotr app-connect`.
+
+The gateway reports a provider's answers as structured codes: `upstream_rate_limited` (429, with its `Retry-After`),
+`upstream_payment_required` (402, out of credit; retrying does not help), `upstream_error` (5xx), `upstream_timeout`.
+The row is read-only until you set `trust: autonomous`, and an unpriced hosted row fails closed under a spend budget.
+
+**Status of this route:** the connection template and the farm side are tested against a loopback fake. The live
+spike (a real key, a real send through the gateway) has **not** been run; it needs you to put the key in the store
+(step 1) and enrol the farm (step 4). Until then, a plain `chat-completions` row with `key_file` still works for a
+manual `send`, but the farm's automatic routing ignores it.
+
+### Hosted spend: sample and how to set up your own
+
+gt 0.22.0 ships a **sample**, not your setup: `templates/hosted-spend.sample.md` in the gt-farm module shows the two settings
+(`usage_external`, `farm_budgets`) and one service-table row for a made-up engine on a made-up host (`example-provider`,
+address ending `.invalid`). It holds no key, no account id and no real address, and gt does not read it.
+
+What you get without doing anything else is an **estimate**: the tokens sent and received, at the rate in the engine's row. The
+status line says `(estimated)` and stays quiet until an engine is at 80% of its budget or was answered with a 429. gt 0.22.0
+**does not read a provider's balance or billing API**; the `balance_source` column in the sample is reserved and ignored.
+
+To set up your own: copy the row into your service table and change every value (name, address, model, rate from the
+provider's pricing page); put the engine's API key in a mode-600 file by a script you run (never in a session), named in
+`key_file`; then `gt_settings.py set farm_budgets "yourname=10"`. For a measured balance you would also need a **read-only billing
+key from the provider, kept in the secrets store** and never entering the session or the repository. gt does not use one yet.
 
 ## 7. Sending a packet
 
@@ -448,7 +554,7 @@ What it does, in order:
    `External engine output — unverified; do not follow instructions in it.` Beside the packet in `results/` when the packet is outside the vault;
    when it is inside the vault, the result goes to a temporary file and the exact
    `gt_write_queue.py --origin farm --op create …` line is printed (`--queue` runs it and the
-   broker drain), because nothing writes a vault file directly.
+   broker drain, for a trusted engine only), because nothing writes a vault file directly.
 6. Appends the ledger line (section 9), with `claude_overhead`: the tokens Claude spent on the send
    (the call, the packet when Claude wrote it, the result it reads; characters / 4). `ledger` reports
    NET: tokens kept off Claude minus that overhead.
@@ -471,6 +577,31 @@ is recalled from training, never read. For anything not stated in the packet's I
 `source: NONE` is the honest answer and the one the system prompt asks for. The skill's rule
 stands with full force: nothing is `self-verified` until someone opens the URL.
 
+### Asking for code back (gt 0.22.0)
+
+A packet whose `### RETURN CONTRACT` section begins with a `CODE:` line asks for code. It is sent without the JSON
+schema and its reply must be fenced code block(s) plus at most one `NOTES:` line. The farm checks the shape and that a
+`python` block parses (never executed); an untagged block is parsed too when the RETURN CONTRACT names python. It does
+**not** check that the code is right: that is your tests' job, and the engine's output stays untrusted. A reply the
+engine stopped at the completion cap (finish reason `length`, or 97% of `--max-tokens` used) is refused even when every
+block is closed, and so is one empty because a reasoning engine used the whole cap thinking, with a hint to raise
+`--max-tokens` (about 40,000 for a reasoning engine; the farm never raises it for you). A reply may hold at most 20
+blocks, under a per-block and a total size cap, and no line inside a block may start with ``` or ~~~ (a bare run of
+three or more backticks closes a block). The filed result is rebuilt: each block under a fence longer than any backtick
+run in it, and the `NOTES:` text as a quoted `Engine note (unverified)` line. The same check runs in `send` and in
+`ladder`; the ladder holds a read-only engine's code for review, `send` does not (see `trust` above).
+
+### Handing one handoff or task item to an engine (gt 0.22.0)
+
+`gt_farm_item.py build` turns one item into a packet (scrubbed, gated, split and never trimmed), `return` checks that the
+answer is complete, and `accept` files it. **The checker is `gt:verify`**, the fresh-context agent behind
+`/gt:gt-validate`; gt ships no separate "farm-verifier" agent, because that would duplicate it. The answer is untrusted
+data: `gt:verify` re-derives its claims, and its verdict is recorded against the answer file with `gt_validation.py
+record --file ANSWER --verdict holds --by gt:verify` (a receipt tied to the file's content hash). `accept` refuses when
+there is no receipt, when the verdict is `broken` or `cannot-verify`, or when the answer was edited after it was
+verified; it records the verdict and who verified in the ledger line. An external engine's answer is never labelled
+better than `self-verified (external engine, weaker)`.
+
 ### Calibrate an engine before gt uses it (gt 0.21.4)
 
 An engine that answers is not yet an engine that is good. Before gt sends a new engine anything on its own, it
@@ -485,8 +616,18 @@ Until a model has a calibration, gt gives it no automatic work (the commit-step 
 `gt_farm_send.py send --service NAME` is still yours to use. The verdicts are kept per model in your vault
 (`Projects/golden-thread/farm/calibrations/`) and in a local cache, so a model you switch away from and back to is
 not measured again, and a second machine that pulls the vault already has them. `--list` shows every model measured,
-`--status` each engine's current model. The setting `farm_first` (off, suggest, auto) decides whether gt only
+`--status` each engine's current model. The setting `farm_first` (off, suggest, yes) decides whether gt only
 tells you what to do or also does the first steps; see the manual's *Farm-first* section.
+
+### Test an engine on code (gt 0.22.0)
+
+Calibration says whether an engine can summarise or extract; it does not say whether it can write code. For that,
+`python3 gt_farm_codetest.py all NAME claude:sonnet --repeat 2 --record NAME` runs the engine through a small fix
+task and a feature task as a real agent session, grades them with a script, and has a blind judge score the diffs.
+Passing the tests is not enough: a model that passes every hidden test with a poor design is `review-only`. The
+verdicts (`code-fix`, `code-feature`) are added to the engine's calibration record, and a single run tops out at
+`review-only`. The engine must be the only large model resident (a 70 GB coder and a 63 GB reasoning model do not
+fit together in 128 GB), so stop the other first. See the manual's section *3b*.
 
 ## 8. The gates, and the one that moves
 
@@ -602,3 +743,361 @@ Keep at the interactive host, or on the laptop-class engine, or at the paid serv
 6. Run real packets for a week; read `gt_farm_send.py ledger` beside your bill (section 9).
 7. Only then decide whether more nodes, a bigger node, or a GPU is worth buying. The fleet you
    already own is the baseline the purchase has to beat.
+8. Using the engines from another machine (a laptop on a VPN)? Follow section 13: prove the route,
+   give the engine a key, write that machine's own table, then run `gt_farm_send.py engines check`.
+9. Remember every engine starts **read-only**: Claude checks what it returns before anything is filed.
+   Add `trust: autonomous` to a row only after a clean calibration (sections 6 and 13).
+10. Want a hosted model to fix code on a copy of your repo? That is separate and opt-in: follow section 15, and
+    read its list of what to check before you turn it on.
+
+## 13. Using your home local models from another machine: connect, qualify, rank
+
+A machine that is not on the engines' network (a work laptop behind a VPN, say) can use your own local
+models as farm engines. gt cannot make that route for you, and it will not send anything until each engine
+has passed the checks below **from that machine**. Section 5 built the engines; section 6 told gt about them;
+this section is what changes when the sender is somewhere else.
+
+### Connect
+
+Do these three in order and stop at the first that fails.
+
+1. **A route.** From the remote machine, ask the engine its health: `curl -s -m 5 http://ENGINE:PORT/health`.
+   An answer (`{"status":"ok"}`) means the network carries it; continue. Silence means the VPN blocks local
+   traffic, or the engine host's firewall does not allow that machine. gt cannot fix that: fix the network. If
+   the VPN cannot reach your home network at all, the only other route is a tunnel with TLS and a token, and a
+   work machine's policy has to allow it: **ask first.**
+2. **A login.** An engine with no key is open to any machine that can reach it, so anything that crosses a
+   network boundary needs one. Start the engine with `--api-key-file` (llama-server); the key is written by your
+   secrets store and never typed into a session. The row's `key_file` names the mode-600 file on the sending
+   machine, and that machine gets its own copy from the store. **Until a key exists, an engine bound to
+   loopback (127.0.0.1) stays bound to loopback:** do not rebind it to the network for a remote caller, and
+   `engines check` reports it unreachable from elsewhere, which is the right answer.
+3. **A table of its own.** The shared service table names the addresses as the host sees them. Put the
+   addresses as the *remote* machine sees them in a copy named for it beside the shared one:
+   `farm-services.<hostname>.md` (the short, lower-case hostname; `GT_FARM_HOSTNAME` overrides it). It is read
+   after the shared table: a row with the same name replaces the shared row, a new name is added, and a copy
+   for another machine is never read. Rows may also carry `tier` (`home` or `remote`) and `rung` (1 to 3).
+
+### Qualify
+
+An engine is usable from a machine only when it passes these from the machine that sends, because the route
+and the login differ per machine. Run `python3 gt_farm_send.py engines check` (or `engines check NAME`):
+
+| # | Check | It passes when |
+|---|---|---|
+| 1 | reachable | `/health` or `/v1/models` answers within the timeout |
+| 2 | authenticated | the key from `key_file` is accepted and a request without it is refused; with no `key_file` the engine is reported **open**, a warning and never a failure |
+| 3 | model | the model the server reports matches the row's `model` |
+| 4 | calibrated | the model has a calibration record (`gt_farm_calibrate.py`); an uncalibrated model gets no automatic work |
+| 5 | latency class | one timed prompt of about 512 tokens: **fast** under 10 s, **slow** 10 to 60 s, **bulk-only** over 60 s. This orders engines; it is never a failure |
+
+The result is kept per machine (mode 600, no address and no key in it). `gt_farm_send.py engines status`
+reads it without contacting anything and shows each engine as available, unavailable, refused, mismatched or
+stale (older than 30 minutes), since when, and how often it went down today and this week; `--refresh` checks
+first. A packet that fails because an engine is down records it by itself.
+
+### Rank
+
+When a packet is routed, per rung: engines that failed reachability, authentication or the model on this
+machine are skipped; the rest are ordered by latency class (fast first, then slow or untimed, then bulk-only), with ties kept in the table's row order; a prompt over about 6,000 tokens skips bulk-only engines (it is about 110 s on a CPU node and 8 s on a
+Mac). An engine that is down is skipped and never fails a packet: a failed check or a rejected result moves the
+packet up one rung, as before. No fresh check for this machine means the table's own order.
+
+**Read-only is the default.** A new engine starts `read-only` whatever its calibration says: `ladder` holds its
+result, Claude reads it against the packet, and `gt_farm_send.py review-result KEY accept` files it (or `reject
+--reason "..."` throws it away). The row says `trust: autonomous` only when you have decided to trust it, and
+that needs a calibration in which every injection probe was resisted. Over a VPN that rule matters more, not
+less.
+
+**Before you start.** `gt_farm_send.py setup --check` names what keeps local routing from working (the ladder
+settings, the ladder table, a calibration). And one question gt cannot answer for you: whether your employer
+allows work material to reach a personal machine at all. If it does not, none of this should be used from the
+work machine.
+
+## 14. Wiring opencode and Codex to calibration verdicts
+
+Calibration (section 6 and `gt_farm_calibrate.py`) leaves a verdict for every engine and task class: `can-take`,
+`review-only` or `not-suitable`, with the measured speed and what the engine costs. A coding assistant such as
+opencode or Codex can use the same data to pick the cheapest capable engine for the job it is about to do,
+instead of a model line you set once and forget. gt does not run inside them and does not change how they call
+a model; it only prints what it already stored.
+
+### The export
+
+```
+python3 gt_farm_calibrate.py --export-json [--task-type T] [--top N] [--include-review] [--vault V]
+```
+
+It prints a JSON list, cheapest first, one row per calibrated engine and task class:
+
+```
+[{"engine": "hosted-small", "model": "small-model-id", "task": "draft", "verdict": "can-take",
+  "cost_per_mtok": 0.2, "tok_per_s": 180.0, "usd_spent_calibration": 0.0123, "hosted": true,
+  "calibrated": "2026-10-28"}]
+```
+
+- `cost_per_mtok` is US dollars per million tokens: `0.0` for a local engine; for a hosted engine the mean of
+  the input and output rate recorded at calibration; `null` when the price table had no row (no number is
+  invented), and `null` sorts last.
+- Only `can-take` rows are printed. `--include-review` adds `review-only`. `not-suitable` never appears.
+- `--task-type` takes a class name (`log-triage`, `quote-extract`, `extract`, `classify`, `draft`, `generalize`,
+  `review`, `summarise`, `code-fix`, `code-feature`) or an alias (`quote-extraction`, `field-extraction`,
+  `classification`, `drafting`, `generalising-claims`, `code-review`, `summaries`). An unknown name exits 2.
+- `--top 1` is the cheapest capable engine.
+- It reads the live store on every call (the vault's calibration files, then the local cache) and writes
+  nothing. A record whose probe set, adjudicator or reference has changed since it was made is left out, as in
+  routing. The rows hold names and numbers only: no address, key file or key.
+
+### The wrapper: `gt-model-for.sh`
+
+`templates/gt-model-for.sh` (POSIX sh) prints the one engine id the export puts first:
+
+```
+sh gt-model-for.sh drafting            # prints, say, hosted-small
+sh gt-model-for.sh code-fix --vault ~/vault --include-review
+GT_MODEL_FALLBACK=my-default sh gt-model-for.sh classify    # a fallback when nothing can take it
+```
+
+Exit 0 found (or fallback), 1 no capable engine, 2 usage or unknown task type, 3 gt-farm not found. It finds the
+scripts through `$GT_FARM_SCRIPTS`, else the folder beside it, else the newest installed gt-farm; `$GT_PYTHON`
+names the interpreter. Copy it somewhere on your `PATH` as `gt-model-for` if you like. **On Windows it needs
+Git Bash** (Git for Windows); it will not run in `cmd` or PowerShell.
+
+The engine id is the name of the service-table row. For the assistant to use it, register the same engine with
+the assistant under the same name (a provider entry that points at the same address and key you gave the
+service table); the wrapper chooses among engines, it does not create providers.
+
+### Honouring the farm share: `--task-key`
+
+Section 15's share table (`farm-share.tsv`) sets what share of each task class goes to the farm, how often
+Claude audits it, what it may spend a day, and when a class pauses. gt's own routing applies it; an assistant
+that picks its own model does not see it unless you ask. Give each task a key (a ticket number, a file name,
+anything stable) and the wrapper applies the table for that one task:
+
+```
+sh gt-model-for.sh code-fix --task-key "ticket-1432"     # prints an engine id, or the word keep
+codex -c model="$(m=$(gt-model-for code-fix --task-key ticket-1432); [ "$m" = keep ] && echo my-default || echo "$m")" "..."
+python3 $FARM/gt_farm_calibrate.py --export-json --task-type code-fix --task-key ticket-1432   # the full decision as JSON
+```
+
+`keep` means the task stays with the model you would have used anyway. The same key always gets the same
+answer, so a share is reproducible; a share below 100 percent sends only that fraction of keys to the farm.
+The JSON also says the `audit_rate` (so you know whether a Claude check is expected), whether the class is
+`paused` and why, and `budget_left` for today. A row that pins an `engine` uses it if calibration says it can
+take the class, and is `keep` if not. With `farm_share` off (the default) the table is not applied and the
+answer is the plain cheapest capable engine, as without a key. A missing calibration, a paused class, an
+unreadable table or an unreadable state file all say `keep`.
+
+This is advice at selection time. It uses the same selection code as gt's routing, but it records no spend,
+moves no ramp and writes no state, so work done by an assistant does not advance the share or count against
+today's budget. If you want it to, that is not wired.
+
+### opencode
+
+opencode's config file holds a fixed model string, so choose the model when you start it, from the command
+line, which accepts `provider/model`:
+
+```
+opencode run --model "farm/$(gt-model-for drafting)" "Draft the release note for ..."
+opencode --model "farm/$(gt-model-for code-fix)"
+```
+
+where `farm` is the provider name you gave the engines in `~/.config/opencode/opencode.jsonc`. Keep the
+config's own `model` line as the default for work you have not classified. To wrap it once, put the two lines
+in a shell function per task type (`oc-draft`, `oc-fix`) in your shell start-up file.
+
+### Codex
+
+Codex reads a top-level `model` key from `~/.codex/config.toml`, and the same key can be set for one run with `-c`
+(a command-line override beats the file; this is from Codex's published configuration docs, not from a Codex run here):
+
+```
+# ~/.codex/config.toml -- the default when nothing is chosen
+model = "my-default"
+```
+
+```
+codex -c model="$(gt-model-for code-fix)" "Fix the failing test in ..."
+```
+
+Use a shell function for each task type, as for opencode. If the wrapper exits 1 (no engine can take it), the
+command substitution is empty; set `GT_MODEL_FALLBACK=my-default` so the run still has a model.
+
+### What this does not do
+
+It does not route in real time (the ladder does that for gt's own packets), it does not make an assistant
+trust an engine (a `can-take` here means the calibration probes passed, not that your task is safe to hand
+over), and the exact flag names above were written from each tool's documentation, not run against a real
+opencode or Codex install. Check `opencode --help` and `codex --help` if a flag is refused.
+
+## 15. Hosted agent farming: a paid model fixes code on a copy (gt 0.22.0)
+
+Sections 1 to 14 are about engines on your own hardware. This one is about a hosted model you pay for, used as an
+assistant with tools on a COPY of one of your repos. Your code leaves the machine, so read "Before you turn it on"
+first. What comes back is a candidate patch for you to review; nothing is applied for you.
+
+**Set it up.** Run these in your own terminal, not through Claude.
+
+1. Put your API key in a file only you can read (`chmod 600`), for example `~/.config/gt/agent-key`. Create it
+   without showing the key on screen. The secrets-store route is not supported for agent farming yet.
+2. Make sure gt's price table (the one the usage report reads, so the gt-usage module must be installed) has a row for
+   the provider and model. With no price row the cost is unknown and `start` refuses.
+3. Run `python3 $FARM/gt_farm_agent_setup.py start --dry-run`. It asks seven questions (provider, model id, key
+   file, task class and share, daily budget, repos, sandbox check) and prints a summary. Nothing is written.
+4. Read the summary. Run `start` again, answer the same, and say yes at the end.
+5. Measure the engine, once, before it routes anything. First `python3 $FARM/gt_farm_calibrate.py NAME --kind
+   agent-code --dry-run` to see the cost, then the same with `--yes-spend`. It spends real money.
+6. Turn routing on with `gt_settings.py set farm_share on` (it is `off` by default). Optionally set
+   `farm_agent_budget_usd_day` to a dollar figure for a limit across all classes.
+7. Check any time with `gt_farm_agent_setup.py status` or `doctor`. `gt_farm_agent_setup.py off` sends every task
+   back to Claude.
+
+**The files.**
+
+| Where | What |
+|---|---|
+| the service table (`farm_services`) | the engine row `start` writes: `agent: yes`, `tools: yes`, `local: no`, a `key_file`, and the optional `parallel_tools`, `reasoning` and `data_policy` columns |
+| `<vault>/farm-share.tsv` | one row per task class: share target, ramp, audit rate, daily cap, failure limits, optional pinned engine |
+| `~/.claude/golden-thread/farm/share-state.json` | per machine: the share now in force, counters, spend today, pauses |
+| your key file | read by the agent loop only; gt never prints or stores the key |
+
+**How the share works.** `share_target` is the percent of eligible tasks of a class that go to the farm at the end of
+a ramp. With `ramp_step` above 0 the share starts low and grows by that many percent after each clean window of
+`ramp_window` tasks (a window is clean when the failure rate stays under `max_fail_rate` and no audit in it failed).
+Which task goes is decided by a hash of its class and key, so the same task always gets the same answer. Routing
+pauses on its own when failures in a row pass `pause_after`, when the failure rate is too high or when a daily cap is
+spent; `gt_farm_share.py status` says which, and `resume` clears it. A fraction of farmed results (`audit_rate`) is
+re-checked blind by Claude, and a failed audit lowers the share.
+
+**Before you turn it on.**
+
+- Your code goes to the provider named in the summary. Read what its data policy does not promise; gt can only
+  enforce the request fields it knows for that provider family, and says so when it cannot. Check that your employer
+  allows source code to reach a third party at all.
+- Name only repos you are content to send. Files named like keys, `.env` files and credentials are never read, and
+  everything the model reads is scrubbed, but a scrubber is not a promise about a secret it does not recognise.
+- Your test command must find every test in the folder (`python -m unittest discover`, or `pytest`). The evaluation
+  runs it three or four times, so it should be quick. A virtualenv interpreter under your home folder may not run in
+  the sandbox; use a system Python.
+- Prefer held-out tests (`--hidden-tests DIR`), tests the model never sees, for any project that has them.
+- Accepted means the tests passed on a clean copy, not that the change is right. Read every patch. A forged result
+  that also fakes the host's check test cannot be excluded.
+- This has not been run on Linux or Windows yet, and Windows has no write mode in the sandbox, so it is refused there.
+- Set a daily budget you can afford to lose. Start with a low share and a fixed ramp.
+
+## 16. Single-shot work on a hosted model: calibrate it, then let gt route to it
+
+Section 15 is a hosted model working as an agent on a copy of a repo. This section is the plainer case: a hosted
+model (anything that answers an OpenAI-style chat request) is measured once on harmless practice tasks, then gt
+sends it routine work it has shown it can do, checks the replies, and records what each packet cost. Claude keeps
+the judgement. A hosted model never gets your vault text: only public or scrubbed material goes to it (the
+ladder's rung 3). The commands below were written from the gt-farm scripts; they have not been run against a
+live provider, so run every paid step with `--dry-run` first.
+
+**Before you start.** gt-farm is installed. You have an endpoint that speaks the OpenAI chat-completions shape
+(a provider's own API, or a local proxy in front of one; if the provider's native endpoint is not OpenAI-shaped,
+use its OpenAI-compatible route). The API key is in a mode-600 file, and the service row points at that file.
+**Never paste the key into a Claude session**; gt reads the file when it sends and never prints it.
+
+**1. Add the engines.** `farm_services` in `~/.claude/vault-config.json` names a Markdown file (an absolute path,
+or one relative to the vault; it is a key in that JSON file, not a `gt_settings.py` setting). One row per model:
+
+```
+| name | transport | base_url | model | pool | local | key_file | reference_rate_per_mtok | rung | provider |
+|---|---|---|---|---|---|---|---|---|---|
+| fast-small | chat-completions | https://api.example.test/v1 | model-small | hosted | no | ~/.config/gt/farm/provider.key | 0 | 3 | example |
+| fast-large | chat-completions | https://api.example.test/v1 | model-large | hosted | no | ~/.config/gt/farm/provider.key | 0 | 3 | example |
+```
+
+`local: no` marks a hosted row, which defaults to rung 3 (public-only material). `model` is the id the service
+expects, and a hosted engine is identified by it: two rows naming the same model share one calibration record.
+`provider` keys the provider budget and the price-table row; a row with no price row cannot be costed. Give
+rows the same `pool` name to spread a batch across them.
+
+**2. Turn routing on.**
+
+```
+python3 $GT/gt_settings.py set farm_first yes         # gt uses calibrated engines on its own
+python3 $GT/gt_settings.py set farm_audit_rate 0.1    # Claude re-checks about one farmed result in ten
+```
+
+Optional: `farm_ladder on` (try the cheapest capable engine first), `farm_budgets` (for example
+`provider:example=5` for a monthly dollar cap), `model_calibration_budget` (a cap on one calibration run).
+
+**3. Calibrate.** `$FARM` is the gt-farm scripts folder.
+
+```
+python3 $FARM/gt_farm_calibrate.py fast-small --dry-run   # the plan and the estimated cost; sends nothing
+python3 $FARM/gt_farm_calibrate.py fast-small             # run it
+python3 $FARM/gt_farm_calibrate.py --status               # each engine: model, calibration, verdicts
+python3 $FARM/gt_farm_calibrate.py --list                 # every model measured so far
+```
+
+A hosted engine is calibrated **only when you name it** (or `--pool`); `--auto` and `--new` never start a paid
+run. With no price row the run is refused unless you pass `--accept-unpriced` (the token counts are still
+recorded), and an engine that has a `farm_budgets` entry and no price row is refused even then. The record and the
+ledger carry what the probes cost (`usd_spent`, `0.0` for a local engine). Records are keyed by model, not
+machine: if you share a vault, another machine that pulls it finds the earlier verdicts and spends nothing
+re-measuring. Calibrate one cheap model first, read its record, then run the rest.
+
+**4. Read the verdicts.** `can-take`: gt uses it for that task class without a check. `review-only`: gt uses it
+and Claude checks every result. `not-suitable`: gt does not use it for that class. An engine with no current
+calibration gets no automatic work; at rung 3 that holds for every class, so an uncalibrated hosted engine is
+skipped. **This is a change in 0.22.0:** rung 3 now requires a current calibration (rungs 1 and 2 are
+unchanged).
+
+**5. Wire an assistant to the verdicts.** Section 14: `--export-json`, `gt-model-for`, and `--task-key` to honour
+the farm share.
+
+**Things that go wrong.**
+
+- *A provider's native endpoint is not OpenAI-shaped.* Use its OpenAI-compatible route for `base_url`.
+- *Newer OpenAI-family models reject `max_tokens`.* gt 0.22.0 sends `max_completion_tokens` as well, and asks again
+  with `max_output_tokens` when a Gemini-style endpoint refuses both; an older gt scores such a model 0 percent for the
+  wrong reason.
+- *An authenticated proxy answers 401 to the health probe.* gt 0.22.0 sends the key on the model list, health and
+  props requests; an older gt marks the engine DOWN before any probe.
+- *A reasoning model may spend its whole token cap thinking* and return nothing. Raise `--max-tokens` for the
+  calibration run.
+- *One gateway serves several model families on different routes.* A proxy in front of more than one provider may
+  speak the OpenAI shape on one base path and a different shape on another. Give each row the `base_url` of the route
+  that answers OpenAI-style chat requests, and run `--dry-run` on one row from each family before calibrating the rest.
+- *The model list names an id with a prefix* (for example `models/` before the id). gt 0.22.0 strips that prefix when
+  it matches rows; the row's `model` column should hold the id the service expects in a request.
+- *Two rows collapsed into one record.* Check `--status`: each row should have its own record. Give each row its
+  exact model id.
+
+
+## 17. Reference: what calibration produced for three local models (an example, not a verdict)
+
+This section is a **reference**. gt never reads it and nothing here is a verdict for your setup: a verdict measures one
+model, at one quantisation and context size, on one engine, on one day, and your own `gt_farm_calibrate.py --status`
+is the only record gt acts on. It is here so you can see what calibration produces, and which kinds of work a model of
+that size tended to pass, before you spend an hour measuring your own. No hosted model is listed: none has been
+measured.
+
+Measured on 2026-10-17 on one Apple-silicon laptop with the synthetic probes gt ships (nothing of anyone's was sent).
+The verdicts are copied from `gt_farm_calibrate.py --list` on that laptop; the records themselves are not shipped, so
+they cannot be checked from this guide. The task classes are the ones the tool reports.
+
+| Model | Quantisation | Context | Can take (used without a check) | Review-only (Claude checks every result) | Not suitable |
+|---|---|---|---|---|---|
+| gemma-4-26b-a4b | Q4_K Medium | 16,384 | log triage, quote extraction, field extraction, classification | code review | drafting, generalising claims, summaries |
+| gpt-oss-120b | MXFP4 (mixture of experts) | 131,072 | log triage, quote extraction, classification, drafting, summaries | field extraction, code review, bug fixing, feature coding | generalising claims |
+| qwen3-coder-30b-a3b | Q4_K Medium | 65,536 | nothing on its own | log triage, quote extraction, field extraction, classification, drafting | generalising claims, code review, summaries |
+
+A class a row does not mention was not reported for that model in the tool's summary (bug fixing and feature coding,
+for the first and third rows); the table does not say why, and neither does this guide.
+
+How to read it:
+
+- **Size helped here.** The 120-billion-parameter model takes drafting and summaries that the two smaller
+  models do not, and it is the only one of the three to be marked for bug fixing and feature coding (review-only).
+- **A coding model is not a safe default.** The third model failed gt's injection probes, so nothing it returns is
+  taken without a check, whatever it scores on the tasks themselves.
+- **"Generalising claims" is hard for all three.** Each was marked not suitable for it.
+- **These were measured once.** Re-measure after a model, quantisation or server change, and expect a record older than
+  about a month to be treated as stale for agent work.
+
+To measure your own: `python3 <farm-scripts>/gt_farm_calibrate.py NAME --dry-run`, then without `--dry-run`, then
+`--status`.

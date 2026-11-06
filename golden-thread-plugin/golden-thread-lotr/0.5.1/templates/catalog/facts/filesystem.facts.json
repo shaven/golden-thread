@@ -1,0 +1,113 @@
+{
+  "schema": 1,
+  "template": "filesystem",
+  "service": "MCP filesystem reference server",
+  "archetype": "stdio-npx",
+  "researched": "2026-10-14",
+  "researcher": "claude sonnet research run 2026-10-14",
+  "facts": [
+    {
+      "id": "f1",
+      "field": "connect.command",
+      "value": [
+        "npx",
+        "-y",
+        "@modelcontextprotocol/server-filesystem@1.0.0",
+        "{dir}"
+      ],
+      "claim": "The server is the npm package @modelcontextprotocol/server-filesystem, started with npx -y, allowed directories as trailing arguments; npm latest is 1.0.0 (published 2026-10-11).",
+      "source": "https://github.com/modelcontextprotocol/servers/blob/main/src/filesystem/README.md",
+      "retrieved": "2026-10-14",
+      "state": "self-verified",
+      "evidence": "README: npx -y @modelcontextprotocol/server-filesystem /Users/username/Desktop /path/to/other/allowed/dir; registry dist-tags latest = 1.0.0, repository modelcontextprotocol/servers."
+    },
+    {
+      "id": "f2",
+      "field": "connect.runtime",
+      "value": "node",
+      "claim": "npx implies Node.js; the package ships a node bin (dist/index.js).",
+      "source": "https://registry.npmjs.org/@modelcontextprotocol/server-filesystem/latest",
+      "retrieved": "2026-10-14",
+      "state": "self-verified",
+      "evidence": "bin: mcp-server-filesystem -> dist/index.js; README launches it with npx."
+    },
+    {
+      "id": "f3",
+      "claim": "Allowed directories come from command-line args or MCP roots; roots replace the command-line directories; with neither the server exits.",
+      "source": "https://github.com/modelcontextprotocol/servers/blob/main/src/filesystem/README.md",
+      "retrieved": "2026-10-14",
+      "state": "unverified",
+      "evidence": "Set via command-line arguments (args) or MCP Roots."
+    },
+    {
+      "id": "f4",
+      "claim": "Read-only tools: read_text_file, read_media_file, read_multiple_files, list_directory, list_directory_with_sizes, directory_tree, search_files, get_file_info, list_allowed_directories (no input).",
+      "source": "https://github.com/modelcontextprotocol/servers/blob/main/src/filesystem/README.md",
+      "retrieved": "2026-10-14",
+      "state": "unverified",
+      "evidence": "list_allowed_directories: read-only, no input."
+    },
+    {
+      "id": "f5",
+      "claim": "Changing tools: write_file (overwrites), edit_file (dryRun supported), create_directory, move_file (deletes source).",
+      "source": "https://github.com/modelcontextprotocol/servers/blob/main/src/filesystem/README.md",
+      "retrieved": "2026-10-14",
+      "state": "unverified",
+      "evidence": "write_file is marked destructive; move_file deletes the source."
+    },
+    {
+      "id": "f6",
+      "claim": "The repository is maintained by the MCP steering group; Filesystem is listed as a current (not archived) reference server, described as reference implementations not production-ready.",
+      "source": "https://github.com/modelcontextprotocol/servers",
+      "retrieved": "2026-10-14",
+      "state": "unverified",
+      "evidence": "Filesystem listed among current reference servers."
+    },
+    {
+      "id": "f7",
+      "claim": "npm versioning changed from date-style (e.g. 2026.8.31) to semver 1.0.0 on 2026-10-11.",
+      "source": "https://registry.npmjs.org/@modelcontextprotocol/server-filesystem",
+      "retrieved": "2026-10-14",
+      "state": "unverified",
+      "evidence": "time: 2026.8.31 then 1.0.0 at 2026-10-11."
+    }
+  ],
+  "choices": [
+    {
+      "decision": "stdio-npx archetype with runtime node",
+      "because": "the official server is an npm package run with npx; no hosted endpoint exists",
+      "facts": [
+        "f1",
+        "f2"
+      ]
+    },
+    {
+      "decision": "directory is a connect.param with no default",
+      "because": "the allowed folder is the access grant and only the user may choose it",
+      "facts": [
+        "f1",
+        "f3"
+      ]
+    },
+    {
+      "decision": "consent on write_file, edit_file, create_directory, move_file",
+      "because": "these change or remove user files; write_file overwrites and move_file deletes its source",
+      "facts": [
+        "f5"
+      ]
+    },
+    {
+      "decision": "smoke op list_allowed_directories",
+      "because": "read-only, takes no input",
+      "facts": [
+        "f4"
+      ]
+    }
+  ],
+  "open": [
+    "Version 1.0.0 comes from the npm registry only; the README shows the command unpinned, so the pin itself rests on one source.",
+    "Tool list read from the README only; the tool names were not checked against the package source or a tools/list response (no execution allowed).",
+    "Whether {dir} may be a single path only (README shows several); the template grants one folder by design.",
+    "The jump from 2026.8.31 to 1.0.0 is unexplained; no changelog read."
+  ]
+}

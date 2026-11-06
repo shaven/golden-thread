@@ -1,0 +1,51 @@
+{
+ "schema": 1,
+ "track": "operations",
+ "title": "An operations engineer's first day",
+ "audience": "Someone who runs systems and changes them carefully.",
+ "project": "demo-pizzabot",
+ "steps": [
+  {
+   "n": 1,
+   "goal": "Open the runbook's project",
+   "say": "/gt:gt-open demo-pizzabot",
+   "see": "A summary of the project, its runbook, recent incidents and open tasks.",
+   "why": "You start from the written state of the system, not from memory."
+  },
+  {
+   "n": 2,
+   "goal": "See what is overdue",
+   "say": "/gt:gt-list tasks overdue",
+   "see": "Overdue tasks with how many days late and who is waiting.",
+   "why": "Late rotations and renewals show up before they bite."
+  },
+  {
+   "n": 3,
+   "goal": "Check a claim before you act",
+   "say": "/gt:gt-validate the certificate on the order service expires on 2026-12-01",
+   "see": "A fresh reviewer checks the claim against the rules and the artifact and reports confirmed, refuted or unknown.",
+   "why": "A number that matters is verified by something that did not make it up."
+  },
+  {
+   "n": 4,
+   "goal": "Write the steps down while they are fresh",
+   "say": "/gt:gt-work",
+   "see": "The commands, gotchas and the incident summary go to the runbook and the project's findings.",
+   "why": "The next on-call person finds the fix instead of rediscovering it."
+  },
+  {
+   "n": 5,
+   "goal": "Leave a handoff",
+   "say": "/gt:gt-create handoff",
+   "see": "A handoff note: what is done, what is half-done, and what to verify first.",
+   "why": "Whoever picks this up knows what is true and what is only believed."
+  },
+  {
+   "n": 6,
+   "goal": "Close the session",
+   "say": "/gt:gt-close",
+   "see": "The notes saved, tasks updated and the session's claim on the vault released.",
+   "why": "Nothing is left half-written and nobody else is blocked."
+  }
+ ]
+}

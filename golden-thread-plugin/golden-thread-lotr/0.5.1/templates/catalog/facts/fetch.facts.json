@@ -1,0 +1,98 @@
+{
+  "schema": 1,
+  "template": "fetch",
+  "service": "MCP fetch reference server",
+  "archetype": "stdio-uvx",
+  "researched": "2026-10-14",
+  "researcher": "claude sonnet research run 2026-10-14",
+  "facts": [
+    {
+      "id": "f1",
+      "field": "connect.command",
+      "value": [
+        "uvx",
+        "mcp-server-fetch==2026.10.10"
+      ],
+      "claim": "The server is the PyPI package mcp-server-fetch (latest 2026.10.10, uploaded 2026-10-11), run with uvx and no arguments.",
+      "source": "https://github.com/modelcontextprotocol/servers/blob/main/src/fetch/README.md",
+      "retrieved": "2026-10-14",
+      "state": "self-verified",
+      "evidence": "README: command uvx, args [\"mcp-server-fetch\"]; PyPI info.version 2026.10.10, not yanked."
+    },
+    {
+      "id": "f2",
+      "field": "connect.runtime",
+      "value": "uv",
+      "claim": "uvx is part of uv.",
+      "source": "https://github.com/modelcontextprotocol/servers/blob/main/src/fetch/README.md",
+      "retrieved": "2026-10-14",
+      "state": "unverified",
+      "evidence": "README shows the uvx command."
+    },
+    {
+      "id": "f3",
+      "claim": "One tool, fetch(url, max_length=5000, start_index=0, raw=false); read-only, can reach any internet host.",
+      "source": "https://github.com/modelcontextprotocol/servers/blob/main/src/fetch/README.md",
+      "retrieved": "2026-10-14",
+      "state": "unverified",
+      "evidence": "Fetches a URL and returns its contents as markdown."
+    },
+    {
+      "id": "f4",
+      "claim": "Flags: --ignore-robots-txt (robots.txt otherwise obeyed for model-initiated requests), --allow-private-ips (disables the private/loopback/link-local guard), --user-agent=, --proxy-url (else HTTP_PROXY/HTTPS_PROXY/ALL_PROXY).",
+      "source": "https://github.com/modelcontextprotocol/servers/blob/main/src/fetch/README.md",
+      "retrieved": "2026-10-14",
+      "state": "unverified",
+      "evidence": "--allow-private-ips: Turns off the guard that blocks private, loopback, and link-local addresses."
+    },
+    {
+      "id": "f5",
+      "claim": "Security: server may reach internal addresses; default guard blocks private/loopback/link-local/metadata (e.g. 169.254.169.254) and checks redirects, but does not protect against DNS rebinding and does not check hosts only a proxy resolves.",
+      "source": "https://github.com/modelcontextprotocol/servers/blob/main/src/fetch/README.md",
+      "retrieved": "2026-10-14",
+      "state": "unverified",
+      "evidence": "does not protect against DNS rebinding"
+    },
+    {
+      "id": "f6",
+      "claim": "Maintained in modelcontextprotocol/servers (src/fetch), listed as a current reference server, not archived. No official npm equivalent: the npm registry returned 404 for @modelcontextprotocol/server-fetch.",
+      "source": "https://registry.npmjs.org/@modelcontextprotocol/server-fetch",
+      "retrieved": "2026-10-14",
+      "state": "self-verified",
+      "evidence": "npm 404; GitHub README lists only uvx, pip and docker."
+    }
+  ],
+  "choices": [
+    {
+      "decision": "stdio-uvx archetype, runtime uv",
+      "because": "official server is a PyPI package; no official npm package exists",
+      "facts": [
+        "f1",
+        "f2",
+        "f6"
+      ]
+    },
+    {
+      "decision": "fetch tool under policy.consent",
+      "because": "it makes requests from the user's machine to arbitrary URLs (SSRF, prompt injection steering); the built-in guard has documented gaps",
+      "facts": [
+        "f3",
+        "f5"
+      ]
+    },
+    {
+      "decision": "no smoke op and no network.hosts",
+      "because": "the only tool needs a URL; destinations are arbitrary by design",
+      "facts": [
+        "f3"
+      ]
+    }
+  ],
+  "open": [
+    "Fetch pin rests on PyPI plus README (README shows unpinned).",
+    "The --allow-private-ips flag and the private-address guard appear in the current README only; whether they exist in 2026.10.10 specifically was not checked in source.",
+    "Tool schema read from the README only; no tools/list check.",
+    "network.hosts omitted deliberately; LOTR cannot restrict destinations for this server.",
+    "Whether the consent glob 'fetch' also matches the prompt named fetch was not examined."
+  ]
+}

@@ -1,0 +1,105 @@
+{
+  "schema": 1,
+  "template": "google-tasks",
+  "service": "Google Tasks API",
+  "archetype": "http-rest",
+  "researched": "2026-10-25",
+  "researcher": "claude, WebFetch of the vendor reference pages named in each fact (phase 88)",
+  "facts": [
+    {
+      "id": "f1",
+      "field": "connect.base_url",
+      "value": "https://tasks.googleapis.com/tasks/v1",
+      "claim": "The service endpoint is https://tasks.googleapis.com and every method path starts with /tasks/v1.",
+      "source": "https://developers.google.com/tasks/reference/rest",
+      "retrieved": "2026-10-25",
+      "state": "self-verified",
+      "evidence": "Reference page: 'Service endpoint https://tasks.googleapis.com'; tasks.list page request line GET https://tasks.googleapis.com/tasks/v1/lists/{tasklist}/tasks."
+    },
+    {
+      "id": "f2",
+      "claim": "Task lists are read at GET /tasks/v1/users/@me/lists; tasks at GET /tasks/v1/lists/{tasklist}/tasks; a task is added with POST .../tasks, changed with PATCH or PUT .../tasks/{task}, removed with DELETE .../tasks/{task}.",
+      "source": "https://developers.google.com/tasks/reference/rest",
+      "retrieved": "2026-10-25",
+      "state": "self-verified",
+      "evidence": "Reference page method tables: tasklists.list GET /tasks/v1/users/@me/lists; tasks.list GET, tasks.insert POST, tasks.patch PATCH, tasks.update PUT, tasks.delete DELETE under /tasks/v1/lists/{tasklist}/tasks."
+    },
+    {
+      "id": "f3",
+      "claim": "POST /tasks/v1/lists/{tasklist}/clear exists (tasks.clear), and DELETE /tasks/v1/users/@me/lists/{tasklist} removes a whole list.",
+      "source": "https://developers.google.com/tasks/reference/rest",
+      "retrieved": "2026-10-25",
+      "state": "self-verified",
+      "evidence": "Reference page tables: tasks.clear POST /tasks/v1/lists/{tasklist}/clear; tasklists.delete DELETE /tasks/v1/users/@me/lists/{tasklist}. What clear removes (completed tasks) is from memory, not the fetched page."
+    },
+    {
+      "id": "f4",
+      "claim": "Listing tasks accepts the scope https://www.googleapis.com/auth/tasks or https://www.googleapis.com/auth/tasks.readonly.",
+      "source": "https://developers.google.com/tasks/reference/rest/v1/tasks/list",
+      "retrieved": "2026-10-25",
+      "state": "self-verified",
+      "evidence": "tasks.list page: 'Requires one of the following: .../auth/tasks, .../auth/tasks.readonly'. The top reference page did not list scopes."
+    },
+    {
+      "id": "f5",
+      "field": "connect.auth_scheme",
+      "value": "bearer",
+      "claim": "A Google OAuth access token is sent as an Authorization: Bearer header.",
+      "source": "https://developers.google.com/tasks/reference/rest",
+      "retrieved": "2026-10-25",
+      "state": "unverified",
+      "evidence": "Neither fetched page states the header; this is Google's general OAuth 2.0 practice, from memory."
+    },
+    {
+      "id": "f6",
+      "field": "network.hosts",
+      "value": [
+        "tasks.googleapis.com"
+      ],
+      "claim": "Only tasks.googleapis.com is called by the connection (obtaining the token happens outside it).",
+      "source": "https://developers.google.com/tasks/reference/rest",
+      "retrieved": "2026-10-25",
+      "state": "self-verified",
+      "evidence": "Reference page service endpoint is the only host named."
+    },
+    {
+      "id": "f7",
+      "claim": "Google has no hosted MCP server for Tasks.",
+      "source": "https://developers.google.com/workspace/guides/configure-mcp-servers",
+      "retrieved": "2026-10-25",
+      "state": "unverified",
+      "evidence": "Not re-fetched for this sheet: the catalog 3 changelog records that Google's page lists no Tasks server; check the page before relying on it."
+    },
+    {
+      "id": "f8",
+      "claim": "A Google OAuth access token is short-lived (about an hour) and needs renewing.",
+      "source": "https://developers.google.com/identity/protocols/oauth2",
+      "retrieved": "2026-10-25",
+      "state": "unverified",
+      "evidence": "From memory; the page was not fetched."
+    }
+  ],
+  "choices": [
+    {
+      "decision": "reads are the default read tier; add and complete use the default write tier; DELETE and clear ask first",
+      "because": "a deleted task or list and a cleared list cannot be taken back; adding or completing a task can",
+      "facts": [
+        "f2",
+        "f3"
+      ]
+    },
+    {
+      "decision": "http-rest with a stored access token, not an OAuth-managed connection",
+      "because": "the http archetype supports bearer, basic and header keys only; there is no hosted Tasks MCP server to use the OAuth archetype",
+      "facts": [
+        "f5",
+        "f7"
+      ]
+    }
+  ],
+  "open": [
+    "The access token does not refresh itself: a long-lived setup needs the OAuth refresh flow, which the http archetype does not offer.",
+    "The bearer header, the token lifetime and the absence of a hosted MCP server are unverified (f5, f7, f8).",
+    "Not run against the live service: no Google account was used."
+  ]
+}

@@ -1,0 +1,8 @@
+{
+  "name": "gt-workflow",
+  "version": "0.1.1",
+  "description": "Golden Thread workflows: save a chain of steps you do again and again as a workflow you own, then run it by name. A step can run a gt tool, call a connected service through the LOTR gateway, hand routine work to an engine on your own hardware, or stop and wait for you or for Claude. Nothing risky runs unless you approved that exact step.",
+  "author": {
+    "name": "Stacy Haven"
+  }
+}

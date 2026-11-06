@@ -1,0 +1,105 @@
+{
+  "schema": 1,
+  "template": "linear",
+  "service": "Linear",
+  "archetype": "mcp-oauth",
+  "researched": "2026-10-14",
+  "researcher": "claude sonnet research run 2026-10-14",
+  "facts": [
+    {
+      "id": "f1",
+      "field": "connect.url",
+      "value": "https://mcp.linear.app/mcp",
+      "claim": "Linear's hosted MCP server (streamable HTTP, primary) is at /mcp",
+      "source": "https://linear.app/docs/mcp",
+      "retrieved": "2026-10-14",
+      "state": "unverified",
+      "evidence": "Streamable HTTP (primary): https://mcp.linear.app/mcp"
+    },
+    {
+      "id": "f2",
+      "field": "network.hosts",
+      "value": [
+        "mcp.linear.app"
+      ],
+      "claim": "The MCP host and the OAuth issuer, authorize, token and register endpoints are all on mcp.linear.app",
+      "source": "https://mcp.linear.app/.well-known/oauth-authorization-server",
+      "retrieved": "2026-10-14",
+      "state": "self-verified",
+      "evidence": "Discovery document: issuer https://mcp.linear.app, authorization/token/registration endpoints on the same host; docs page names the same host."
+    },
+    {
+      "id": "f3",
+      "field": "connect.scopes",
+      "value": [],
+      "claim": "Docs name OAuth scopes read (read-only) and default read-write on /mcp; discovery lists read, write, openid, email; template leaves scopes empty so the server decides",
+      "source": "https://mcp.linear.app/.well-known/oauth-protected-resource",
+      "retrieved": "2026-10-14",
+      "state": "self-verified",
+      "evidence": "Protected-resource document: scopes_supported [read, write]; docs: requesting only the read scope limits to read-only."
+    },
+    {
+      "id": "f4",
+      "claim": "Dynamic client registration is offered, so no OAuth app has to be created first (mcp-oauth, client_registration auto)",
+      "source": "https://mcp.linear.app/.well-known/oauth-authorization-server",
+      "retrieved": "2026-10-14",
+      "state": "self-verified",
+      "evidence": "registration_endpoint https://mcp.linear.app/register; docs: Interactive OAuth 2.1 with dynamic client registration."
+    },
+    {
+      "id": "f5",
+      "claim": "A Linear API key or OAuth access token can be sent as a bearer Authorization header instead of the browser sign-in",
+      "source": "https://linear.app/docs/mcp",
+      "retrieved": "2026-10-14",
+      "state": "unverified",
+      "evidence": "Bearer token in the Authorization header (OAuth access token or API key)."
+    },
+    {
+      "id": "f6",
+      "claim": "https://mcp.linear.app/mcp/readonly exposes only read tools; https://mcp.linear.app/sse is the deprecated SSE fallback",
+      "source": "https://linear.app/docs/mcp",
+      "retrieved": "2026-10-14",
+      "state": "unverified",
+      "evidence": "Read-only endpoint and deprecated SSE fallback are listed on the docs page."
+    },
+    {
+      "id": "f7",
+      "claim": "Linear's 2025 changelog announced the server at /sse (since superseded by /mcp)",
+      "source": "https://linear.app/changelog/2025-05-01-mcp",
+      "retrieved": "2026-10-14",
+      "state": "unverified",
+      "evidence": "Server URL given there is https://mcp.linear.app/sse."
+    }
+  ],
+  "choices": [
+    {
+      "decision": "mcp-oauth, hosted streamable HTTP /mcp",
+      "because": "Docs name browser OAuth 2.1 with dynamic client registration and the discovery document advertises a registration endpoint, so nothing must be created first; hosted beats running a local package.",
+      "facts": [
+        "f1",
+        "f4"
+      ]
+    },
+    {
+      "decision": "scopes left empty",
+      "because": "Docs give no required scope; the server decides (read-write by default, read scope narrows to read-only).",
+      "facts": [
+        "f3"
+      ]
+    },
+    {
+      "decision": "no smoke op",
+      "because": "Linear's docs name no tools, so none could be quoted from the vendor.",
+      "facts": [
+        "f1"
+      ]
+    }
+  ],
+  "open": [
+    "Linear's docs name no tool names; no smoke op or tool-based consent list could be sourced (tool names change at runtime via tools/list).",
+    "The /mcp path itself rests on one vendor page (the discovery documents confirm the host, not the path).",
+    "The docs state no plan requirement for MCP; admin requirements are mentioned only for Okta-managed authorization.",
+    "Whether an API key or token as bearer is accepted was read on one page and not tested (no requests to the MCP endpoint allowed).",
+    "The 2025 changelog gives /sse, the docs page gives /mcp; the docs page is current and treats /sse as deprecated."
+  ]
+}

@@ -1,0 +1,42 @@
+{
+  "schema": 1,
+  "name": "stdio-docker",
+  "archetype": "stdio-docker",
+  "summary": "ARCHETYPE: a local MCP server run as a docker image (TODO: say which service)",
+  "kind": "mcp-stdio",
+  "docs": "https://todo-host.example/docs",
+  "connect": {
+    "command": [
+      "docker",
+      "run",
+      "-i",
+      "--rm",
+      "-e",
+      "TODO_API_KEY",
+      "TODO/image:TODO-tag"
+    ],
+    "runtime": "docker",
+    "env_refs": {
+      "TODO_API_KEY": "store:TODO-secret-name"
+    },
+    "env": {},
+    "trust": "T1",
+    "identity": "TODO: your account at the service",
+    "description": "TODO (stdio, docker)",
+    "timeouts": {
+      "start_s": 120,
+      "call_s": 120,
+      "idle_s": 600
+    }
+  },
+  "smoke": {
+    "op": "TODO: the name of one read-only tool",
+    "args": {}
+  },
+  "notes": [
+    "ARCHETYPE: copy with `lotr template new NAME --archetype stdio-docker`, then replace every TODO.",
+    "`-e NAME` (no value) makes docker pass that variable from LOTR's environment into the container; the value comes from env_refs and is never in the command line.",
+    "Use a tag or digest (image@sha256:...), not `latest`. Docker must be running.",
+    "-i keeps stdin open (MCP over stdio); --rm removes the container when it stops."
+  ]
+}

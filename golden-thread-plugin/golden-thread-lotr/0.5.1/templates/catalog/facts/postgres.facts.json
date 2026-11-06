@@ -1,0 +1,123 @@
+{
+  "schema": 1,
+  "template": "postgres",
+  "service": "PostgreSQL (Google MCP Toolbox for Databases)",
+  "archetype": "stdio-npx",
+  "researched": "2026-10-14",
+  "researcher": "claude opus research run 2026-10-14",
+  "facts": [
+    {
+      "id": "f1",
+      "field": "connect.command",
+      "value": [
+        "npx",
+        "-y",
+        "@toolbox-sdk/server@1.14.0",
+        "--prebuilt=postgres",
+        "--stdio"
+      ],
+      "claim": "MCP Toolbox for Databases is published on npm as @toolbox-sdk/server (latest 1.14.0, repository googleapis/mcp-toolbox, Apache-2.0); the prebuilt PostgreSQL config is selected with --prebuilt postgres and stdio with --stdio.",
+      "source": "https://github.com/googleapis/mcp-toolbox/blob/v1.14.0/docs/en/reference/cli.md",
+      "retrieved": "2026-10-14",
+      "state": "self-verified",
+      "evidence": "CLI reference lists --prebuilt and --stdio ('Listens via MCP STDIO'); npm dist-tags latest 1.14.0, repository git+https://github.com/googleapis/mcp-toolbox.git."
+    },
+    {
+      "id": "f2",
+      "field": "connect.runtime",
+      "value": "node",
+      "claim": "The npm package ships a node launcher (bin toolbox -> bin/run.js) with per-platform optional packages, including darwin-arm64 and darwin-x64.",
+      "source": "https://registry.npmjs.org/@toolbox-sdk/server/1.14.0",
+      "retrieved": "2026-10-14",
+      "state": "self-verified",
+      "evidence": "bin {toolbox: bin/run.js}; optionalDependencies @toolbox-sdk/server-darwin-arm64 and others; the CLI docs show npx use."
+    },
+    {
+      "id": "f3",
+      "claim": "The prebuilt postgres source reads POSTGRES_HOST (default localhost), POSTGRES_PORT (default 5432), POSTGRES_DATABASE, POSTGRES_USER, POSTGRES_PASSWORD and POSTGRES_QUERY_PARAMS from the environment; there is no single connection-string variable.",
+      "source": "https://github.com/googleapis/mcp-toolbox/blob/v1.14.0/internal/prebuiltconfigs/tools/postgres.yaml",
+      "retrieved": "2026-10-14",
+      "state": "unverified",
+      "evidence": "host: ${POSTGRES_HOST:localhost} port: ${POSTGRES_PORT:5432} database: ${POSTGRES_DATABASE} user: ${POSTGRES_USER} password: ${POSTGRES_PASSWORD}"
+    },
+    {
+      "id": "f4",
+      "claim": "Tools: execute_sql (one SQL statement), list_tables, list_views, list_schemas, list_indexes and about 25 more catalog and statistics reads; toolsets data, monitor, health, view-config, replication.",
+      "source": "https://github.com/googleapis/mcp-toolbox/blob/v1.14.0/docs/en/integrations/postgres/prebuilt-configs/postgresql.md",
+      "retrieved": "2026-10-14",
+      "state": "unverified",
+      "evidence": "'execute_sql: Executes a SQL query.' Toolsets defined in the prebuilt YAML."
+    },
+    {
+      "id": "f5",
+      "claim": "get_query_plan substitutes the caller's text into EXPLAIN (FORMAT JSON) without parameter binding; its own description warns of SQL injection.",
+      "source": "https://github.com/googleapis/mcp-toolbox/blob/v1.14.0/internal/prebuiltconfigs/tools/postgres.yaml",
+      "retrieved": "2026-10-14",
+      "state": "unverified",
+      "evidence": "statement: EXPLAIN (FORMAT JSON) {{.query}}; 'Do not use this tool in production as it is prone to SQL injection risks.'"
+    },
+    {
+      "id": "f6",
+      "claim": "Toolbox says prebuilt configs are for build-time use by trusted developers and are not secure enough for run-time use with untrusted users.",
+      "source": "https://github.com/googleapis/mcp-toolbox/blob/v1.14.0/docs/en/reference/cli.md",
+      "retrieved": "2026-10-14",
+      "state": "unverified",
+      "evidence": "'They are not secure enough for run time use cases'"
+    },
+    {
+      "id": "f7",
+      "claim": "The MCP reference package @modelcontextprotocol/server-postgres (0.6.2) is marked deprecated on npm; the repository is maintained and active (pushed 2026-10-14, not archived).",
+      "source": "https://registry.npmjs.org/@modelcontextprotocol/server-postgres",
+      "retrieved": "2026-10-14",
+      "state": "self-verified",
+      "evidence": "npm: 'Package no longer supported.'; GitHub API googleapis/mcp-toolbox archived=false pushed_at 2026-10-14."
+    },
+    {
+      "id": "f8",
+      "claim": "list_schemas lists schemas and takes no required input (smoke op).",
+      "source": "https://github.com/googleapis/mcp-toolbox/blob/v1.14.0/docs/en/integrations/postgres/prebuilt-configs/postgresql.md",
+      "retrieved": "2026-10-14",
+      "state": "unverified",
+      "evidence": "'list_schemas: Lists schemas in the database.' Arguments not shown on the page."
+    }
+  ],
+  "choices": [
+    {
+      "decision": "Google MCP Toolbox @toolbox-sdk/server@1.14.0, --prebuilt=postgres --stdio",
+      "because": "Maintained by Google and current; the reference postgres server is deprecated and took the password on the command line.",
+      "facts": [
+        "f1",
+        "f2",
+        "f7"
+      ]
+    },
+    {
+      "decision": "every connection detail as env_refs, no inline connection string",
+      "because": "Toolbox reads host, database, user and password from the environment; references keep all of them out of the file.",
+      "facts": [
+        "f3"
+      ]
+    },
+    {
+      "decision": "consent on execute_sql and get_query_plan",
+      "because": "execute_sql runs any statement; get_query_plan interpolates raw text into SQL.",
+      "facts": [
+        "f4",
+        "f5"
+      ]
+    },
+    {
+      "decision": "smoke op list_schemas",
+      "because": "a catalog read with no stated required input",
+      "facts": [
+        "f8"
+      ]
+    }
+  ],
+  "open": [
+    "POSTGRES_HOST, POSTGRES_DATABASE and POSTGRES_USER are not secrets but are kept as references because a template cannot hold per-user plain values in env (params fill the command only). If lotr gains params-in-env, these three could become params.",
+    "Arguments of list_schemas and the other reads were not checked against tools/list; read-tier assumptions rest on tool names and the prebuilt YAML.",
+    "Whether execute_sql refuses multiple statements was not checked in source (the description says a single statement).",
+    "The npm pin rests on the registry; the docs show the command unpinned."
+  ]
+}

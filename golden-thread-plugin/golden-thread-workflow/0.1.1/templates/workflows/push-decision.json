@@ -1,0 +1,64 @@
+{
+  "schema": 1,
+  "name": "push-decision",
+  "title": "Push a decision to a date",
+  "description": "Defers the handoff to that date with your reason, so it comes back on its own.",
+  "personas": [
+    "executive",
+    "leadership"
+  ],
+  "help_workflow": "push-decision",
+  "say": "Push the vendor decision to Friday.",
+  "inputs": [
+    {
+      "name": "handoff",
+      "type": "string",
+      "required": true,
+      "prompt": "Which handoff? Give its path in the vault, like Projects/website/handoff/vendor.md"
+    },
+    {
+      "name": "until",
+      "type": "date",
+      "required": true,
+      "prompt": "Push it to which date? (YYYY-MM-DD, or tomorrow)"
+    },
+    {
+      "name": "reason",
+      "type": "string",
+      "required": false,
+      "default": "decide later",
+      "prompt": "Why?"
+    }
+  ],
+  "steps": [
+    {
+      "id": "defer",
+      "kind": "run",
+      "title": "Defer the handoff to that date",
+      "script": "gt_handoff_status.py",
+      "args": [
+        "mark",
+        "{{inputs.handoff}}",
+        "--vault",
+        "{{vault}}",
+        "--status",
+        "deferred",
+        "--until",
+        "{{inputs.until}}",
+        "--reason",
+        "{{inputs.reason}}"
+      ]
+    },
+    {
+      "id": "after",
+      "kind": "run",
+      "title": "Show what is waiting now",
+      "script": "gt_handoff_status.py",
+      "args": [
+        "list",
+        "--vault",
+        "{{vault}}"
+      ]
+    }
+  ]
+}

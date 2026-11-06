@@ -1,0 +1,47 @@
+{
+  "schema": 1,
+  "name": "gitlab",
+  "archetype": "mcp-oauth",
+  "summary": "GitLab's built-in MCP server on GitLab.com (projects, merge requests, work items, pipelines), browser sign-in",
+  "kind": "mcp-oauth",
+  "docs": "https://docs.gitlab.com/user/model_context_protocol/mcp_server/",
+  "connect": {
+    "url": "https://gitlab.com/api/v4/mcp",
+    "scopes": [
+      "mcp"
+    ],
+    "offline_access": false,
+    "skip_audience_check": false,
+    "send_resource": true,
+    "redirect_host": "127.0.0.1",
+    "trust": "T1",
+    "identity": "<your GitLab.com account>",
+    "description": "GitLab (hosted MCP, sign-in)",
+    "policy": {
+      "consent": [
+        "accept_merge_request",
+        "save_pipeline",
+        "manage_pipeline",
+        "start_duo_session",
+        "send_duo_session_input"
+      ]
+    }
+  },
+  "network": {
+    "hosts": [
+      "gitlab.com"
+    ]
+  },
+  "smoke": {
+    "op": "get_mcp_server_version",
+    "args": {}
+  },
+  "notes": [
+    "Sign in with your GitLab account in the browser: lotr setup gitlab. GitLab registers the client itself (dynamic client registration); nothing to create first. Such a client can only get the mcp scope.",
+    "On GitLab.com the MCP server must be allowed for your top-level group (a group Owner setting). Every tool still checks your own permissions.",
+    "Self-managed or Dedicated: copy this template, set connect.url to https://YOUR-HOST/api/v4/mcp and network.hosts to YOUR-HOST.",
+    "Asks first (consent): accept_merge_request (merges), save_pipeline (creates, runs, retries, cancels pipelines), manage_pipeline (deletes pipelines), start_duo_session and send_duo_session_input (run Duo sessions in CI jobs, may use credits). Commits, branches, merge requests, notes and work items are ordinary writes.",
+    "offline_access is off: GitLab does not use that scope; it issues refresh tokens on its own.",
+    "Alternative: a fine-grained personal access token (MCP tool resource, Execute permission) as a bearer key would be the mcp-http-key archetype; legacy personal, project and group tokens are refused by the server."
+  ]
+}

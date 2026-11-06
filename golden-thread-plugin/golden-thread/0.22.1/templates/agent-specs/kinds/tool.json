@@ -1,0 +1,22 @@
+{
+  "kind": "tool",
+  "spec_version": 1,
+  "summary": "An AI tool, plugin or API specification: behaviour, not code.",
+  "prompt_delta": ["The material is an AI TOOL, PLUGIN or API SPECIFICATION."],
+  "stages": {
+    "extract": {
+      "prompt_delta": [
+        "Characterise BEHAVIOUR, not code: what the tool can do (capabilities), what it cannot or will not do (limitations, quotas, failure modes), and how other systems are expected to call it (interfaces, commands, endpoints, hooks, configuration).",
+        "Start from the manifest or spec (plugin.json, SKILL.md files, an OpenAPI or MCP definition) and the README; open source files only to confirm behaviour the documentation claims.",
+        "Record integration patterns: the sequences a caller actually uses, with the prerequisite configuration. A capability you could not find evidence for goes in gaps, not in capabilities."
+      ],
+      "output_schema": {
+        "interfaces": {"type": "list", "description": "Commands, endpoints, hooks or entry points, each with its purpose."},
+        "capabilities": {"type": "list", "description": "What it does, each with evidence."},
+        "limitations": {"type": "list", "description": "What it does not do, quotas, failure modes."},
+        "integration_patterns": {"type": "list", "description": "How a caller uses it, with prerequisites."}
+      },
+      "summary_fields": ["summary", "capabilities", "limitations", "gaps"]
+    }
+  }
+}

@@ -1,0 +1,46 @@
+{
+  "schema": 1,
+  "name": "what-to-decide",
+  "title": "See what needs your decision",
+  "description": "Reads the decisions waiting for you and the handoffs that are open, and puts the context next to each.",
+  "personas": [
+    "executive",
+    "leadership"
+  ],
+  "help_workflow": "what-to-decide",
+  "say": "What do I need to decide?",
+  "steps": [
+    {
+      "id": "waiting",
+      "kind": "run",
+      "title": "The handoffs that are waiting",
+      "script": "gt_handoff_status.py",
+      "args": [
+        "list",
+        "--vault",
+        "{{vault}}"
+      ]
+    },
+    {
+      "id": "tasks",
+      "kind": "run",
+      "title": "The open tasks",
+      "script": "gt_task.py",
+      "args": [
+        "list",
+        "--vault",
+        "{{vault}}"
+      ],
+      "ok_exit": [
+        0,
+        1
+      ]
+    },
+    {
+      "id": "decisions",
+      "kind": "claude",
+      "title": "Put the context next to each decision",
+      "prompt": "Find the decisions waiting for the person: look for a decisions-needed page with /gt:gt-query, and read these lists. Handoffs: {{steps.waiting.output.text}} Tasks: {{steps.tasks.output.text}} For each decision say what it is about and who is waiting, most urgent first."
+    }
+  ]
+}

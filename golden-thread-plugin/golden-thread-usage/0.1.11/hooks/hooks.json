@@ -1,0 +1,23 @@
+{
+  "description": "gt module usage: each entry runs the command gt's installer wired for this machine, when it wired one",
+  "hooks": {
+    "SessionStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "f=\"${HOME:-$USERPROFILE}/.claude/golden-thread/wired/SessionStart__gt_usage_brief.py\"; if [ -f \"$f\" ]; then . \"$f\"; fi"
+          }
+        ]
+      },
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "f=\"${HOME:-$USERPROFILE}/.claude/golden-thread/wired/SessionStart__gt_savings.py\"; if [ -f \"$f\" ]; then . \"$f\"; fi"
+          }
+        ]
+      }
+    ]
+  }
+}
